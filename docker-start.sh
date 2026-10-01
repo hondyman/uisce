@@ -172,7 +172,7 @@ list_services() {
 # Function to start only backend services
 start_backend() {
     print_info "Starting backend microservices..."
-    BACKEND_SERVICES=(backend fabric-builder wealth-management ai-builder semantic-engine governance compliance-engine validation-service rule-engine-service notifications-service policy-service search-service event-router)
+    BACKEND_SERVICES=(backend fabric-builder wealth-management ai-builder semantic-engine governance notifications-service policy-service search-service event-router)
 
     # Helper: determine likely Dockerfile locations for a service and skip missing builds
     services_to_start=()
@@ -180,23 +180,15 @@ start_backend() {
         skip=false
         # Common backend-local dockerfiles
         case "$svc" in
-            backend|validation-service|rule-engine-service|notifications-service|policy-service|search-service)
+            backend|notifications-service|policy-service|search-service)
                         # check for Dockerfile variants in ./backend (explicit filenames)
                         base="./backend/Dockerfile"
-                        df_rule="./backend/Dockerfile.rule-engine"
                         df_notifications="./backend/Dockerfile.notifications"
-                        df_validation="./backend/Dockerfile.validation"
                         df_policy="./backend/Dockerfile.policy"
                         df_search="./backend/Dockerfile.search"
                         case "$svc" in
-                            rule-engine-service)
-                                [ -f "$df_rule" ] && services_to_start+=("$svc") || print_warning "Skipping service '$svc' because $df_rule not found."
-                                ;;
                             notifications-service)
                                 [ -f "$df_notifications" ] && services_to_start+=("$svc") || print_warning "Skipping service '$svc' because $df_notifications not found."
-                                ;;
-                            validation-service)
-                                [ -f "$df_validation" ] && services_to_start+=("$svc") || print_warning "Skipping service '$svc' because $df_validation not found."
                                 ;;
                             policy-service)
                                 [ -f "$df_policy" ] && services_to_start+=("$svc") || print_warning "Skipping service '$svc' because $df_policy not found."
@@ -214,7 +206,7 @@ start_backend() {
                                 ;;
                         esac
                 ;;
-            fabric-builder|wealth-management|ai-builder|semantic-engine|governance|compliance-engine)
+            fabric-builder|wealth-management|ai-builder|semantic-engine|governance)
                 dir="./services/${svc//-/_}"
                 dir_alt="./services/$(echo $svc | sed 's/-/\//')"
                 # check typical locations

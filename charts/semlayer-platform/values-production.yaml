@@ -8,7 +8,6 @@ global:
   replicas:
     apiGateway: 5
     semanticEngine: 5
-    cubeApi: 5
     ruleEngine: 5
     complianceEngine: 3
     aiBuilder: 3
@@ -24,13 +23,6 @@ global:
         cpu: "1"
         memory: 2Gi
     semanticEngine:
-      limits:
-        cpu: "8"
-        memory: 16Gi
-      requests:
-        cpu: "2"
-        memory: 4Gi
-    cubeApi:
       limits:
         cpu: "8"
         memory: 16Gi
@@ -77,10 +69,6 @@ global:
       minReplicas: 5
       maxReplicas: 30
       targetCPUUtilizationPercentage: 60
-    cubeApi:
-      minReplicas: 5
-      maxReplicas: 25
-      targetCPUUtilizationPercentage: 70
     ruleEngine:
       minReplicas: 5
       maxReplicas: 25
@@ -104,8 +92,6 @@ global:
     apiGateway:
       minAvailable: 3
     semanticEngine:
-      minAvailable: 3
-    cubeApi:
       minAvailable: 3
     ruleEngine:
       minAvailable: 3

@@ -3,6 +3,7 @@ package infisical
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	infisical "github.com/infisical/go-sdk"
 )
@@ -41,6 +42,8 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 		if err != nil {
 			return nil, fmt.Errorf("infisical universal auth login failed: %w", err)
 		}
+	} else if cfg.ServiceToken != "" {
+		infisicalClient.Auth().SetAccessToken(cfg.ServiceToken)
 	}
 
 	return &Client{
@@ -133,4 +136,43 @@ func (c *Client) ListSecrets(ctx context.Context, path string) ([]infisical.Secr
 	}
 
 	return secrets, nil
+}
+
+// EnsureFolderPath creates every missing folder along path (e.g.
+// "/datasources/<tenant>/<id>"). Infisical rejects secrets written to a
+// folder that does not exist.
+func (c *Client) EnsureFolderPath(ctx context.Context, path string) error {
+	parent := "/"
+	for _, name := range strings.Split(strings.Trim(path, "/"), "/") {
+		if name == "" {
+			continue
+		}
+		folders, err := c.client.Folders().List(infisical.ListFoldersOptions{
+			ProjectID:   c.cfg.ProjectID,
+			Environment: c.cfg.Environment,
+			Path:        parent,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to list folders at path '%s': %w", parent, err)
+		}
+		exists := false
+		for _, f := range folders {
+			if f.Name == name {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			if _, err := c.client.Folders().Create(infisical.CreateFolderOptions{
+				ProjectID:   c.cfg.ProjectID,
+				Environment: c.cfg.Environment,
+				Name:        name,
+				Path:        parent,
+			}); err != nil {
+				return fmt.Errorf("failed to create folder '%s' at path '%s': %w", name, parent, err)
+			}
+		}
+		parent = strings.TrimSuffix(parent, "/") + "/" + name
+	}
+	return nil
 }

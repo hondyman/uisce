@@ -477,70 +477,38 @@ func (h *Handler) DownloadInstance(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 
 func (h *Handler) ListSchedules(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	tenantID, datasourceID := getTenantContext(r)
-
-	schedules, err := h.service.ListSchedules(ctx, tenantID, datasourceID)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	respondJSON(w, http.StatusOK, schedules)
+	respondJSON(w, http.StatusGone, map[string]string{
+		"error":   "legacy_report_schedules_retired",
+		"message": "Use GET /api/schedules with target.kind=report.",
+	})
 }
 
 func (h *Handler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	tenantID, datasourceID := getTenantContext(r)
-	userID := getUserID(r)
-
-	var sched ReportSchedule
-	if err := json.NewDecoder(r.Body).Decode(&sched); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	sched.TenantID = tenantID
-	sched.TenantDatasourceID = datasourceID
-	sched.CreatedBy = userID
-
-	if err := h.service.CreateSchedule(ctx, &sched); err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	respondJSON(w, http.StatusCreated, sched)
+	respondJSON(w, http.StatusGone, map[string]string{
+		"error":   "legacy_report_schedules_retired",
+		"message": "Create schedules at POST /api/schedules with target.kind=report (and delivery fields in target.params).",
+	})
 }
 
 func (h *Handler) GetSchedule(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	idStr := chi.URLParam(r, "id")
-
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid id")
-		return
-	}
-
-	sched, err := h.service.GetSchedule(ctx, id)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if sched == nil {
-		respondError(w, http.StatusNotFound, "schedule not found")
-		return
-	}
-
-	respondJSON(w, http.StatusOK, sched)
+	respondJSON(w, http.StatusGone, map[string]string{
+		"error":   "legacy_report_schedules_retired",
+		"message": "Use GET /api/schedules/{id}.",
+	})
 }
 
 func (h *Handler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
-	respondError(w, http.StatusNotImplemented, "not implemented")
+	respondJSON(w, http.StatusGone, map[string]string{
+		"error":   "legacy_report_schedules_retired",
+		"message": "Use PUT /api/schedules/{id}.",
+	})
 }
 
 func (h *Handler) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
-	respondError(w, http.StatusNotImplemented, "not implemented")
+	respondJSON(w, http.StatusGone, map[string]string{
+		"error":   "legacy_report_schedules_retired",
+		"message": "Use DELETE /api/schedules/{id}.",
+	})
 }
 
 // ============================================================================

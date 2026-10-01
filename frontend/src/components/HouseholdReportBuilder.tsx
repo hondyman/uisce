@@ -57,6 +57,9 @@ export const HouseholdReportBuilder: React.FC<HouseholdReportBuilderProps> = ({
   households = [],
   semanticViews = [],
 }) => {
+  const confirm = useConfirm();
+  const notification = useNotification();
+
   // ========================================================================
   // STATE
   // ========================================================================
@@ -206,8 +209,6 @@ export const HouseholdReportBuilder: React.FC<HouseholdReportBuilderProps> = ({
   };
 
   const handleDelete = () => {
-    const confirm = useConfirm();
-    const notification = useNotification();
     (async () => {
       if (config.id && (await confirm({ title: 'Delete report', description: 'Are you sure you want to delete this report?' }))) {
         onDelete?.(config.id);

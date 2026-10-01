@@ -161,7 +161,7 @@ export const PreFlightUpgradeConsole: React.FC = () => {
               <Chip icon={<CheckCircleIcon />} label="Signed & Verified SHA-256 Checksum" color="success" size="small" />
             </Box>
             <Typography variant="caption" color="#94a3b8">
-              Author: Uisce System Release Pipeline
+              Author: Ivy System Release Pipeline
             </Typography>
           </Box>
         </CardContent>

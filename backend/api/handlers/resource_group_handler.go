@@ -181,7 +181,6 @@ func UpdateTenantConcurrencyHandler(db *sql.DB) http.HandlerFunc {
 		}
 
 		// Store tenant settings (would persist to database)
-		// TODO: Integrate with Cube.js orchestrator
 
 		logAuditEvent(db, actor, "update_tenant_concurrency", tenantID,
 			fmt.Sprintf("concurrency=%d, cache=%dMB", req.Concurrency, req.CacheBudgetMB))

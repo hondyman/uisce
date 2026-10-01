@@ -2,6 +2,7 @@ import { ImpactReport } from '../../types/scripts';
 import { useNotification } from '../../hooks/useNotification';
 
 export function ImpactPanel({ report, onClose }: { report: ImpactReport; onClose: () => void }) {
+  const notification = useNotification();
   return (
     <div className="panel">
       <header>
@@ -45,7 +46,7 @@ export function ImpactPanel({ report, onClose }: { report: ImpactReport; onClose
       </section>
 
       <footer className="actions">
-        <button onClick={() => { const notification = useNotification(); notification.info('Exporting report...'); }}>Export report</button>
+        <button onClick={() => { notification.info('Exporting report...'); }}>Export report</button>
       </footer>
     </div>
   );

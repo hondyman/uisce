@@ -168,7 +168,6 @@ export const BusinessTermReviewDrawer: React.FC<BusinessTermReviewDrawerProps> =
                         multiline
                         rows={2}
                         sx={{ mb: 2 }}
-                        autoFocus
                     />
                 )}
                 {suggestion.status === 'DRAFT_AI' && (

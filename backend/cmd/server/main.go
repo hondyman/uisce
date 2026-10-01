@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/api"
 	fixpkg "github.com/hondyman/uisce/backend/internal/fix"
@@ -109,7 +110,7 @@ func main() {
 		}
 	}
 
-	router := api.SetupRouter(db, nil, nil, temporalClient, nil, geminiClient, nil, nil, nil)
+	router := api.SetupRouter(db, nil, nil, temporalClient, nil, geminiClient, nil, connectRedis(os.Getenv("REDIS_URL")), nil)
 
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("Starting main Uisce Unified API server on %s...\n", addr)
@@ -204,4 +205,30 @@ func startFIXServer(ctx context.Context, db *sql.DB, temporalClient sdkclient.Cl
 			log.Println("✅ FIX demo agent started (sample broker)")
 		}
 	}
+}
+
+// connectRedis returns a client for REDIS_URL, or nil (with a warning) when
+// it is unset or unreachable: Redis is a cache here (the gold-copy tenant
+// resolver and friends fall back to the database), so its absence must not
+// stop the server.
+func connectRedis(redisURL string) *redis.Client {
+	if redisURL == "" {
+		log.Printf("REDIS_URL not set: running without the Redis cache")
+		return nil
+	}
+	opt, err := redis.ParseURL(redisURL)
+	if err != nil {
+		log.Printf("WARNING: REDIS_URL is not a valid redis URL, running without the Redis cache: %v", err)
+		return nil
+	}
+	client := redis.NewClient(opt)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := client.Ping(ctx).Err(); err != nil {
+		log.Printf("WARNING: Redis at %s is unreachable, running without the Redis cache: %v", opt.Addr, err)
+		_ = client.Close()
+		return nil
+	}
+	log.Printf("✅ Connected to Redis at %s", opt.Addr)
+	return client
 }

@@ -27,6 +27,8 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import { useTranslation } from 'react-i18next';
 import { useTenant } from '../../../contexts/TenantContext';
 import { useNotification } from '../../../hooks/useNotification';
 import BusinessObjectSelectorControl from '../../../components/shared/BusinessObjectSelectorControl';
@@ -41,6 +43,8 @@ import {
 } from '../services/savedQueryApi';
 import type { SavedQuery, SavedQueryState, QueryDef } from '../types/queryDef';
 import { friendlyQueryError, savedQueryResultToSet, type SavedQueryRunShape } from '../../query-execution';
+import ScheduleEditor from '../../schedules/ScheduleEditor';
+import { useTargetSchedule } from '../../schedules/useTargetSchedule';
 
 function useLoadedSavedQuery(id: string | undefined, isNew: boolean) {
   const [savedQuery, setSavedQuery] = useState<SavedQuery | null>(null);
@@ -64,11 +68,13 @@ export default function SavedQueryEditor() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const notify = useNotification();
+  const { t } = useTranslation();
 
   const isNew = !id || id === 'new';
   const returnTo = searchParams.get('return_to');
 
   const { savedQuery, setSavedQuery, loading, error: loadError } = useLoadedSavedQuery(id, isNew);
+  const querySchedule = useTargetSchedule('saved_query', id, !isNew);
 
   const [name, setName] = useState('New Query');
   const [description, setDescription] = useState('');
@@ -329,6 +335,17 @@ export default function SavedQueryEditor() {
                 >
                   {running ? 'Running…' : 'Run'}
                 </Button>
+                <Button
+                  startIcon={<ScheduleIcon />}
+                  onClick={querySchedule.openEditor}
+                  disabled={isNew}
+                  color={querySchedule.schedule?.enabled ? 'success' : 'primary'}
+                  variant="outlined"
+                >
+                  {querySchedule.schedule?.enabled
+                    ? t('schedules.embed.scheduled')
+                    : t('schedules.embed.schedule')}
+                </Button>
                 <Button variant="contained" startIcon={<SaveIcon />} onClick={handleSave} disabled={saving}>
                   {saving ? 'Saving…' : 'Save'}
                 </Button>
@@ -361,6 +378,16 @@ export default function SavedQueryEditor() {
           />
         </Box>
       </Stack>
+
+      {!isNew && id && querySchedule.open && (
+        <ScheduleEditor
+          key={querySchedule.schedule?.id ?? `sq-${id}`}
+          open
+          schedule={querySchedule.schedule}
+          fixedTarget={{ kind: 'saved_query', ref: id, name }}
+          onClose={querySchedule.closeEditor}
+        />
+      )}
     </Box>
   );
 }

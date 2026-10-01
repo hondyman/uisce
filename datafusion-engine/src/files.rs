@@ -1,0 +1,687 @@
+//! File endpoints for the uisce data pipeline.
+//!
+//! - POST /files/profile  : infer schema + sample rows (analyst preview)
+//! - POST /files/read     : stream a file as NDJSON, in file order
+//! - POST /files/convert  : NDJSON spool -> csv/json/parquet (export)
+//! - POST /files/write    : NDJSON request body -> csv/json/parquet (export)
+//! - POST /files/upload   : raw request body -> file (atomic)
+//! - POST /files/list     : files under a folder
+//!
+//! All URIs resolve under DATAFUSION_FILE_ROOT (default /data/files); absolute
+//! paths, `..` and symlinks that escape the root are rejected. Tenant scoping
+//! is the caller's job: the Go side prefixes every path with the tenant id.
+//!
+//! CSV is read as all-strings on purpose: the pipeline's map/validate nodes
+//! parse and report bad values per row (with plain-language reasons) instead
+//! of DataFusion failing the whole scan on the first bad cell.
+
+use axum::{body::Body, http::StatusCode, response::Response, Json};
+use bytes::Bytes;
+use datafusion::arrow::array::RecordBatch;
+use datafusion::arrow::datatypes::{DataType, SchemaRef};
+use datafusion::arrow::json::LineDelimitedWriter;
+use datafusion::parquet::arrow::ArrowWriter;
+use datafusion::prelude::*;
+use futures::StreamExt;
+use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::path::{Component, Path, PathBuf};
+
+type ApiErr = (StatusCode, String);
+
+fn bad(msg: impl ToString) -> ApiErr {
+    (StatusCode::BAD_REQUEST, msg.to_string())
+}
+fn internal(msg: impl ToString) -> ApiErr {
+    (StatusCode::INTERNAL_SERVER_ERROR, msg.to_string())
+}
+
+fn root() -> PathBuf {
+    PathBuf::from(std::env::var("DATAFUSION_FILE_ROOT").unwrap_or_else(|_| "/data/files".into()))
+}
+
+/// Resolve a file:// (or bare relative) URI under the file root.
+pub fn resolve(uri: &str) -> Result<PathBuf, ApiErr> {
+    let rel = uri.strip_prefix("file://").unwrap_or(uri);
+    if uri.contains("://") && !uri.starts_with("file://") {
+        return Err(bad("only file:// URIs are supported by the engine; stage remote files first"));
+    }
+    let rel = rel.trim_start_matches('/');
+    let p = Path::new(rel);
+    if rel.is_empty() {
+        return Err(bad("empty path"));
+    }
+    for c in p.components() {
+        if !matches!(c, Component::Normal(_)) {
+            return Err(bad("path must be relative and must not contain '..'"));
+        }
+    }
+    let root = root();
+    let full = root.join(p);
+    // Symlink escape check on the deepest existing ancestor.
+    let mut probe = full.clone();
+    while !probe.exists() {
+        if !probe.pop() {
+            break;
+        }
+    }
+    if let (Ok(cr), Ok(cp)) = (root.canonicalize(), probe.canonicalize()) {
+        if !cp.starts_with(&cr) {
+            return Err(bad("path escapes the file root"));
+        }
+    }
+    Ok(full)
+}
+
+#[derive(Deserialize, Clone)]
+pub struct FileSpec {
+    pub uri: String,
+    pub format: String, // csv | json | parquet
+    #[serde(default)]
+    pub delimiter: Option<String>,
+    #[serde(default = "yes")]
+    pub has_header: bool,
+    /// Column names by position; required for headerless CSV.
+    #[serde(default)]
+    pub columns: Vec<String>,
+}
+fn yes() -> bool {
+    true
+}
+
+fn delim(s: &Option<String>) -> Result<u8, ApiErr> {
+    match s.as_deref() {
+        None | Some("") => Ok(b','),
+        Some("\\t") | Some("tab") => Ok(b'\t'),
+        Some(d) if d.len() == 1 => Ok(d.as_bytes()[0]),
+        Some(_) => Err(bad("delimiter must be a single character")),
+    }
+}
+
+fn ctx() -> SessionContext {
+    // One partition + no scan repartitioning => rows come back in file order,
+    // which the pipeline relies on for _source_row_num.
+    let cfg = SessionConfig::new()
+        .with_target_partitions(1)
+        .with_repartition_file_scans(false);
+    SessionContext::new_with_config(cfg)
+}
+
+async fn open(spec: &FileSpec, typed: bool) -> Result<DataFrame, ApiErr> {
+    let path = resolve(&spec.uri)?;
+    let ps = path.to_str().ok_or_else(|| bad("non-utf8 path"))?.to_string();
+    if !path.exists() {
+        return Err((StatusCode::NOT_FOUND, format!("file not found: {}", spec.uri)));
+    }
+    let c = ctx();
+    // DataFusion only reads paths with the format's default extension; the
+    // format is declared, so accept the file's own (.txt, .psv, .ndjson, ...).
+    let ext_owned = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| format!(".{e}"))
+        .unwrap_or_default();
+    let ext = ext_owned.as_str();
+    match spec.format.as_str() {
+        "csv" => {
+            let d = delim(&spec.delimiter)?;
+            let mut opts = CsvReadOptions::new().has_header(spec.has_header).delimiter(d).file_extension(ext);
+            let schema;
+            if !typed {
+                if spec.has_header {
+                    // zero inference records => every column is Utf8, names from header
+                    opts = opts.schema_infer_max_records(0);
+                } else {
+                    if spec.columns.is_empty() {
+                        return Err(bad("headerless csv needs column names"));
+                    }
+                    schema = datafusion::arrow::datatypes::Schema::new(
+                        spec.columns
+                            .iter()
+                            .map(|n| datafusion::arrow::datatypes::Field::new(n, DataType::Utf8, true))
+                            .collect::<Vec<_>>(),
+                    );
+                    return c.read_csv(&ps, opts.schema(&schema)).await.map_err(internal);
+                }
+            } else {
+                opts = opts.schema_infer_max_records(1000);
+            }
+            c.read_csv(&ps, opts).await.map_err(|e| bad(format!("cannot read csv: {e}")))
+        }
+        "json" => {
+            let mut jo = NdJsonReadOptions::default().file_extension(ext);
+            jo.schema_infer_max_records = 100_000;
+            c.read_json(&ps, jo).await
+                .map_err(|e| bad(format!("cannot read json (expected one object per line): {e}")))
+        }
+        "parquet" => c
+            .read_parquet(&ps, ParquetReadOptions { file_extension: ext, ..Default::default() })
+            .await
+            .map_err(|e| bad(format!("cannot read parquet: {e}"))),
+        f => Err(bad(format!("unsupported format {f}"))),
+    }
+}
+
+fn type_name(t: &DataType) -> &'static str {
+    use DataType::*;
+    match t {
+        Int8 | Int16 | Int32 | Int64 | UInt8 | UInt16 | UInt32 | UInt64 => "int",
+        Float16 | Float32 | Float64 => "float",
+        Decimal128(_, _) | Decimal256(_, _) => "decimal",
+        Boolean => "bool",
+        Date32 | Date64 => "date",
+        Timestamp(_, _) => "timestamp",
+        _ => "string",
+    }
+}
+
+#[derive(Serialize)]
+pub struct ColumnInfo {
+    name: String,
+    #[serde(rename = "type")]
+    ty: &'static str,
+    nullable: bool,
+}
+
+#[derive(Deserialize)]
+pub struct ProfileReq {
+    #[serde(flatten)]
+    file: FileSpec,
+    #[serde(default = "default_sample")]
+    sample_rows: usize,
+    #[serde(default)]
+    count_rows: bool,
+}
+fn default_sample() -> usize {
+    20
+}
+
+#[derive(Serialize)]
+pub struct ProfileResp {
+    columns: Vec<ColumnInfo>,
+    sample: Vec<serde_json::Map<String, serde_json::Value>>,
+    row_count: Option<usize>,
+}
+
+pub async fn profile(Json(req): Json<ProfileReq>) -> Result<Json<ProfileResp>, ApiErr> {
+    // Typed open: the analyst sees inferred types (int/date/...) in the preview.
+    let df = open(&req.file, true).await?;
+    let mut columns: Vec<ColumnInfo> = df
+        .schema()
+        .fields()
+        .iter()
+        .map(|f| ColumnInfo {
+            name: f.name().clone(),
+            ty: type_name(f.data_type()),
+            nullable: f.is_nullable(),
+        })
+        .collect();
+
+    let n = req.sample_rows.min(200);
+    // CSV text is the truth: sample it untyped, so values show exactly as in
+    // the file (a typed read turns CUSIP 037833100 into 37833100), and scan
+    // as many rows as inference did for identifier-looking values.
+    let csv = req.file.format == "csv";
+    let sample_df = if csv { open(&req.file, false).await? } else { df.clone() };
+    let scan = if csv { n.max(1000) } else { n };
+    let batches = sample_df.limit(0, Some(scan)).map_err(internal)?.collect().await.map_err(internal)?;
+    let refs: Vec<&RecordBatch> = batches.iter().collect();
+    #[allow(deprecated)]
+    let rows = datafusion::arrow::json::writer::record_batches_to_json_rows(&refs).map_err(internal)?;
+    if csv {
+        for c in columns.iter_mut() {
+            let numeric = matches!(c.ty, "int" | "float" | "decimal");
+            if numeric
+                && (identifier_name(&c.name)
+                    || rows.iter().any(|r| r.get(&c.name).and_then(|v| v.as_str()).is_some_and(leading_zero)))
+            {
+                c.ty = "string";
+            }
+        }
+    }
+    let sample = rows.into_iter().take(n).collect();
+
+    let row_count = if req.count_rows {
+        Some(df.count().await.map_err(internal)?)
+    } else {
+        None
+    };
+    Ok(Json(ProfileResp { columns, sample, row_count }))
+}
+
+/// Identifiers are text even when every value is digits: a CUSIP, an
+/// account number or a postcode is never summed, and a numeric type would
+/// drop its leading zeros.
+fn identifier_name(name: &str) -> bool {
+    const WORDS: [&str; 20] = [
+        "id", "cusip", "isin", "sedol", "figi", "lei", "ticker", "fsym", "code", "zip", "postcode",
+        "postal", "phone", "account", "acct", "iban", "bic", "swift", "ssn", "tin",
+    ];
+    let lower = name.to_ascii_lowercase();
+    if lower.split(|c: char| !c.is_ascii_alphanumeric()).any(|w| WORDS.contains(&w)) {
+        return true;
+    }
+    // camelCase: accountId, securityID
+    let b = name.as_bytes();
+    name.len() > 2 && (name.ends_with("Id") || name.ends_with("ID")) && b[b.len() - 3].is_ascii_lowercase()
+}
+
+/// "007", "-0123": a number would lose the zero. "0", "0.5" are numbers.
+fn leading_zero(v: &str) -> bool {
+    let d = v.trim().trim_start_matches(['+', '-']);
+    d.len() > 1 && d.starts_with('0') && d.as_bytes()[1].is_ascii_digit()
+}
+
+/// Stream the file as NDJSON. CSV values are strings; json/parquet keep native types.
+pub async fn read(Json(spec): Json<FileSpec>) -> Result<Response, ApiErr> {
+    let df = open(&spec, false).await?;
+    let stream = df.execute_stream().await.map_err(internal)?;
+    let body = Body::from_stream(stream.map(|r| -> Result<Bytes, std::io::Error> {
+        let batch = r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        let mut buf = Vec::new();
+        {
+            // Explicit nulls: every column is present on every line, so the
+            // caller can tell an empty cell from a missing column.
+            let mut w = datafusion::arrow::json::WriterBuilder::new()
+                .with_explicit_nulls(true)
+                .build::<_, datafusion::arrow::json::writer::LineDelimited>(&mut buf);
+            w.write(&batch).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            w.finish().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        }
+        Ok(Bytes::from(buf))
+    }));
+    Response::builder()
+        .header("content-type", "application/x-ndjson")
+        .body(body)
+        .map_err(internal)
+}
+
+#[derive(Deserialize)]
+pub struct ConvertReq {
+    /// NDJSON spool written by the caller, under the file root.
+    spool_uri: String,
+    /// Destination.
+    uri: String,
+    format: String,
+    #[serde(default)]
+    delimiter: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct ConvertResp {
+    rows: usize,
+    bytes: u64,
+}
+
+#[derive(Deserialize)]
+pub struct WriteQuery {
+    uri: String,
+    format: String,
+    #[serde(default)]
+    delimiter: Option<String>,
+}
+
+/// POST /files/write?uri=..&format=..: the request body is NDJSON rows; the
+/// engine spools them under the file root, converts to the target format and
+/// publishes atomically. The spool is removed either way.
+pub async fn write(
+    axum::extract::Query(q): axum::extract::Query<WriteQuery>,
+    body: Body,
+) -> Result<Json<ConvertResp>, ApiErr> {
+    // Validate the destination before accepting any data.
+    resolve(&q.uri)?;
+    let spool_rel = format!(".spool/{}.ndjson", uuid::Uuid::new_v4());
+    let spool = resolve(&spool_rel)?;
+    std::fs::create_dir_all(spool.parent().unwrap()).map_err(internal)?;
+    let res = async {
+        let mut f = File::create(&spool).map_err(internal)?;
+        copy_body(body, &mut f).await?;
+        convert(Json(ConvertReq { spool_uri: spool_rel.clone(), uri: q.uri, format: q.format, delimiter: q.delimiter })).await
+    }
+    .await;
+    let _ = std::fs::remove_file(&spool);
+    res
+}
+
+/// The file routes. Every call must carry `Authorization: Bearer <token>`
+/// matching FILE_ENGINE_TOKEN; without a configured token the routes refuse
+/// everything (tenant files are never served unauthenticated).
+pub fn router<S: Clone + Send + Sync + 'static>() -> axum::Router<S> {
+    use axum::routing::post;
+    axum::Router::new()
+        .route("/files/profile", post(profile))
+        .route("/files/read", post(read))
+        .route("/files/convert", post(convert))
+        .route("/files/list", post(list))
+        .route("/files/write", post(write))
+        .route("/files/upload", post(upload))
+        .layer(axum::middleware::from_fn(require_token))
+}
+
+async fn require_token(req: axum::extract::Request, next: axum::middleware::Next) -> Result<Response, ApiErr> {
+    let expected = std::env::var("FILE_ENGINE_TOKEN").unwrap_or_default();
+    if expected.len() < 32 {
+        return Err((StatusCode::SERVICE_UNAVAILABLE, "file engine token is not configured".into()));
+    }
+    let got = req
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or("");
+    if !constant_time_eq(got.as_bytes(), expected.as_bytes()) {
+        return Err((StatusCode::UNAUTHORIZED, "unauthorized".into()));
+    }
+    Ok(next.run(req).await)
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+/// Size cap for streamed bodies (uploads, exports): FILE_BODY_LIMIT_MB,
+/// default 5 GB. Raw `Body` streams are not limited by axum, so the copy
+/// loops enforce it.
+fn body_limit_bytes() -> u64 {
+    let mb: u64 = std::env::var("FILE_BODY_LIMIT_MB").ok().and_then(|v| v.parse().ok()).unwrap_or(5 * 1024);
+    mb * 1024 * 1024
+}
+
+/// Copy a streamed body into f, refusing more than the size cap.
+async fn copy_body(body: Body, f: &mut File) -> Result<u64, ApiErr> {
+    use std::io::Write;
+    let limit = body_limit_bytes();
+    let mut stream = body.into_data_stream();
+    let mut n = 0u64;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| bad(format!("reading body: {e}")))?;
+        n += chunk.len() as u64;
+        if n > limit {
+            return Err((StatusCode::PAYLOAD_TOO_LARGE, format!("file exceeds the {} MB limit", limit / 1024 / 1024)));
+        }
+        f.write_all(&chunk).map_err(internal)?;
+    }
+    f.sync_all().map_err(internal)?;
+    Ok(n)
+}
+
+#[derive(Deserialize)]
+pub struct UploadQuery {
+    uri: String,
+}
+
+#[derive(Serialize)]
+pub struct UploadResp {
+    bytes: u64,
+}
+
+/// POST /files/upload?uri=..: store the request body at uri, atomically.
+pub async fn upload(
+    axum::extract::Query(q): axum::extract::Query<UploadQuery>,
+    body: Body,
+) -> Result<Json<UploadResp>, ApiErr> {
+    let out = resolve(&q.uri)?;
+    if let Some(parent) = out.parent() {
+        std::fs::create_dir_all(parent).map_err(internal)?;
+    }
+    let tmp = out.with_extension(format!("upload-{}", uuid::Uuid::new_v4()));
+    let res = async {
+        let mut f = File::create(&tmp).map_err(internal)?;
+        let n = copy_body(body, &mut f).await?;
+        std::fs::rename(&tmp, &out).map_err(internal)?;
+        Ok(n)
+    }
+    .await;
+    if res.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    Ok(Json(UploadResp { bytes: res? }))
+}
+
+#[derive(Deserialize)]
+pub struct ListReq {
+    prefix: String,
+}
+
+#[derive(Serialize)]
+pub struct FileEntry {
+    path: String,
+    bytes: u64,
+    modified: Option<u64>,
+}
+
+/// POST /files/list: regular files under prefix (recursive, max 1000),
+/// paths relative to the root. Temp/spool files are hidden.
+pub async fn list(Json(req): Json<ListReq>) -> Result<Json<Vec<FileEntry>>, ApiErr> {
+    let dir = resolve(&req.prefix)?;
+    let base = root();
+    let mut out = Vec::new();
+    let mut stack = vec![dir];
+    while let Some(d) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        for e in rd.flatten() {
+            let Ok(ft) = e.file_type() else { continue };
+            let p = e.path();
+            if ft.is_dir() {
+                stack.push(p);
+            } else if ft.is_file() {
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if name.contains(".upload-") || name.ends_with(".part") {
+                    continue;
+                }
+                let md = e.metadata().ok();
+                out.push(FileEntry {
+                    path: p.strip_prefix(&base).unwrap_or(&p).to_string_lossy().into_owned(),
+                    bytes: md.as_ref().map(|m| m.len()).unwrap_or(0),
+                    modified: md
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs()),
+                });
+                if out.len() >= 1000 {
+                    break;
+                }
+            }
+        }
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(Json(out))
+}
+
+pub async fn convert(Json(req): Json<ConvertReq>) -> Result<Json<ConvertResp>, ApiErr> {
+    let src = FileSpec {
+        uri: req.spool_uri.clone(),
+        format: "json".into(),
+        delimiter: None,
+        has_header: true,
+        columns: vec![],
+    };
+    let df = open(&src, true).await?;
+    let mut stream = df.execute_stream().await.map_err(internal)?;
+    let schema: SchemaRef = stream.schema();
+
+    let out = resolve(&req.uri)?;
+    if let Some(parent) = out.parent() {
+        std::fs::create_dir_all(parent).map_err(internal)?;
+    }
+    let tmp = out.with_extension("part");
+    let file = File::create(&tmp).map_err(internal)?;
+    let mut rows = 0usize;
+
+    enum W {
+        Csv(datafusion::arrow::csv::Writer<File>),
+        Json(LineDelimitedWriter<File>),
+        Parquet(ArrowWriter<File>),
+    }
+    let mut w = match req.format.as_str() {
+        "csv" => W::Csv(
+            datafusion::arrow::csv::WriterBuilder::new()
+                .with_delimiter(delim(&req.delimiter)?)
+                .with_header(true)
+                .build(file),
+        ),
+        "json" => W::Json(LineDelimitedWriter::new(file)),
+        "parquet" => W::Parquet(ArrowWriter::try_new(file, schema, None).map_err(internal)?),
+        f => return Err(bad(format!("unsupported format {f}"))),
+    };
+
+    while let Some(b) = stream.next().await {
+        let b = b.map_err(internal)?;
+        rows += b.num_rows();
+        match &mut w {
+            W::Csv(x) => x.write(&b).map_err(internal)?,
+            W::Json(x) => x.write(&b).map_err(internal)?,
+            W::Parquet(x) => x.write(&b).map_err(internal)?,
+        }
+    }
+    match w {
+        W::Csv(_) => {}
+        W::Json(mut x) => x.finish().map_err(internal)?,
+        W::Parquet(x) => {
+            x.close().map_err(internal)?;
+        }
+    }
+    // Atomic publish: readers never see a half-written export.
+    std::fs::rename(&tmp, &out).map_err(internal)?;
+    let bytes = std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0);
+    Ok(Json(ConvertResp { rows, bytes }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use axum::response::IntoResponse;
+
+    // Handlers read DATAFUSION_FILE_ROOT; one test owns it to avoid races.
+    #[tokio::test]
+    async fn profile_read_write_roundtrip_and_path_safety() {
+        let dir = std::env::temp_dir().join(format!("dfe-files-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(dir.join("t1")).unwrap();
+        std::env::set_var("DATAFUSION_FILE_ROOT", &dir);
+        std::fs::write(
+            dir.join("t1/fs.txt"),
+            "FSYM_ID|NAME|AUM\nAB12CD-R|Alpha Fund|1000.5\nZZ99YY-R|Beta|\n",
+        )
+        .unwrap();
+        let spec = |uri: &str| FileSpec {
+            uri: uri.into(),
+            format: "csv".into(),
+            delimiter: Some("|".into()),
+            has_header: true,
+            columns: vec![],
+        };
+
+        // Profile: typed columns + sample + count.
+        let Json(p) = profile(Json(ProfileReq { file: spec("t1/fs.txt"), sample_rows: 5, count_rows: true }))
+            .await
+            .unwrap();
+        let cols: Vec<(String, &str)> = p.columns.iter().map(|c| (c.name.clone(), c.ty)).collect();
+        assert_eq!(cols[0], ("FSYM_ID".into(), "string"));
+        assert_eq!(cols[2], ("AUM".into(), "float"));
+        assert_eq!(p.row_count, Some(2));
+
+        // Identifiers stay text: by name (CUSIP, ACCOUNT_NO, accountId) or
+        // by a leading zero in the data (REF); QTY is still a number, and
+        // the sample shows values exactly as in the file.
+        std::fs::write(
+            dir.join("t1/ids.csv"),
+            "CUSIP,ACCOUNT_NO,accountId,REF,QTY\n037833100,12345,77,0042,10\n594918104,67890,78,1001,20\n",
+        )
+        .unwrap();
+        let ids = FileSpec { uri: "t1/ids.csv".into(), format: "csv".into(), delimiter: None, has_header: true, columns: vec![] };
+        let Json(pi) = profile(Json(ProfileReq { file: ids, sample_rows: 5, count_rows: false })).await.unwrap();
+        let types: Vec<&str> = pi.columns.iter().map(|c| c.ty).collect();
+        assert_eq!(types, vec!["string", "string", "string", "string", "int"]);
+        assert_eq!(pi.sample[0]["CUSIP"], "037833100");
+        assert_eq!(pi.sample[0]["REF"], "0042");
+        assert!(!identifier_name("valid") && !identifier_name("paid_amount") && !identifier_name("AUM"));
+        assert!(leading_zero("-012") && !leading_zero("0") && !leading_zero("0.5") && !leading_zero("10"));
+
+        // Read: NDJSON, all strings, file order.
+        let resp = read(Json(spec("t1/fs.txt"))).await.unwrap();
+        let body = String::from_utf8(to_bytes(resp.into_body(), usize::MAX).await.unwrap().to_vec()).unwrap();
+        let lines: Vec<serde_json::Value> = body.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0]["FSYM_ID"], "AB12CD-R");
+        assert_eq!(lines[0]["AUM"], "1000.5");
+        assert!(lines[1].as_object().unwrap().contains_key("AUM"), "empty cell must be an explicit null");
+        assert!(lines[1]["AUM"].is_null());
+
+        // Write: NDJSON body -> parquet, then read it back.
+        let q = WriteQuery { uri: "t1/out/fs.parquet".into(), format: "parquet".into(), delimiter: None };
+        let Json(w) = write(axum::extract::Query(q), Body::from(body.clone())).await.unwrap();
+        assert_eq!(w.rows, 2);
+        assert!(!dir.join("t1/out/fs.part").exists(), "temp file must be renamed away");
+        assert_eq!(std::fs::read_dir(dir.join(".spool")).unwrap().count(), 0, "spool must be cleaned up");
+        let back = FileSpec { uri: "t1/out/fs.parquet".into(), format: "parquet".into(), delimiter: None, has_header: true, columns: vec![] };
+        let Json(p2) = profile(Json(ProfileReq { file: back, sample_rows: 5, count_rows: true })).await.unwrap();
+        assert_eq!(p2.row_count, Some(2));
+
+        // Upload then list.
+        let Json(u) = upload(axum::extract::Query(UploadQuery { uri: "t1/in/new.csv".into() }), Body::from("a,b\n1,2\n")).await.unwrap();
+        assert_eq!(u.bytes, 8);
+        let Json(files) = list(Json(ListReq { prefix: "t1".into() })).await.unwrap();
+        let names: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(names, vec!["t1/fs.txt", "t1/ids.csv", "t1/in/new.csv", "t1/out/fs.parquet"]);
+        assert!(upload(axum::extract::Query(UploadQuery { uri: "../x".into() }), Body::from("x")).await.is_err());
+
+        // Through the router: the token is required.
+        use tower::ServiceExt;
+        let token = "t".repeat(40);
+        std::env::set_var("FILE_ENGINE_TOKEN", &token);
+        for auth in [None, Some("Bearer wrong".to_string())] {
+            let mut rq = axum::http::Request::post("/files/list").header("content-type", "application/json");
+            if let Some(a) = auth { rq = rq.header("authorization", a); }
+            let resp = router::<()>().oneshot(rq.body(Body::from(r#"{"prefix":"t1"}"#)).unwrap()).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        }
+        // Through the router: a body over axum's 2 MB default is accepted.
+        let big = vec![b'x'; 3 * 1024 * 1024];
+        let resp = router::<()>()
+            .oneshot(
+                axum::http::Request::post("/files/upload?uri=t1/in/big.bin")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::from(big))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(std::fs::metadata(dir.join("t1/in/big.bin")).unwrap().len(), 3 * 1024 * 1024);
+
+        // ...and one over the configured cap is refused, leaving nothing behind.
+        std::env::set_var("FILE_BODY_LIMIT_MB", "2");
+        let resp = router::<()>()
+            .oneshot(
+                axum::http::Request::post("/files/upload?uri=t1/in/too_big.bin")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::from(vec![b'x'; 3 * 1024 * 1024]))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        std::env::remove_var("FILE_BODY_LIMIT_MB");
+        assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        assert!(!dir.join("t1/in/too_big.bin").exists());
+        std::env::remove_var("FILE_ENGINE_TOKEN");
+        let resp = router::<()>()
+            .oneshot(axum::http::Request::post("/files/list").header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json").body(Body::from(r#"{"prefix":"t1"}"#)).unwrap())
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE, "no token configured: refuse everything");
+        let leftovers = std::fs::read_dir(dir.join("t1/in")).unwrap().flatten()
+            .filter(|e| e.file_name().to_string_lossy().contains(".upload-")).count();
+        assert_eq!(leftovers, 0, "partial upload must be removed");
+
+        // Path safety.
+        for bad_uri in ["../etc/passwd", "/t1/../../x", "s3://bucket/x.csv"] {
+            let e = read(Json(spec(bad_uri))).await.map(|r| r.into_response().status());
+            assert!(e.is_err(), "{bad_uri} must be rejected");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

@@ -130,7 +130,7 @@ export const BYOBIConfigTab: React.FC<BYOBITabProps> = ({ tenantId }) => {
                 <Typography variant="h6" fontWeight="600">Cube.dev Schema</Typography>
               </Box>
               <Typography variant="body2" color="#94a3b8" mb={2}>
-                Export Cube JavaScript semantic schema file mapping measures & dimensions to Uisce OS.
+                Export Cube JavaScript semantic schema file mapping measures & dimensions to Ivy OS.
               </Typography>
               <Button
                 variant="contained"

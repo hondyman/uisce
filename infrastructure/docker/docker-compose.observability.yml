@@ -35,8 +35,6 @@ services:
       traefik.enable: "false"
     depends_on:
       - backend
-      - validation-service
-      - rule-engine-service
       - notifications-service
       - search-service
 

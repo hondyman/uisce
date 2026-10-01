@@ -90,10 +90,6 @@ func (e *RuleEngine) evaluateChain(
 				_, violations, _ := EvaluateRecursiveWithDiagnostics(evaluator, rule.Node, input)
 				result.Violations = violations
 			}
-		} else if rule.ScoringFormula != "" {
-			if score, err := e.evaluateScoringFormula(ctx, rule.ScoringFormula, input); err == nil {
-				result.Score = &score
-			}
 		}
 
 		results = append(results, result)

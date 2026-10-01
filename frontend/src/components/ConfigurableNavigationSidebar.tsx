@@ -61,7 +61,7 @@ export const ConfigurableNavigationSidebar: React.FC = () => {
   return (
     <Box sx={{ width: 280, borderRight: '1px solid #e2e8f0', bgcolor: '#0f172a', color: '#94a3b8', height: '100vh', pt: 4 }}>
       <Typography variant="h6" fontWeight="700" color="#f8fafc" px={3} mb={4}>
-        Uisce OS <span style={{ fontWeight: 300, fontSize: '14px', color: '#38bdf8' }}>Northwind</span>
+        Ivy OS <span style={{ fontWeight: 300, fontSize: '14px', color: '#38bdf8' }}>Northwind</span>
       </Typography>
 
       <List 

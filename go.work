@@ -13,6 +13,7 @@ use (
 	./libs/shared-types
 	./libs/temporal-client
 	./libs/infisical
+	./libs/validation-sdk
 	./portfolio-management/backend
 	./rebalancing/api
 	./rebalancing/worker

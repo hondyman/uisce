@@ -232,7 +232,7 @@ export default function BOAIAssistantModal({
             />
             <FormControlLabel
               control={<Switch checked={includeRules} onChange={(e) => setIncludeRules(e.target.checked)} size="small" />}
-              label={<Typography variant="body2">Generate Starlark Validation Rules</Typography>}
+              label={<Typography variant="body2">Generate Validation Rules</Typography>}
             />
           </Stack>
 

@@ -21,11 +21,6 @@ dependencies:
   repository: "file://../semantic-engine"
   condition: semantic-engine.enabled
 
-- name: cube-api
-  version: "1.0.0"
-  repository: "file://../cube-api"
-  condition: cube-api.enabled
-
 - name: governance-engine
   version: "1.0.0"
   repository: "file://../governance-engine"
@@ -97,5 +92,4 @@ keywords:
 - semantic-layer
 - multi-tenant
 - enterprise
-- cube
 - analytics

@@ -1030,6 +1030,7 @@ export type SQLDialect = 'postgres' | 'snowflake' | 'bigquery' | 'clickhouse' | 
 /**
  * Generate dialect-specific SQL string for the current query state.
  */
+// eslint-disable-next-line no-restricted-syntax -- display-only dialect preview; real execution goes through the backend executeQuery/previewQuery imported in this same file
 export function generateDialectSQL(
   source: ExplorerSource,
   state: ExplorerQueryState,

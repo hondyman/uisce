@@ -1,0 +1,2 @@
+party
+rating_scale

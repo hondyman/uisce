@@ -79,7 +79,6 @@ func (h *GlossaryHandler) RegisterRoutes(r chi.Router) {
 
 		// Cube.dev properties endpoints
 		r.Get("/semantic-terms/{id}/cube-definition", h.HandleGetSemanticTermWithCubeProperties)
-		r.Get("/semantic-terms/export/cube-yaml", h.HandleExportSemanticTermsAsCubeYaml)
 	})
 }
 
@@ -113,9 +112,9 @@ func (h *GlossaryHandler) listTerms(w http.ResponseWriter, r *http.Request, term
 	`
 	args := []interface{}{secCtx.TenantID}
 
-	if secCtx.DatasourceID != "" {
+	if ds := secCtx.ScopedDatasourceID(); ds != "" {
 		query += " AND cn.tenant_datasource_id = $2"
-		args = append(args, secCtx.DatasourceID)
+		args = append(args, ds)
 	}
 
 	if termType != "" {
@@ -199,7 +198,7 @@ func (h *GlossaryHandler) ListEdges(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var rows *sql.Rows
-	if secCtx.DatasourceID != "" {
+	if ds := secCtx.ScopedDatasourceID(); ds != "" {
 		query := `
 			SELECT
 				ce.id,
@@ -219,7 +218,7 @@ func (h *GlossaryHandler) ListEdges(w http.ResponseWriter, r *http.Request) {
 			ORDER BY ce.created_at DESC
 		`
 		var err error
-		rows, err = h.db.Query(query, secCtx.TenantID, secCtx.DatasourceID)
+		rows, err = h.db.Query(query, secCtx.TenantID, ds)
 		if err != nil {
 			log.Printf("Error querying edges: %v", err)
 			http.Error(w, "Failed to fetch edges: "+err.Error(), http.StatusInternalServerError)
@@ -343,7 +342,7 @@ func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if secCtx.DatasourceID == "" {
+	if secCtx.ScopedDatasourceID() == "" {
 		http.Error(w, "datasource_id is required", http.StatusBadRequest)
 		return
 	}
@@ -372,7 +371,7 @@ func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if termData.TenantDatasourceID == "" {
-		termData.TenantDatasourceID = secCtx.DatasourceID
+		termData.TenantDatasourceID = secCtx.ScopedDatasourceID()
 	}
 
 	propertiesJSON, err := json.Marshal(termData.Properties)
@@ -545,7 +544,7 @@ func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
 			VALUES ($1, $2, $3, $4, $5, $6, NOW())
 			ON CONFLICT DO NOTHING
 		`
-		if _, err := h.db.Exec(edgeCreateQ, edgeID, termData.ParentID, insertedID, "business_term_to_semantic_term", secCtx.TenantID, secCtx.DatasourceID); err != nil {
+		if _, err := h.db.Exec(edgeCreateQ, edgeID, termData.ParentID, insertedID, "business_term_to_semantic_term", secCtx.TenantID, nullString(secCtx.ScopedDatasourceID())); err != nil {
 			log.Printf("Warning: Failed to create edge from business term to semantic term: %v", err)
 		}
 	}
@@ -699,7 +698,7 @@ func (h *GlossaryHandler) UpdateTerm(w http.ResponseWriter, r *http.Request) {
 					VALUES ($1, $2, $3, $4, $5, $6, NOW())
 					ON CONFLICT DO NOTHING
 				`
-				if _, err := h.db.Exec(edgeCreateQ, edgeID, str, termID, "business_term_to_semantic_term", secCtx.TenantID, secCtx.DatasourceID); err != nil {
+				if _, err := h.db.Exec(edgeCreateQ, edgeID, str, termID, "business_term_to_semantic_term", secCtx.TenantID, nullString(secCtx.ScopedDatasourceID())); err != nil {
 					log.Printf("Warning: Failed to create edge from business term to semantic term during update: %v", err)
 				}
 			}
@@ -1004,7 +1003,7 @@ func (h *GlossaryHandler) CreateEdge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	datasourceID := secCtx.DatasourceID
+	datasourceID := secCtx.ScopedDatasourceID()
 	if datasourceID == "" {
 		if req.TenantDatasourceID != "" {
 			datasourceID = req.TenantDatasourceID
@@ -1476,118 +1475,6 @@ func (h *GlossaryHandler) HandleGetSemanticTermWithCubeProperties(w http.Respons
 		}
 	} else {
 		response.CubeProperties = map[string]interface{}{}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-// CubeYamlExportResponse represents Cube.js configuration export
-type CubeYamlExportResponse struct {
-	Cubes          []map[string]interface{} `json:"cubes"`
-	Dimensions     []map[string]interface{} `json:"dimensions"`
-	Measures       []map[string]interface{} `json:"measures"`
-	Segments       []map[string]interface{} `json:"segments"`
-	TimeDimensions []map[string]interface{} `json:"time_dimensions"`
-}
-
-// HandleExportSemanticTermsAsCubeYaml exports all semantic terms as Cube.js configuration
-func (h *GlossaryHandler) HandleExportSemanticTermsAsCubeYaml(w http.ResponseWriter, r *http.Request) {
-	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
-	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
-		return
-	}
-
-	if secCtx.TenantID == "" || secCtx.DatasourceID == "" {
-		http.Error(w, "Missing required parameters: tenant_id, datasource_id", http.StatusBadRequest)
-		return
-	}
-
-	query := `
-		SELECT
-			cn.id,
-			cn.node_name,
-			cn.properties::jsonb
-		FROM catalog_node cn
-		WHERE cn.tenant_id = $1
-		  AND cn.tenant_datasource_id = $2
-		  AND cn.node_type_id IN (
-			SELECT id FROM catalog_node_type
-			WHERE catalog_type_name LIKE 'semantic_term_%'
-		)
-		ORDER BY cn.node_name
-	`
-
-	rows, err := h.db.Query(query, secCtx.TenantID, secCtx.DatasourceID)
-	if err != nil {
-		log.Printf("Error querying semantic terms: %v", err)
-		http.Error(w, "Failed to fetch semantic terms", http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	response := CubeYamlExportResponse{
-		Cubes:          []map[string]interface{}{},
-		Dimensions:     []map[string]interface{}{},
-		Measures:       []map[string]interface{}{},
-		Segments:       []map[string]interface{}{},
-		TimeDimensions: []map[string]interface{}{},
-	}
-
-	// Process each semantic term and categorize by type
-	for rows.Next() {
-		var termID, nodeName, propsJSON string
-		if err := rows.Scan(&termID, &nodeName, &propsJSON); err != nil {
-			log.Printf("Error scanning term: %v", err)
-			continue
-		}
-
-		var props map[string]interface{}
-		if err := json.Unmarshal([]byte(propsJSON), &props); err != nil {
-			log.Printf("Error parsing properties for %s: %v", termID, err)
-			continue
-		}
-
-		// Extract semantic term type
-		termType, ok := props["semantic_term_type"].(string)
-		if !ok {
-			continue
-		}
-
-		// Extract cube properties
-		cubePropsInterface, hasCubeProps := props["cube_properties"]
-		if !hasCubeProps {
-			continue
-		}
-
-		cubeProps, ok := cubePropsInterface.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		// Add to appropriate collection based on type
-		switch strings.ToUpper(termType) {
-		case "DIMENSION":
-			response.Dimensions = append(response.Dimensions, cubeProps)
-		case "MEASURE":
-			response.Measures = append(response.Measures, cubeProps)
-		case "TIME":
-			response.TimeDimensions = append(response.TimeDimensions, cubeProps)
-		case "SEGMENT":
-			response.Segments = append(response.Segments, cubeProps)
-		case "HIERARCHY":
-			// Hierarchies are typically used for organizing dimensions
-			// Store as a special cube configuration
-			cubeConfig := map[string]interface{}{
-				"name":        nodeName,
-				"type":        "hierarchy",
-				"levels":      cubeProps["levels"],
-				"title":       cubeProps["title"],
-				"description": cubeProps["description"],
-			}
-			response.Cubes = append(response.Cubes, cubeConfig)
-		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -2266,7 +2153,7 @@ func (h *GlossaryHandler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(job)
+	json.NewEncoder(w).Encode(&job) // a snapshot; pointer so vet sees no lock copy
 }
 
 func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.Request) {

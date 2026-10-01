@@ -5,6 +5,7 @@ package vm
 import (
 	"fmt"
 	"reflect"
+	"strings"
 )
 
 type ConditionEvaluator struct {
@@ -157,6 +158,16 @@ func (ce *ConditionEvaluator) evaluateSimpleCondition(
 
 	actualVal, found := ce.hierarchyResolver.ResolveFieldPath(data, fieldPath)
 
+	// The array-membership operators test a collection, so a dotted path
+	// through an array ("nodes.type") projects every element's value - the
+	// same traversal collection aggregation uses. Scoped to these operators
+	// so no existing operator's field resolution changes.
+	if (operator == "contains_any" || operator == "contains_all") && strings.Contains(fieldPath, ".") {
+		if vals, ok := ce.hierarchyResolver.ResolveFieldPathArray(data, fieldPath); ok {
+			actualVal, found = vals, true
+		}
+	}
+
 	// is_null/is_not_null are special-cased ahead of the "field not
 	// found -> false" branch below: unlike every other operator, "no
 	// value" (a missing key) is exactly what is_null exists to detect,
@@ -175,6 +186,16 @@ func (ce *ConditionEvaluator) evaluateSimpleCondition(
 		return !found || actualVal == nil, nil
 	case "is_not_null":
 		return found && actualVal != nil, nil
+	case "is_empty":
+		// Same null-first rule as the editor's evaluator: an absent value
+		// is empty.
+		if !found || actualVal == nil {
+			return true, nil
+		}
+	case "is_not_empty":
+		if !found || actualVal == nil {
+			return false, nil
+		}
 	}
 
 	if !found {
@@ -229,6 +250,9 @@ func (ce *ConditionEvaluator) compareValues(
 		return lt || eq, nil
 
 	default:
+		if ok, handled, err := compareExtended(actual, operator, expected); handled {
+			return ok, err
+		}
 		return false, fmt.Errorf("unknown operator: %s", operator)
 	}
 }

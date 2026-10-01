@@ -119,11 +119,12 @@ func TestTenantScoping_CombinesWithExistingFilters(t *testing.T) {
 	require.NoError(t, err)
 
 	where := extractWhere(sql)
-	assert.True(t, strings.HasPrefix(where, "t0.tenant_id = $1"))
+	// Filter values are bound parameters too, so the tenant predicate still
+	// leads the WHERE but binds the second placeholder.
+	assert.True(t, strings.HasPrefix(where, "t0.tenant_id = $2"))
 	assert.Contains(t, where, " AND ")
-	assert.Contains(t, sql, "t0.total_amount > 100")
-	require.Len(t, args, 1)
-	assert.Equal(t, "tenant-alpha", args[0])
+	assert.Contains(t, sql, "t0.total_amount > $1")
+	require.Equal(t, []interface{}{100, "tenant-alpha"}, args)
 }
 
 func TestTenantScoping_NoTenantID_NoScoping(t *testing.T) {

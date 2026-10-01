@@ -55,6 +55,8 @@ type Server struct {
 	drift    *driftread.Service
 	nlEngine *semanticast.Compiler
 	temporal client.Client
+	// pipelines is set by the API server (SetPipelines); nil elsewhere.
+	pipelines PipelineTools
 
 	mu    sync.RWMutex
 	order []string
@@ -78,6 +80,7 @@ func NewServer(db *sqlx.DB) *Server {
 	s.registerDefaultTools()
 	s.registerOMSTools()
 	s.registerGovernanceTools()
+	s.registerPipelineTools()
 	return s
 }
 

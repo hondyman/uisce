@@ -362,7 +362,7 @@ const Connections = () => {
     setSortConfig({ key, direction });
   };
 
-  if (!scopedTenant && !useAccess().isPlatformOperator) return <p>Select a tenant scope to view connections.</p>;
+  if (!scopedTenant && !isPlatformOperator) return <p>Select a tenant scope to view connections.</p>;
   if (isLoading) return <p>Loading...</p>;
   if (error) return <p>Error: {(error as Error).message}</p>;
 

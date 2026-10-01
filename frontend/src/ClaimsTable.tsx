@@ -11,6 +11,8 @@ interface ClaimsTableProps {
 }
 
 export default function ClaimsTable({ domain, statusFilter }: ClaimsTableProps) {
+  const confirm = useConfirm();
+
   const [claims, setClaims] = useState<SemanticModelClaim[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +75,6 @@ export default function ClaimsTable({ domain, statusFilter }: ClaimsTableProps) 
   }, [filterUser, fetchClaims]);
 
   const handleRevoke = async (claimId: string) => {
-    const confirm = useConfirm();
     if (!(await confirm({ title: 'Revoke claim', description: 'Are you sure you want to revoke this claim?' }))) return;
     try {
       await revokeDirectClaim(claimId);

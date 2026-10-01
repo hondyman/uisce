@@ -1642,12 +1642,17 @@ const BusinessObjectQueryBuilder: React.FC = () => {
                 ) : (
                   <>
                     <Stack direction="row" spacing={2}>
-                      <FormControl size="small" sx={{ minWidth: 140 }}>
+                      <FormControl size="small" sx={{ minWidth: 160 }}>
                         <InputLabel>Visual type</InputLabel>
                         <Select value={chartType} label="Visual type" onChange={(e) => setChartType(e.target.value as SavedQueryChartType)}>
-                          <MenuItem value="bar">Bar</MenuItem>
-                          <MenuItem value="line">Line</MenuItem>
-                          <MenuItem value="pie">Pie</MenuItem>
+                          <MenuItem value="bar">Bar Chart</MenuItem>
+                          <MenuItem value="stackedBar">Stacked Bar</MenuItem>
+                          <MenuItem value="line">Line Chart</MenuItem>
+                          <MenuItem value="area">Area Chart</MenuItem>
+                          <MenuItem value="pie">Pie Chart</MenuItem>
+                          <MenuItem value="donut">Donut Chart</MenuItem>
+                          <MenuItem value="scatter">Scatter Plot</MenuItem>
+                          <MenuItem value="combo">Combo (Bar + Line)</MenuItem>
                         </Select>
                       </FormControl>
                       <FormControl size="small" sx={{ minWidth: 160 }}>
@@ -1712,7 +1717,6 @@ const BusinessObjectQueryBuilder: React.FC = () => {
               fullWidth
               value={savedQueryName}
               onChange={(e) => setSavedQueryName(e.target.value)}
-              autoFocus
             />
             <TextField
               label="Description"

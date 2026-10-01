@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/component_extensibility/forms"
-	"github.com/hondyman/uisce/backend/internal/component_extensibility/marketplace"
 	"github.com/hondyman/uisce/backend/internal/component_extensibility/micro"
 	"github.com/hondyman/uisce/backend/internal/component_extensibility/recipes"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
@@ -16,20 +15,17 @@ type ComponentExtensibilityHandler struct {
 	recipeRegistry   *recipes.Registry
 	compositeManager *micro.CompositeManager
 	formGenerator    *forms.FormGenerator
-	marketplace      *marketplace.Service
 }
 
 func NewComponentExtensibilityHandler(
 	rr *recipes.Registry,
 	cm *micro.CompositeManager,
 	fg *forms.FormGenerator,
-	mp *marketplace.Service,
 ) *ComponentExtensibilityHandler {
 	return &ComponentExtensibilityHandler{
 		recipeRegistry:   rr,
 		compositeManager: cm,
 		formGenerator:    fg,
-		marketplace:      mp,
 	}
 }
 
@@ -45,9 +41,6 @@ func (h *ComponentExtensibilityHandler) Routes() chi.Router {
 
 	// Forms
 	r.Post("/forms/generate", h.GenerateForm)
-
-	// Marketplace
-	r.Get("/marketplace", h.ListMarketplace)
 
 	return r
 }
@@ -84,9 +77,4 @@ func (h *ComponentExtensibilityHandler) GenerateForm(w http.ResponseWriter, r *h
 	}
 	form, _ := h.formGenerator.Generate(r.Context(), bo)
 	json.NewEncoder(w).Encode(form)
-}
-
-func (h *ComponentExtensibilityHandler) ListMarketplace(w http.ResponseWriter, r *http.Request) {
-	items, _ := h.marketplace.List(r.Context(), "all")
-	json.NewEncoder(w).Encode(items)
 }

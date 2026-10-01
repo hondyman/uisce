@@ -23,8 +23,10 @@
 20261001_003_swift_field_map_seed.up.sql	different	BASELINE UNRECOVERABLE, EFFECT VERIFIED: the 26 seeded rows (MT541 8, MT543 8, MT548 3, pacs.008 7) match vend.swift_field_map exactly. The unqualified table name resolves via search_path (vend, public); on another search_path it would seed public instead
 20261001_009_swift_settlement_unique_txn_ref.up.sql	different	BASELINE UNRECOVERABLE, EFFECT VERIFIED: settlement_transaction_ref_tenant_uniq exists live exactly as on disk. The old non-unique index that disk drops (settlement_transaction_ref_tenant_idx) still exists live: redundant, harmless
 20261016_002a_seed_gold_copy_tenant.up.sql	different	BASELINE UNRECOVERABLE, EFFECT VERIFIED: idx_tenants_gold_copy exists live and the seed insert is a no-op because a gold-copy tenant (northwind) already exists. Separate finding: tenants.gold_copy and tenants.is_gold_copy disagree live (t vs f) and 14 code sites use is_gold_copy
+20261107_001_crims_column_ref_edge_type.up.sql	different	BASELINE UNRECOVERABLE, EFFECT VERIFIED: applied 2026-09-26 from a copy no ref holds; landed file (3bec435ac) seeds catalog_edge_types COLUMN_REFERENCES_COLUMN, which exists live with identical fields. Disk is authoritative
 
 # --- modified (git-base mode): shipped migrations legitimately edited ---------------
 20261021_001_catalog_node_tenant_path_unique.up.sql	modified	Trailing DOWN block stripped in 55e262aa4 (the runner executed the DOWN inside the same transaction as the UP)
 20261021_002_semantic_term_rejections.up.sql	modified	Trailing DOWN block stripped in 55e262aa4 (the runner executed the DOWN inside the same transaction as the UP)
 20260914_014_seed_order_validation_trigger.up.sql	modified	File-scope BEGIN/COMMIT stripped in 8ebbb8e90 (runner rejects COMMIT in migration files); behaviour-preserving
+20261027_001_message_catalog.up.sql	modified	Restored to the applied text (55baa65ea); the post-apply ALTER from fd73f661f moved to 20261115_001_message_catalog_changes_by_name

@@ -64,7 +64,6 @@ export const MappingModal: React.FC<MappingModalProps> = ({ open, onClose, onAdd
             <DialogContent dividers>
                 <Box mb={2}>
                     <TextField
-                        autoFocus
                         margin="dense"
                         label="Search Semantic Terms"
                         type="text"

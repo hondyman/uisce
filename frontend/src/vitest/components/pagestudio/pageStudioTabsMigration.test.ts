@@ -17,11 +17,13 @@ describe('migrateLayoutSpecToV3', () => {
     expect(v3.version).toBe(3);
     expect(v3.tabs).toHaveLength(1);
     expect(v3.tabs[0].title).toBe('Details');
-    expect(v3.tabs[0].canvas).toEqual(canvas);
+    // migration backfills a default responsive gridSpan on widgets that lack one
+    expect(v3.tabs[0].canvas).toEqual([{ ...canvas[0], gridSpan: { xs: 12, md: 6, lg: 6 } }]);
+    expect(v3.declaredParameters).toEqual([]);
     expect(v3.pageKey).toBe('p1');
   });
 
-  it('passes an already-v3 spec through unchanged', () => {
+  it('passes an already-v3 spec through, defaulting declaredParameters', () => {
     const v3in = {
       version: 3 as const,
       pageKey: 'p2',
@@ -32,7 +34,7 @@ describe('migrateLayoutSpecToV3', () => {
       tabs: [{ id: 't1', title: 'Tab 1', canvas: [] }],
     };
     const v3out = migrateLayoutSpecToV3(v3in);
-    expect(v3out).toBe(v3in);
+    expect(v3out).toEqual({ ...v3in, declaredParameters: [] });
   });
 
   it('throws for an unrecognized version', () => {

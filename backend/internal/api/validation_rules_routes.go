@@ -1,10 +1,8 @@
 package api
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,19 +13,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/security"
-	"github.com/hondyman/uisce/backend/internal/services"
 )
 
 type validationRulesHandler struct {
 	securityDeps handlers.SecurityContextDeps
 	db           *sql.DB
-	cueEngine    *services.CueEngine
 	boService    interface{}
 	resolver     security.DatasourceResolver
 }
@@ -99,18 +94,10 @@ type ValidationRuleExecutionResult struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-func errString(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}
-
-func RegisterValidationRulesRoutes(r chi.Router, db *sql.DB, cueEngine *services.CueEngine, boService interface{}, resolver security.DatasourceResolver) {
+func RegisterValidationRulesRoutes(r chi.Router, db *sql.DB, boService interface{}, resolver security.DatasourceResolver) {
 	h := &validationRulesHandler{
 		securityDeps: handlers.SecurityContextDeps{Resolver: resolver},
 		db:           db,
-		cueEngine:    cueEngine,
 		boService:    boService,
 		resolver:     resolver,
 	}
@@ -131,7 +118,6 @@ func RegisterValidationRulesRoutes(r chi.Router, db *sql.DB, cueEngine *services
 	// Execution and testing endpoints
 	r.Post("/validation-rules/{id}/execute", h.handleExecuteValidationRule())
 	r.Post("/validation-rules/execute-binding", h.handleExecuteValidationRuleBinding())
-	// r.Post("/validation-rules/execute-batch", handleExecuteValidationRulesBatch(db, cueEngine)) // Batch disabled for now if relies on Starlark logic mismatch
 	r.Get("/validation-rules/{id}/audit", h.handleGetValidationRuleAudit())
 
 	// Simulation with instance data
@@ -141,163 +127,26 @@ func RegisterValidationRulesRoutes(r chi.Router, db *sql.DB, cueEngine *services
 	r.Get("/validation-rules/schema", h.handleGetValidationRuleSchema())
 }
 
+// retiredLegacyRuleEndpoint answers every catalog_validation_rules
+// execution/simulation/schema endpoint. Those endpoints ran the retired
+// corpus (all rows is_active=false) through a CUE engine - a second rule
+// engine. The platform has exactly one: internal/rules/vm, reached through
+// /api/validation-rule-nodes.
+func retiredLegacyRuleEndpoint(w http.ResponseWriter) {
+	writeJSONError(w, http.StatusGone, "This validation-rule endpoint is retired", "endpoint_retired",
+		"catalog_validation_rules evaluation is retired along with its CUE engine - author, preview and evaluate rules through /api/validation-rule-nodes (internal/rules/vm, the single rule engine).")
+}
+
 func (h *validationRulesHandler) handleGetValidationRuleSchema() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
-		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
-			return
-		}
-
-		tenantID := secCtx.TenantID
-		datasourceID := secCtx.DatasourceID
-		boID := r.URL.Query().Get("bo_id")
-		locale := r.URL.Query().Get("locale")
-
-		if boID == "" {
-			writeJSONError(w, http.StatusBadRequest, "bo_id is required", "missing_params", "")
-			return
-		}
-
-		// Resolve non-UUID bo_id (name/technical name/entity_key) to the actual BO UUID scoped by tenant and datasource
-		if _, err := uuid.Parse(boID); err != nil {
-			lookup := `
-				SELECT id
-				FROM business_objects
-				WHERE tenant_id = $1
-				  AND ($2::text IS NULL OR datasource_id = $2)
-				  AND (id::text = $3 OR name ILIKE $3 OR display_name ILIKE $3 OR technical_name ILIKE $3 OR entity_key ILIKE $3)
-				LIMIT 1
-			`
-			var resolved sql.NullString
-			err := h.db.QueryRowContext(r.Context(), lookup, tenantID, nullString(datasourceID), boID).Scan(&resolved)
-			if err != nil || !resolved.Valid {
-				writeJSONError(w, http.StatusBadRequest, "business object not found for provided bo_id", "bo_not_found", errString(err))
-				return
-			}
-			boID = resolved.String
-		}
-
-		// Check invalid DB driver or just assume postgres? Application uses postgres.
-		sx := sqlx.NewDb(h.db, "postgres")
-		gen := services.NewCueSchemaGenerator(sx)
-
-		schemaStr, err := gen.GenerateSchemaStringPublic(r.Context(), tenantID, boID, locale)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[SCHEMA-ERROR] Failed to generate schema for BO %s: %v\n", boID, err)
-			writeJSONError(w, http.StatusInternalServerError, "Failed to generate schema", "schema_error", err.Error())
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"schema": schemaStr,
-		})
+		retiredLegacyRuleEndpoint(w)
 	}
-}
-
-type tenantRuleExecRow struct {
-	rule            ValidationRule
-	coreRuleID      sql.NullString
-	inheritMode     sql.NullString
-	coreVersionPin  sql.NullInt32
-	extensionScript sql.NullString
-}
-
-func fetchTenantRuleForExecution(ctx context.Context, db *sql.DB, id string, tenantID string, datasourceID string) (*tenantRuleExecRow, error) {
-	var out tenantRuleExecRow
-	var conditionJSON []byte
-	var scriptContent sql.NullString
-	q := `
-		SELECT id, tenant_id, rule_name, rule_type, condition_json, script_content, severity,
-		       core_rule_id, inherit_mode, core_version_pin, extension_script_content
-		FROM catalog_validation_rules
-		WHERE id = $1 AND tenant_id = $2 AND datasource_id = $3 AND is_active = true
-	`
-	err := db.QueryRowContext(ctx, q, id, tenantID, datasourceID).Scan(
-		&out.rule.ID,
-		&out.rule.TenantID,
-		&out.rule.RuleName,
-		&out.rule.RuleType,
-		&conditionJSON,
-		&scriptContent,
-		&out.rule.Severity,
-		&out.coreRuleID,
-		&out.inheritMode,
-		&out.coreVersionPin,
-		&out.extensionScript,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if len(conditionJSON) > 0 {
-		if err := json.Unmarshal(conditionJSON, &out.rule.ConditionJSON); err != nil {
-			return nil, fmt.Errorf("invalid condition json: %w", err)
-		}
-	}
-	if scriptContent.Valid {
-		out.rule.ScriptContent = scriptContent.String
-	}
-	return &out, nil
 }
 
 type coreRuleResolved struct {
 	RuleKey string
 	Version int
 	Script  string
-}
-
-func resolveCoreRuleScript(ctx context.Context, db *sql.DB, coreRuleID string, coreVersionPin *int) (*coreRuleResolved, error) {
-	var ruleKey string
-	var baseVersion int
-	err := db.QueryRowContext(ctx, `SELECT rule_key, version FROM public.catalog_validation_rule_cores WHERE id = $1`, coreRuleID).Scan(&ruleKey, &baseVersion)
-	if err != nil {
-		return nil, err
-	}
-
-	if coreVersionPin != nil {
-		var script sql.NullString
-		var version int
-		err := db.QueryRowContext(ctx, `
-			SELECT version, script_content
-			FROM public.catalog_validation_rule_cores
-			WHERE rule_key = $1 AND version = $2
-		`, ruleKey, *coreVersionPin).Scan(&version, &script)
-		if err != nil {
-			return nil, err
-		}
-		if !script.Valid {
-			return nil, errors.New("core rule has no script_content")
-		}
-		return &coreRuleResolved{RuleKey: ruleKey, Version: version, Script: script.String}, nil
-	}
-
-	var script sql.NullString
-	var version int
-	err = db.QueryRowContext(ctx, `
-		SELECT version, script_content
-		FROM public.catalog_validation_rule_cores
-		WHERE rule_key = $1 AND status = 'active'
-		ORDER BY version DESC
-		LIMIT 1
-	`, ruleKey).Scan(&version, &script)
-	if err != nil {
-		// Fall back to the referenced version if no active exists.
-		var s2 sql.NullString
-		var v2 int
-		err2 := db.QueryRowContext(ctx, `SELECT version, script_content FROM public.catalog_validation_rule_cores WHERE id = $1`, coreRuleID).Scan(&v2, &s2)
-		if err2 != nil {
-			return nil, err
-		}
-		if !s2.Valid {
-			return nil, errors.New("core rule has no script_content")
-		}
-		return &coreRuleResolved{RuleKey: ruleKey, Version: v2, Script: s2.String}, nil
-	}
-	if !script.Valid {
-		return nil, errors.New("core rule has no script_content")
-	}
-	return &coreRuleResolved{RuleKey: ruleKey, Version: version, Script: script.String}, nil
 }
 
 // handleListValidationRules retrieves all validation rules for a tenant with facets and pagination
@@ -975,114 +824,7 @@ func (h *validationRulesHandler) handleDeleteValidationRule() http.HandlerFunc {
 // handleExecuteValidationRule executes a validation rule against a provided record.
 func (h *validationRulesHandler) handleExecuteValidationRule() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
-		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
-		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
-			return
-		}
-
-		tenantID := secCtx.TenantID
-		datasourceID := secCtx.DatasourceID
-
-		var req struct {
-			Record map[string]interface{} `json:"record"`
-			Data   map[string]interface{} `json:"data"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "Invalid request body", "decode_error", err.Error())
-			return
-		}
-		record := req.Record
-		if record == nil {
-			record = req.Data
-		}
-		if record == nil {
-			writeJSONError(w, http.StatusBadRequest, "record is required", "missing_record", "")
-			return
-		}
-
-		row, err := fetchTenantRuleForExecution(r.Context(), h.db, id, tenantID, datasourceID)
-		if err == sql.ErrNoRows {
-			writeJSONError(w, http.StatusNotFound, "Validation rule not found or is inactive", "not_found", "")
-			return
-		}
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "Failed to query rule", "query_error", err.Error())
-			return
-		}
-
-		// Enforce CUE or Business Logic
-		if row.rule.RuleType != "cue" && row.rule.RuleType != "business_logic" {
-			writeJSONError(w, http.StatusBadRequest, "Only CUE validation rules are supported", "unsupported_type", "")
-			return
-		}
-
-		// Simple CUE execution (inheritance not fully adapted for CUE yet in this refactor, usage of ScriptContent directly)
-		// TODO: Handle inheritance by merging CUE scripts if needed.
-
-		var script string
-		// Logic to resolve script based on inheritance (simplified for now)
-		mode := "custom"
-		if row.inheritMode.Valid {
-			mode = strings.ToLower(strings.TrimSpace(row.inheritMode.String))
-		}
-
-		switch mode {
-		case "inherit", "extend":
-			// Resolve core
-			var pin *int
-			if row.coreVersionPin.Valid {
-				p := int(row.coreVersionPin.Int32)
-				pin = &p
-			}
-			if row.coreRuleID.Valid {
-				core, err := resolveCoreRuleScript(r.Context(), h.db, row.coreRuleID.String, pin)
-				if err == nil {
-					script = core.Script
-					if mode == "extend" && row.extensionScript.Valid {
-						script += "\n" + row.extensionScript.String
-					}
-				}
-			}
-		default:
-			// script = row.rule.ScriptContent -- Removed
-			script = ""
-		}
-
-		if script == "" {
-			writeJSONError(w, http.StatusInternalServerError, "No script content found (Starlark/CUE removed)", "empty_script", "")
-			return
-		}
-
-		// ASL TODO: Use RuleEngine from somewhere? (currently this method takes cueEngine)
-		// For now simple CUE eval if script exists (only from core inheritance?)
-		res, err := h.cueEngine.EvaluateValidation(r.Context(), script, record)
-		if err != nil {
-			// System error
-			writeJSONError(w, http.StatusInternalServerError, "Evaluation failed", "eval_error", err.Error())
-			return
-		}
-
-		result := ValidationRuleExecutionResult{
-			RuleID:    row.rule.ID,
-			RuleName:  row.rule.RuleName,
-			RuleType:  row.rule.RuleType,
-			Severity:  row.rule.Severity,
-			Status:    "fail",
-			Message:   "",
-			Timestamp: time.Now(),
-		}
-
-		if res.IsValid {
-			result.Status = "pass"
-		} else {
-			result.Status = "fail"
-			result.Message = res.Message
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(result)
+		retiredLegacyRuleEndpoint(w)
 	}
 }
 
@@ -1165,142 +907,7 @@ func (h *validationRulesHandler) handleGetValidationRuleAudit() http.HandlerFunc
 // handleSimulateValidationRuleWithInstance executes a validation rule against a business object instance
 func (h *validationRulesHandler) handleSimulateValidationRuleWithInstance() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ruleID := chi.URLParam(r, "id")
-		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
-		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
-			return
-		}
-
-		tenantID := secCtx.TenantID
-		datasourceID := secCtx.DatasourceID
-
-		var req struct {
-			InstanceID string `json:"instance_id"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "Invalid request body", "decode_error", err.Error())
-			return
-		}
-
-		if req.InstanceID == "" {
-			writeJSONError(w, http.StatusBadRequest, "instance_id is required", "missing_instance_id", "")
-			return
-		}
-
-		// Try to use the services.BusinessObjectService if available
-		if boService, ok := h.boService.(*services.BusinessObjectService); ok {
-			// Get instance data formatted for validation
-			record, err := boService.GetInstanceForValidation(r.Context(), tenantID, req.InstanceID)
-			if err != nil {
-				if err.Error() == "instance not found" {
-					writeJSONError(w, http.StatusNotFound, "Business object instance not found", "not_found", err.Error())
-				} else {
-					writeJSONError(w, http.StatusInternalServerError, "Failed to retrieve instance", "retrieval_error", err.Error())
-				}
-				return
-			}
-
-			// Get the validation rule
-			row, err := fetchTenantRuleForExecution(r.Context(), h.db, ruleID, tenantID, datasourceID)
-			if err == sql.ErrNoRows {
-				writeJSONError(w, http.StatusNotFound, "Validation rule not found or is inactive", "not_found", "")
-				return
-			}
-			if err != nil {
-				writeJSONError(w, http.StatusInternalServerError, "Failed to query rule", "query_error", err.Error())
-				return
-			}
-
-			mode := "custom"
-			if row.inheritMode.Valid {
-				mode = strings.ToLower(strings.TrimSpace(row.inheritMode.String))
-				if mode == "" {
-					mode = "custom"
-				}
-			}
-
-			var pin *int
-			if row.coreVersionPin.Valid {
-				p := int(row.coreVersionPin.Int32)
-				pin = &p
-			}
-
-			evalScript := func(script string) (*services.CueValidationResult, error) {
-				script = strings.TrimSpace(script)
-				if script == "" {
-					return &services.CueValidationResult{IsValid: false, Message: "Missing script content", Severity: "error"}, nil
-				}
-				// Force CUE
-				return h.cueEngine.EvaluateValidation(r.Context(), script, record)
-			}
-
-			var res *services.CueValidationResult
-			switch mode {
-			case "inherit", "extend":
-				if !row.coreRuleID.Valid {
-					res = &services.CueValidationResult{IsValid: false, Message: "inherit_mode requires core_rule_id", Severity: "error"}
-					break
-				}
-				core, err := resolveCoreRuleScript(r.Context(), h.db, row.coreRuleID.String, pin)
-				if err != nil {
-					res = &services.CueValidationResult{IsValid: false, Message: "Failed to resolve core rule script: " + err.Error(), Severity: "error"}
-					break
-				}
-				coreRes, execErr := evalScript(core.Script)
-				if execErr != nil {
-					res = &services.CueValidationResult{IsValid: false, Message: execErr.Error(), Severity: "error"}
-					break
-				}
-				if mode == "inherit" || !coreRes.IsValid {
-					res = coreRes
-					break
-				}
-				if row.extensionScript.Valid && strings.TrimSpace(row.extensionScript.String) != "" {
-					extRes, execErr := evalScript(row.extensionScript.String)
-					if execErr != nil {
-						res = &services.CueValidationResult{IsValid: false, Message: execErr.Error(), Severity: "error"}
-						break
-					}
-					res = extRes
-				} else {
-					res = coreRes
-				}
-			default:
-				// Script content removed.
-				// For now, fail or skip if not extended from core.
-				if row.coreRuleID.Valid {
-					// resolve core
-					// omitted for brevity, logic similar to above
-				}
-				res = &services.CueValidationResult{IsValid: false, Message: "No script content available (Starlark/CUE removed)", Severity: "error"}
-			}
-
-			result := map[string]interface{}{
-				"rule_id":     row.rule.ID,
-				"rule_name":   row.rule.RuleName,
-				"rule_type":   row.rule.RuleType,
-				"severity":    row.rule.Severity,
-				"status":      "fail",
-				"message":     "",
-				"timestamp":   time.Now(),
-				"instance_id": req.InstanceID,
-				"data_used":   record,
-			}
-			if res != nil {
-				if res.IsValid {
-					result["status"] = "pass"
-				}
-				result["message"] = res.Message
-			}
-
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(result)
-			return
-		}
-
-		// Fallback: service type not supported
-		writeJSONError(w, http.StatusInternalServerError, "Business object service not available", "service_error", "")
+		retiredLegacyRuleEndpoint(w)
 	}
 }
 
@@ -1433,4 +1040,3 @@ func (h *validationRulesHandler) handleExecuteValidationRuleBinding() http.Handl
 		})
 	}
 }
-

@@ -15,11 +15,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	dbpkg "github.com/hondyman/uisce/backend/internal/db"
+	"github.com/hondyman/uisce/backend/internal/dscreds"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/backend/internal/platform"
+	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/pkg/llm"
 	"github.com/jmoiron/sqlx"
@@ -52,18 +54,18 @@ type JoinColumn struct {
 }
 
 type RelationshipResult struct {
-	ID                string        `json:"id" db:"id"`
-	RelatedObjectName string        `json:"relatedObjectName" db:"related_object_name"`
-	TargetObjectID    string        `json:"targetObjectId" db:"target_object_id"`
-	RelationshipType  string        `json:"relationshipType" db:"relationship_type"`
-	Cardinality       string        `json:"cardinality" db:"cardinality"`
-	Description       string        `json:"description" db:"description"`
-	JoinCondition     string        `json:"joinCondition" db:"join_condition"`
-	JoinColumns       []JoinColumn  `json:"joinColumns,omitempty"`
-	SourceDriverTable string        `json:"sourceDriverTable" db:"source_driver_table"`
-	TargetDriverTable string        `json:"targetDriverTable" db:"target_driver_table"`
-	Kind              string        `json:"kind"`
-	LinkTable         string        `json:"linkTable,omitempty"`
+	ID                string       `json:"id" db:"id"`
+	RelatedObjectName string       `json:"relatedObjectName" db:"related_object_name"`
+	TargetObjectID    string       `json:"targetObjectId" db:"target_object_id"`
+	RelationshipType  string       `json:"relationshipType" db:"relationship_type"`
+	Cardinality       string       `json:"cardinality" db:"cardinality"`
+	Description       string       `json:"description" db:"description"`
+	JoinCondition     string       `json:"joinCondition" db:"join_condition"`
+	JoinColumns       []JoinColumn `json:"joinColumns,omitempty"`
+	SourceDriverTable string       `json:"sourceDriverTable" db:"source_driver_table"`
+	TargetDriverTable string       `json:"targetDriverTable" db:"target_driver_table"`
+	Kind              string       `json:"kind"`
+	LinkTable         string       `json:"linkTable,omitempty"`
 	// Not serialized - internal-only, used to resolve the real FK column
 	// from information_schema below when the catalog graph's own
 	// join_condition/cardinality properties are unpopulated (the common
@@ -102,14 +104,25 @@ type BusinessObjectService struct {
 	backendDBCache sync.Map // string (backend id) -> *sqlx.DB
 }
 
-// resolveRecordsDB returns the *sqlx.DB that live record queries/writes for
-// this Business Object should run against: the physical database behind its
-// default (or first) binding's backend, falling back to the alpha metadata
-// DB (s.db) when the BO has no binding, the backend has no connection
-// config, or the connection can't be established. A BO whose driving table
-// happens to live in alpha resolves back to s.db too, so this is safe to
-// call unconditionally.
+// resolveRecordsDB returns the *sqlx.DB that live record reads should run
+// against: the database behind the BO's default (or first) binding's backend,
+// or the alpha metadata DB (s.db) when the BO has no bound backend. Reads
+// degrade to s.db when the bound backend cannot be resolved; writes use
+// recordsDBStrict, which never does.
 func (s *BusinessObjectService) resolveRecordsDB(ctx context.Context, boID string) *sqlx.DB {
+	db, err := s.recordsDBStrict(ctx, boID)
+	if err != nil {
+		logging.GetLogger().Sugar().Warnf("resolveRecordsDB: %v - falling back to alpha DB for a read", err)
+		return s.db
+	}
+	return db
+}
+
+// recordsDBStrict resolves the database a BO's records live in. No bound
+// backend means the records live in the metadata DB (s.db). A bound backend
+// that cannot be resolved or reached is an error: writing a tenant's records
+// to any other database is never acceptable.
+func (s *BusinessObjectService) recordsDBStrict(ctx context.Context, boID string) (*sqlx.DB, error) {
 	var backendID string
 	err := s.db.GetContext(ctx, &backendID, `
 		SELECT backend_id::text FROM public.business_object_binding
@@ -117,29 +130,36 @@ func (s *BusinessObjectService) resolveRecordsDB(ctx context.Context, boID strin
 		ORDER BY is_default DESC, created_at ASC
 		LIMIT 1
 	`, boID)
-	if err != nil || backendID == "" {
-		return s.db
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && backendID == "") {
+		return s.db, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolving the datasource of business object %s: %w", boID, err)
 	}
 
 	if cached, ok := s.backendDBCache.Load(backendID); ok {
-		return cached.(*sqlx.DB)
+		return cached.(*sqlx.DB), nil
 	}
 
-	var connectionDetails string
-	if err := s.db.GetContext(ctx, &connectionDetails, `
-		SELECT config::text FROM public.tenant_product_datasource WHERE id = $1::uuid
-	`, backendID); err != nil || connectionDetails == "" {
-		// No datasource-level connection config for this backend (e.g. an
-		// orphan/placeholder backend row) -- degrade to the metadata DB
-		// rather than failing the read outright.
-		logging.GetLogger().Sugar().Warnf("resolveRecordsDB: no connection_details for backend %s, falling back to alpha DB", backendID)
-		return s.db
+	var backend struct {
+		Config   string `db:"config"`
+		TenantID string `db:"tenant_id"`
+	}
+	if err := s.db.GetContext(ctx, &backend, `
+		SELECT COALESCE(config::text, '') AS config, COALESCE(tenant_id::text, '') AS tenant_id
+		FROM public.tenant_product_datasource WHERE id = $1::uuid
+	`, backendID); err != nil || backend.Config == "" {
+		return nil, fmt.Errorf("business object %s is bound to datasource %s, which has no connection configuration", boID, backendID)
 	}
 
-	targetDB, err := connectToDatabaseFromDetails(ctx, connectionDetails)
+	connectionDetails, err := datasourceCreds().Hydrate(ctx, dscreds.KindDatasource, backend.TenantID, backendID, []byte(backend.Config))
 	if err != nil {
-		logging.GetLogger().Sugar().Warnf("resolveRecordsDB: failed to connect to backend %s, falling back to alpha DB: %v", backendID, err)
-		return s.db
+		return nil, fmt.Errorf("business object %s: cannot resolve credentials for its datasource %s: %w", boID, backendID, err)
+	}
+
+	targetDB, err := connectToDatabaseFromDetails(ctx, string(connectionDetails))
+	if err != nil {
+		return nil, fmt.Errorf("business object %s: cannot connect to its datasource %s: %w", boID, backendID, err)
 	}
 
 	sqlxDB := sqlx.NewDb(targetDB, "pgx")
@@ -149,7 +169,21 @@ func (s *BusinessObjectService) resolveRecordsDB(ctx context.Context, boID strin
 	if loaded {
 		_ = sqlxDB.Close()
 	}
-	return actual.(*sqlx.DB)
+	return actual.(*sqlx.DB), nil
+}
+
+// RecordsDB is the database a BO's records live in, for the BO records API
+// (reads and writes). It resolves the tenant's own BO first, else the gold
+// copy's; a key with no business_objects row has its records in s.db.
+func (s *BusinessObjectService) RecordsDB(ctx context.Context, tenantID, boKeyOrID string) (*sqlx.DB, error) {
+	bo, err := s.loadEnforcementTarget(ctx, tenantID, boKeyOrID)
+	if err != nil {
+		return nil, err
+	}
+	if bo == nil {
+		return s.db, nil
+	}
+	return s.recordsDBStrict(ctx, bo.ID)
 }
 
 var boFieldsColumnCache sync.Map
@@ -470,6 +504,16 @@ func (s *BusinessObjectService) CreateBusinessObject(
 		return nil, fmt.Errorf("cannot create business object %q: driver table catalog node not found (has the datasource been scanned, and is driverTableId valid?)", req.Name)
 	}
 
+	// Core-ness follows the caller's tenant, not the request: a BO created in
+	// the gold-copy tenant is core (ListBusinessObjectsComposed only shows
+	// core objects there, and other tenants inherit it read-only); anywhere
+	// else it is that tenant's own custom object.
+	isGold, err := IsGoldCopyTenant(ctx, s.db, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve gold copy tenant: %w", err)
+	}
+	bo.IsCore = isGold
+
 	// Insert BO
 	query := `
 		INSERT INTO public.business_objects (
@@ -489,7 +533,7 @@ func (s *BusinessObjectService) CreateBusinessObject(
 
 	logging.GetLogger().Sugar().Warnf("[META BO SERVICE] Create scope: tenant=%s driverTable=%v name=%s", bo.TenantID, driverTableID, bo.Name)
 
-	_, err := s.db.ExecContext(ctx, query,
+	_, err = s.db.ExecContext(ctx, query,
 		bo.ID, bo.TenantID, bo.Key, bo.DisplayName, bo.Description,
 		classificationNodeID, keyColumnNodeID,
 		driverTableID, bo.DriverTableName,
@@ -3445,6 +3489,31 @@ func quotedQualifiedTable(drivingTable string) string {
 	return pq.QuoteIdentifier(schema) + "." + pq.QuoteIdentifier(table)
 }
 
+// tenantScopePredicate returns a "tenant_id = $argIdx" predicate and its bound
+// arg when drivingTable (on db) has a tenant_id column. Tables without one are
+// isolated at the datasource level and get no predicate. Fails closed: an
+// introspection error, or a tenanted table with no caller tenant, is an error
+// rather than an unscoped read.
+func tenantScopePredicate(ctx context.Context, db *sqlx.DB, drivingTable string, secCtx *security.Context, argIdx int) (string, []interface{}, error) {
+	schemaName, tableName := resolveQualifiedTable(drivingTable)
+	var hasTenant bool
+	if err := db.GetContext(ctx, &hasTenant, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = $1 AND table_name = $2 AND column_name = 'tenant_id'
+		)
+	`, schemaName, tableName); err != nil {
+		return "", nil, fmt.Errorf("tenant scope check on %s.%s: %w", schemaName, tableName, err)
+	}
+	if !hasTenant {
+		return "", nil, nil
+	}
+	if secCtx == nil || secCtx.TenantID == "" {
+		return "", nil, fmt.Errorf("tenant context required to query %s.%s", schemaName, tableName)
+	}
+	return fmt.Sprintf("%s = $%d", pq.QuoteIdentifier("tenant_id"), argIdx), []interface{}{secCtx.TenantID}, nil
+}
+
 // QueryBORecords queries physical records through the Business Object ORM layer with
 // parameter filtering, column projections, bi-temporal time-travel, and pagination.
 func (s *BusinessObjectService) QueryBORecords(
@@ -3577,6 +3646,19 @@ func (s *BusinessObjectService) QueryBORecords(
 	args := make([]interface{}, 0)
 	argIdx := 1
 
+	// Tenant isolation: a driving table shared across tenants carries a
+	// tenant_id column and must be scoped to the caller's tenant. Applies to
+	// both the COUNT and the page query since they share whereSQL/args.
+	tenantPred, tenantArgs, err := tenantScopePredicate(ctx, recordsDB, drivingTable, secCtx, argIdx)
+	if err != nil {
+		return nil, err
+	}
+	if tenantPred != "" {
+		whereClauses = append(whereClauses, tenantPred)
+		args = append(args, tenantArgs...)
+		argIdx += len(tenantArgs)
+	}
+
 	// Bi-temporal / Historical query filter
 	if req.AsOfValidTime != nil && bo.EnableHistory {
 		whereClauses = append(whereClauses, fmt.Sprintf(
@@ -3587,46 +3669,22 @@ func (s *BusinessObjectService) QueryBORecords(
 		argIdx++
 	}
 
-	// User-specified filters
+	// User-specified filters: the rule engine's condition vocabulary, pushed
+	// down to SQL. An operator it cannot push down is an error - never a
+	// dropped predicate that widens the result.
 	for _, flt := range req.Filters {
 		if flt.Field == "" {
 			continue
 		}
-		quotedField := pq.QuoteIdentifier(flt.Field)
-		switch strings.ToLower(flt.Operator) {
-		case "eq", "=":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d", quotedField, argIdx))
-			args = append(args, flt.Value)
+		pred, err := vm.CompileConditionSQL(pq.QuoteIdentifier(flt.Field), flt.Operator, flt.Value, func(v interface{}) string {
+			args = append(args, v)
 			argIdx++
-		case "neq", "!=":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s != $%d", quotedField, argIdx))
-			args = append(args, flt.Value)
-			argIdx++
-		case "gt", ">":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s > $%d", quotedField, argIdx))
-			args = append(args, flt.Value)
-			argIdx++
-		case "gte", ">=":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s >= $%d", quotedField, argIdx))
-			args = append(args, flt.Value)
-			argIdx++
-		case "lt", "<":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s < $%d", quotedField, argIdx))
-			args = append(args, flt.Value)
-			argIdx++
-		case "lte", "<=":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s <= $%d", quotedField, argIdx))
-			args = append(args, flt.Value)
-			argIdx++
-		case "like", "contains":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s ILIKE $%d", quotedField, argIdx))
-			args = append(args, fmt.Sprintf("%%%v%%", flt.Value))
-			argIdx++
-		case "is_null":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s IS NULL", quotedField))
-		case "is_not_null":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s IS NOT NULL", quotedField))
+			return fmt.Sprintf("$%d", argIdx-1)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("filter on %q: %w", flt.Field, err)
 		}
+		whereClauses = append(whereClauses, pred)
 	}
 
 	// Text search across string columns if provided
@@ -4330,13 +4388,21 @@ Respond with a strictly valid JSON object matching this schema:
 	}
 
 	if req.IncludeRules {
-		resp.SuggestedRules = []models.SynthesizedRule{
-			{RuleName: "ValidatePrimaryKey", Description: "Ensures primary identifier is non-empty", Severity: "ERROR", Field: "id", Script: "def validate(record):\n    return bool(record.get('id'))"},
-			{RuleName: "ValidateNonNegativeAmount", Description: "Ensures amount is not negative", Severity: "WARNING", Field: "amount", Script: "def validate(record):\n    val = record.get('amount')\n    return val is None or float(val) >= 0"},
-		}
+		// Scripts are internal/rules/vm expressions - the single rule engine
+		// (see TestSynthesizedRulesAreRuleEngineExpressions).
+		resp.SuggestedRules = synthesizedRuleSuggestions()
 	}
 
 	return resp, nil
+}
+
+// synthesizedRuleSuggestions are the starter rules offered by BO synthesis,
+// written as internal/rules/vm expressions.
+func synthesizedRuleSuggestions() []models.SynthesizedRule {
+	return []models.SynthesizedRule{
+		{RuleName: "ValidatePrimaryKey", Description: "Ensures primary identifier is non-empty", Severity: "ERROR", Field: "id", Script: "NOT_EMPTY(id)"},
+		{RuleName: "ValidateNonNegativeAmount", Description: "Ensures amount is not negative", Severity: "WARNING", Field: "amount", Script: "amount >= 0"},
+	}
 }
 
 // TranslateNLToQueryDef converts natural language queries into executable QueryDef and multi-dialect SQL
@@ -4661,7 +4727,7 @@ func (s *BusinessObjectService) DetectAnomaliesWithAI(ctx context.Context, secCt
 	summary := fmt.Sprintf("Analyzed %d records across %d fields. Detected %d data quality anomalies.", total, len(recordsResp.Columns), len(anomalies))
 	recs := []string{
 		"Add REQUIRED constraints on high-frequency null fields.",
-		"Configure Starlark validation rules for automated anomaly rejection.",
+		"Author validation rules in the rule editor for automated anomaly rejection.",
 	}
 
 	return &models.BOAIAnomalyDetectResponse{

@@ -41,20 +41,14 @@ func newProxy(target string) *httputil.ReverseProxy {
 
 func main() {
 	listen := flag.String("listen", getEnv("PROXY_LISTEN", ":29080"), "listen address")
-	ruleEngine := flag.String("rule", getEnv("RULE_ENGINE_URL", "http://localhost:8083"), "rule-engine base URL")
 	backend := flag.String("backend", getEnv("BACKEND_URL", "http://localhost:8080"), "backend/api gateway URL")
 	flag.Parse()
 
-	log.Printf("proxy starting on %s; rule=%s backend=%s", *listen, *ruleEngine, *backend)
+	log.Printf("proxy starting on %s; backend=%s", *listen, *backend)
 
-	ruleProxy := newProxy(*ruleEngine)
 	backendProxy := newProxy(*backend)
 
 	mux := http.NewServeMux()
-
-	// route /api/validation-rules -> rule-engine
-	mux.HandleFunc("/api/validation-rules", func(w http.ResponseWriter, r *http.Request) { ruleProxy.ServeHTTP(w, r) })
-	mux.HandleFunc("/api/validation-rules/", func(w http.ResponseWriter, r *http.Request) { ruleProxy.ServeHTTP(w, r) })
 
 	// Add more specific routes if needed in the future
 	// Debug endpoint: echo headers and basic info so we can validate proxy-to-backend path

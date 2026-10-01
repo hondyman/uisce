@@ -380,9 +380,22 @@ func sendNotificationHandler(db *sqlx.DB, logger *zap.Logger) http.HandlerFunc {
 			Message  string `json:"message"`
 		}
 
+		claims := jwtmiddleware.GetClaimsFromContext(r)
+		if claims == nil {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]string{"error": "invalid request"})
+			return
+		}
+		// The tenant comes from the token; a tenant named in the body must be
+		// one the caller belongs to.
+		if req.TenantID == "" {
+			req.TenantID = claims.TenantID
+		} else if err := jwtmiddleware.ValidateTenantAccess(claims, req.TenantID); err != nil {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 			return
 		}
 
@@ -417,6 +430,11 @@ func sendNotificationHandler(db *sqlx.DB, logger *zap.Logger) http.HandlerFunc {
 
 func getNotificationStatusHandler(db *sqlx.DB, logger *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		claims := jwtmiddleware.GetClaimsFromContext(r)
+		if claims == nil {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
 		notificationID := chi.URLParam(r, "notificationID")
 
 		var notification struct {
@@ -433,8 +451,8 @@ func getNotificationStatusHandler(db *sqlx.DB, logger *zap.Logger) http.HandlerF
 
 		err := db.GetContext(r.Context(), &notification, `
 			SELECT id, tenant_id, type, subject, message, delivery_status, read_at, created_at, updated_at
-			FROM notifications WHERE id = $1
-		`, notificationID)
+			FROM notifications WHERE id = $1 AND tenant_id = $2
+		`, notificationID, claims.TenantID)
 
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
@@ -503,6 +521,11 @@ func listNotificationsHandler(db *sqlx.DB, logger *zap.Logger) http.HandlerFunc 
 
 func markAsReadHandler(db *sqlx.DB, logger *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		claims := jwtmiddleware.GetClaimsFromContext(r)
+		if claims == nil {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
 		notificationID := chi.URLParam(r, "notificationID")
 
 		notificationIDOutbox := generateUUID()
@@ -511,11 +534,18 @@ func markAsReadHandler(db *sqlx.DB, logger *zap.Logger) http.HandlerFunc {
 		}
 		payloadBytes, _ := json.Marshal(payload)
 
-		_, err := db.ExecContext(r.Context(), `
+		res, err := db.ExecContext(r.Context(), `
 			INSERT INTO notification_outbox (id, aggregate_type, event_type, payload, tenant_id, created_at)
 			SELECT $1, 'notification', 'read', $2, tenant_id, NOW()
-			FROM notifications WHERE id = $3
-		`, notificationIDOutbox, payloadBytes, notificationID)
+			FROM notifications WHERE id = $3 AND tenant_id = $4
+		`, notificationIDOutbox, payloadBytes, notificationID, claims.TenantID)
+		if err == nil {
+			if n, _ := res.RowsAffected(); n == 0 {
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]string{"error": "notification not found"})
+				return
+			}
+		}
 
 		if err != nil {
 			logger.Error("Failed to mark as read", zap.Error(err))

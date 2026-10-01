@@ -178,78 +178,6 @@ semantic-engine:
     cacheTTL: 1h
 
 # =============================================================================
-# Cube.js API Configuration (DISABLED - Cube.js removed)
-# =============================================================================
-cube-api:
-  enabled: false
-
-  replicaCount: 5
-
-  image:
-    repository: cubejs/cube
-    tag: "v0.35.0"
-
-  resources:
-    requests:
-      cpu: 500m
-      memory: 1Gi
-    limits:
-      cpu: 2000m
-      memory: 4Gi
-
-  autoscaling:
-    enabled: true
-    minReplicas: 5
-    maxReplicas: 100
-    metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
-    - type: Pods
-      pods:
-        metric:
-          name: cube_query_queue_depth
-        target:
-          type: AverageValue
-          averageValue: "50"
-
-  # Cube.js specific settings
-  cube:
-    apiSecret: "" # Set via external secret
-    devMode: false
-
-    # Pre-aggregation settings
-    preAggregations:
-      externalRefresh: true
-      rollupOnly: false
-
-    # Query queue
-    queryQueue:
-      concurrency: 4
-      executionTimeout: 300
-      orphanedTimeout: 120
-
-    # Caching
-    cache:
-      enabled: true
-      type: redis
-
-  # Refresh workers (separate deployment)
-  refreshWorker:
-    enabled: true
-    replicaCount: 3
-    resources:
-      requests:
-        cpu: 1000m
-        memory: 2Gi
-      limits:
-        cpu: 4000m
-        memory: 8Gi
-
-# =============================================================================
 # Governance Engine Configuration
 # =============================================================================
 governance-engine:
@@ -623,8 +551,6 @@ podDisruptionBudgets:
     minAvailable: 2
   semantic-engine:
     minAvailable: 1
-  cube-api:
-    minAvailable: 3
   governance-engine:
     minAvailable: 2
 

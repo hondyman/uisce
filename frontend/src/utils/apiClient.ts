@@ -1,6 +1,7 @@
 import { getRequiredTenantScope, hasTenantScope, readCachedSelection } from './tenantScope';
 import resolveApiUrl from './resolveApiUrl';
 import { getSelectedRegion } from '../lib/region';
+import { acceptLanguage, CatalogError, parseCatalogError } from './catalogError';
 
 /**
  * Standard API client for semlayer.
@@ -40,6 +41,11 @@ export async function apiClient<T = Response>(input: RequestInfo | URL, init?: R
                 headers.set('X-Tenant-Datasource-ID', datasourceId);
             }
         } catch (_) {}
+    }
+
+    // The UI language, so catalog errors come back translated.
+    if (!headers.has('Accept-Language')) {
+        headers.set('Accept-Language', acceptLanguage());
     }
 
     // Inject Authorization Token - check multiple storage locations for OIDC tokens
@@ -95,6 +101,10 @@ export async function apiClient<T = Response>(input: RequestInfo | URL, init?: R
             errDetails = await response.text();
         } catch (_) {}
         console.error(`[apiClient] Request to ${url} failed with ${response.status} ${response.statusText}:`, errDetails);
+        const catalog = parseCatalogError(errDetails);
+        if (catalog) {
+            throw new CatalogError(catalog, response.status);
+        }
         throw new Error(`API Error: ${response.status} ${response.statusText}${errDetails ? ` - ${errDetails}` : ''}`);
     }
 

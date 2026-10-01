@@ -725,7 +725,6 @@ export const DataExplorerPage: React.FC = () => {
                   value={queryName}
                   onChange={(e) => setQueryName(e.target.value)}
                   onBlur={() => setIsEditingName(false)}
-                  autoFocus
                   variant="standard"
                   sx={{ width: 320 }}
                 />
@@ -1206,7 +1205,6 @@ export const DataExplorerPage: React.FC = () => {
         <DialogTitle sx={{ fontWeight: 800, fontSize: '0.92rem' }}>Save Exploration Query</DialogTitle>
         <DialogContent>
           <TextField
-            autoFocus
             fullWidth
             label="Query Name"
             value={saveName}

@@ -221,7 +221,7 @@ func (s *CalcTermService) PreviewSQL(ctx context.Context, tenantID, boName, expr
 		}
 		return col, nil
 	}
-	return vm.CompileToSQL(expr, resolveColumn)
+	return vm.CompileExpressionToSQL(expr, resolveColumn)
 }
 
 // Evaluate parses expression text and evaluates it numerically against a

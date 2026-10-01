@@ -79,7 +79,6 @@ export const AuditLogViewer: FC<AuditLogViewerProps> = ({
   });
 
   const handleExport = () => {
-    const notification = useNotification();
     if (logs.length === 0) {
       notification.info('No logs to export');
       return;

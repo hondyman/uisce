@@ -2,7 +2,6 @@ package rules
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -313,45 +312,11 @@ func (e *UMARebalanceRulesEngine) EvaluateRebalancePlan(ctx context.Context, uma
 	var violations []UMARebalanceRuleViolation
 
 	// 1. Evaluate Dynamic Rules from Database
-	if e.repo != nil && e.engine != nil {
-		rules, err := e.repo.ListRules(ctx, "")
-		if err == nil {
-			// Convert structs to map[string]interface{} for CEL
-			var umaMap map[string]interface{}
-			umaJSON, _ := json.Marshal(uma)
-			json.Unmarshal(umaJSON, &umaMap)
-
-			input := map[string]interface{}{
-				"uma": umaMap,
-				// "sleeves": sleeves, // TODO: Handle slice conversion if needed
-				// "plan":    plan,    // TODO: Handle struct conversion if needed
-			}
-			for _, rule := range rules {
-				if !rule.Enabled {
-					continue
-				}
-				// Evaluate: true means compliant, false means violation
-				compliant, err := e.engine.EvaluateCEL(ctx, rule.Expression, input)
-				if err != nil {
-					log.Printf("Error evaluating rule %s: %v", rule.Name, err)
-					continue
-				}
-				if !compliant {
-					violations = append(violations, UMARebalanceRuleViolation{
-						RuleID:   rule.ID.String(),
-						RuleName: rule.Name,
-						Severity: rule.Severity,
-						Message:  fmt.Sprintf("Violation of rule: %s", rule.Name),
-						Metadata: map[string]interface{}{
-							"description": rule.Description,
-						},
-					})
-				}
-			}
-		} else {
-			log.Printf("Error listing rules: %v", err)
-		}
-	}
+	// DELETED — per Amendment A (cel-retirement handoff), compliance_rules.expression
+	// never existed in any migration. e.repo.ListRules queries that column and errors
+	// on every call. The EvaluateCEL call at uma_rebalance_rules.go:334 was dead-on-
+	// arrival. Hardcoded rules (section 2 below) are the live evaluation path.
+	// CEL retirement: engine.evaluateScoringFormula removed; engine.EvaluateCEL removed.
 
 	// 2. Evaluate Hardcoded Rules (Legacy/Fallback)
 

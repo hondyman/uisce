@@ -73,6 +73,8 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
   workflowName,
   onRuleCreated,
 }) => {
+  const notification = useNotification();
+
   const [stepName, setStepName] = useState('');
   const [stepOrder, setStepOrder] = useState(1);
   const [field, setField] = useState('order_total');
@@ -128,7 +130,6 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
   });
 
   const handleCreateRule = async () => {
-    const notification = useNotification();
     if (!stepName.trim() || !field || !errorMessage.trim()) {
       notification.error('Please fill in all required fields');
       return;
