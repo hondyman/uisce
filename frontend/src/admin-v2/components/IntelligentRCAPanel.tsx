@@ -19,6 +19,14 @@ export const IntelligentRCAPanel: React.FC<IntelligentRCAPanelProps> = ({
   rca,
   isLoading = false,
 }) => {
+  // Declared before both guards below (`isLoading`, then `rca`): a hook after an
+  // early return makes the hook count depend on loading/data state, which throws
+  // "Rendered fewer hooks than expected". The label is only read after both guards pass.
+  const eventTypeLabel = useMemo(() => {
+    const type = rca?.suspected_root_cause?.event?.event_type || "Unknown";
+    return type.replace(/_/g, " ");
+  }, [rca]);
+
   if (isLoading) {
     return (
       <div className="intelligent-rca-panel loading">
@@ -43,11 +51,6 @@ export const IntelligentRCAPanel: React.FC<IntelligentRCAPanelProps> = ({
   const confidence = rca.confidence_score;
   const suggestions = rca.suggested_remediations;
   const services = rca.affected_services;
-
-  const eventTypeLabel = useMemo(() => {
-    const type = rootCause.event?.event_type || "Unknown";
-    return type.replace(/_/g, " ");
-  }, [rootCause]);
 
   return (
     <div className="intelligent-rca-panel">

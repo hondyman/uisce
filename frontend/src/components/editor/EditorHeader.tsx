@@ -67,7 +67,6 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
       await onSave?.();
     } catch (err) {
       devError('Save failed:', err);
-      const notification = useNotification();
       notification.error(`Save failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }, [primaryBO, layoutName, userId, onSave]);
@@ -164,7 +163,6 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
         userId,
       });
 
-      const notification = useNotification();
       notification.success('Published successfully!');
     } catch (err) {
       logInteraction('layout_publish_failed', {
@@ -174,7 +172,6 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
         error: err instanceof Error ? err.message : String(err),
       });
 
-      const notification = useNotification();
       notification.error(`Publish failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       publishingRef.current = false;

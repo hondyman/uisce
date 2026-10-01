@@ -569,6 +569,7 @@ export function sourceScoringBlueprint(): Omit<CorePageDefinition, 'id' | 'creat
       surface: { maxWidth: 1400, padding: 3 },
       tabVariable: 'tab',
       variables: [
+        { name: 'as_of', default: '', description: 'Score as of this date; empty = the latest' },
         { name: 'universe_size', default: '42000', url: true },
         { name: 'candidate_vendor', default: 'BBG', url: true },
         { name: 'vendor_filter', default: '', url: true },

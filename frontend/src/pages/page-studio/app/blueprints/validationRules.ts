@@ -151,7 +151,7 @@ export function validationRulesBlueprint(): Omit<CorePageDefinition, 'id' | 'cre
       filter_root: { type: 'Column', children: ['header_row'], style: { gap: '12px' } },
       header_row: { type: 'Row', children: ['hdr', 'bo_select', 'domain_select'], style: { alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
     }),
-    appModel: {
+    app: {
       chrome: 'none',
       surface: { maxWidth: 1400, padding: 3 },
       tabVariable: 'tab',

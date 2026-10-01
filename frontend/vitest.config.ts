@@ -6,13 +6,20 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     dedupe: ['react', 'react-dom'],
-    alias: {
-      '@': path.resolve(__dirname, 'src'),
-      react: path.resolve(__dirname, 'node_modules/react'),
-      'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
-      // Prevent Monaco from being prebundled in tests; we provide a lightweight mock in src/vitest/__mocks__
-      'monaco-editor': path.resolve(__dirname, 'src/vitest/__mocks__/monaco-editor.js')
-    }
+    alias: [
+      { find: '@', replacement: path.resolve(__dirname, 'src') },
+      { find: /^react$/, replacement: path.resolve(__dirname, 'node_modules/react') },
+      { find: /^react-dom$/, replacement: path.resolve(__dirname, 'node_modules/react-dom') },
+      // Wave A: monaco-editor/esm alias — handle deep imports through the same mock.
+      // The bare 'monaco-editor' alias above only matches the package root, not
+      // subpath imports like 'monaco-editor/esm/vs/editor/editor.api'.
+      { find: /^monaco-editor(\/esm)?/, replacement: path.resolve(__dirname, 'src/vitest/__mocks__/monaco-editor.js') },
+      // Wave A: RTL renderHook import swap. @testing-library/react-hooks is
+      // deprecated; its renderHook/waitFor/etc. live on @testing-library/react
+      // in v13+. Aliasing lets existing imports keep working without touching
+      // each test file.
+      { find: '@testing-library/react-hooks', replacement: '@testing-library/react' }
+    ]
   },
 
   test: {
@@ -45,16 +52,7 @@ export default defineConfig({
 
       'src/api/**/*.test.ts',
       'src/api/**/*.test.tsx',
-      'src/api/**/__tests__/**',
-
-      // Pre-workstation unmaintained legacy tests with stale DOM/mock expectations
-      'src/vitest/components/pagestudio/PageStudioCanvas.test.tsx',
-      'src/vitest/components/pagestudio/pageStudioTabsMigration.test.ts',
-      'src/vitest/components/common/UnifiedBOPickerModalMultiSubtype.test.tsx',
-      'src/vitest/components/rules/RuleDiffViewer.test.tsx',
-      'src/vitest/BusinessObjectDetailsPage.test.tsx',
-      'src/vitest/utils/dedupeFields.test.ts',
-      'src/vitest/components/business-objects/BusinessObjectBindingWizard.test.tsx'
+      'src/api/**/__tests__/**'
     ],
 
     deps: {

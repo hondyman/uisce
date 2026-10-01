@@ -58,7 +58,6 @@ export default function SemanticSearchContainer({ onOpenQuery }: SemanticSearchP
       onOpenQuery(fullQuery);
     } else {
       // onOpenWorkbook(result.id);
-      const notification = useNotification();
       notification.info(`Opening workbook ${result.name} is not implemented yet.`);
     }
     setQuery(''); // Clear search after opening

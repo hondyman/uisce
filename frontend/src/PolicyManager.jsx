@@ -7,6 +7,9 @@ import PolicyForm from './PolicyForm';
 const API_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '') + '/api/v1';
 
 const PolicyManager = () => {
+  const confirm = useConfirm();
+  const notification = useNotification();
+
   const [policies, setPolicies] = useState([]);
   const [editingPolicy, setEditingPolicy] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -71,8 +74,6 @@ const PolicyManager = () => {
   };
 
   const handleDelete = async (policyId) => {
-    const confirm = useConfirm();
-    const notification = useNotification();
     if (!(await confirm({ title: 'Delete policy', description: 'Are you sure you want to delete this policy?' }))) return;
       try {
         const response = await fetch(`${API_URL}/policies/${policyId}`, {

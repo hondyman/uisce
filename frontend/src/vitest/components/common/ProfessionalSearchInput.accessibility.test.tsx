@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import ProfessionalSearchInput from '../ProfessionalSearchInput';
+import ProfessionalSearchInput from '@/components/common/ProfessionalSearchInput';
 import { test, expect, vi } from 'vitest';
 
 const DATA = [
@@ -27,8 +27,10 @@ test('ProfessionalSearchInput sets aria-activedescendant on keyboard navigation'
   const input = screen.getByPlaceholderText('Type to search...');
   // Type a query to open the results (debounced)
   fireEvent.change(input, { target: { value: 'A' } });
-  // advance timers so debounced effect runs
-  vi.advanceTimersByTime(250);
+  // advance timers so debounced effect runs. Must use the *Async variant
+  // because screen.findByRole below polls with real-time intervals that fake
+  // timers would otherwise freeze — leading to an indefinite hang.
+  vi.advanceTimersByTimeAsync(250);
 
   const list = await screen.findByRole('listbox', { name: 'Search results' });
   fireEvent.keyDown(input, { key: 'ArrowDown' });
