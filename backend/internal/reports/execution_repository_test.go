@@ -318,6 +318,7 @@ func TestExecutionRepository_LiveAlpha_ListExecutionEvents(t *testing.T) {
 }
 
 func TestExecutionRepository_LiveAlpha_ListScheduleExecutions(t *testing.T) {
+	skipLegacyReportSchedules(t)
 	db := getTestDB(t)
 	repo := reports.NewExecutionRepository(db)
 
