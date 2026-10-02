@@ -93,7 +93,6 @@ services:
       - semlayer
 
   # =========================================================================
-  # UMA Events Listener (RabbitMQ consumer)
   # =========================================================================
   uma-events-listener:
     build:
@@ -156,10 +155,6 @@ services:
       - uma-rebalance
     networks:
       - semlayer
-
-volumes:
-  rabbitmq_data:
-    driver: local
 
 networks:
   semlayer:

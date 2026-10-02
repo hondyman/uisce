@@ -116,16 +116,6 @@ export INFISICAL_ENVIRONMENT="${INFISICAL_ENVIRONMENT:-dev}"
 
 docker compose -f ${COMPOSE_FILE} up --build -d
 
-echo "Waiting for RabbitMQ management API to respond..."
-# Wait for RabbitMQ to be healthy
-for i in {1..30}; do
-  if curl -s http://localhost:15672/api/whoami -u guest:guest >/dev/null 2>&1; then
-    echo "RabbitMQ is up"
-    break
-  fi
-  sleep 1
-done
-
 echo "All backend services started. Use 'docker compose -f ${COMPOSE_FILE} ps' to view status."
 
 echo ""
@@ -136,4 +126,4 @@ else
   echo "   ⚠️  No INFISICAL_TOKEN set - using default/hardcoded secrets"
 fi
 echo ""
-echo "To follow logs: docker compose -f ${COMPOSE_FILE} logs -f backend event-router rabbitmq"
+echo "To follow logs: docker compose -f ${COMPOSE_FILE} logs -f backend event-router"

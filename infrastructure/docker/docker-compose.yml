@@ -53,7 +53,6 @@ services:
     - ./backend/migrations:/app/migrations
     command: ./server
     depends_on:
-    - rabbitmq
     - event-router
   ai-service:
     build:
@@ -79,18 +78,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-  rabbitmq:
-    image: rabbitmq:3.12-management
-    container_name: semlayer-rabbitmq
-    restart: always
-    environment:
-    - RABBITMQ_DEFAULT_USER=guest
-    - RABBITMQ_DEFAULT_PASS=guest
-    ports:
-    - 5672:5672
-    - 15672:15672
-    volumes:
-    - rabbitmq_data:/var/lib/rabbitmq
   temporal:
     image: temporalio/auto-setup:latest
     container_name: semlayer-temporal
@@ -246,16 +233,11 @@ services:
     - DB_USER=postgres
     - DB_PASSWORD=postgres
     - DB_NAME=alpha
-    - RABBITMQ_HOST=rabbitmq
-    - RABBITMQ_PORT=5672
-    - RABBITMQ_USER=guest
-    - RABBITMQ_PASSWORD=guest
     - TEMPORAL_HOST=temporal:7233
     - PORT=8081
     ports:
     - "8081:8081"
     depends_on:
-    - rabbitmq
     - temporal
     healthcheck:
       test:
@@ -281,16 +263,11 @@ services:
     - DB_USER=postgres
     - DB_PASSWORD=postgres
     - DB_NAME=alpha
-    - RABBITMQ_HOST=rabbitmq
-    - RABBITMQ_PORT=5672
-    - RABBITMQ_USER=guest
-    - RABBITMQ_PASSWORD=guest
     - TEMPORAL_HOST=temporal:7233
     - HTTP_PORT=8082
     ports:
     - "8082:8082"
     depends_on:
-    - rabbitmq
     - temporal
     healthcheck:
       test:
@@ -302,6 +279,3 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-
-volumes:
-  rabbitmq_data: null

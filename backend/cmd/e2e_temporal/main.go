@@ -1,3 +1,7 @@
+// Command e2e_temporal is an end-to-end check that a Temporal workflow can run
+// an activity that publishes an event to Kafka/Redpanda: it starts a worker,
+// starts workflows.TestWorkflow, and consumes the "events" topic until the
+// published message arrives. Run it through scripts/e2e_temporal.sh.
 package main
 
 import (
@@ -7,20 +11,21 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	temporalclientlib "github.com/hondyman/uisce/libs/temporal-client"
-	st "github.com/streadway/amqp"
+	"github.com/segmentio/kafka-go"
 	sdkclient "go.temporal.io/sdk/client"
 
 	"github.com/hondyman/uisce/backend/internal/workflows"
 	workerpkg "github.com/hondyman/uisce/backend/temporal/worker"
 )
 
+const eventsTopic = "events" // the topic workflows.PublishEventActivity writes to
+
 func main() {
-	var (
-		amqpURL = getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
-	)
+	brokers := getEnv("KAFKA_BROKERS", "localhost:9092")
 	flag.Parse()
 
 	// Start Temporal client (centralized helper with retries)
@@ -37,61 +42,62 @@ func main() {
 		}
 	}()
 
-	// Prepare AMQP consumer to observe the published event
-	conn, err := st.Dial(amqpURL)
-	if err != nil {
-		log.Fatalf("failed to dial rabbit: %v", err)
-	}
-	defer conn.Close()
-	ch, err := conn.Channel()
-	if err != nil {
-		log.Fatalf("failed to open channel: %v", err)
-	}
-	defer ch.Close()
-
-	if err := ch.ExchangeDeclare("events", "topic", true, false, false, false, nil); err != nil {
-		log.Fatalf("failed to declare exchange: %v", err)
+	if err := ensureTopic(brokers, eventsTopic); err != nil {
+		log.Fatalf("failed to ensure topic %q: %v", eventsTopic, err)
 	}
 
-	q, err := ch.QueueDeclare("", false, true, true, false, nil)
-	if err != nil {
-		log.Fatalf("failed to declare queue: %v", err)
-	}
-	routingKey := "test.workflow"
-	if err := ch.QueueBind(q.Name, routingKey, "events", false, nil); err != nil {
-		log.Fatalf("failed to bind queue: %v", err)
-	}
-	msgs, err := ch.Consume(q.Name, "", true, false, false, false, nil)
-	if err != nil {
-		log.Fatalf("failed to start consumer: %v", err)
+	// Observe the topic from the end, before the workflow can publish.
+	reader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:     strings.Split(brokers, ","),
+		Topic:       eventsTopic,
+		Partition:   0,
+		StartOffset: kafka.LastOffset,
+		MaxWait:     500 * time.Millisecond,
+	})
+	defer reader.Close()
+	if err := reader.SetOffset(kafka.LastOffset); err != nil {
+		log.Fatalf("failed to position reader: %v", err)
 	}
 
-	// Start the workflow which runs the activity that publishes to RabbitMQ
 	wid := fmt.Sprintf("e2e-test-%d", time.Now().Unix())
+	routingKey := "test.workflow"
 	opts := sdkclient.StartWorkflowOptions{ID: wid, TaskQueue: "e2e_test_queue"}
-
 	payload := map[string]interface{}{"wid": wid}
-	we, err := tc.ExecuteWorkflow(context.Background(), opts, workflows.TestWorkflow, amqpURL, routingKey, payload)
+	we, err := tc.ExecuteWorkflow(context.Background(), opts, workflows.TestWorkflow, brokers, routingKey, payload)
 	if err != nil {
 		log.Fatalf("failed to execute workflow: %v", err)
 	}
 	log.Printf("workflow started: %s", we.GetID())
 
-	// Wait for message published by activity
-	select {
-	case d := <-msgs:
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	for {
+		m, err := reader.ReadMessage(ctx)
+		if err != nil {
+			log.Fatalf("timed out waiting for the published event: %v", err)
+		}
+		if string(m.Key) != routingKey {
+			continue
+		}
 		var got map[string]interface{}
-		if err := json.Unmarshal(d.Body, &got); err != nil {
+		if err := json.Unmarshal(m.Value, &got); err != nil {
 			log.Fatalf("failed to unmarshal body: %v", err)
 		}
 		if got["wid"] == wid {
 			log.Println("E2E PASS: workflow produced event")
 			os.Exit(0)
 		}
-		log.Fatalf("unexpected payload: %v", got)
-	case <-time.After(15 * time.Second):
-		log.Fatalf("timed out waiting for event")
+		// Another run's message on the shared topic: keep waiting for ours.
 	}
+}
+
+func ensureTopic(brokers, topic string) error {
+	conn, err := kafka.Dial("tcp", strings.Split(brokers, ",")[0])
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	return conn.CreateTopics(kafka.TopicConfig{Topic: topic, NumPartitions: 1, ReplicationFactor: 1})
 }
 
 func getEnv(k, d string) string {

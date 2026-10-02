@@ -19,7 +19,6 @@ PROJECT_ROOT="/Users/eganpj/GitHub/semlayer"
 BACKEND_PORT=8080
 FRONTEND_PORT=3000
 TEMPORAL_PORT=7233
-RABBITMQ_PORT=5672
 
 # Function to print status
 print_status() {
@@ -69,10 +68,10 @@ start_infrastructure() {
 
     cd "$PROJECT_ROOT"
 
-    # Start Docker Compose services (Temporal, RabbitMQ, Postgres)
+    # Start Docker Compose services (Temporal, Postgres)
     if [ -f "docker-compose.yml" ]; then
         print_status "Starting Docker services..."
-        docker-compose up -d temporal rabbitmq postgres
+        docker-compose up -d temporal postgres
         print_success "Infrastructure services started"
     else
         print_warning "docker-compose.yml not found. Please ensure infrastructure is running."
@@ -183,7 +182,6 @@ deployment_summary() {
     echo "   • Backend API:     http://localhost:$BACKEND_PORT"
     echo "   • Frontend UI:     http://localhost:$FRONTEND_PORT"
     echo "   • Temporal UI:     http://localhost:$TEMPORAL_PORT"
-    echo "   • RabbitMQ:        http://localhost:$RABBITMQ_PORT"
     echo
     echo "🚀 Killer Apps Ready:"
     echo "   • UMA Alpha Dashboard: http://localhost:$FRONTEND_PORT/uma-alpha"

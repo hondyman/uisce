@@ -107,7 +107,6 @@ echo -e "  API Gateway:        ${GREEN}http://localhost:8001${NC}"
 echo -e "  Backend API:        ${GREEN}http://localhost:8080${NC}"
 echo -e "  Fabric Builder:     ${GREEN}http://localhost:8081${NC}"
 echo -e "  Temporal UI:        ${GREEN}http://localhost:8088${NC}"
-echo -e "  RabbitMQ Console:   ${GREEN}http://localhost:15672${NC} (guest:guest)"
 echo ""
 
 echo -e "${BLUE}Health Checks:${NC}"

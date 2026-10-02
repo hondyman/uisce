@@ -58,11 +58,11 @@ echo -e "${BLUE}STEP 2: Starting Docker Services${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 echo "Pulling latest images..."
-docker compose pull temporal temporal-ui postgresql-temporal rabbitmq 2>&1 | grep -E "^Pulling|^Digest|Status:|Downloaded" || true
+docker compose pull temporal temporal-ui postgresql-temporal 2>&1 | grep -E "^Pulling|^Digest|Status:|Downloaded" || true
 
 echo ""
 echo "Starting Docker services..."
-docker compose up -d temporal postgresql-temporal temporal-ui rabbitmq
+docker compose up -d temporal postgresql-temporal temporal-ui
 
 echo "⏳ Waiting for services to be healthy (30 seconds)..."
 sleep 30
@@ -76,13 +76,6 @@ if docker exec semlayer-temporal temporal workflow list --address localhost:7233
     echo -e "${GREEN}✅ Temporal is running${NC}"
 else
     echo -e "${YELLOW}⚠️  Temporal may still be initializing...${NC}"
-fi
-
-# Check RabbitMQ
-if curl -s -u guest:guest http://localhost:15672/api/overview | grep -q "rabbitmq_version"; then
-    echo -e "${GREEN}✅ RabbitMQ is running at http://localhost:15672${NC}"
-else
-    echo -e "${RED}❌ RabbitMQ is not responding${NC}"
 fi
 
 # Check Temporal UI
@@ -160,7 +153,6 @@ echo ""
 echo "📊 SERVICE URLS:"
 echo "   • Temporal UI:      http://localhost:8080"
 echo "   • Temporal gRPC:    localhost:7233"
-echo "   • RabbitMQ Admin:   http://localhost:15672 (guest/guest)"
 echo "   • PostgreSQL:       postgresql://postgres:postgres@localhost:5432/alpha"
 echo ""
 echo "✅ Verify with:"
