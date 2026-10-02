@@ -63,9 +63,10 @@ jobs:
         options: >-
           --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
 
-      # StarRocks FE for analytics (single-node mode for CI)
+      # StarRocks for analytics (single node). The all-in-one image starts FE and BE;
+      # starrocks/fe-ubuntu has no start command, so as a service container it never ran.
       starrocks-fe:
-        image: starrocks/fe-ubuntu:3.3-latest
+        image: starrocks/allin1-ubuntu:3.3-latest
         ports:
         - 9030:9030
         - 8030:8030
@@ -118,7 +119,7 @@ jobs:
         ports:
         - 5432:5432
       starrocks-fe:
-        image: starrocks/fe-ubuntu:3.3-latest
+        image: starrocks/allin1-ubuntu:3.3-latest
         ports:
         - 9030:9030
         - 8030:8030
