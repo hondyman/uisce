@@ -55,6 +55,13 @@ jobs:
 
       - name: Run a11y baseline crawl
         working-directory: frontend
+        # FIRST REAL CRAWL EXPECTED TO FIND VIOLATIONS. This gate has never
+        # scanned the app before - E2E_JWT only started reaching the baseline
+        # crawl in #331. So a wall of findings on the first run means the
+        # ratchet is STARTING, not that something regressed. Do not "fix" it by
+        # baselining the findings wholesale, and do not disable the gate on the
+        # strength of a first-run failure. Record the real numbers, then let
+        # the ratchet hold them.
         run: npx playwright test --config=playwright.a11y.config.ts baseline.spec.ts
 
       - name: Aggregate baseline

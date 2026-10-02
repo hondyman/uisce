@@ -42,6 +42,34 @@ compares commit author identity against an expected set is cheap — but the rul
 stands on its own even unenforced: **set the author deliberately, and check
 `git log --format="%an <%ae>"` before pushing.**
 
+### Standing rule: a shared checkout commits by explicit path list, never `-a`
+
+Several sessions share this repository's working tree, and the tree's uncommitted
+files are not necessarily yours. `git commit -a` (and `.`) stages *every*
+tracked modification, so the cheapest possible command is the one that most
+easily sweeps another session's in-flight work into your commit. This happened
+once already: a freeze guard being written in the shared checkout was reported
+as "uncommitted changes" by the session that owned the branch, and a routine
+`git commit -a` there would have carried it into a frontend PR.
+
+**Stage by explicit path, always.** If `git status` shows a file you did not
+write, stop and find out whose it is before committing anything.
+
+### Standing rule: overrides are decisions, and decisions get recorded
+
+An admin override on a required check is a decision to ship without a gate, and
+it deserves the same treatment as any other decision here: a written reason,
+recorded where the next reader will find it. The first use was **#331** ("ci:
+fix a11y JWT env; disable Frontend E2E until it boots a stack", merged as
+`695258beb`), where the Security Scan and the flaky `validate (pull_request)`
+check were skipped by override. The justification: the change touched workflow
+files only, and the scan had passed on the earlier PRs in the same run. That is
+a sound reason, and it is only auditable because it was written down.
+
+The failure mode to watch is not a bad override — it is a *habitual* one. If
+overrides start appearing without recorded reasons, that is the signal to stop
+using them and move the check into branch protection instead.
+
 ## Standing evidence rule
 
 A decision marked as *implemented* or *wired* must cite a **production call
@@ -743,6 +771,33 @@ exists — cube validation, which resolves real metric definitions — plus comp
 time. When a CRUD endpoint for governed metric expressions lands, it **must**
 call `ValidateMetricExpression`; the function is exported and the omission would
 be the defect.
+
+**Where the validator is actually enforced — and one path that is not.** The
+obligation was to confirm the check also fires at *import*, so an ambiguous
+metric cannot be stored and only rejected at first execution. Confirmed, with
+one gap stated plainly:
+
+- `CompileMetric` is the **only live entry to SQL generation from a metric**. It
+  has exactly one non-test caller: `cube_ddl.go:138`. Every metric that reaches a
+  database today therefore passes `ValidateMetricExpression` first, and the
+  rejection cannot be bypassed by any current path.
+- **There is no metric import function at all.** `ExportMetricBundle` exists
+  (`metric_definition.go:436`); there is no `ImportMetricBundle` counterpart. So
+  the import obligation does not attach to existing code — it attaches to
+  **8.3's corpus**, which builds the first import path and must call the
+  validator there. Recorded so the corpus is not written assuming compile-time
+  checking was always sufficient.
+- **A second SQL builder bypasses the compiler entirely, and is currently dead.**
+  `starrocks_mv_manager.go:62` hardcodes `measureExpr := "SUM(notional)"` and
+  only special-cases `Kind == "aggregation"`, so a derived or formula metric
+  reaching it would materialize as `SUM(notional)` — silently wrong, and exactly
+  the bug class the cube DDL guard exists to prevent. It is dead today:
+  `NewStarRocksMaterializationManager` has **zero production callers** (its
+  policy helpers `EvaluateABACMVCompatibility` and `EvaluateStaleMVAction` are
+  used by `cube_router.go:147,169`, but they emit no SQL). Flagged rather than
+  deleted, because retiring the legacy materialization path is a separate
+  decision. **If it is ever wired, it must route through `CompileMetric` or call
+  `ValidateMetricExpression` first.**
 
 **Evidence (production call sites).** `ValidateMetricExpression`
 (`internal/querybuilder/metric_definition.go`) is called from
