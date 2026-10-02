@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, Chip, Button, Stack, CircularProgress, Alert,
-  FormGroup, FormControlLabel, Checkbox, Slider, Grid
+  FormGroup, FormControlLabel, Checkbox, Slider, GridLegacy as Grid
 } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';

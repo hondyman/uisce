@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Box, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper, Chip, Grid, Alert
+  TableHead, TableRow, Paper, Chip, GridLegacy as Grid, Alert
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import HandshakeIcon from '@mui/icons-material/Handshake';

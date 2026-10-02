@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Box, Card, CardContent, Typography, Grid, Chip, Button, Stack,
+  Box, Card, CardContent, Typography, GridLegacy as Grid, Chip, Button, Stack,
   Slider, CircularProgress, Alert, Paper, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, MenuItem, Select, FormControl,
   InputLabel, Tooltip, Divider, ToggleButtonGroup, ToggleButton

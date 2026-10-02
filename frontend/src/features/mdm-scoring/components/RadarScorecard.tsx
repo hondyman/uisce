@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
   Box, Card, CardContent, Typography, Chip, Stack, CircularProgress,
-  Paper, Grid, Divider
+  Paper, GridLegacy as Grid, Divider
 } from '@mui/material';
 import { mdmScoringApi, type VendorDimensionProfile, type WeightProfile } from '../api';
 

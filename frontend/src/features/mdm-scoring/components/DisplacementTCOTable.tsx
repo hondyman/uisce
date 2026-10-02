@@ -63,10 +63,10 @@ export const DisplacementTCOTable: React.FC<DisplacementTCOTableProps> = ({
   // Derive TCO components
   const annualLicense = data.annual_cost || 2140000;
   const currentFriction = 12500;
-  const replacedFriction = currentFriction + (data.friction_savings > 0 ? data.friction_savings : 34500);
+  const replacedFriction = currentFriction + ((data.friction_savings ?? 0) > 0 ? data.friction_savings! : 34500);
   const deltaFriction = replacedFriction - currentFriction;
 
-  const currentSLACredits = data.forfeited_sla_credits > 0 ? data.forfeited_sla_credits : 85000;
+  const currentSLACredits = (data.forfeited_sla_credits ?? 0) > 0 ? data.forfeited_sla_credits! : 85000;
   const replacedSLACredits = 0;
   const deltaSLACredits = -currentSLACredits;
 
@@ -75,8 +75,8 @@ export const DisplacementTCOTable: React.FC<DisplacementTCOTableProps> = ({
   const deltaRemediation = replacedRemediation;
 
   // Net TCO benefit
-  const netTCOBenefit = data.net_tco_benefit > 0
-    ? data.net_tco_benefit
+  const netTCOBenefit = (data.net_tco_benefit ?? 0) > 0
+    ? data.net_tco_benefit!
     : annualLicense - deltaFriction + deltaSLACredits - deltaRemediation;
 
   return (
