@@ -75,6 +75,7 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { CoreIcon } from '../../../../components/common/CoreCustomIcons';
 import { useTenant } from '../../../../contexts/TenantContext';
 import { useNotification } from '../../../../hooks/useNotification';
+import { fetchAPI } from '../../../../api';
 import { previewQuery, executeQuery } from '../../../../features/query-builder/services/queryBuilderApi';
 import type { QueryDef, PreviewResult, QueryExecuteResult } from '../../../../features/query-builder/types/queryDef';
 import { friendlyQueryError } from '../../../../features/query-execution';
