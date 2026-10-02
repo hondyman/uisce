@@ -180,7 +180,7 @@ export default function IntelligentSemanticMapper() {
   const nodeTypes = useMemo(() => Array.isArray(nodeTypesRaw) ? nodeTypesRaw : [], [nodeTypesRaw]);
 
   // 2. Fetch Catalog Edge Types
-  const { data: edgeTypesRaw, isLoading: edgeTypesLoading } = useEdgeTypes(tenantId || '');
+  const { data: edgeTypesRaw, isLoading: edgeTypesLoading } = useEdgeTypes();
   const edgeTypes = useMemo(() => Array.isArray(edgeTypesRaw) ? edgeTypesRaw : [], [edgeTypesRaw]);
 
   // States: Selection & Filtering

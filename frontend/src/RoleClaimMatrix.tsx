@@ -30,7 +30,7 @@ export default function RoleClaimMatrix({ domain }: RoleClaimMatrixProps) {
       // In a real app, the datasource might be selectable or global.
       const [fetchedRoles, fetchedModels, fetchedClaims] = await Promise.all([
         listAllRoles(),
-        listSemanticViews("mock-datasource-id"),
+        listSemanticViews(),
         listRoleClaims(),
       ]);
 

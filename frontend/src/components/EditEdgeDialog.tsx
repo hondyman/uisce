@@ -41,7 +41,7 @@ const EditEdgeDialog: React.FC<EditEdgeDialogProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   // APIs
-  const { data: edgeTypes, isLoading: loadingEdgeTypes } = useEdgeTypes(tenant?.id || '');
+  const { data: edgeTypes, isLoading: loadingEdgeTypes } = useEdgeTypes();
   const { data: nodeTypes } = useNodeTypes(tenant?.id || '');
   const updateEdgeMutation = useUpdateTermEdge();
 

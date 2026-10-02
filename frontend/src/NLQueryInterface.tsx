@@ -78,7 +78,7 @@ export default function NLQueryInterface({
   // Conversation handlers
   const handleStartConversation = async () => {
     try {
-      const context = await startConversation(currentUser, currentTenant, currentDatasource);
+      const context = await startConversation(currentUser);
       setConversationId(context.conversation_id);
       setConversationContext(context);
       setConversationSummary(null);

@@ -23,8 +23,8 @@ export function DashboardHome() {
 
   const compliance = useComplianceSummary(tenantId, valuationDate);
   const risk = useRiskSummary(tenantId, valuationDate);
-  const sparklines = useSparklines(tenantId);
-  const etl = useETLHealth(tenantId);
+  const sparklines = useSparklines();
+  const etl = useETLHealth();
   const alerts = useAlerts(tenantId, valuationDate);
 
   return (

@@ -104,7 +104,7 @@ export default function AccessDebuggerPage() {
   const tenantId = 'acme_corp';
 
   useEffect(() => {
-    listSemanticViews('mock-datasource-id').then(setViews).catch(err => devError('Failed to load semantic views for AccessDebuggerPage:', err));
+    listSemanticViews().then(setViews).catch(err => devError('Failed to load semantic views for AccessDebuggerPage:', err));
   }, []);
 
   const handleInspect = useCallback(async () => {

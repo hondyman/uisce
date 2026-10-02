@@ -175,7 +175,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
       setSaving(true);
       await Promise.all(
         selectedUserIds.map(id =>
-          apiClient(`/rbac/users/${id}`, { method: 'DELETE' }, { tenantId: tenant.id })
+          apiClient(`/rbac/users/${id}`, { method: 'DELETE' })
         )
       );
       setSelectedUserIds([]);
@@ -209,8 +209,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
             department: createUserForm.department,
             tenant_id: tenant.id,
           }),
-        },
-        { tenantId: tenant.id }
+        }
       );
       setOpenCreateUserModal(false);
       setCreateUserForm({ username: '', email: '', full_name: '', password: '', department: '' });
@@ -227,7 +226,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const data = await apiClient<User[]>('/rbac/users', {}, { tenantId: tenant.id });
+      const data = await apiClient<User[]>('/rbac/users', {});
       const usersArray = Array.isArray(data)
         ? data
         : Array.isArray((data as any)?.users)
@@ -256,7 +255,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
   // Fetch user roles
   const fetchUserRoles = async (userId: string) => {
     try {
-      const data = await apiClient<UserRole[]>(`/rbac/users/${userId}/access`, {}, { tenantId: tenant.id });
+      const data = await apiClient<UserRole[]>(`/rbac/users/${userId}/access`, {});
       const rolesArray = Array.isArray(data) ? data : [];
       setUserRoles(rolesArray);
     } catch (error) {
@@ -268,7 +267,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
   // Fetch user teams
   const fetchUserTeams = async (userId: string) => {
     try {
-      const data = await apiClient<UserTeam[]>(`/rbac/users/${userId}/teams`, {}, { tenantId: tenant.id });
+      const data = await apiClient<UserTeam[]>(`/rbac/users/${userId}/teams`, {});
       const teamsArray = Array.isArray(data) ? data : [];
       setUserTeams(teamsArray);
     } catch (error) {
@@ -280,7 +279,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
   // Fetch teams for add to team modal
   const fetchTeams = async () => {
     try {
-      const data = await apiClient<Team[]>('/rbac/teams', {}, { tenantId: tenant.id });
+      const data = await apiClient<Team[]>('/rbac/teams', {});
       const teamsArray = Array.isArray(data) ? data : [];
       setTeams(teamsArray);
     } catch (error) {
@@ -292,7 +291,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
   // Fetch roles for assign role modal
   const fetchRoles = async () => {
     try {
-      const data = await apiClient<Role[]>('/rbac/roles', {}, { tenantId: tenant.id });
+      const data = await apiClient<Role[]>('/rbac/roles', {});
       const rolesArray = Array.isArray(data) ? data : [];
       setRoles(rolesArray);
     } catch (error) {
@@ -315,8 +314,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
             scope_type: assignRoleForm.scope_type,
             scope_id: assignRoleForm.scope_id || null,
           }),
-        },
-        { tenantId: tenant.id, datasourceId: datasource.id }
+        }
       );
       await fetchUserRoles(selectedUser.id);
       setOpenAssignRoleModal(false);
@@ -337,8 +335,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
         `/rbac/roles/${roleId}/unassign/${selectedUser.id}`,
         {
           method: 'DELETE',
-        },
-        { tenantId: tenant.id, datasourceId: datasource.id }
+        }
       );
       await fetchUserRoles(selectedUser.id);
     } catch (error) {
@@ -361,8 +358,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
             user_id: selectedUser.id,
             role_in_team: addToTeamForm.role_in_team,
           }),
-        },
-        { tenantId: tenant.id, datasourceId: datasource.id }
+        }
       );
       await fetchUserTeams(selectedUser.id);
       setOpenAddToTeamModal(false);
@@ -382,8 +378,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
       setSaving(true);
       await apiClient(
         `/rbac/teams/${teamId}/members/${selectedUser.id}`,
-        { method: 'DELETE' },
-        { tenantId: tenant.id, datasourceId: datasource.id }
+        { method: 'DELETE' }
       );
       await fetchUserTeams(selectedUser.id);
     } catch (error) {
@@ -407,8 +402,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
             scope_type: editRoleForm.scope_type,
             scope_id: editRoleForm.scope_id || null,
           }),
-        },
-        { tenantId: tenant.id, datasourceId: datasource.id }
+        }
       );
       await fetchUserRoles(selectedUser.id);
       setEditingRole(null);
@@ -433,8 +427,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
           body: JSON.stringify({
             role_in_team: editTeamForm.role_in_team,
           }),
-        },
-        { tenantId: tenant.id, datasourceId: datasource.id }
+        }
       );
       await fetchUserTeams(selectedUser.id);
       setEditingTeam(null);
@@ -452,8 +445,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
     try {
       const response = await apiClient(
         `/rbac/users/${userId}/attributes`,
-        {},
-        { tenantId: tenant.id }
+        {}
       );
       const data = await response.json();
       if (data.jsonb_attributes) {
@@ -475,8 +467,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
         {
           method: 'PUT',
           body: JSON.stringify({ attributes: updatedAttrs }),
-        },
-        { tenantId: tenant.id }
+        }
       );
       setUserAttributes(updatedAttrs);
       setNewAttrKey('');
@@ -501,8 +492,7 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
         {
           method: 'PUT',
           body: JSON.stringify({ attributes: updatedAttrs }),
-        },
-        { tenantId: tenant.id }
+        }
       );
       setUserAttributes(updatedAttrs);
     } catch (error) {

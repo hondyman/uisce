@@ -313,10 +313,10 @@ export const EdgeTypeFormModal: React.FC<EdgeTypeFormModalProps> = ({
 
       try {
         if (resp && resp.tenant_id) {
-          queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list(resp.tenant_id) });
-          queryClient.invalidateQueries({ queryKey: edgeTypesKeys.detail(resp.id, resp.tenant_id) });
+          queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list() });
+          queryClient.invalidateQueries({ queryKey: edgeTypesKeys.detail(resp.id) });
         } else {
-          queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list(tenantId) });
+          queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list() });
         }
       } catch (e) {
         devWarn('[EdgeTypeFormModal] Query invalidation error', e);

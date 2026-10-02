@@ -22,7 +22,7 @@ export default function SemanticViewPicker({ datasourceId, onSelect, views: prel
     if (preloadedViews) {
       setLocalViews(preloadedViews);
     } else if (datasourceId) {
-  listSemanticViews(datasourceId).then(setLocalViews).catch((e) => { devError(e); });
+  listSemanticViews().then(setLocalViews).catch((e) => { devError(e); });
     }
   }, [datasourceId, preloadedViews]);
 

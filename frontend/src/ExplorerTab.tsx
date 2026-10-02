@@ -93,7 +93,7 @@ export default function ExplorerTab({ tab, views, onChange, onOpenSavedQuery, on
     const fetchData = async () => {
       try {
         const [fetchedViews, userClaims] = await Promise.all([
-          listSemanticViews(datasourceId),
+          listSemanticViews(),
           getEffectiveClaims(currentUser, tenantId),
         ]);
 
