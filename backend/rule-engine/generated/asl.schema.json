@@ -4600,26 +4600,26 @@
     },
     "ConformanceCase": {
       "properties": {
-        "ExpectedError": {
-          "type": "boolean"
-        },
-        "ExpectedValid": {
-          "type": "boolean"
-        },
-        "Input": {
+        "AST": {},
+        "Data": {
           "$ref": "#/definitions/Record\u003cstring, any\u003e"
         },
-        "Name": {
+        "Description": {
           "type": "string"
         },
-        "RuleAST": {}
+        "Expected": {
+          "type": "boolean"
+        },
+        "ID": {
+          "type": "string"
+        }
       },
       "required": [
-        "Name",
-        "RuleAST",
-        "Input",
-        "ExpectedValid",
-        "ExpectedError"
+        "ID",
+        "Description",
+        "AST",
+        "Data",
+        "Expected"
       ],
       "type": "object"
     },

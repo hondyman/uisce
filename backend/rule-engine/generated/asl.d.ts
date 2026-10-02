@@ -1572,11 +1572,11 @@ export interface ConflictDetail {
 }
 
 export interface ConformanceCase {
-  ExpectedError: boolean;
-  ExpectedValid: boolean;
-  Input: Record<string, any>;
-  Name: string;
-  RuleAST: any;
+  AST: any;
+  Data: Record<string, any>;
+  Description: string;
+  Expected: boolean;
+  ID: string;
 }
 
 /** Connection represents a datasource connection from the `connections` table
