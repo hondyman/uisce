@@ -86,9 +86,13 @@ type EventStreamBroker struct {
 	eventBuffer chan *StreamedEvent
 	bufferMutex sync.RWMutex
 
-	// Shutdown control
-	done chan struct{}
-	once sync.Once
+	// Shutdown control. inbound is never closed (publishers may still be sending);
+	// stopping tells publishers and the event loop to stop, loopDone reports that
+	// the loop has exited, and done is closed once Stop has finished.
+	stopping chan struct{}
+	loopDone chan struct{}
+	done     chan struct{}
+	once     sync.Once
 }
 
 // NewEventStreamBroker creates a new event broker
@@ -98,6 +102,8 @@ func NewEventStreamBroker(bufferSize int) *EventStreamBroker {
 		inbound:     make(chan *StreamedEvent, bufferSize),
 		bufferSize:  bufferSize,
 		eventBuffer: make(chan *StreamedEvent, bufferSize),
+		stopping:    make(chan struct{}),
+		loopDone:    make(chan struct{}),
 		done:        make(chan struct{}),
 	}
 
@@ -151,18 +157,19 @@ func (b *EventStreamBroker) PublishEvent(ctx context.Context, event *StreamedEve
 		event.Timestamp = time.Now()
 	}
 
-	// Prevent panic if inbound channel has been closed concurrently
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("publish panic: %v", r)
-		}
-	}()
+	select {
+	case <-b.stopping:
+		return fmt.Errorf("event broker stopped")
+	default:
+	}
 
 	select {
 	case b.inbound <- event:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-b.stopping:
+		return fmt.Errorf("event broker stopped")
 	default:
 		return fmt.Errorf("event buffer full")
 	}
@@ -170,37 +177,57 @@ func (b *EventStreamBroker) PublishEvent(ctx context.Context, event *StreamedEve
 
 // eventLoop processes events and distributes to subscribers
 func (b *EventStreamBroker) eventLoop() {
-	for event := range b.inbound {
-		// Buffer event for late subscribers
+	defer close(b.loopDone)
+	for {
 		select {
-		case b.eventBuffer <- event:
+		case event := <-b.inbound:
+			b.dispatch(event)
+		case <-b.stopping:
+			// Deliver what was already accepted, then exit.
+			for {
+				select {
+				case event := <-b.inbound:
+					b.dispatch(event)
+				default:
+					return
+				}
+			}
+		}
+	}
+}
+
+// dispatch buffers an event for late subscribers and delivers it to the
+// subscribers it matches.
+func (b *EventStreamBroker) dispatch(event *StreamedEvent) {
+	// Buffer event for late subscribers
+	select {
+	case b.eventBuffer <- event:
+	default:
+		// Buffer full, discard oldest
+		select {
+		case <-b.eventBuffer:
+			b.eventBuffer <- event
 		default:
-			// Buffer full, discard oldest
-			select {
-			case <-b.eventBuffer:
-				b.eventBuffer <- event
-			default:
-			}
+		}
+	}
+
+	// Distribute to matching subscribers
+	b.subMutex.RLock()
+	subscribers := make([]*EventSubscriber, 0, len(b.subscribers))
+	for _, sub := range b.subscribers {
+		subscribers = append(subscribers, sub)
+	}
+	b.subMutex.RUnlock()
+
+	for _, subscriber := range subscribers {
+		// Check if event matches subscriber filters
+		if !b.matchesSubscriber(event, subscriber) {
+			continue
 		}
 
-		// Distribute to matching subscribers
-		b.subMutex.RLock()
-		subscribers := make([]*EventSubscriber, 0, len(b.subscribers))
-		for _, sub := range b.subscribers {
-			subscribers = append(subscribers, sub)
-		}
-		b.subMutex.RUnlock()
-
-		for _, subscriber := range subscribers {
-			// Check if event matches subscriber filters
-			if !b.matchesSubscriber(event, subscriber) {
-				continue
-			}
-
-			// Send with timeout to avoid blocking on slow subscribers
-			if _, slow := subscriber.send(event, 5*time.Second); slow {
-				fmt.Printf("Slow subscriber %s, skipping event\n", subscriber.ID)
-			}
+		// Send with timeout to avoid blocking on slow subscribers
+		if _, slow := subscriber.send(event, 5*time.Second); slow {
+			fmt.Printf("Slow subscriber %s, skipping event\n", subscriber.ID)
 		}
 	}
 }
@@ -233,11 +260,14 @@ func (b *EventStreamBroker) matchesSubscriber(event *StreamedEvent, subscriber *
 func (b *EventStreamBroker) Stop() error {
 	var err error
 	b.once.Do(func() {
-		// Close inbound to signal event loop to stop
-		close(b.inbound)
-
-		// Wait for event loop to finish processing
-		time.Sleep(100 * time.Millisecond)
+		// Tell publishers and the event loop to stop, then give the loop a moment
+		// to deliver what it already accepted. A slow subscriber can hold it up;
+		// closing the subscribers below is safe either way.
+		close(b.stopping)
+		select {
+		case <-b.loopDone:
+		case <-time.After(time.Second):
+		}
 
 		// Disconnect all subscribers
 		b.subMutex.Lock()
