@@ -8,6 +8,7 @@ use (
 	./backend
 	./calc-engine
 	./libs/abac-client
+	./libs/db/queries
 	./libs/jwt-middleware
 	./libs/logging
 	./libs/shared-types
