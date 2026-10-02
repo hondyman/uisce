@@ -92,10 +92,13 @@ jobs:
 
     - name: Build Binaries
       working-directory: backend
+      # The backend entry points the image builds (backend/Dockerfile). The earlier
+      # api-gateway / semantic-engine / governance-engine lines pointed at
+      # backend/cmd directories that do not exist (api-gateway is its own module at
+      # the repo root), so this step could never have passed.
       run: |
-        CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.Version=${{ steps.version.outputs.version }}" -o bin/api-gateway ./cmd/api-gateway
-        CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.Version=${{ steps.version.outputs.version }}" -o bin/semantic-engine ./cmd/semantic-engine
-        CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.Version=${{ steps.version.outputs.version }}" -o bin/governance-engine ./cmd/governance-engine
+        CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.Version=${{ steps.version.outputs.version }}" -o bin/server ./cmd/server
+        CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.Version=${{ steps.version.outputs.version }}" -o bin/worker ./cmd/worker
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
