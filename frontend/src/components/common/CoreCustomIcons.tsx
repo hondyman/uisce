@@ -1,6 +1,6 @@
 import React from 'react';
-import { Tooltip, useTheme, Chip, Stack } from '@mui/material';
-import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import { Tooltip, Chip, Stack } from '@mui/material';
+import CoreLeafIcon from './CoreLeafIcon';
 import BuildIcon from '@mui/icons-material/Build';
 import { deriveViewFlags } from '../../utils/viewFlags';
 
@@ -13,13 +13,11 @@ interface CoreIconProps {
 }
 
 export const CoreIcon: React.FC<CoreIconProps> = ({ sx = {}, fontSize = 'small' }) => {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-  const color = isDark ? theme.palette.primary.light : theme.palette.info.main;
+  const color = CORE_COLOR;
 
   return (
     <Tooltip title="Core" arrow placement="top">
-      <WaterDropIcon
+      <CoreLeafIcon
         sx={{
           color,
           fontSize,
@@ -102,7 +100,7 @@ export const CoreCustomBadge: React.FC<CoreCustomBadgeProps> = ({
 
   return (
     <Chip
-      icon={isCoreKind ? <WaterDropIcon sx={{ fontSize: size === 'small' ? 16 : 20, color }} /> : <BuildIcon sx={{ fontSize: size === 'small' ? 16 : 20, color }} />}
+      icon={isCoreKind ? <CoreLeafIcon sx={{ fontSize: size === 'small' ? 16 : 20, color }} /> : <BuildIcon sx={{ fontSize: size === 'small' ? 16 : 20, color }} />}
       label={displayLabel}
       size={size}
       variant="outlined"
@@ -139,7 +137,7 @@ export function renderCoreCustomIcons(props?: RenderCoreCustomIconsProps) {
     chips.push(
       <Chip
         key="core"
-        icon={<WaterDropIcon sx={{ fontSize: size === 'small' ? 16 : 20, color: CORE_COLOR }} />}
+        icon={<CoreLeafIcon sx={{ fontSize: size === 'small' ? 16 : 20, color: CORE_COLOR }} />}
         label="Core"
         size={size}
         variant="outlined"

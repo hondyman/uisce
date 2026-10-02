@@ -1,3 +1,5 @@
+import { Button, Chip, Menu, MenuItem, Select, Stack } from '@mui/material';
+import CatalogList from '../../../components/common/CatalogList';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import useBlockableNavigate from '../../../components/RouteBlocker/useBlockableNavigate';
 // API helpers used elsewhere
@@ -88,6 +90,7 @@ const ViewsCatalogPage: React.FC = () => {
   const missingExtends = useRef<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionsMenu, setActionsMenu] = useState<{ el: HTMLElement; view: ViewItem } | null>(null);
   const [q, setQ] = useState('');
   const [qDebounced, setQDebounced] = useState('');
   const debounceTimer = useRef<number | null>(null);
@@ -534,114 +537,80 @@ const ViewsCatalogPage: React.FC = () => {
       {!isSelected && (
         <div className={styles.error} role="alert">Select a tenant and datasource (via Connections) to view the scoped catalog.</div>
       )}
-      <div className={styles.toolbar}>
-        <div className={styles.toolbarLeft}>
-          <input
-            className={styles.search}
-            placeholder="Search views..."
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-        </div>
-        <div className={styles.toolbarRight}>
-          <button 
-            className={styles.iconButton} 
-            title="Compare views" 
-            aria-label="Compare views"
-            onClick={openCompareModalIfReady} 
+      {error && <div className={styles.error}>{error}</div>}
+      <CatalogList<ViewItem>
+        items={[...items].sort((x, y) => x.name.localeCompare(y.name))}
+        getId={(v) => v.name}
+        getTitle={(v) => v.title || v.name}
+        getSubtitle={(v) => (v.title ? v.name : undefined)}
+        getDescription={(v) => v.description || undefined}
+        isCore={(v) => isCoreView(v)}
+        search={q}
+        onSearchChange={(next) => { setQ(next); setPage(1); }}
+        serverSearch
+        storageKey="views-catalog-view"
+        searchPlaceholder="Search views..."
+        loading={loading}
+        emptyMessage="No views yet."
+        noMatchMessage="No views match your search."
+        onOpen={openDetail}
+        onActions={(v, el) => setActionsMenu({ el, view: v })}
+        toolbarExtra={(
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={openCompareModalIfReady}
             disabled={!isSelected || compareSelection.length !== 2}
           >
-            ⚖️ Compare ({compareSelection.length}/2)
-          </button>
-          <select 
-            aria-label="Page size" 
-            value={pageSize} 
-            onChange={(e) => { setPageSize(parseInt(e.target.value) || 25); setPage(1); }}
-            className={styles.pageSize}
-          >
-            {[10,25,50,100].map(n => <option key={n} value={n}>{n}/page</option>)}
-          </select>
-          <div className={styles.pagination}>
-            <button 
-              disabled={page<=1} 
-              onClick={() => setPage(p => Math.max(1, p-1))}
-              className={styles.iconButton}
-            >
-              Previous
-            </button>
+            Compare ({compareSelection.length}/2)
+          </Button>
+        )}
+        renderTileMeta={(v) => (
+          <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap">
+            {getViewExtendsDisplay(v, viewsLookup) && <Chip size="small" variant="outlined" label={`Extends ${getViewExtendsDisplay(v, viewsLookup)}`} />}
+            <Chip size="small" variant="outlined" label={`${v.cube_count ?? 0} cubes`} />
+            <Chip size="small" variant="outlined" label={`${v.folder_count ?? 0} folders`} />
+            {compareSelection.includes(v.name) && <Chip size="small" color="primary" label="Selected for compare" />}
+          </Stack>
+        )}
+        columns={[
+          { key: 'description', header: 'Description', render: (v) => v.description || '—' },
+          { key: 'extends', header: 'Extends', render: (v) => getViewExtendsDisplay(v, viewsLookup) || '—' },
+          { key: 'cubes', header: 'Cubes', render: (v) => v.cube_count ?? '—' },
+          { key: 'folders', header: 'Folders', render: (v) => v.folder_count ?? '—' },
+          { key: 'modified', header: 'Modified', render: (v) => (v.modified_at ? new Date(v.modified_at).toLocaleString() : '—') },
+        ]}
+        footer={(
+          <Stack direction="row" spacing={2} alignItems="center" justifyContent="flex-end" sx={{ mt: 2 }}>
+            <Select size="small" value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value) || 25); setPage(1); }} inputProps={{ 'aria-label': 'Page size' }}>
+              {[10, 25, 50, 100].map((n) => <MenuItem key={n} value={n}>{n}/page</MenuItem>)}
+            </Select>
+            <Button size="small" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</Button>
             <span>{page} / {totalPages}</span>
-            <button 
-              disabled={page>=totalPages} 
-              onClick={() => setPage(p => Math.min(totalPages, p+1))}
-              className={styles.iconButton}
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      </div>
-      {loading && <div>Loading…</div>}
-      {error && <div className={styles.error}>{error}</div>}
-  {/* compare errors are surfaced via snackbar */}
-      <div className={styles.tableWrap}>
-        <table className={styles.table} role="grid" aria-label="Views">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Title</th>
-              <th>Description</th>
-              <th>Extends</th>
-              <th>Cubes</th>
-              <th>Folders</th>
-              <th>Modified</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...items].sort((a,b)=>a.name.localeCompare(b.name)).map((v) => {
-              const canMutate = canMutateView(v);
-              return (
-              <tr key={v.name} className={styles.row}>
-                <td>
-                  <label className={styles.rowSelectLabel}>
-                    <input type="checkbox" aria-label={`Select ${v.name} for compare`} checked={compareSelection.includes(v.name)} onChange={() => toggleCompareSelect(v.name)} />
-                  </label>
-                  <button className={styles.rowLink} onClick={() => openDetail(v)}>{v.name}</button>
-                </td>
-                <td>{v.title || '—'}</td>
-                <td className={styles.truncate}>{v.description || '—'}</td>
-                <td className={styles.truncate}>{getViewExtendsDisplay(v, viewsLookup) || '—'}</td>
-                <td>{v.cube_count ?? '—'}</td>
-                <td>{v.folder_count ?? '—'}</td>
-                <td>{v.modified_at ? new Date(v.modified_at).toLocaleString() : '—'}</td>
-                <td>
-                  <div className={styles.rowActions}>
-                    <button className={styles.iconButton} title="Edit" onClick={() => openDetail(v)} disabled={!canMutate}>✎</button>
-                    <button className={styles.iconDangerButton} title="Delete" onClick={() => void deleteView(v)} disabled={!canMutate}>🗑</button>
-                    <div className={styles.menu}>
-                      <details>
-                        <summary aria-label="Actions" title="Actions" className={styles.hamburgerButton}>
-                          <span className={styles.hamburgerIcon} aria-hidden>≡</span>
-                        </summary>
-                        <div className={styles.menuList} role="menu">
-                          <button onClick={() => publishAsBundle(v)} role="menuitem" disabled={!canMutate}>Publish as Bundle</button>
-                          <button onClick={() => openDetail(v)} role="menuitem" disabled={!canMutate}>Edit</button>
-                          <button onClick={() => cloneView(v)} role="menuitem" disabled={!canMutate}>Clone</button>
-                          <button onClick={() => navigator.clipboard.writeText(v.name)} role="menuitem">Copy name</button>
-                          <button onClick={() => copyJSON(v)} role="menuitem">Copy JSON</button>
-                          <button onClick={() => download(v)} role="menuitem">Download JSON</button>
-                          <button onClick={() => downloadYAML(v)} role="menuitem">Download YAML</button>
-                        </div>
-                      </details>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            );
-            })}
-          </tbody>
-        </table>
-      </div>
+            <Button size="small" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</Button>
+          </Stack>
+        )}
+      />
+      <Menu anchorEl={actionsMenu?.el} open={!!actionsMenu} onClose={() => setActionsMenu(null)}>
+        {actionsMenu && (() => {
+          const v = actionsMenu.view;
+          const canMutate = canMutateView(v);
+          const run = (fn: () => unknown) => () => { setActionsMenu(null); void fn(); };
+          return [
+            <MenuItem key="edit" disabled={!canMutate} onClick={run(() => openDetail(v))}>Edit</MenuItem>,
+            <MenuItem key="clone" disabled={!canMutate} onClick={run(() => cloneView(v))}>Clone</MenuItem>,
+            <MenuItem key="bundle" disabled={!canMutate} onClick={run(() => publishAsBundle(v))}>Publish as Bundle</MenuItem>,
+            <MenuItem key="compare" onClick={run(() => toggleCompareSelect(v.name))}>
+              {compareSelection.includes(v.name) ? 'Remove from compare' : 'Select for compare'}
+            </MenuItem>,
+            <MenuItem key="name" onClick={run(() => navigator.clipboard.writeText(v.name))}>Copy name</MenuItem>,
+            <MenuItem key="json" onClick={run(() => copyJSON(v))}>Copy JSON</MenuItem>,
+            <MenuItem key="dl" onClick={run(() => download(v))}>Download JSON</MenuItem>,
+            <MenuItem key="yaml" onClick={run(() => downloadYAML(v))}>Download YAML</MenuItem>,
+            <MenuItem key="del" disabled={!canMutate} sx={{ color: 'error.main' }} onClick={run(() => deleteView(v))}>Delete</MenuItem>,
+          ];
+        })()}
+      </Menu>
   {/* Compare Modal */}
       {compareOpen && (
         <div className={styles.modalOverlay} role="dialog" aria-modal="true">
