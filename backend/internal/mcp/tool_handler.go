@@ -97,8 +97,17 @@ func (h *MCPToolHandler) HandleRPC(w http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal(req.Params, &params)
 		bodyTenantID := params.Arguments.TenantID
 
-		dispatchTenant := auth.TenantIDs[0]
-		if bodyTenantID != "" {
+		dispatchTenant := ""
+		if bodyTenantID == "" {
+			// No explicit tenant: only an unambiguous active tenant is acceptable.
+			active, hasActive := auth.ActiveTenant()
+			if !hasActive {
+				json.NewEncoder(w).Encode(ErrorResponse(req.ID, InvalidParams,
+					"tenant_id is required: you are authorized for several tenants and none is selected"))
+				return
+			}
+			dispatchTenant = active
+		} else {
 			found := false
 			for _, tid := range auth.TenantIDs {
 				if tid == bodyTenantID {

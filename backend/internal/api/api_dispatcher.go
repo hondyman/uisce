@@ -115,12 +115,11 @@ func (h *ApiDispatcherHandler) IngestOpenAPI(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "either 'spec' or 'url' is required", http.StatusBadRequest)
 		return
 	}
-	if req.TenantID == "" {
-		req.TenantID = r.URL.Query().Get("tenant_id")
+	ingestTenant, tenantOK := callerTenant(w, r, req.TenantID, r.URL.Query().Get("tenant_id"))
+	if !tenantOK {
+		return
 	}
-	if req.TenantID == "" {
-		req.TenantID = r.Header.Get("X-Tenant-ID")
-	}
+	req.TenantID = ingestTenant
 
 	result, err := h.IngestOpenAPISpec(r.Context(), req)
 	if err != nil {
@@ -189,9 +188,9 @@ type CreateFieldRequest struct {
 
 // ListApiDatasources lists all inventoried API datasources
 func (h *ApiDispatcherHandler) ListApiDatasources(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
+	tenantID, tenantOK := callerTenant(w, r, r.URL.Query().Get("tenant_id"))
+	if !tenantOK {
+		return
 	}
 
 	query := `
@@ -254,9 +253,9 @@ func (h *ApiDispatcherHandler) ListApiDatasources(w http.ResponseWriter, r *http
 
 // ListApiEndpoints lists all endpoints with their parent API, resource, and counts
 func (h *ApiDispatcherHandler) ListApiEndpoints(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
+	tenantID, tenantOK := callerTenant(w, r, r.URL.Query().Get("tenant_id"))
+	if !tenantOK {
+		return
 	}
 
 	query := `
@@ -329,9 +328,9 @@ func (h *ApiDispatcherHandler) ListApiEndpoints(w http.ResponseWriter, r *http.R
 // GetApiEndpointDetail returns detailed metadata for a single endpoint
 func (h *ApiDispatcherHandler) GetApiEndpointDetail(w http.ResponseWriter, r *http.Request) {
 	endpointID := chi.URLParam(r, "id")
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
+	tenantID, tenantOK := callerTenant(w, r, r.URL.Query().Get("tenant_id"))
+	if !tenantOK {
+		return
 	}
 
 	query := `
@@ -470,9 +469,9 @@ func (h *ApiDispatcherHandler) ListApiFields(w http.ResponseWriter, r *http.Requ
 
 // ListSemanticTerms lists searchable semantic terms for mapping
 func (h *ApiDispatcherHandler) ListSemanticTerms(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
+	tenantID, tenantOK := callerTenant(w, r, r.URL.Query().Get("tenant_id"))
+	if !tenantOK {
+		return
 	}
 	search := r.URL.Query().Get("q")
 
@@ -527,9 +526,9 @@ func (h *ApiDispatcherHandler) MapFieldToSemanticTerm(w http.ResponseWriter, r *
 		return
 	}
 
-	tenantID := req.TenantID
-	if tenantID == "" {
-		tenantID = "99e99e99-99e9-49e9-89e9-99e99e99e999" // Default to Gold Copy if unspecified
+	tenantID, tenantOK := callerTenant(w, r, req.TenantID)
+	if !tenantOK {
+		return
 	}
 
 	// 1. Remove existing has_context edge for this field
@@ -574,9 +573,9 @@ func (h *ApiDispatcherHandler) CreateApiField(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	tenantID := req.TenantID
-	if tenantID == "" {
-		tenantID = "99e99e99-99e9-49e9-89e9-99e99e99e999"
+	tenantID, tenantOK := callerTenant(w, r, req.TenantID)
+	if !tenantOK {
+		return
 	}
 	if req.DataType == "" {
 		req.DataType = "varchar"
@@ -942,6 +941,12 @@ func (h *ApiDispatcherHandler) SaveTenantConnection(w http.ResponseWriter, r *ht
 		return
 	}
 
+	connTenant, tenantOK := callerTenant(w, r, req.TenantID)
+	if !tenantOK {
+		return
+	}
+	req.TenantID = connTenant
+
 	if req.TenantID == "" || req.ApiDatasourceID == "" || req.BaseURL == "" {
 		http.Error(w, "tenant_id, api_datasource_id, and base_url are required", http.StatusBadRequest)
 		return
@@ -1049,12 +1054,9 @@ func (h *ApiDispatcherHandler) ExecuteEndpoint(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	tenantID := req.TenantID
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
+	tenantID, tenantOK := callerTenant(w, r, req.TenantID)
+	if !tenantOK {
+		return
 	}
 
 	// 1. Fetch endpoint node, parent resource, and parent datasource
@@ -1580,9 +1582,9 @@ func (h *ApiDispatcherHandler) writeAuditEntry(ctx context.Context, entry auditE
 // tenant. When endpoint_id is supplied, only entries for that endpoint are
 // returned. Results are limited to the most recent N rows.
 func (h *ApiDispatcherHandler) ListDispatchAudit(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
+	tenantID, tenantOK := callerTenant(w, r, r.URL.Query().Get("tenant_id"))
+	if !tenantOK {
+		return
 	}
 	if tenantID == "" {
 		http.Error(w, "tenant_id is required", http.StatusBadRequest)

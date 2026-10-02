@@ -11,7 +11,6 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/hondyman/uisce/backend/internal/events"
-	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 /**
@@ -24,7 +23,7 @@ func TestMemoryLeakLongDurationStreaming(t *testing.T) {
 	broker := events.NewEventStreamBroker(10000)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
+	wsHandler := newTestWSHandler(broker)
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 
@@ -108,7 +107,7 @@ func TestMemoryLeakSubscriberChurn(t *testing.T) {
 	broker := events.NewEventStreamBroker(5000)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
+	wsHandler := newTestWSHandler(broker)
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 
@@ -281,7 +280,7 @@ func BenchmarkMemoryStressLongDuration(b *testing.B) {
 	broker := events.NewEventStreamBroker(10000)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
+	wsHandler := newTestWSHandler(broker)
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 

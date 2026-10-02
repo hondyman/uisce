@@ -158,7 +158,8 @@ func (s *MakerCheckerService) evaluateComplianceRules(boID string, payload json.
 
 func (s *MakerCheckerService) ListTicketsHandler(w http.ResponseWriter, r *http.Request) {
 	auth, ok := security.AuthInfoFromContext(r.Context())
-	if !ok || len(auth.TenantIDs) == 0 || strings.TrimSpace(auth.TenantIDs[0]) == "" {
+	activeTenant, hasTenant := auth.ActiveTenant()
+	if !ok || !hasTenant {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
@@ -166,7 +167,7 @@ func (s *MakerCheckerService) ListTicketsHandler(w http.ResponseWriter, r *http.
 		})
 		return
 	}
-	tenantID := auth.TenantIDs[0]
+	tenantID := activeTenant
 
 	tickets, err := s.ListTickets(r.Context(), tenantID)
 	if err != nil {

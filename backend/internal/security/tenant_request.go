@@ -11,7 +11,8 @@ import (
 // path that WithTenantContext may use; no other implementation is permitted.
 //
 // Behavior:
-//   - If no X-Tenant-ID header is present: returns auth.TenantIDs[0] from JWT.
+//   - If no X-Tenant-ID header is present: returns the caller's active tenant only
+//     if unambiguous (a single tenant); several tenants and no header is an error.
 //   - If X-Tenant-ID header is present:
 //   - Caller is global_admin or global_ops → header value honored (admin override).
 //   - Header matches one of auth.TenantIDs → header value honored.

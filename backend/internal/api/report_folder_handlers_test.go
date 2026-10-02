@@ -52,8 +52,7 @@ func authRequest(method, url string, body []byte, tenantID, userID string) *http
 func TestReportFolderAPI_AuthAndSecurity(t *testing.T) {
 	_, _, r := setupFolderTestRouter(t)
 
-	t.Run("Security - Reject Client Headers in Production (ALLOW_CLIENT_TENANT_HEADER_FALLBACK=false)", func(t *testing.T) {
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false")
+	t.Run("Security - Reject Client-Supplied Identity Headers", func(t *testing.T) {
 
 		endpoints := []struct {
 			method string
@@ -89,7 +88,6 @@ func TestReportFolderAPI_AuthAndSecurity(t *testing.T) {
 
 	t.Run("Security - JWT Auth Takes Absolute Precedence Over Spoofed Headers", func(t *testing.T) {
 		_, mock, r2 := setupFolderTestRouter(t)
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
 
 		realTenant := "11111111-1111-1111-1111-111111111111"
 		realTenantUUID := uuid.MustParse(realTenant)

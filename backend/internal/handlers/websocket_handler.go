@@ -43,18 +43,15 @@ func NewWebSocketEventHandler(broker *events.EventStreamBroker, securityDeps Sec
 
 // ServeHTTP handles WebSocket upgrade and streaming
 func (h *WebSocketEventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	tenantID := strings.TrimSpace(r.URL.Query().Get("tenant_id"))
-	if tenantID == "" {
-		tenantID = strings.TrimSpace(r.URL.Query().Get("tenantId"))
+	// The tenant comes from the verified security context only. A tenant_id query
+	// parameter is a request that SecurityContextFromRequest validates against the
+	// caller's authorized tenants; it is never used directly.
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
+		return
 	}
-	if tenantID == "" {
-		secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
-		if err != nil {
-			http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
-			return
-		}
-		tenantID = secCtx.TenantID
-	}
+	tenantID := secCtx.TenantID
 
 	// Parse regions parameter (comma-separated)
 	regionsParam := r.URL.Query().Get("regions")

@@ -31,8 +31,8 @@ func IdentityEnrichmentMiddleware(cfg IdentityEnrichmentConfig) func(http.Handle
 			}
 
 			tenantIDStr := ""
-			if len(authInfo.TenantIDs) > 0 {
-				tenantIDStr = authInfo.TenantIDs[0]
+			if active, hasActive := authInfo.ActiveTenant(); hasActive {
+				tenantIDStr = active
 			}
 			if tenantIDStr == "" {
 				next.ServeHTTP(w, r)
@@ -114,8 +114,8 @@ func ResolveIdentityContext(ctx context.Context) IdentityContext {
 
 	if authInfo, ok := security.AuthInfoFromContext(ctx); ok {
 		tenantID := ""
-		if len(authInfo.TenantIDs) > 0 {
-			tenantID = authInfo.TenantIDs[0]
+		if active, hasActive := authInfo.ActiveTenant(); hasActive {
+			tenantID = active
 		}
 		return IdentityContext{
 			FunctionalRole: authInfo.FunctionalRole,

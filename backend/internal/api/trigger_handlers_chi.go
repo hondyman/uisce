@@ -12,7 +12,8 @@ import (
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
-// Helper functions to read tenant/user from request (header preferred, then context)
+// Helper functions to read the verified tenant from the request context. The raw
+// X-Tenant-ID header is never a tenant.
 func tenantIDFromRequest(r *http.Request) string {
 	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
 		return claims.TenantID
@@ -22,10 +23,12 @@ func tenantIDFromRequest(r *http.Request) string {
 			return s
 		}
 	}
-	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
-		return auth.TenantIDs[0]
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok {
+		if active, hasActive := auth.ActiveTenant(); hasActive {
+			return active
+		}
 	}
-	return r.Header.Get("X-Tenant-ID")
+	return ""
 }
 
 func userIDFromRequest(r *http.Request) string {

@@ -2647,6 +2647,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		// Optionally enforce tenant/datasource scoping if present in claims
 		if t, ok := claims["tenant_id"].(string); ok && t != "" {
 			r.Header.Set("X-Tenant-ID", t)
+		} else {
+			// No tenant in the token: the client's own X-Tenant-ID is not a substitute.
+			r.Header.Del("X-Tenant-ID")
 		}
 		if ds, ok := claims["datasource_id"].(string); ok && ds != "" {
 			r.Header.Set("X-Tenant-Datasource-ID", ds)

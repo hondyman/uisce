@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/security"
@@ -98,7 +97,8 @@ func (router *MCPToolRouter) HandleToolCall(w http.ResponseWriter, r *http.Reque
 	}
 
 	auth, ok := security.AuthInfoFromContext(r.Context())
-	if !ok || len(auth.TenantIDs) == 0 || strings.TrimSpace(auth.TenantIDs[0]) == "" {
+	activeTenant, hasTenant := auth.ActiveTenant()
+	if !ok || !hasTenant {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(MCPToolCallResponse{
 			JSONRPC: "2.0",
@@ -110,7 +110,7 @@ func (router *MCPToolRouter) HandleToolCall(w http.ResponseWriter, r *http.Reque
 		})
 		return
 	}
-	tenantID := auth.TenantIDs[0]
+	tenantID := activeTenant
 	functionalRole := auth.FunctionalRole
 
 	if err := router.checkRoleAccess(r.Context(), req.Params.Name, tenantID, functionalRole); err != nil {

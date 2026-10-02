@@ -48,8 +48,8 @@ func HandleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 	var userTenantIDs []string
 
 	if authInfo, ok := security.AuthInfoFromContext(r.Context()); ok && authInfo.UserID != "" {
-		if len(authInfo.TenantIDs) > 0 {
-			tenantID = authInfo.TenantIDs[0]
+		if active, hasActive := authInfo.ActiveTenant(); hasActive {
+			tenantID = active
 		}
 		isGlobalAdmin = authInfo.IsGlobalAdmin
 		userTenantIDs = authInfo.TenantIDs

@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"golang.org/x/time/rate"
@@ -29,14 +28,6 @@ func getBatchLimiter(tenantID string) *rate.Limiter {
 		batchLimiters[tenantID] = lim
 	}
 	return lim
-}
-
-func parseUUIDOrNil(s string) uuid.UUID {
-	id, err := uuid.Parse(s)
-	if err != nil {
-		return uuid.Nil
-	}
-	return id
 }
 
 // EvalService is the interface required for rule evaluation endpoints.
@@ -75,15 +66,8 @@ type EvaluatePushdownRequest struct {
 func (h *ValidationRuleHandler) handleEvaluateRecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := mustTenantID(r)
 	if !ok {
-		// Fallback for tests or unsecured local calls if tenant is passed in body or query
-		tStr := r.URL.Query().Get("tenant_id")
-		if tStr == "" {
-			tStr = r.Header.Get("X-Tenant-ID")
-		}
-		if tStr == "" {
-			tStr = "00000000-0000-0000-0000-000000000000"
-		}
-		tenantID = parseUUIDOrNil(tStr)
+		http.Error(w, "unauthorized: no tenant established for this request", http.StatusUnauthorized)
+		return
 	}
 
 	var req EvaluateRecordRequest
@@ -135,14 +119,8 @@ func (h *ValidationRuleHandler) handleEvaluateRecord(w http.ResponseWriter, r *h
 func (h *ValidationRuleHandler) handleEvaluateBatch(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := mustTenantID(r)
 	if !ok {
-		tStr := r.URL.Query().Get("tenant_id")
-		if tStr == "" {
-			tStr = r.Header.Get("X-Tenant-ID")
-		}
-		if tStr == "" {
-			tStr = "00000000-0000-0000-0000-000000000000"
-		}
-		tenantID = parseUUIDOrNil(tStr)
+		http.Error(w, "unauthorized: no tenant established for this request", http.StatusUnauthorized)
+		return
 	}
 
 	// Rate limiting: max 60 batch evaluation requests per minute per tenant
@@ -195,14 +173,8 @@ func (h *ValidationRuleHandler) handleEvaluateBatch(w http.ResponseWriter, r *ht
 func (h *ValidationRuleHandler) handleEvaluatePushdown(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := mustTenantID(r)
 	if !ok {
-		tStr := r.URL.Query().Get("tenant_id")
-		if tStr == "" {
-			tStr = r.Header.Get("X-Tenant-ID")
-		}
-		if tStr == "" {
-			tStr = "00000000-0000-0000-0000-000000000000"
-		}
-		tenantID = parseUUIDOrNil(tStr)
+		http.Error(w, "unauthorized: no tenant established for this request", http.StatusUnauthorized)
+		return
 	}
 
 	// Concurrency quota guard: max 10 concurrent pushdowns cluster-wide
@@ -265,14 +237,8 @@ func (h *ValidationRuleHandler) handleEvaluatePushdown(w http.ResponseWriter, r 
 func (h *ValidationRuleHandler) handleLoadSnapshot(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := mustTenantID(r)
 	if !ok {
-		tStr := r.URL.Query().Get("tenant_id")
-		if tStr == "" {
-			tStr = r.Header.Get("X-Tenant-ID")
-		}
-		if tStr == "" {
-			tStr = "00000000-0000-0000-0000-000000000000"
-		}
-		tenantID = parseUUIDOrNil(tStr)
+		http.Error(w, "unauthorized: no tenant established for this request", http.StatusUnauthorized)
+		return
 	}
 
 	boName := r.URL.Query().Get("bo_name")
