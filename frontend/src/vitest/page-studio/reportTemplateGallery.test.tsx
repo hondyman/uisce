@@ -14,7 +14,7 @@ describe('ReportTemplateGallery & Scaffolding (Phase 6.3)', () => {
     expect(draft.layout?.nodes?.['root'].props?.layoutKind).toBe('grid');
     expect(draft.layout?.nodes?.['root'].props?.columns).toBe(12);
 
-    const components = draft.components || [];
+    const components = Object.values(draft.components ?? {});
     const paramBar = components.find((c) => c.type === 'report_parameter_bar');
     expect(paramBar).toBeDefined();
 
@@ -24,7 +24,7 @@ describe('ReportTemplateGallery & Scaffolding (Phase 6.3)', () => {
     const chart = components.find((c) => c.type === 'saved_query_widget');
     expect(chart).toBeDefined();
 
-    expect(draft.app?.variables).toEqual([{ name: 'v_date_range', type: 'string', defaultValue: 'YTD' }]);
+    expect(draft.app?.variables).toEqual([{ name: 'v_date_range', default: 'YTD' }]);
   });
 
   it('renders built-in templates with categories, parameter chips, and tile counts', () => {
@@ -75,7 +75,7 @@ describe('ReportTemplateGallery & Scaffolding (Phase 6.3)', () => {
     const draft = onSelect.mock.calls[0][0];
     expect(draft.name).toBe('Executive KPI Dashboard');
     expect(draft.layout.nodes['root'].props.layoutKind).toBe('grid');
-    expect(draft.components.length).toBe(6);
+    expect(Object.keys(draft.components).length).toBe(6);
     expect(draft.app.variables.length).toBe(3);
     expect(onClose).toHaveBeenCalled();
   });
