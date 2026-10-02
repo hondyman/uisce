@@ -175,11 +175,13 @@ correctness.
 - A router error must degrade to the base BO path rather than fail the query;
   the cube is an optimization, the base path is always correct.
 
-**Evidence (as of this entry).** `StarRocksMaterializationManager` is defined at
-`backend/internal/querybuilder/starrocks_mv_manager.go:13` but
-`NewStarRocksMaterializationManager` has no call site outside its own test file.
-This entry records that absence deliberately; the production call site is added
-by the cube router work and cited in the delivery report.
+**Evidence (production call sites, as of the cube router landing).**
+`StarRocksMaterializationManager.GenerateMVDDL` and `ParseStarRocksExplainPlan`
+remain diagnostics-only and deliberately have no production call site; the cube
+path uses `querybuilder.CubeDDLGenerator` instead. uisce-owned routing is live
+at `backend/internal/api/api.go:1151`
+(`qbService.SetCubeRouter(querybuilder.NewCubeRouter(sqlxDB))`), invoked from
+`QueryService.Preview` at `backend/internal/querybuilder/service.go:162`.
 
 ### ADR-013: The Pre-Aggregation Scheduler Is Activated, Not Adopted
 **Status:** accepted · **Date:** 2026-10-01 · **Scope:** Storage maintenance
@@ -216,6 +218,10 @@ following the existing `CBO_ENABLED` precedent at `backend/internal/api/api.go:1
 Per-node: `refresh_strategy = 'manual'`, which `Tick` already skips
 (`pre_aggregation_lifecycle.go:255-257`).
 
+**Evidence (production call site).** `NewPreAggScheduler` is constructed at
+`backend/internal/api/api.go:1379` and started at line 1383 in enabled mode.
+The previously dormant component is now reachable from server construction.
+
 ### ADR-014: ABAC-Below-Grain Prevents Materialization Serving
 **Status:** accepted · **Date:** 2026-10-01 · **Scope:** Authorization
 
@@ -234,6 +240,13 @@ returned **data** differs between the materialization and base paths — not tha
 a boolean flag was set. The existing helper `EvaluateABACMVCompatibility`
 (`starrocks_mv_manager.go:169`) already encodes the rule; this ADR requires it to
 have a production call site.
+
+**Evidence (production call site).** The check runs inside
+`CubeRouter.Route` at `backend/internal/querybuilder/cube_router.go:147`, reached
+from `Preview` at `backend/internal/querybuilder/service.go:162`. The
+restricted-grain list is read from the verified security context by
+`abacRestrictedGrainsFrom` (`service.go`), never from a request header — a
+header-derived value would let a caller opt out of its own restriction.
 
 ### ADR-015: Grain Matching Is Set-Subset (Known Limitation)
 **Status:** accepted, with recorded limitation · **Date:** 2026-10-01 · **Scope:** Query routing
@@ -317,7 +330,54 @@ claiming a capability the server does not have.
 own kind of misleading contract. Recorded here so the stub is not mistaken for a
 working feature in future audits.
 
+**Evidence (production call site).** The hardcoded `false` at
+`saved_query_cache.go:375` is gone; `MVHit` is now derived from the router's
+decision (`execRes.CubeHit != nil`) and `QueryExecuteResponse` carries
+`CubeHit`/`CubeMiss` from `Preview` through `QueryService.Execute`.
+
 ---
+
+### ADR-020: Materialization Staleness Is Status-Driven, Not Clock-Driven
+**Status:** accepted · **Date:** 2026-10-01 · **Scope:** Query routing
+
+**Context.** `EvaluateMVWatermarkStaleness(mvRefreshedAt, boWatermarkTimestamp)`
+compares a materialization's refresh time against a **source watermark**, not
+against the current clock: a materialization refreshed ten minutes ago is fresh
+unless the underlying data moved on since. `models.PreAggProperties` carries no
+watermark column, and the router has no source-watermark source.
+
+**Decision.** The router derives staleness from the **lifecycle status** the
+scheduler maintains: `stale` is servable-but-flagged, `active` with a recorded
+refresh is fresh, an `active` materialization that has never refreshed is stale
+by definition, and every other state (`materializing`, `refreshing`, `idle`,
+`failed`) is not query-visible at all.
+
+**Consequences.** An earlier draft passed `now()` as the watermark, which marked
+*every* materialization stale on sight — correct-looking code, wrong behaviour,
+and a test that would have passed had it not asserted `Stale == false`. The
+scheduler (ADR-013) is the component that owns staleness, because it is the
+component that knows when the source moved. A future source-watermark column
+can replace this without changing the router's contract.
+
+### ADR-021: A Time Rollup Occurs When the Request Omits the Time Dimension
+**Status:** accepted · **Date:** 2026-10-01 · **Scope:** Query routing
+
+**Context.** A materialization at `country × day` answering a request for
+`country` alone is a time rollup: eleven hundred daily rows collapse to one
+total. The initial check only inspected *requested* dimensions for a time term,
+so it concluded "no time involved" and allowed the rollup for any metric,
+including `AVG` — whose rollup is arithmetically invalid.
+
+**Decision.** A rollup is in play whenever the materialization carries the
+cube's time dimension and the request does **not** select it at the same
+granularity. Every requested metric must then be distributive
+(`Decomposable == true`).
+
+**Consequences.** AVG, division, and derived metrics fall through to base tables
+rather than being silently mis-rolled-up. This is the conservative direction:
+the router can be slow, never wrong. The test that guards it omits the time
+dimension deliberately, which is what makes it a real rollup case rather than an
+exact-grain match.
 
 ## Open items
 

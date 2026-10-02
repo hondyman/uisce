@@ -64,6 +64,29 @@ type QueryPreviewResponse struct {
 	// with each column's source BO and cardinality. Empty for single-BO
 	// queries, where every column trivially belongs to the primary BO.
 	Columns []QueryResultColumn `json:"columns,omitempty"`
+
+	// CubeHit is set when the query was served from a cube materialization.
+	// It is an observability field: the SQL in this response is the base
+	// statement, and the router reports which materialization WOULD serve it
+	// faster. Nil means the base path is authoritative.
+	//
+	// Declared as a local struct rather than the querybuilder type to keep
+	// boresolver free of a dependency on the query builder package.
+	CubeHit *CubeHitInfo `json:"cubeHit,omitempty"`
+	// CubeMiss explains why no materialization was used. Empty when CubeHit is
+	// set, and empty when cube routing is not installed at all.
+	CubeMiss string `json:"cubeMiss,omitempty"`
+}
+
+// CubeHitInfo describes the materialization a cube router selected.
+type CubeHitInfo struct {
+	CubeID          string   `json:"cubeId"`
+	CubeName        string   `json:"cubeName"`
+	Materialization string   `json:"materialization"`
+	Grain           []string `json:"grain"`
+	// Stale is true when the materialization is behind its source. The data is
+	// still served, flagged, unless the cube's stalePolicy forces a fallback.
+	Stale bool `json:"stale"`
 }
 
 // QueryExecuteResponse is returned by POST /api/query/execute.
@@ -73,6 +96,11 @@ type QueryExecuteResponse struct {
 	Rows            []map[string]interface{} `json:"rows"`
 	RowCount        int                      `json:"rowCount"`
 	ExecutionTimeMs int64                    `json:"executionTimeMs"`
+	// CubeHit mirrors QueryPreviewResponse.CubeHit so the executed result
+	// carries the same routing provenance as the preview that preceded it.
+	CubeHit *CubeHitInfo `json:"cubeHit,omitempty"`
+	// CubeMiss explains why no materialization served the query.
+	CubeMiss string `json:"cubeMiss,omitempty"`
 }
 
 // QueryResultColumn describes one result column.

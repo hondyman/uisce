@@ -1144,6 +1144,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		}
 		qbRelationships := analytics.NewRelationshipInferenceService(sqlxDB)
 		qbService := querybuilder.NewQueryService(boGenerator, boResolver, qbRelationships)
+		// Cube routing: uisce decides explicitly which materialization serves a
+		// query, at the Preview seam (ADR-012). StarRocks native rewrite is
+		// diagnostics only. The router degrades to the base BO path on any
+		// failure, so installing it cannot break existing queries.
+		qbService.SetCubeRouter(querybuilder.NewCubeRouter(sqlxDB))
 		// srv.SQLXDB isn't assigned until later in NewServer (line ~1464) -
 		// using it here captured a permanent nil, so QueryBuilderHandler.Execute
 		// always failed its "no database connection" check regardless of which

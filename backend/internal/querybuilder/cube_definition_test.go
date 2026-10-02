@@ -195,3 +195,42 @@ func TestCubeDimensionSet(t *testing.T) {
 	assert.Equal(t, []string{"country", "product"}, c.DimensionSet(),
 		"blank term IDs are dropped")
 }
+
+// TestCacheKey_CubeContentHashInvalidates is acceptance test #10: deploying or
+// editing a cube must invalidate dependent cache entries, so a cached envelope
+// can never claim a cubeHit from a cube that has since changed.
+func TestCacheKey_CubeContentHashInvalidates(t *testing.T) {
+	metrics := []MetricDefinition{revenueMetric()}
+	base := ComputeQueryAndMetricsAndCubeCacheKey(
+		"tenant_a", "qhash", metrics, "cube-hash-v1", "phash", "abachash", "hot", "bo-v1")
+
+	edited := ComputeQueryAndMetricsAndCubeCacheKey(
+		"tenant_a", "qhash", metrics, "cube-hash-v2", "phash", "abachash", "hot", "bo-v1")
+	assert.NotEqual(t, base, edited,
+		"a changed cube content hash must produce a different cache key")
+
+	undeployed := ComputeQueryAndMetricsAndCubeCacheKey(
+		"tenant_a", "qhash", metrics, "", "phash", "abachash", "hot", "bo-v1")
+	assert.NotEqual(t, base, undeployed,
+		"removing the cube must not reuse the cube-keyed entry")
+}
+
+// TestCacheKey_NoCubeMatchesLegacyKey verifies a query with no cube produces
+// exactly the key the pre-cube implementation produced, so existing cache
+// entries stay valid.
+func TestCacheKey_NoCubeMatchesLegacyKey(t *testing.T) {
+	metrics := []MetricDefinition{revenueMetric()}
+	legacy := ComputeQueryAndMetricsCacheKey("tenant_a", "qhash", metrics, "phash", "abachash", "hot", "bo-v1")
+	withEmptyCube := ComputeQueryAndMetricsAndCubeCacheKey("tenant_a", "qhash", metrics, "", "phash", "abachash", "hot", "bo-v1")
+	assert.Equal(t, legacy, withEmptyCube,
+		"an empty cube hash must not perturb the existing key")
+}
+
+// TestCubeContentHashChangesWithContent confirms the hash the cache key consumes
+// is content-sensitive, which is what makes the invalidation above meaningful.
+func TestCubeContentHashChangesWithContent(t *testing.T) {
+	base := ComputeCubeContentHash(sampleCube())
+	changed := sampleCube()
+	changed.Grains = append(changed.Grains, []string{"customer", "order_date"})
+	assert.NotEqual(t, base, ComputeCubeContentHash(changed))
+}

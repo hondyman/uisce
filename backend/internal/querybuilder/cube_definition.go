@@ -80,11 +80,11 @@ type CubeDefinition struct {
 	Name            string                    `json:"name" db:"name"`
 	Description     string                    `json:"description" db:"description"`
 	BOID            string                    `json:"boId" db:"bo_id"`
-	Dimensions      []CubeDimension           `json:"dimensions"`
-	TimeDimension   *CubeTimeDimension        `json:"timeDimension,omitempty"`
-	MetricIDs       []string                  `json:"metricIds"`
-	Grains          [][]string                `json:"grains"`
-	Materialization CubeMaterializationConfig `json:"materialization"`
+	Dimensions      []CubeDimension           `json:"dimensions" db:"dimensions"`
+	TimeDimension   *CubeTimeDimension        `json:"timeDimension,omitempty" db:"time_dimension"`
+	MetricIDs       []string                  `json:"metricIds" db:"metric_ids"`
+	Grains          [][]string                `json:"grains" db:"grains"`
+	Materialization CubeMaterializationConfig `json:"materialization" db:"materialization"`
 	ContentHash     string                    `json:"contentHash" db:"content_hash"`
 	IsCore          bool                      `json:"isCore" db:"is_core"`
 	Status          string                    `json:"status" db:"status"` // "active" | "deprecated" | "archived"

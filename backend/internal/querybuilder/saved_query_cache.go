@@ -372,7 +372,12 @@ func (h *SavedQueryHandler) HandleBatchExecuteSavedQueries(w http.ResponseWriter
 					Rows:         execRes.Rows,
 					RowCount:     len(execRes.Rows),
 					ResolvedTier: tier,
-					MVHit:        false,
+					// Sourced from the real routing decision rather than a
+					// hardcoded default. This field was permanently false
+					// while the MV layer had no call sites; it is now driven
+					// by the cube router (ADR-019). Absent CubeHit means the
+					// base BO path served the query.
+					MVHit: execRes.CubeHit != nil,
 				}
 
 				GlobalQueryCache.Put(cacheKey, payload, currentWM, sq.BOID, 60*time.Second)

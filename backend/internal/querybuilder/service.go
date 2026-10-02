@@ -41,6 +41,16 @@ type QueryService struct {
 	generator     *boresolver.BOSQLGenerator
 	resolver      BOResolver
 	relationships RelationshipResolver
+	// cubes routes eligible queries to a cube materialization. It may be nil,
+	// in which case every query takes the base BO path unchanged.
+	cubes *CubeRouter
+}
+
+// SetCubeRouter installs the cube router. This is the seam where uisce takes
+// explicit ownership of materialization routing (ADR-012): a nil router
+// disables cube routing entirely rather than failing closed.
+func (s *QueryService) SetCubeRouter(r *CubeRouter) {
+	s.cubes = r
 }
 
 // NewQueryService creates a QueryService for the given generator, resolver,
@@ -132,12 +142,69 @@ func (s *QueryService) Preview(ctx context.Context, secCtx *security.Context, qd
 		})
 	}
 
-	return &boresolver.QueryPreviewResponse{
+	resp := &boresolver.QueryPreviewResponse{
 		SQL:        sql,
 		Dialect:    dialectName(s.generator.Dialect),
 		Parameters: args,
 		Columns:    columns,
-	}, nil
+	}
+
+	// Cube routing runs AFTER base SQL generation on purpose. A cube is an
+	// optimization over a path that is always correct, so the base statement is
+	// the fallback rather than something the router must reproduce. Any router
+	// failure leaves resp exactly as the base path produced it.
+	//
+	// abacRestrictedGrains comes from the caller's verified security context,
+	// never from client input: defaulting it to empty would silently disable
+	// the sub-grain check that stops an aggregated-away dimension from being
+	// served to a restricted caller (ADR-014).
+	if s.cubes != nil {
+		decision := s.cubes.Route(ctx, secCtx.TenantID, qd, abacRestrictedGrainsFrom(secCtx))
+		if decision.Route != nil {
+			resp.CubeHit = &boresolver.CubeHitInfo{
+				CubeID:          decision.Route.CubeID,
+				CubeName:        decision.Route.CubeName,
+				Materialization: decision.Route.Materialization,
+				Grain:           decision.Route.Grain,
+				Stale:           decision.Route.Stale,
+			}
+		} else {
+			resp.CubeMiss = string(decision.MissReason)
+		}
+	}
+
+	return resp, nil
+}
+
+// abacRestrictedGrainsFrom extracts the dimension terms the caller is
+// row-restricted on from the verified security context.
+//
+// An unrestricted caller legitimately yields nil. The invariant that matters is
+// that this value is derived server-side from a verified identity and never
+// accepted from a request header.
+func abacRestrictedGrainsFrom(secCtx *security.Context) []string {
+	if secCtx == nil || len(secCtx.Attributes) == 0 {
+		return nil
+	}
+	const key = "abac_restricted_grains"
+	var out []string
+	switch v := secCtx.Attributes[key].(type) {
+	case []string:
+		out = append(out, v...)
+	case []any:
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+	case string:
+		for _, part := range strings.Split(v, ",") {
+			if p := strings.TrimSpace(part); p != "" {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
 }
 
 // previewMultiBO compiles a QueryDef whose Dimensions/Measures/Filters span
@@ -232,6 +299,8 @@ func (s *QueryService) Execute(ctx context.Context, secCtx *security.Context, qd
 		Rows:            data,
 		RowCount:        len(data),
 		ExecutionTimeMs: time.Since(start).Milliseconds(),
+		CubeHit:         preview.CubeHit,
+		CubeMiss:        preview.CubeMiss,
 	}, nil
 }
 

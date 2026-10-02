@@ -179,6 +179,19 @@ func sanitizeIdentifier(s string) string {
 // ComputeQueryAndMetricsCacheKey computes the combined cache key incorporating
 // the query content hash, sorted metric content hashes, and canonical parameter hashes.
 func ComputeQueryAndMetricsCacheKey(tenantID, queryContentHash string, referencedMetrics []MetricDefinition, canonicalParamsHash, abacContextHash, routeTier, boSchemaVersion string) string {
+	return ComputeQueryAndMetricsAndCubeCacheKey(tenantID, queryContentHash, referencedMetrics, "", canonicalParamsHash, abacContextHash, routeTier, boSchemaVersion)
+}
+
+// ComputeQueryAndMetricsAndCubeCacheKey composes the full cache key, including
+// the cube content hash when a cube is in play.
+//
+// cubeContentHash participates because a cube deploy or edit changes which
+// materialization serves a query. Including it means a cache entry minted
+// against one cube version cannot be served after that cube changes, and an
+// undeployed cube can never leave a stale cubeHit claim behind (ADR-016). An
+// empty hash contributes a constant, so queries with no cube produce exactly
+// the same key as before this term existed.
+func ComputeQueryAndMetricsAndCubeCacheKey(tenantID, queryContentHash string, referencedMetrics []MetricDefinition, cubeContentHash, canonicalParamsHash, abacContextHash, routeTier, boSchemaVersion string) string {
 	metricHashes := make([]string, len(referencedMetrics))
 	for i, m := range referencedMetrics {
 		h := m.ContentHash
@@ -190,10 +203,11 @@ func ComputeQueryAndMetricsCacheKey(tenantID, queryContentHash string, reference
 	sort.Strings(metricHashes)
 	concatenatedMetricHashes := strings.Join(metricHashes, ":")
 
-	raw := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%s",
+	raw := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%s:%s",
 		tenantID,
 		queryContentHash,
 		concatenatedMetricHashes,
+		cubeContentHash,
 		canonicalParamsHash,
 		abacContextHash,
 		routeTier,
