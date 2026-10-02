@@ -17,7 +17,9 @@ jobs:
     - name: Use Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: 18
+        # Cypress 15's bundled tsx needs Node >= 20.6 (it loads via --import);
+        # on Node 18 the config loader crashes and the job hangs to the timeout.
+        node-version: 20
     - name: Install frontend deps
       working-directory: frontend
       run: npm ci --legacy-peer-deps
