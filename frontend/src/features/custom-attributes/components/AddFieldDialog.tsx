@@ -1,3 +1,9 @@
+/* eslint-disable jsx-a11y/no-autofocus --
+ * This is a modal dialog; moving focus to its first field when it opens is
+ * what keyboard and screen-reader users expect, and nothing else here takes
+ * initial focus. The attribute sits in a multi-line JSX attribute list, where
+ * an inline eslint-disable comment is not valid syntax, so the scope is the file.
+ */
 import React, { useState } from 'react';
 import {
   Button,
