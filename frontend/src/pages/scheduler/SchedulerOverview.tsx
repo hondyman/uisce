@@ -10,18 +10,15 @@ import {
   Schedule as ClockIcon,
   Warning as AlertTriangleIcon,
   TrendingUp,
-  Calendar,
+  CalendarToday as Calendar,
   Bolt as ZapIcon,
   Shield
 } from '@mui/icons-material';
-import { useTenantContext } from '../../hooks/useTenantContext';
 import { useSchedulerStats, useJobs, Job } from '../../api/schedulerApi';
 
 const SchedulerOverview: React.FC = () => {
-  const { selectedTenant } = useTenantContext();
-  const tenantId = selectedTenant?.id;
-  const { stats, loading: statsLoading } = useSchedulerStats(tenantId || '');
-  const { jobs, loading: jobsLoading } = useJobs(tenantId || '', { limit: 10 });
+  const { stats, loading: statsLoading } = useSchedulerStats();
+  const { jobs, loading: jobsLoading } = useJobs({ limit: 10 });
 
   const categoryBreakdown = useMemo(() => {
     if (!jobs) return [];
