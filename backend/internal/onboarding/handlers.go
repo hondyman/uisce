@@ -34,7 +34,7 @@ func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get tenant ID from header
-	tenantIDStr := func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }()
+	tenantIDStr := func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if t, ok := auth.ActiveTenant(); ok { return t }; return "" }()
 	tenantUUID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")

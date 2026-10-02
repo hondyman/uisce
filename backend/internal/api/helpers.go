@@ -28,8 +28,10 @@ import (
 // (2) jwtmiddleware.GetClaimsFromContext (standalone services with their own wiring).
 // (3) empty string, false — caller should respond 401.
 func TenantIDFromRequest(r *http.Request) (string, bool) {
-	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
-		return auth.TenantIDs[0], true
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok {
+		if active, hasActive := auth.ActiveTenant(); hasActive {
+			return active, true
+		}
 	}
 	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
 		return claims.TenantID, true
@@ -113,14 +115,6 @@ type TenantContext struct {
 	DatasourceID string
 }
 
-// allowClientTenantHeaderFallback reports whether the X-Tenant-ID header may
-// be trusted when the JWT carries no tenant claim. This must never be enabled
-// in production: the header is fully client-controlled, so trusting it lets
-// any caller assert an arbitrary tenant identity.
-func allowClientTenantHeaderFallback() bool {
-	return getEnv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false") == "true"
-}
-
 // AssertProductionConfig returns an error if unsafe dev-only flags are active
 // in what appears to be a production environment.
 //
@@ -141,13 +135,6 @@ func AssertProductionConfig() error {
 		return nil // explicitly declared safe environment
 	}
 	// Any other value — including unset ("") — is treated as production.
-	if allowClientTenantHeaderFallback() {
-		return fmt.Errorf(
-			"ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true is not permitted in environment %q "+
-				"(only development/local/test); this flag is dev-only and must be false in production",
-			env,
-		)
-	}
 	if getEnv("API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK", "false") == "true" {
 		return fmt.Errorf(
 			"API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK=true is not permitted in environment %q "+
@@ -168,14 +155,11 @@ func AssertProductionConfig() error {
 // extractTenantContext extracts tenant context from request headers (JWT-validated)
 // WARNING: This function intentionally does NOT fall back to URL query params for security.
 // Tenant ID must come from validated JWT claims; the X-Tenant-ID header is only
-// trusted when ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true (local/dev use only).
+// not trusted: the tenant comes only from verified claims.
 func extractTenantContext(r *http.Request) (*TenantContext, error) {
 	var tenantID string
 	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
 		tenantID = claims.TenantID
-	}
-	if tenantID == "" && allowClientTenantHeaderFallback() {
-		tenantID = r.Header.Get("X-Tenant-ID")
 	}
 	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 
@@ -391,16 +375,10 @@ func nilIfNullFloat64(n sql.NullFloat64) *float64 {
 // AuthContextMiddleware - includes the verified-global-admin X-Tenant-ID header
 // fallback (AuthContextMiddleware only honors that header for a caller whose JWT
 // role claims proved global_admin/global_ops); (2) jwtmiddleware claims for
-// standalone services; (3) the raw X-Tenant-ID header, but only when
-// ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true (local/dev use only).
+// standalone services. The raw X-Tenant-ID header is never trusted.
 func getSecureTenantID(r *http.Request) string {
 	if tenantID, ok := TenantIDFromRequest(r); ok && tenantID != "" {
 		return tenantID
-	}
-	if allowClientTenantHeaderFallback() {
-		if tid := r.Header.Get("X-Tenant-ID"); tid != "" {
-			return tid
-		}
 	}
 	return ""
 }

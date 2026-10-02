@@ -97,8 +97,8 @@ func resolveReportAuthContext(r *http.Request) (tenantID uuid.UUID, userID strin
 				}
 			}
 		}
-		if len(auth.TenantIDs) > 0 {
-			if tid, parseErr := uuid.Parse(auth.TenantIDs[0]); parseErr == nil && tid != uuid.Nil {
+		if active, ok := auth.ActiveTenant(); ok {
+			if tid, parseErr := uuid.Parse(active); parseErr == nil && tid != uuid.Nil {
 				tenantID = tid
 			}
 		}
@@ -129,24 +129,6 @@ func resolveReportAuthContext(r *http.Request) (tenantID uuid.UUID, userID strin
 		if tenantID == uuid.Nil && claims.TenantID != "" {
 			if tid, parseErr := uuid.Parse(claims.TenantID); parseErr == nil && tid != uuid.Nil {
 				tenantID = tid
-			}
-		}
-	}
-
-	// 4. Request header fallback ONLY if ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true (dev/local use only).
-	// In production, this fallback is strictly disabled: headers are client-controlled and untrusted.
-	// Admin status NEVER falls back to headers under any circumstances.
-	if allowClientTenantHeaderFallback() {
-		if tenantID == uuid.Nil {
-			if tidHeader := r.Header.Get("X-Tenant-ID"); tidHeader != "" {
-				if tid, parseErr := uuid.Parse(tidHeader); parseErr == nil && tid != uuid.Nil {
-					tenantID = tid
-				}
-			}
-		}
-		if userID == "" {
-			if uidHeader := r.Header.Get("X-User-ID"); uidHeader != "" {
-				userID = uidHeader
 			}
 		}
 	}

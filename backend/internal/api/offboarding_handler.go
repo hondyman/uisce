@@ -24,8 +24,14 @@ func requireOffboardingAdmin(w http.ResponseWriter, r *http.Request) (auth secur
 		http.Error(w, "Forbidden: admin role required", http.StatusForbidden)
 		return security.AuthInfo{}, "", false
 	}
-	if len(auth.TenantIDs) > 0 {
-		tenantID = auth.TenantIDs[0]
+	if active, hasActive := auth.ActiveTenant(); hasActive {
+		tenantID = active
+	}
+	// Only a global admin may act tenant-agnostically; anyone else without an
+	// established tenant (e.g. several tenants and none selected) is refused.
+	if tenantID == "" && !auth.IsGlobalAdmin {
+		http.Error(w, "Forbidden: no active tenant", http.StatusForbidden)
+		return security.AuthInfo{}, "", false
 	}
 	return auth, tenantID, true
 }

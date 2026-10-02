@@ -44,7 +44,6 @@ func (j jsonArrayArg) Match(v driver.Value) bool {
 }
 
 func TestReportAPI(t *testing.T) {
-	t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -76,8 +75,7 @@ func TestReportAPI(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest("POST", "/api/v1/reports/", bytes.NewBuffer(body))
-		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
-		req.Header.Set("X-User-ID", "user-123")
+		req = withTenantUserAuth(req, "11111111-1111-1111-1111-111111111111", "user-123")
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -110,8 +108,7 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(rows)
 
 		req := httptest.NewRequest("GET", "/api/v1/reports/", nil)
-		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
-		req.Header.Set("X-User-ID", "user-123")
+		req = withTenantUserAuth(req, "11111111-1111-1111-1111-111111111111", "user-123")
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -138,8 +135,7 @@ func TestReportAPI(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest("POST", "/api/v1/reports/", bytes.NewBuffer(body))
-		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
-		req.Header.Set("X-User-ID", "user-123")
+		req = withTenantUserAuth(req, "11111111-1111-1111-1111-111111111111", "user-123")
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -149,8 +145,7 @@ func TestReportAPI(t *testing.T) {
 
 	t.Run("Favorite Endpoint - Rejects Request Body", func(t *testing.T) {
 		req := httptest.NewRequest("PUT", "/api/v1/reports/00000000-0000-0000-0000-000000000001/favorite", bytes.NewBufferString(`{"inject": true}`))
-		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
-		req.Header.Set("X-User-ID", "user-123")
+		req = withTenantUserAuth(req, "11111111-1111-1111-1111-111111111111", "user-123")
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -189,8 +184,7 @@ func TestReportAPI(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest("PUT", "/api/v1/reports/00000000-0000-0000-0000-000000000001", bytes.NewBuffer(body))
-		req.Header.Set("X-Tenant-ID", clientTenant)
-		req.Header.Set("X-User-ID", "client-user")
+		req = withTenantUserAuth(req, clientTenant, "client-user")
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -231,8 +225,7 @@ func TestReportAPI(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest("PUT", "/api/v1/reports/00000000-0000-0000-0000-000000000002", bytes.NewBuffer(body))
-		req.Header.Set("X-Tenant-ID", clientTenant)
-		req.Header.Set("X-User-ID", nonAuthorID)
+		req = withTenantUserAuth(req, clientTenant, nonAuthorID)
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -274,8 +267,7 @@ func TestReportAPI(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest("PUT", "/api/v1/reports/00000000-0000-0000-0000-000000000003", bytes.NewBuffer(body))
-		req.Header.Set("X-Tenant-ID", clientTenant)
-		req.Header.Set("X-User-ID", authorID)
+		req = withTenantUserAuth(req, clientTenant, authorID)
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -317,8 +309,7 @@ func TestReportAPI(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest("POST", "/api/v1/reports/", bytes.NewBuffer(body))
-		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
-		req.Header.Set("X-User-ID", "user-non-admin")
+		req = withTenantUserAuth(req, "11111111-1111-1111-1111-111111111111", "user-non-admin")
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -344,8 +335,7 @@ func TestReportAPI(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest("POST", "/api/v1/reports/", bytes.NewBuffer(body))
-		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
-		req.Header.Set("X-User-ID", "user-123")
+		req = withTenantUserAuth(req, "11111111-1111-1111-1111-111111111111", "user-123")
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -417,8 +407,7 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		req := httptest.NewRequest("DELETE", "/api/v1/reports/00000000-0000-0000-0000-000000000020", nil)
-		req.Header.Set("X-Tenant-ID", clientTenant)
-		req.Header.Set("X-User-ID", nonAuthorID)
+		req = withTenantUserAuth(req, clientTenant, nonAuthorID)
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -587,8 +576,7 @@ func TestReportAPI(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest("POST", "/api/v1/reports/", bytes.NewBuffer(body))
-		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
-		req.Header.Set("X-User-ID", "user-123")
+		req = withTenantUserAuth(req, "11111111-1111-1111-1111-111111111111", "user-123")
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -596,8 +584,7 @@ func TestReportAPI(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, w.Code)
 	})
 
-	t.Run("Security - Reject Client Headers in Production (ALLOW_CLIENT_TENANT_HEADER_FALLBACK=false)", func(t *testing.T) {
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false")
+	t.Run("Security - Reject Client-Supplied Identity Headers", func(t *testing.T) {
 
 		req := httptest.NewRequest("GET", "/api/v1/reports/", nil)
 		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
@@ -610,7 +597,6 @@ func TestReportAPI(t *testing.T) {
 	})
 
 	t.Run("Security - Spoofed X-Admin Header Is Ignored", func(t *testing.T) {
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
 
 		dupRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
 		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM report_templates WHERE tenant_id = \$1 AND LOWER\(template_name\) = LOWER\(\$2\)`).
@@ -646,8 +632,8 @@ func TestReportAPI(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest("POST", "/api/v1/reports/", bytes.NewBuffer(body))
-		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
-		req.Header.Set("X-User-ID", "attacker")
+		// Authenticated as an ordinary (non-admin) user; the spoofed admin header must be ignored.
+		req = withTenantUserAuth(req, "11111111-1111-1111-1111-111111111111", "attacker")
 		req.Header.Set("X-Admin", "true") // Malicious admin header
 		w := httptest.NewRecorder()
 
@@ -661,7 +647,6 @@ func TestReportAPI(t *testing.T) {
 	})
 
 	t.Run("Security - JWT Auth Takes Absolute Precedence Over Headers", func(t *testing.T) {
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
 
 		realTenant := "11111111-1111-1111-1111-111111111111"
 		realTenantUUID := uuid.MustParse(realTenant)
@@ -727,14 +712,12 @@ func TestReportAPI(t *testing.T) {
 		w := httptest.NewRecorder()
 
 		// Temporarily disable fallback for strict test
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false")
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 
 	t.Run("List Templates - Search with ?q= binds parameter", func(t *testing.T) {
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
 		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
@@ -760,8 +743,7 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(rows)
 
 		req := httptest.NewRequest("GET", "/api/v1/reports/?q=Portfolo", nil)
-		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
-		req.Header.Set("X-User-ID", "user-123")
+		req = withTenantUserAuth(req, "11111111-1111-1111-1111-111111111111", "user-123")
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -775,11 +757,9 @@ func TestReportAPI(t *testing.T) {
 	})
 
 	t.Run("List Templates - Query exceeding 256 chars returns 400 Bad Request", func(t *testing.T) {
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
 		tooLongQuery := strings.Repeat("a", 257)
 		req := httptest.NewRequest("GET", "/api/v1/reports/?q="+tooLongQuery, nil)
-		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
-		req.Header.Set("X-User-ID", "user-123")
+		req = withTenantUserAuth(req, "11111111-1111-1111-1111-111111111111", "user-123")
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -788,7 +768,6 @@ func TestReportAPI(t *testing.T) {
 	})
 
 	t.Run("List Templates - Empty or whitespace ?q= delegates to standard listing", func(t *testing.T) {
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
 		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
@@ -813,8 +792,7 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(rows)
 
 		req := httptest.NewRequest("GET", "/api/v1/reports/?q=%20%20%20", nil)
-		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
-		req.Header.Set("X-User-ID", "user-123")
+		req = withTenantUserAuth(req, "11111111-1111-1111-1111-111111111111", "user-123")
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -828,7 +806,6 @@ func TestReportAPI(t *testing.T) {
 	})
 
 	t.Run("Create Template - parameters derived from parameter_schema when frontend omits top-level parameters", func(t *testing.T) {
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
 
 		dupRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
 		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM report_templates WHERE tenant_id = \$1 AND LOWER\(template_name\) = LOWER\(\$2\)`).
@@ -863,8 +840,7 @@ func TestReportAPI(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest("POST", "/api/v1/reports/", bytes.NewBuffer(body))
-		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
-		req.Header.Set("X-User-ID", "user-123")
+		req = withTenantUserAuth(req, "11111111-1111-1111-1111-111111111111", "user-123")
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -877,7 +853,6 @@ func TestReportAPI(t *testing.T) {
 	})
 
 	t.Run("Update Template - parameters re-derived from parameter_schema, not frozen at the stale existing value", func(t *testing.T) {
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
 		clientTenant := "11111111-1111-1111-1111-111111111111"
 		authorID := "author-dual-write"
 
@@ -935,8 +910,7 @@ func TestReportAPI(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest("PUT", "/api/v1/reports/00000000-0000-0000-0000-000000000040", bytes.NewBuffer(body))
-		req.Header.Set("X-Tenant-ID", clientTenant)
-		req.Header.Set("X-User-ID", authorID)
+		req = withTenantUserAuth(req, clientTenant, authorID)
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)

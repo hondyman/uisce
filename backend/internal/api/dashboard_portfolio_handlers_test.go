@@ -31,9 +31,10 @@ func (m *testMockResolver) Resolve(ctx context.Context, datasourceID string) (*s
 // DashboardHandler.verifyAuthentication requires identity.ActorIDFromContext and security.AuthInfoFromContext.
 func withAuthContext(req *http.Request, tenantID string) *http.Request {
 	authInfo := security.AuthInfo{
-		UserID:    "test-user-001",
-		TenantIDs: []string{tenantID, "t1"},
-		Roles:     []string{"admin"},
+		UserID:         "test-user-001",
+		TenantIDs:      []string{tenantID, "t1"},
+		ActiveTenantID: tenantID,
+		Roles:          []string{"admin"},
 	}
 	ctx := identity.WithActorTenant(req.Context(), "test-user-001", tenantID)
 	ctx = security.WithAuthInfo(ctx, authInfo)

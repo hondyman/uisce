@@ -48,6 +48,18 @@ type AuthInfo struct {
 	Roles     []string
 	TenantIDs []string
 
+	// ActiveTenantID is the tenant this request operates on, set only by
+	// AuthContextMiddleware from a verified source: the token's tenant claim, the
+	// caller's sole tenant, or an explicit client selection that was validated
+	// against TenantIDs (or made by a verified global admin). Empty means no
+	// tenant has been established; there is no default. Use ActiveTenant().
+	ActiveTenantID string
+
+	// RequestedTenantID is the tenant the client asked for via X-Tenant-ID. It is
+	// UNVERIFIED input, kept only so later middleware can validate it against a
+	// tenant list it resolves itself. Never use it as a tenant on its own.
+	RequestedTenantID string
+
 	// IsGlobalAdmin is true when the user holds the global_admin or global_ops role.
 	IsGlobalAdmin bool
 
@@ -113,9 +125,9 @@ func BuildContext(ctx context.Context, auth AuthInfo, req BuildContextRequest, r
 	isGlobalAdmin := containsRole(auth.Roles, "global_admin") || containsRole(auth.Roles, "global_ops")
 	if strings.TrimSpace(req.DatasourceID) == "" {
 		// Pure tenant/instance metadata scope (e.g. Business Object definitions, catalog metadata)
-		primaryTenantID := "gold_copy"
-		if len(auth.TenantIDs) > 0 {
-			primaryTenantID = auth.TenantIDs[0]
+		primaryTenantID, ok := auth.ActiveTenant()
+		if !ok {
+			return nil, fmt.Errorf("no active tenant for this request")
 		}
 		operatingScope := fmt.Sprintf("%s:default:default:none", primaryTenantID)
 		return &Context{

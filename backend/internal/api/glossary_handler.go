@@ -1570,9 +1570,9 @@ type CreateTechnicalAssetsRequest struct {
 }
 
 func (h *GlossaryHandler) CreateTechnicalAssets(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
+	tenantID, tenantOK := callerTenant(w, r, r.URL.Query().Get("tenant_id"))
+	if !tenantOK {
+		return
 	}
 
 	var req CreateTechnicalAssetsRequest

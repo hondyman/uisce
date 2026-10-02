@@ -51,7 +51,7 @@ func TestListWorkflowEvents_WithTenantReturnsList(t *testing.T) {
 	RegisterTriggerRoutesChi(r, sqlxDB, nil)
 
 	req := httptest.NewRequest("GET", "/v1/triggers/events", nil)
-	req.Header.Set("X-Tenant-ID", "tenant-123")
+	req = withTenantUserAuth(req, "tenant-123", "user-1")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

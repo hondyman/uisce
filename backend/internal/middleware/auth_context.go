@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/google/uuid"
@@ -11,15 +10,6 @@ import (
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
 )
-
-// allowClientTenantHeaderFallback reports whether a JWT lacking a tenant
-// claim may fall back to the client-supplied X-Tenant-ID header. The header
-// is fully client-controlled, so trusting it without this explicit opt-in
-// would let any caller with a validly-signed-but-tenantless token assert an
-// arbitrary tenant identity. Must never be enabled in production.
-func allowClientTenantHeaderFallback() bool {
-	return os.Getenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK") == "true"
-}
 
 // AuthContextMiddleware returns a chi-compatible middleware that validates
 // an Authorization Bearer token using SecurityManager and injects actor/tenant
@@ -34,6 +24,17 @@ func allowClientTenantHeaderFallback() bool {
 func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// X-Tenant-ID and X-User-ID are identity assertions that only this
+			// middleware may establish, from a verified token or API key. Whatever the
+			// client sent is discarded up front: the client's tenant is kept only as a
+			// *requested selection*, honored below solely if the caller is authorized
+			// for it. A request with no token, an invalid token or an unauthorized
+			// selection therefore reaches handlers with no tenant and no user, and
+			// fails. There are no fallbacks.
+			clientTenant := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
+			r.Header.Del("X-Tenant-ID")
+			r.Header.Del("X-User-ID")
+
 			if secMgr != nil {
 				authHeader := r.Header.Get("Authorization")
 				if authHeader != "" {
@@ -82,6 +83,8 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 							UserID:                 uid,
 							Roles:                  realRoles,
 							TenantIDs:              []string{tenantID},
+							ActiveTenantID:         tenantID,
+							RequestedTenantID:      clientTenant,
 							IsGlobalAdmin:          isGlobalAdmin,
 							ImpersonationActive:    true,
 							RealAdminUserID:        uid,
@@ -128,44 +131,46 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 								}
 							}
 
-							// Authoritative Tenant ID from token
-							tenantID := strings.TrimSpace(jclaims.TenantID)
-							tenantIDs := normalizeTenantIDs(jclaims.TenantIDs, tenantID)
-							if tenantID != "" {
-								// Override header with authoritative value from token if present.
-								r.Header.Set("X-Tenant-ID", tenantID)
-							} else if len(tenantIDs) == 1 {
-								tenantID = tenantIDs[0]
-								r.Header.Set("X-Tenant-ID", tenantID)
-							} else if len(tenantIDs) == 0 && (isGlobalAdmin || allowClientTenantHeaderFallback()) {
-								// A verified global admin/ops caller (role checked above) may select a
-								// tenant via the client-supplied X-Tenant-ID header, since their JWT never
-								// carries a tenant claim of its own. Non-admin callers only get this
-								// fallback in dev (ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true) - the header
-								// is otherwise client-controlled and untrusted for them. Parse it as a UUID
-								// to reject malicious/injected values either way.
-								headerTenant := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
-								if parsed, err := uuid.Parse(headerTenant); err == nil {
-									tenantID = parsed.String()
-									r.Header.Set("X-Tenant-ID", tenantID)
-									tenantIDs = []string{tenantID}
-									logging.GetLogger().Sugar().Infof("[AuthContextMiddleware] JWT lacks tenant claim; falling back to X-Tenant-ID header: tenant=%s user=%s isGlobalAdmin=%v", tenantID, uid, isGlobalAdmin)
+							// Establish the active tenant from verified sources only. Every other
+							// case leaves it empty and the request fails downstream; there is no
+							// default tenant and no guessing.
+							claimTenant := strings.TrimSpace(jclaims.TenantID)
+							tenantIDs := normalizeTenantIDs(jclaims.TenantIDs, claimTenant)
+							tenantID := ""
+							switch {
+							case claimTenant != "":
+								tenantID = claimTenant // explicit tenant claim
+							case len(tenantIDs) == 1:
+								tenantID = tenantIDs[0] // unambiguous
+							case len(tenantIDs) > 1:
+								// Several tenants: the caller must select one, and the selection
+								// counts only if the token authorizes it.
+								if clientTenant != "" && containsString(tenantIDs, clientTenant) {
+									tenantID = clientTenant
 								} else {
-									logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] JWT lacks tenant claim and X-Tenant-ID header is missing or not a valid UUID: header=%q user=%s", headerTenant, uid)
-									r.Header.Del("X-Tenant-ID")
+									logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] multi-tenant caller user=%s sent no valid tenant selection (requested=%q); no active tenant", uid, clientTenant)
 								}
-							} else if len(tenantIDs) == 0 {
-								r.Header.Del("X-Tenant-ID")
+							case isGlobalAdmin:
+								// A verified global admin/ops caller has no tenant claim and selects
+								// the tenant to operate on explicitly. Must be a valid UUID.
+								if parsed, err := uuid.Parse(clientTenant); err == nil {
+									tenantID = parsed.String()
+									tenantIDs = []string{tenantID}
+								}
+							}
+							if tenantID != "" {
+								r.Header.Set("X-Tenant-ID", tenantID)
 							}
 
-						ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
-						ctx = security.WithAuthInfo(ctx, security.AuthInfo{
-							UserID:        uid,
-							Roles:         normalizeStringList(jclaims.Roles),
-							TenantIDs:     tenantIDs,
-							IsGlobalAdmin: isGlobalAdmin,
-							RawClaims:     jclaims,
-						})
+							ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
+							ctx = security.WithAuthInfo(ctx, security.AuthInfo{
+								UserID:         uid,
+								Roles:          normalizeStringList(jclaims.Roles),
+								TenantIDs:      tenantIDs,
+								ActiveTenantID: tenantID,
+								IsGlobalAdmin:  isGlobalAdmin,
+								RawClaims:      jclaims,
+							})
 							r = r.WithContext(ctx)
 						}
 					}
@@ -182,10 +187,12 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 
 							ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
 							ctx = security.WithAuthInfo(ctx, security.AuthInfo{
-								UserID:    uid,
-								Roles:     normalizeStringList(ak.Roles),
-								TenantIDs: normalizeTenantIDs(ak.TenantIDs, tenantID),
-								RawClaims: nil,
+								UserID:            uid,
+								Roles:             normalizeStringList(ak.Roles),
+								TenantIDs:         normalizeTenantIDs(ak.TenantIDs, tenantID),
+								ActiveTenantID:    tenantID,
+								RequestedTenantID: clientTenant,
+								RawClaims:         nil,
 							})
 							r = r.WithContext(ctx)
 						}
@@ -233,4 +240,13 @@ func normalizeStringList(values []string) []string {
 		result = append(result, trimmed)
 	}
 	return result
+}
+
+func containsString(list []string, target string) bool {
+	for _, v := range list {
+		if v == target {
+			return true
+		}
+	}
+	return false
 }

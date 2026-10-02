@@ -40,8 +40,10 @@ func (h *TenantStudioHandler) RegisterRoutes(r chi.Router) {
 }
 
 func (h *TenantStudioHandler) getTenantID(r *http.Request) (uuid.UUID, error) {
-	if authInfo, ok := security.AuthInfoFromContext(r.Context()); ok && len(authInfo.TenantIDs) > 0 {
-		return uuid.Parse(authInfo.TenantIDs[0])
+	if authInfo, ok := security.AuthInfoFromContext(r.Context()); ok {
+		if active, hasActive := authInfo.ActiveTenant(); hasActive {
+			return uuid.Parse(active)
+		}
 	}
 	tenantIDStr := jwtmiddleware.GetTenantIDFromContext(r)
 	if tenantIDStr == "" {

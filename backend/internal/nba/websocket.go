@@ -187,7 +187,7 @@ func (h *WebSocketHub) ServeWs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenantID := func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }()
+	tenantID := func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if t, ok := auth.ActiveTenant(); ok { return t }; return "" }()
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {

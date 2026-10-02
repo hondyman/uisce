@@ -54,7 +54,6 @@ func unsetForTest(t *testing.T, keys ...string) {
 func TestAssertProductionConfig_productionClean(t *testing.T) {
 	setEnvForTest(t,
 		"ENVIRONMENT", "production",
-		"ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false",
 		"API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK", "false",
 	)
 	if err := AssertProductionConfig(); err != nil {
@@ -64,25 +63,9 @@ func TestAssertProductionConfig_productionClean(t *testing.T) {
 
 // ── Production + unsafe flags ─────────────────────────────────────────────────
 
-func TestAssertProductionConfig_productionHeaderFallback(t *testing.T) {
-	setEnvForTest(t,
-		"ENVIRONMENT", "production",
-		"ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true",
-		"API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK", "false",
-	)
-	err := AssertProductionConfig()
-	if err == nil {
-		t.Fatal("expected error for ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true in production, got nil")
-	}
-	if !strings.Contains(err.Error(), "ALLOW_CLIENT_TENANT_HEADER_FALLBACK") {
-		t.Errorf("error message should mention the flag; got: %v", err)
-	}
-}
-
 func TestAssertProductionConfig_productionDevKey(t *testing.T) {
 	setEnvForTest(t,
 		"ENVIRONMENT", "production",
-		"ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false",
 		"API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK", "true",
 	)
 	err := AssertProductionConfig()
@@ -99,22 +82,9 @@ func TestAssertProductionConfig_productionDevKey(t *testing.T) {
 // ENVIRONMENT set, combined with a dev flag still true, must be rejected.
 // If this test passes with err==nil, the control is fail-open (broken).
 
-func TestAssertProductionConfig_unsetEnvironment_headerFallback(t *testing.T) {
-	unsetForTest(t, "ENVIRONMENT")
-	setEnvForTest(t,
-		"ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true",
-		"API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK", "false",
-	)
-	err := AssertProductionConfig()
-	if err == nil {
-		t.Fatal("CRITICAL: unset ENVIRONMENT with ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true must be rejected (fail-closed), got nil")
-	}
-}
-
 func TestAssertProductionConfig_unsetEnvironment_devKey(t *testing.T) {
 	unsetForTest(t, "ENVIRONMENT")
 	setEnvForTest(t,
-		"ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false",
 		"API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK", "true",
 	)
 	err := AssertProductionConfig()
@@ -126,7 +96,6 @@ func TestAssertProductionConfig_unsetEnvironment_devKey(t *testing.T) {
 func TestAssertProductionConfig_unsetEnvironment_bothFlagsOff(t *testing.T) {
 	unsetForTest(t, "ENVIRONMENT")
 	setEnvForTest(t,
-		"ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false",
 		"API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK", "false",
 	)
 	// Both flags off — even unset ENVIRONMENT is safe, no unsafe flags active.
@@ -140,7 +109,7 @@ func TestAssertProductionConfig_unsetEnvironment_bothFlagsOff(t *testing.T) {
 func TestAssertProductionConfig_typoEnvironment(t *testing.T) {
 	setEnvForTest(t,
 		"ENVIRONMENT", "prod", // common abbreviation, NOT in safe list
-		"ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true",
+		"API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK", "true",
 	)
 	err := AssertProductionConfig()
 	if err == nil {
@@ -153,7 +122,6 @@ func TestAssertProductionConfig_typoEnvironment(t *testing.T) {
 func TestAssertProductionConfig_developmentPermissive(t *testing.T) {
 	setEnvForTest(t,
 		"ENVIRONMENT", "development",
-		"ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true",
 		"API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK", "true",
 	)
 	if err := AssertProductionConfig(); err != nil {
@@ -164,7 +132,6 @@ func TestAssertProductionConfig_developmentPermissive(t *testing.T) {
 func TestAssertProductionConfig_localPermissive(t *testing.T) {
 	setEnvForTest(t,
 		"ENVIRONMENT", "local",
-		"ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true",
 		"API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK", "true",
 	)
 	if err := AssertProductionConfig(); err != nil {
@@ -175,7 +142,6 @@ func TestAssertProductionConfig_localPermissive(t *testing.T) {
 func TestAssertProductionConfig_testPermissive(t *testing.T) {
 	setEnvForTest(t,
 		"ENVIRONMENT", "test",
-		"ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true",
 		"API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK", "true",
 	)
 	if err := AssertProductionConfig(); err != nil {
@@ -187,9 +153,22 @@ func TestAssertProductionConfig_testPermissive(t *testing.T) {
 func TestAssertProductionConfig_caseInsensitive(t *testing.T) {
 	setEnvForTest(t,
 		"ENVIRONMENT", "Development",
-		"ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true",
 	)
 	if err := AssertProductionConfig(); err != nil {
 		t.Fatalf(`expected nil for ENVIRONMENT="Development" (case-insensitive match), got: %v`, err)
+	}
+}
+
+// ALLOW_CLIENT_TENANT_HEADER_FALLBACK no longer exists: setting it must change
+// nothing, in production or anywhere else. There is no client-header tenant
+// fallback to enable.
+func TestAssertProductionConfig_removedHeaderFallbackFlagIsInert(t *testing.T) {
+	setEnvForTest(t,
+		"ENVIRONMENT", "production",
+		"ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true",
+		"API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK", "false",
+	)
+	if err := AssertProductionConfig(); err != nil {
+		t.Fatalf("the removed flag must not influence the assertion, got: %v", err)
 	}
 }

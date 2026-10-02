@@ -79,6 +79,7 @@ func SecurityContextFromRequest(r *http.Request, bodyDatasourceID string, bodyRe
 	resolvedTenantID, resolveOK := security.ResolveTenantID(auth, targetTenantID)
 	switch {
 	case resolveOK:
+		auth.ActiveTenantID = resolvedTenantID
 		if len(auth.TenantIDs) == 0 || auth.TenantIDs[0] != resolvedTenantID {
 			auth.TenantIDs = append([]string{resolvedTenantID}, auth.TenantIDs...)
 		}

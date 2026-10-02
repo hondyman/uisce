@@ -83,12 +83,28 @@ func TenantProvisioningMiddleware(cfg TenantProvisioningConfig) func(http.Handle
 			}
 			if len(tenantIDs) > 0 {
 				authInfo.TenantIDs = tenantIDs
+				// The active tenant is the sole tenant, or the client's requested one if the
+				// user is a member; several tenants and no valid request leaves none.
+				authInfo.ActiveTenantID = ""
+				if len(tenantIDs) == 1 {
+					authInfo.ActiveTenantID = tenantIDs[0]
+				} else {
+					for _, tid := range tenantIDs {
+						if tid == authInfo.RequestedTenantID {
+							authInfo.ActiveTenantID = tid
+						}
+					}
+				}
+				activeTenant, _ := authInfo.ActiveTenant()
+				if activeTenant != "" {
+					r.Header.Set("X-Tenant-ID", activeTenant)
+				}
 				ctx = security.WithAuthInfo(ctx, authInfo)
 				if jclaims, _ := authInfo.RawClaims.(*services.JWTClaims); jclaims != nil {
 					jwtClaims := &jwtmiddleware.JWTClaims{
 						UserID:    jclaims.UserID,
 						Email:     jclaims.Email,
-						TenantID:  tenantIDs[0],
+						TenantID:  activeTenant,
 						TenantIDs: tenantIDs,
 						Roles:     jclaims.Roles,
 					}

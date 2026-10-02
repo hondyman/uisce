@@ -23,12 +23,14 @@ func NewReportScheduleHandler(db *sqlx.DB) *ReportScheduleHandler {
 	return &ReportScheduleHandler{db: db}
 }
 
-// resolveTenantID resolves tenant from security context, identity, JWT, or dev fallback.
+// resolveTenantID resolves the tenant from verified auth context only.
 func (h *ReportScheduleHandler) resolveTenantID(r *http.Request) (uuid.UUID, error) {
 	// 1. Try security.AuthInfoFromContext
-	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
-		if tid, err := uuid.Parse(auth.TenantIDs[0]); err == nil && tid != uuid.Nil {
-			return tid, nil
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok {
+		if active, ok := auth.ActiveTenant(); ok {
+			if tid, err := uuid.Parse(active); err == nil && tid != uuid.Nil {
+				return tid, nil
+			}
 		}
 	}
 
@@ -43,15 +45,6 @@ func (h *ReportScheduleHandler) resolveTenantID(r *http.Request) (uuid.UUID, err
 	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
 		if tid, err := uuid.Parse(claims.TenantID); err == nil && tid != uuid.Nil {
 			return tid, nil
-		}
-	}
-
-	// 4. Request header fallback ONLY if ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true (dev/local use only).
-	if allowClientTenantHeaderFallback() {
-		if tidHeader := r.Header.Get("X-Tenant-ID"); tidHeader != "" {
-			if tid, err := uuid.Parse(tidHeader); err == nil && tid != uuid.Nil {
-				return tid, nil
-			}
 		}
 	}
 

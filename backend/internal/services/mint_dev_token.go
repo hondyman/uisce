@@ -46,7 +46,11 @@ func DevTokenClaims(in DevTokenInput) jwt.MapClaims {
 	}
 	if len(tenantIDs) > 0 {
 		claims["tenant_ids"] = tenantIDs
-		claims["tenant_id"] = tenantIDs[0]
+		// A single-tenant token carries its tenant; a multi-tenant token must have it
+		// selected per request, so no primary tenant claim is guessed here.
+		if len(tenantIDs) == 1 {
+			claims["tenant_id"] = tenantIDs[0]
+		}
 	}
 	return claims
 }

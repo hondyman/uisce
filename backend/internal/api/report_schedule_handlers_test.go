@@ -48,7 +48,6 @@ func TestReportScheduleAPI_AuthAndSecurity(t *testing.T) {
 	_, _, r := setupScheduleTestRouter(t)
 
 	t.Run("Reject Unauthenticated Access", func(t *testing.T) {
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false")
 		templateID := uuid.New().String()
 
 		endpoints := []struct {
@@ -197,7 +196,6 @@ func TestHardenedBurstEndpoints_AuthSecurity(t *testing.T) {
 	_, _, r := setupBurstScheduleTestRouter(t)
 
 	t.Run("Reject Unauthenticated Access on CreateSchedule", func(t *testing.T) {
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false")
 
 		req := httptest.NewRequest(http.MethodPost, "/api/reports/schedules", bytes.NewBufferString(`{"schedule_name":"Test"}`))
 		req.Header.Set("Content-Type", "application/json")
@@ -208,7 +206,6 @@ func TestHardenedBurstEndpoints_AuthSecurity(t *testing.T) {
 	})
 
 	t.Run("Reject Spoofed Header in Production on CreateSchedule", func(t *testing.T) {
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false")
 
 		req := httptest.NewRequest(http.MethodPost, "/api/reports/schedules", bytes.NewBufferString(`{"schedule_name":"Test"}`))
 		req.Header.Set("Content-Type", "application/json")
@@ -220,7 +217,6 @@ func TestHardenedBurstEndpoints_AuthSecurity(t *testing.T) {
 	})
 
 	t.Run("Unauthenticated ListSchedules Returns 401 Unauthorized", func(t *testing.T) {
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false")
 
 		req := httptest.NewRequest(http.MethodGet, "/api/reports/schedules", nil)
 		w := httptest.NewRecorder()
@@ -230,7 +226,6 @@ func TestHardenedBurstEndpoints_AuthSecurity(t *testing.T) {
 	})
 
 	t.Run("Reject Spoofed Header on GetBatchTelemetry When DB Has No Batch", func(t *testing.T) {
-		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false")
 		batchID := uuid.New()
 
 		req := httptest.NewRequest(http.MethodGet, "/api/reports/batches/"+batchID.String()+"/telemetry", nil)
