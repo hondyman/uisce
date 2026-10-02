@@ -203,11 +203,6 @@ func (rs *Routes) RegisterMetadataWrite(r chi.Router, handler interface {
 	r.Post("/object/{ObjectType}", handler.HandleGenericWrite)
 }
 
-// RegisterCalendarSync mounts the calendar sync endpoints
-func (rs *Routes) RegisterCalendarSync(r chi.Router, handler interface{ RegisterRoutes(chi.Router) }) {
-	handler.RegisterRoutes(r)
-}
-
 // RegisterExports mounts the result export endpoints
 func (rs *Routes) RegisterExports(r chi.Router, h *handlers.ExportHandlers) {
 	r.Route("/v1/exports", func(r chi.Router) {
@@ -218,17 +213,5 @@ func (rs *Routes) RegisterExports(r chi.Router, h *handlers.ExportHandlers) {
 	r.Route("/v1/jobs/{jobId}/exports", func(r chi.Router) {
 		r.Post("/", h.CreateExport)
 		r.Get("/", h.ListExports)
-	})
-}
-
-// RegisterScheduler mounts the job scheduler endpoints
-func (rs *Routes) RegisterScheduler(r chi.Router, h *handlers.SchedulerHandlers) {
-	r.Route("/v1/schedules", func(r chi.Router) {
-		r.Post("/", h.CreateScheduledJob)
-		r.Get("/", h.ListSchedules)
-		r.Get("/{scheduleId}", h.GetSchedule)
-		r.Post("/{scheduleId}/pause", h.PauseSchedule)
-		r.Post("/{scheduleId}/resume", h.ResumeSchedule)
-		r.Delete("/{scheduleId}", h.DeleteSchedule)
 	})
 }

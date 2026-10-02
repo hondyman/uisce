@@ -6,12 +6,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	httpapi "github.com/hondyman/uisce/backend/internal/api"
-	"github.com/hondyman/uisce/backend/internal/services"
 )
 
 func newIntegrationValidationRouter(db *sql.DB) http.Handler {
 	r := chi.NewRouter()
-	httpapi.RegisterValidationRulesRoutes(r, db, services.NewCueEngine(), nil, &mockResolver{})
+	httpapi.RegisterValidationRulesRoutes(r, db, nil, &mockResolver{})
 	return r
 }
 

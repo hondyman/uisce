@@ -219,6 +219,7 @@ export const HelpCenter: React.FC<HelpCenterProps> = ({ context }) => {
                 <DialogContent sx={{ p: 0 }}>
                      <Box sx={{ position: 'relative', paddingTop: '56.25%', bgcolor: 'black' }}>
                        <iframe 
+                         title="Help video player"
                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
                          src={currentVideoUrl} 
                          frameBorder="0" 

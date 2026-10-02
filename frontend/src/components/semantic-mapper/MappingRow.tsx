@@ -235,7 +235,6 @@ export function MappingRow({ mapping, idx, ...props }: MappingRowProps) {
                               }
                             }
                           }}
-                          autoFocus
                           inputProps={{
                             ...params.inputProps,
                             autoComplete: 'off'

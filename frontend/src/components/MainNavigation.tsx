@@ -36,15 +36,19 @@ import {
   Policy as PolicyIcon,
   Build as BuildIcon,
   Timeline as TimelineIcon,
+  Translate as TranslateIcon,
+  EventRepeat as EventRepeatIcon,
   KeyboardArrowDown as KeyboardArrowDownIcon,
   CheckCircle as CheckCircleIcon,
   Api as ApiIcon,
+  MenuBook as MenuBookIcon,
+  CreateNewFolder as CreateNewFolderIcon,
+  Folder as FolderIcon,
   AccountCircle as AccountCircleIcon,
   Logout as LogoutIcon,
   ManageAccounts as ManageAccountsIcon,
   AutoFixHigh as AutoFixHighIcon,
   AutoAwesome as AIIcon,
-  Store as StoreIcon,
   Storage as StorageIcon,
   PlayCircleOutline as PlayCircleOutlineIcon,
   SupervisorAccount as SupervisorAccountIcon,
@@ -52,7 +56,6 @@ import {
   Speed as SpeedIcon,
   AccountTree as AccountTreeIcon,
   Layers as LayersIcon,
-  Event as EventIcon,
   Extension as ExtensionIcon
 } from '@mui/icons-material';
 import {
@@ -82,9 +85,11 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import { Tenant } from '../types';
-import { UisceLogo } from './brand/UisceLogo';
+import { IvyLogo } from './brand/IvyLogo';
+import { useCapabilities } from '../hooks/useCapabilities';
+import { NavigationMenuApi, type NavigationMenuNode } from '../api/navigationMenu';
 
-interface NavigationItem {
+export interface NavigationItem {
   label: string;
   path: string;
   icon: React.ReactNode;
@@ -95,6 +100,12 @@ interface NavigationItem {
   };
   /** Backend ABAC capability required to render this item (e.g. "menu:platform"). */
   requiredCapability?: string;
+  /**
+   * target_profile_key this item is restricted to, e.g. "PLATFORM_OPERATOR".
+   * Resolved from a Menu Designer node's required_entitlement. Distinct from
+   * requiredCapability: that is a menu:* action key, this is a profile.
+   */
+  requiredEntitlement?: string;
 }
 
 interface NavigationMenu {
@@ -103,11 +114,13 @@ interface NavigationMenu {
   items: NavigationItem[];
   /** Backend ABAC capability required to render this menu group. */
   requiredCapability?: string;
+  /** Profile required to render this group; see NavigationItem.requiredEntitlement. */
+  requiredEntitlement?: string;
 }
 
-interface CategoryConfig {
+export interface CategoryConfig {
   label: string;
-  key: 'tenants' | 'catalog' | 'weave' | 'studio' | 'workflow' | 'intelligence' | 'entity' | 'calendar';
+  key: 'tenants' | 'catalog' | 'weave' | 'workflow' | 'intelligence' | 'entity';
   icon: React.ReactNode;
   defaultPath: string; // Navigate here when category is selected
   color: {
@@ -119,6 +132,8 @@ interface CategoryConfig {
   menus: NavigationMenu[];
   /** Backend ABAC capability required to render this top-level category. */
   requiredCapability?: string;
+  /** Profile required to render this category; see NavigationItem.requiredEntitlement. */
+  requiredEntitlement?: string;
 }
 
 const categoryConfigs: CategoryConfig[] = [
@@ -162,8 +177,6 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'Field Permissions', path: '/admin/rbac/field-permissions', icon: <LockOpenIcon />, description: 'Field-level security' },
           { label: 'IP Whitelist', path: '/fabric/ip-whitelist', icon: <SecurityIcon />, description: 'Network access rules' },
           { label: 'Secrets', path: '/secrets/config', icon: <LockIcon />, description: 'Secrets management' },
-          { label: 'Secrets Audit', path: '/secrets/audit', icon: <ShieldIcon />, description: 'Audit secret changes' },
-          { label: 'Secrets Monitoring', path: '/secrets/monitoring', icon: <AssessmentIcon />, description: 'Monitor secrets usage' },
           { label: 'JIT Requests', path: '/jit-request', icon: <LockOpenIcon />, description: 'Just-in-time access' },
           { label: 'Access Explanation', path: '/access-explanation', icon: <SecurityIcon />, description: 'Access debug explain' },
         ]
@@ -174,13 +187,13 @@ const categoryConfigs: CategoryConfig[] = [
         requiredCapability: 'menu:system',
         items: [
 
-          { label: 'Audit Plane', path: '/audit', icon: <TimelineIcon />, description: 'Immutable audit & snapshots', badge: { label: 'New', color: 'success' } },
-          { label: 'Audit Explorer', path: '/core/audit-explorer', icon: <TimelineIcon />, description: 'Explore audit records' },
-          { label: 'Fabric Audit', path: '/fabric/audit-logs', icon: <TimelineIcon />, description: 'Platform audit logs' },
+          { label: 'Audit Log', path: '/audit', icon: <TimelineIcon />, description: 'Immutable audit log, explorer & platform audit records' },
           { label: 'Fabric Settings', path: '/fabric/settings', icon: <SettingsIcon />, description: 'Platform settings' },
+          { label: 'Message Catalog', path: '/admin/message-catalog', icon: <TranslateIcon />, description: 'Error & message text, all languages' },
           { label: 'LLM Config', path: '/admin/llm', icon: <AutoFixHighIcon />, description: 'AI model configuration' },
           { label: 'Seeding', path: '/admin/seeding', icon: <SystemUpdateAltIcon />, description: 'Rule seeding' },
           { label: 'Temporal Ops', path: '/admin/temporal-ops', icon: <PlayCircleOutlineIcon />, description: 'Workflow engine' },
+          { label: 'Menu Designer', path: '/menu-designer', icon: <AccountTreeIcon />, description: 'Configure tenant navigation menus' },
         ]
       }
     ]
@@ -211,7 +224,6 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'Abbreviations', path: '/core/abbreviations', icon: <CategoryIcon />, description: 'Standard abbreviations' },
           { label: 'Data Domains', path: '/core/domains', icon: <CategoryIcon />, description: 'Domain ownership' },
           { label: 'API Inventory', path: '/catalog/api-inventory', icon: <ApiIcon />, description: 'API Services, Endpoints & Fields' },
-          { label: 'BO Explorer', path: '/business-objects', icon: <BusinessIcon />, description: 'Business Objects setup' },
         ]
       },
       {
@@ -235,7 +247,7 @@ const categoryConfigs: CategoryConfig[] = [
     label: 'Build',
     key: 'weave',
     icon: <BuildIcon />,
-    defaultPath: '/business-objects',
+    defaultPath: '/views',
     color: {
       primary: '#9C27B0',
       light: '#F3E5F5',
@@ -253,12 +265,21 @@ const categoryConfigs: CategoryConfig[] = [
         ]
       },
       {
+        label: 'Data',
+        icon: <AccountTreeIcon />,
+        items: [
+          { label: 'Data Pipelines', path: '/data/pipelines', icon: <AccountTreeIcon />, description: 'Load files and business objects visually', badge: { label: 'New', color: 'success' } },
+          { label: 'Staging Bindings', path: '/data/staging-bindings', icon: <AccountTreeIcon />, description: 'Map vendor staging tables to business objects; approvals', badge: { label: 'New', color: 'success' } },
+          { label: 'Mastering', path: '/data/mastering', icon: <AccountTreeIcon />, description: 'Golden records, provenance, runs, exceptions and match review', badge: { label: 'New', color: 'success' } },
+          { label: 'Manage Custom Fields', path: '/catalog/custom-fields', icon: <SchemaIcon />, description: 'Define custom_attributes and map semantic terms' },
+        ]
+      },
+      {
         label: 'Rules',
         icon: <CheckCircleIcon />,
         items: [
           { label: 'Validation Rules', path: '/core/validation-rules', icon: <CheckCircleIcon />, description: 'Data validations' },
           { label: 'Calculated Fields', path: '/core/calculated-fields', icon: <QueryStatsIcon />, description: 'Field calculations' },
-          { label: 'Expressions', path: '/reports/expressions', icon: <CodeIcon />, description: 'Starlark expressions' },
           { label: 'Calculations Library', path: '/fabric/calculations', icon: <QueryStatsIcon />, description: 'Core calculation logic' },
         ]
       },
@@ -267,62 +288,17 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <CheckCircleIcon />,
         items: [
           { label: 'Flow Builder', path: '/core/flow-builder', icon: <TimelineIcon />, description: 'Visual pipeline builder', badge: { label: 'New', color: 'success' } },
-          { label: 'Uisce Builder', path: '/core/uisce-builder', icon: <BuildIcon />, description: 'Advanced UI builder' },
           { label: 'Run Validations', path: '/core/validation', icon: <CheckCircleIcon />, description: 'Execute validations' },
-          { label: 'Marketplace', path: '/marketplace', icon: <StoreIcon />, description: 'Components library' },
-          { label: 'UI Components', path: '/marketplace/components', icon: <CodeIcon />, description: 'Component marketplace' },
         ]
       },
       {
-        label: 'Pages',
+        label: 'Pages & APIs',
         icon: <BuildIcon />,
         items: [
           { label: 'Page Designer', path: '/page-studio', icon: <BuildIcon />, description: 'Build CRUD pages against a Business Object' },
-          { label: 'Menu Designer', path: '/menu-designer', icon: <AccountTreeIcon />, description: 'Arrange pages into the navigation menu' },
           { label: 'Browse Pages', path: '/pages', icon: <ApiIcon />, description: 'View pages as a consumer would' },
-        ]
-      }
-    ]
-  },
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // STUDIO - Low-code development tools (NEW)
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'Studio',
-    key: 'studio' as any,
-    icon: <CodeIcon />,
-    defaultPath: '/api-studio',
-    color: {
-      primary: '#E91E63',
-      light: '#FCE4EC',
-      dark: '#C2185B',
-      background: 'rgba(233, 30, 99, 0.08)'
-    },
-    menus: [
-      {
-        label: 'API Studio',
-        icon: <ApiIcon />,
-        items: [
           { label: 'API Designer', path: '/api-studio', icon: <ApiIcon />, description: 'Visual API builder', badge: { label: 'New', color: 'success' } },
           { label: 'API Catalog', path: '/api-catalog', icon: <ApiIcon />, description: 'Published APIs' },
-        ]
-      },
-      {
-        label: 'Page Designer',
-        icon: <BuildIcon />,
-        items: [
-          { label: 'Page Designer', path: '/page-studio', icon: <BuildIcon />, description: 'Visual UI builder', badge: { label: 'New', color: 'success' } },
-          { label: 'Custom Components', path: '/fabric/custom-components', icon: <BuildIcon />, description: 'Reusable components' },
-        ]
-      },
-      {
-        label: 'Workflow Studio',
-        icon: <AccountTreeIcon />,
-        items: [
-          { label: 'Process Designer', path: '/client-portal/workflow-studio', icon: <AccountTreeIcon />, description: 'Workflow builder' },
-          { label: 'Business Rules', path: '/client-portal/rules-editor', icon: <PolicyIcon />, description: 'Rule editor' },
-          { label: 'Workflow Designer', path: '/core/workflow-designer', icon: <TimelineIcon />, description: 'Legacy designer' },
         ]
       }
     ]
@@ -335,7 +311,7 @@ const categoryConfigs: CategoryConfig[] = [
     label: 'Operations',
     key: 'workflow',
     icon: <PlayCircleOutlineIcon />,
-    defaultPath: '/scheduler-intelligence',
+    defaultPath: '/automation/schedules',
     color: {
       primary: '#00695C',
       light: '#E0F2F1',
@@ -347,10 +323,7 @@ const categoryConfigs: CategoryConfig[] = [
         label: 'Scheduler',
         icon: <TimelineIcon />,
         items: [
-          { label: 'Intelligence Console', path: '/scheduler-intelligence', icon: <AutoFixHighIcon />, description: 'AI-powered scheduler', badge: { label: 'AI', color: 'info' } },
-          { label: 'Jobs', path: '/scheduler/jobs', icon: <TimelineIcon />, description: 'Job definitions' },
-          { label: 'Executions', path: '/scheduler/executions', icon: <PlayCircleOutlineIcon />, description: 'Run history' },
-          { label: 'Calendars', path: '/scheduler/calendars', icon: <CategoryIcon />, description: 'Business calendars' },
+          { label: 'Schedules', path: '/automation/schedules', icon: <EventRepeatIcon />, description: 'Platform scheduler — schedules, run history, business calendars (former Scheduler Intelligence)' },
         ]
       },
       {
@@ -361,6 +334,8 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'Instance Explorer', path: '/bp-console/instances', icon: <TimelineIcon />, description: 'Debug workflows' },
           { label: 'Work Queues', path: '/bp-console/queues', icon: <AssessmentIcon />, description: 'Queue management' },
           { label: 'Process Catalog', path: '/core/process-catalog', icon: <SchemaIcon />, description: 'Process definitions' },
+          { label: 'Process Designer', path: '/client-portal/workflow-studio', icon: <AccountTreeIcon />, description: 'Visual workflow builder' },
+          { label: 'Workflow Designer (Legacy)', path: '/core/workflow-designer', icon: <TimelineIcon />, description: 'Classic workflow designer' },
         ]
       },
       {
@@ -375,6 +350,7 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'Notifications', path: '/core/notifications', icon: <NotificationsIcon />, description: 'Notification center' },
           { label: 'Notification Templates', path: '/core/notifications/templates', icon: <NotificationsIcon />, description: 'Message templates' },
           { label: 'Notification Prefs', path: '/core/notifications/preferences', icon: <SettingsIcon />, description: 'User preferences' },
+          { label: 'Business Rules', path: '/client-portal/rules-editor', icon: <PolicyIcon />, description: 'Business rule authoring' },
         ]
       }
     ]
@@ -422,10 +398,6 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'Natural Language', path: '/nlq', icon: <AutoFixHighIcon />, description: 'Ask questions', badge: { label: 'AI', color: 'info' } },
           { label: 'Global Intelligence', path: '/global-intelligence', icon: <AIIcon />, description: 'Cross-platform AI assistant', badge: { label: 'New', color: 'success' } },
           { label: 'Scenario Analysis', path: '/analytics/scenario-analysis', icon: <TimelineIcon />, description: 'What-if scenarios' },
-          { label: 'Portfolio Rebalancer', path: '/analytics/rebalancer', icon: <AutoFixHighIcon />, description: 'AI rebalancing' },
-          { label: 'Simulation Workspace', path: '/simulation', icon: <TimelineIcon />, description: 'Run simulations', badge: { label: 'New', color: 'info' } },
-          { label: 'Rebalancing Wizard', path: '/simulation/rebalance', icon: <AutoFixHighIcon />, description: 'AI guided rebalancing' },
-          { label: 'Scenario Comparison', path: '/simulation/compare', icon: <AssessmentIcon />, description: 'Compare scenario outcomes' },
         ]
       }
     ]
@@ -460,9 +432,6 @@ const categoryConfigs: CategoryConfig[] = [
         label: 'Analytics',
         icon: <TimelineIcon />,
         items: [
-          { label: 'Factor Analytics', path: '/analytics/factors', icon: <AssessmentIcon />, description: 'Factor exposure' },
-          { label: 'Fixed Income', path: '/fixed-income', icon: <TimelineIcon />, description: 'Bond analytics' },
-          { label: 'Private Markets', path: '/private-markets', icon: <BusinessIcon />, description: 'PE/VC analytics' },
         ]
       },
       {
@@ -471,36 +440,8 @@ const categoryConfigs: CategoryConfig[] = [
         items: [
           { label: 'Advisor Dashboard', path: '/analytics/advisor-dashboard', icon: <SupervisorAccountIcon />, description: 'Advisor view' },
           { label: 'Portfolio Master', path: '/analytics/portfolio-master', icon: <PortfolioIcon />, description: 'Gold copy & performance' },
-          { label: 'Security Master', path: '/analytics/security-master', icon: <AssessmentIcon />, description: 'Instrument MDM & lineage' },
-          { label: 'Crypto Portfolio', path: '/crypto/portfolio', icon: <TimelineIcon />, description: 'Digital assets' },
-          { label: 'Wealth Feed', path: '/wealth/feed', icon: <NotificationsIcon />, description: 'Activity feed' },
+          { label: 'Security Master', path: '/data/mastering?entity=security', icon: <AssessmentIcon />, description: 'Instrument MDM: golden securities in the mastering console' },
           { label: 'Fabric Dashboard', path: '/fabric/dashboard', icon: <AssessmentIcon />, description: 'General dashboard view' },
-        ]
-      }
-    ]
-  },
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // CALENDAR - Calendar synchronization and management
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'Calendar',
-    key: 'calendar',
-    icon: <EventIcon />,
-    defaultPath: '/calendar',
-    color: {
-      primary: '#009688',
-      light: '#E0F2F1',
-      dark: '#00796B',
-      background: 'rgba(0, 150, 136, 0.08)'
-    },
-    menus: [
-      {
-        label: 'Management',
-        icon: <EventIcon />,
-        items: [
-          { label: 'Calendar Dashboard', path: '/calendar', icon: <EventIcon />, description: 'View events and sync status' },
-          { label: 'Sync Conflicts', path: '/calendar/conflicts', icon: <WarningIcon />, description: 'Resolve synchronization conflicts' },
         ]
       }
     ]
@@ -524,7 +465,7 @@ const categoryConfigs: CategoryConfig[] = [
  * organization entitlement never see the submenu; users with read-only
  * entitlement see the submenu and the page itself enforces read-only mode.
  */
-function filterNavigationByCapabilities(
+export function filterNavigationByCapabilities(
   categories: CategoryConfig[],
   capabilities: Record<string, boolean> | undefined,
   isPlatformOperator: boolean = false,
@@ -532,7 +473,10 @@ function filterNavigationByCapabilities(
     isVisible: false,
     canRead: false,
     canWrite: false,
-  }
+  },
+  // The caller's resolved profile, used to enforce Menu Designer
+  // required_entitlement (a target_profile_key). See useResolvedProfile below.
+  resolvedProfile: string | undefined = undefined
 ): CategoryConfig[] {
   // Platform operators bypass the capability gate entirely — they are trusted
   // to see admin navigation.  This is safe because the canAccess() check in
@@ -541,6 +485,20 @@ function filterNavigationByCapabilities(
   if (isPlatformOperator) {
     return categories;
   }
+
+  // A node gated to a profile is visible only to callers resolved to that
+  // profile. BASE_USER is the default (what navigation_menu_handler.go stores
+  // when the field is blank), and an empty value means ungated.
+  //
+  // Fails closed: when the profile is still unknown (undefined) we cannot prove
+  // the caller holds it, so restricted nodes stay hidden. An unrecognized
+  // value that no IAM row can ever produce also hides the node — a typo in the
+  // Menu Designer must never authorize everyone.
+  const hasProfile = (entitlement?: string): boolean => {
+    if (!entitlement || entitlement === 'BASE_USER') return true;
+    if (!resolvedProfile) return false;
+    return entitlement === resolvedProfile;
+  };
 
   // Strip the Organization submenu for users who do not have any
   // organization entitlement.  The Platform category itself remains visible
@@ -561,15 +519,17 @@ function filterNavigationByCapabilities(
     // back to showing only menus that require no capability.  This prevents a
     // flash of unauthorized UI for non-admin users.
     return categories
-      .filter((cat) => !cat.requiredCapability)
+      .filter((cat) => !cat.requiredCapability && hasProfile(cat.requiredEntitlement))
       .map(stripOrganization)
       .map((cat) => ({
         ...cat,
         menus: cat.menus
-          .filter((menu) => !menu.requiredCapability)
+          .filter((menu) => !menu.requiredCapability && hasProfile(menu.requiredEntitlement))
           .map((menu) => ({
             ...menu,
-            items: menu.items.filter((item) => !item.requiredCapability),
+            items: menu.items.filter(
+              (item) => !item.requiredCapability && hasProfile(item.requiredEntitlement)
+            ),
           }))
           .filter((menu) => menu.items.length > 0),
       }))
@@ -579,15 +539,17 @@ function filterNavigationByCapabilities(
   const hasCap = (cap?: string) => (cap ? !!capabilities[cap] : true);
 
   return categories
-    .filter((cat) => hasCap(cat.requiredCapability))
+    .filter((cat) => hasCap(cat.requiredCapability) && hasProfile(cat.requiredEntitlement))
     .map(stripOrganization)
     .map((cat) => ({
       ...cat,
       menus: cat.menus
-        .filter((menu) => hasCap(menu.requiredCapability))
+        .filter((menu) => hasCap(menu.requiredCapability) && hasProfile(menu.requiredEntitlement))
         .map((menu) => ({
           ...menu,
-          items: menu.items.filter((item) => hasCap(item.requiredCapability)),
+          items: menu.items.filter(
+            (item) => hasCap(item.requiredCapability) && hasProfile(item.requiredEntitlement)
+          ),
         }))
         .filter((menu) => menu.items.length > 0),
     }))
@@ -596,6 +558,66 @@ function filterNavigationByCapabilities(
 
 interface MainNavigationProps {
   // No longer needed - ThemeToggleButton handles theme internally
+}
+
+// DB icon keys are free text set in the Menu Designer. Map the ones that have
+// an obvious equivalent to existing MUI icons and fall back to a neutral glyph
+// rather than rendering nothing.
+const DESIGNER_ICON_MAP: Record<string, React.ReactNode> = {
+  settings: <SettingsIcon />,
+  business: <BusinessIcon />,
+  security: <SecurityIcon />,
+  system: <SystemUpdateAltIcon />,
+  book: <MenuBookIcon />,
+  description: <DescriptionIcon />,
+  timeline: <TimelineIcon />,
+  api: <ApiIcon />,
+  build: <BuildIcon />,
+  folder: <CreateNewFolderIcon />,
+  default: <FolderIcon />,
+};
+
+function designerIcon(key?: string | null): React.ReactNode {
+  if (!key) return <FolderIcon />;
+  return DESIGNER_ICON_MAP[key] ?? DESIGNER_ICON_MAP[key.toLowerCase()] ?? <FolderIcon />;
+}
+
+/**
+ * Flatten the Menu Designer's navigation_menu_nodes tree into nav items for
+ * Build -> Pages & APIs.
+ *
+ * This tree is a tree of Page Studio business pages (seeded by the page
+ * migrations: Master Data, Orders, and their children), NOT a model of the
+ * platform navigation. Its roots are grouping folders; only nodes that carry a
+ * targetPageKey are reachable pages, so folders are skipped and their leaves
+ * surface directly.
+ *
+ * Grouping is preserved in the item label so "Master Data > Vendor registry"
+ * stays legible in a flat menu. required_entitlement is carried through so
+ * filterNavigationByCapabilities can drop nodes the caller's profile does not
+ * hold.
+ */
+export function flattenDesignerPages(nodes: NavigationMenuNode[]): NavigationItem[] {
+  const out: NavigationItem[] = [];
+  const walk = (list: NavigationMenuNode[] | undefined, trail: string[]) => {
+    for (const node of list ?? []) {
+      if (!node || !node.label) continue;
+      if (node.targetPageKey) {
+        out.push({
+          label: trail.length > 0 ? `${trail.join(' › ')} › ${node.label}` : node.label,
+          path: `/pages/${node.targetPageKey}`,
+          icon: designerIcon(node.icon),
+          description: 'Menu Designer page',
+          requiredEntitlement: node.requiredEntitlement || undefined,
+        });
+      } else {
+        // A folder: descend, but only if it actually has children.
+        walk(node.children, [...trail, node.label]);
+      }
+    }
+  };
+  walk(nodes, []);
+  return out;
 }
 
 export const MainNavigation: React.FC<MainNavigationProps> = () => {
@@ -608,6 +630,26 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   const scopeSummary = `${tenant?.display_name || tenant?.name || ''}${product ? ` · ${product.alpha_product?.product_name || 'Product'}` : ''}${datasource ? ` · ${datasource.source_name || 'Source'}` : ''}`;
   const { user, logout } = useAuth();
   const organizationAccess = useOrganizationEntitlement();
+  const { capabilities, profile: resolvedProfile } = useCapabilities();
+
+  // The platform nav is the hardcoded categoryConfigs below. The Menu
+  // Designer's navigation_menu_nodes tree is a DIFFERENT thing: it is a tree of
+  // Page Studio business pages (Master Data, Orders, ...), seeded by the
+  // 20261118/20261129 page migrations, not a replacement for the platform nav.
+  // It is merged in as leaf items under Build -> Pages & APIs alongside the
+  // plain page list, so designer work adds pages without ever displacing the
+  // Platform / Catalog / Operations categories.
+  //
+  // required_entitlement on those nodes is enforced here: a node whose profile
+  // the caller does not hold is filtered out of the merged list.
+  const [designerPages, setDesignerPages] = useState<NavigationItem[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    NavigationMenuApi.listTree()
+      .then((tree) => { if (!cancelled) setDesignerPages(flattenDesignerPages(tree)); })
+      .catch(() => { if (!cancelled) setDesignerPages([]); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Capability-filtered navigation config.  The backend decides which menus
   // the user is allowed to see; the frontend only renders the allowed subset.
@@ -618,11 +660,12 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
     () =>
       filterNavigationByCapabilities(
         categoryConfigs,
-        undefined,
+        capabilities,
         isPlatformOperator,
         organizationAccess,
+        resolvedProfile,
       ),
-    [isPlatformOperator, organizationAccess],
+    [capabilities, isPlatformOperator, organizationAccess, resolvedProfile],
   );
 
   // Real Page Studio pages, listed dynamically under Build -> Pages so a
@@ -640,28 +683,37 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   }, []);
 
   const filteredCategoryConfigs = useMemo(() => {
-    if (pageStudioPages.length === 0) return baseCategoryConfigs;
+    if (pageStudioPages.length === 0 && designerPages.length === 0) return baseCategoryConfigs;
     return baseCategoryConfigs.map((cat) => {
       if (cat.key !== 'weave') return cat;
       return {
         ...cat,
         menus: cat.menus.map((menu) => {
-          if (menu.label !== 'Pages') return menu;
+          if (menu.label !== 'Pages & APIs') return menu;
           const pageItems: NavigationItem[] = pageStudioPages.map((p) => ({
             label: p.name,
             path: `/pages/${p.slug}`,
             icon: <DescriptionIcon />,
             description: 'Page Studio page',
           }));
-          return { ...menu, items: [...menu.items, ...pageItems] };
+          // Drop duplicates: a designer-tree node and a plain page can point at
+          // the same slug, and two identical rows in the menu look like a bug.
+          const deduped: NavigationItem[] = [];
+          const paths = new Set<string>();
+          for (const item of [...menu.items, ...pageItems, ...designerPages]) {
+            if (paths.has(item.path)) continue;
+            paths.add(item.path);
+            deduped.push(item);
+          }
+          return { ...menu, items: deduped };
         }),
       };
     });
-  }, [baseCategoryConfigs, pageStudioPages]);
+  }, [baseCategoryConfigs, pageStudioPages, designerPages]);
 
   const [categoryMenuAnchorEl, setCategoryMenuAnchorEl] = useState<null | HTMLElement>(null);
   // Default to Tenants category on initial load
-  const [selectedCategory, setSelectedCategory] = useState<'tenants' | 'catalog' | 'weave' | 'studio' | 'workflow' | 'intelligence' | 'entity' | 'calendar' | null>('tenants');
+  const [selectedCategory, setSelectedCategory] = useState<'tenants' | 'catalog' | 'weave' | 'workflow' | 'intelligence' | 'entity' | null>('tenants');
   // Nav Mode preference: 'dropdown' or 'cards'
   const [navMode, setNavMode] = useState<'dropdown' | 'cards'>(() => {
     return (localStorage.getItem('app-nav-mode-preference') as 'dropdown' | 'cards') || 'dropdown';
@@ -685,7 +737,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   const currentCategory = selectedCategory ? filteredCategoryConfigs.find(c => c.key === selectedCategory) : null;
 
   // Handle category selection from dropdown - navigate to default page
-  const handleCategorySelect = (categoryKey: 'tenants' | 'catalog' | 'weave' | 'studio' | 'workflow' | 'intelligence' | 'entity' | 'calendar') => {
+  const handleCategorySelect = (categoryKey: 'tenants' | 'catalog' | 'weave' | 'workflow' | 'intelligence' | 'entity') => {
     setSelectedCategory(categoryKey);
     setCategoryMenuAnchorEl(null);
 
@@ -819,7 +871,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   <Toolbar className="app-top-nav" sx={{ flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
           {/* Logo/Brand with Category Selector */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <UisceLogo variant="full" size="sm" asLink />
+            <IvyLogo variant="full" size="sm" asLink />
             <Button
               color="inherit"
               endIcon={<KeyboardArrowDownIcon />}

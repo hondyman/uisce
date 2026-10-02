@@ -212,10 +212,10 @@ func TestPickFirstNonRejected_AllRejected(t *testing.T) {
 		{Name: "AddressLine1", Source: "pascal"},
 	}
 	rejections := rejectionSet{
-		makeRejectionKey("ds1", "/orm/employee/address_line_1", "EmployeeAddress1"):          struct{}{},
-		makeRejectionKey("ds1", "/orm/employee/address_line_1", "Employee Address Line 1"):    struct{}{},
-		makeRejectionKey("ds1", "/orm/employee/address_line_1", "Address1"):                   struct{}{},
-		makeRejectionKey("ds1", "/orm/employee/address_line_1", "AddressLine1"):                struct{}{},
+		makeRejectionKey("ds1", "/orm/employee/address_line_1", "EmployeeAddress1"):          "",
+		makeRejectionKey("ds1", "/orm/employee/address_line_1", "Employee Address Line 1"):    "",
+		makeRejectionKey("ds1", "/orm/employee/address_line_1", "Address1"):                   "",
+		makeRejectionKey("ds1", "/orm/employee/address_line_1", "AddressLine1"):                "",
 	}
 
 	got, src := pickFirstNonRejected(candidates, rejections, "ds1", "/orm/employee/address_line_1")
@@ -233,7 +233,7 @@ func TestPickFirstNonRejected_PrimaryRejected_SecondaryWins(t *testing.T) {
 		{Name: "Employee Address Line 1", Source: "addr_line_context"},
 	}
 	rejections := rejectionSet{
-		makeRejectionKey("ds1", "/orm/employee/address_line_1", "EmployeeAddress1"): struct{}{},
+		makeRejectionKey("ds1", "/orm/employee/address_line_1", "EmployeeAddress1"): "",
 	}
 
 	got, src := pickFirstNonRejected(candidates, rejections, "ds1", "/orm/employee/address_line_1")
@@ -264,7 +264,7 @@ func TestPickFirstNonRejected_DifferentDatasourceNotRejected(t *testing.T) {
 	}
 	rejections := rejectionSet{
 		// Same column, different datasource — should NOT be rejected
-		makeRejectionKey("ds2", "/orm/employee/address_line_1", "EmployeeAddress1"): struct{}{},
+		makeRejectionKey("ds2", "/orm/employee/address_line_1", "EmployeeAddress1"): "",
 	}
 
 	got, _ := pickFirstNonRejected(candidates, rejections, "ds1", "/orm/employee/address_line_1")
@@ -346,9 +346,9 @@ func TestPickFirstNonRejected_ExhaustedAbbreviatedColumnFallsBackToNaive(t *test
 	candidates := deriveTermNamesCandidates(
 		[]string{"auditor", "IDENTIFIER"}, "auditor_id", `table "fund" in schema "orm"`)
 	rejections := rejectionSet{
-		makeRejectionKey("ds1", "/orm/fund/auditor_id", "AuditorIdentifier"):  struct{}{},
-		makeRejectionKey("ds1", "/orm/fund/auditor_id", "Auditor Identifier"): struct{}{},
-		makeRejectionKey("ds1", "/orm/fund/auditor_id", "AuditorId"):          struct{}{},
+		makeRejectionKey("ds1", "/orm/fund/auditor_id", "AuditorIdentifier"):  "",
+		makeRejectionKey("ds1", "/orm/fund/auditor_id", "Auditor Identifier"): "",
+		makeRejectionKey("ds1", "/orm/fund/auditor_id", "AuditorId"):          "",
 	}
 	got, src := pickFirstNonRejected(candidates, rejections, "ds1", "/orm/fund/auditor_id")
 	if got != "AuditorId" || src != "pascal" {
@@ -364,12 +364,49 @@ func TestPickFirstNonRejected_ExhaustedNeverReturnsSpacedName(t *testing.T) {
 		{Name: "Country Code", Source: "abbrev_map"},
 	}
 	rejections := rejectionSet{
-		makeRejectionKey("ds1", "/orm/issuer/country_cd", "CountryCode"):  struct{}{},
-		makeRejectionKey("ds1", "/orm/issuer/country_cd", "Country Code"): struct{}{},
+		makeRejectionKey("ds1", "/orm/issuer/country_cd", "CountryCode"):  "",
+		makeRejectionKey("ds1", "/orm/issuer/country_cd", "Country Code"): "",
 	}
 	got, src := pickFirstNonRejected(candidates, rejections, "ds1", "/orm/issuer/country_cd")
 	if got != "CountryCode" || src != "pascal" {
 		t.Errorf("got (%q, %q); want (CountryCode, pascal)", got, src)
+	}
+}
+
+func TestPickFirstNonRejected_PreferredNameWins(t *testing.T) {
+	candidates := []CandidateTerm{
+		{Name: "EmployeeAddress1", Source: "addr_line_context"},
+		{Name: "Employee Address Line 1", Source: "addr_line_context"},
+		{Name: "Address1", Source: "bare_generic"},
+	}
+	rejections := rejectionSet{
+		makeRejectionKey("ds1", "/orm/employee/address_line_1", "EmployeeAddress1"): "Addr",
+	}
+
+	got, src := pickFirstNonRejected(candidates, rejections, "ds1", "/orm/employee/address_line_1")
+	if got != "Addr" {
+		t.Errorf("got %q; want preferred name %q", got, "Addr")
+	}
+	if src != "preferred" {
+		t.Errorf("source = %q; want %q", src, "preferred")
+	}
+}
+
+func TestPickFirstNonRejected_PreferredEmptyStringIgnored(t *testing.T) {
+	candidates := []CandidateTerm{
+		{Name: "EmployeeAddress1", Source: "addr_line_context"},
+		{Name: "Address1", Source: "bare_generic"},
+	}
+	rejections := rejectionSet{
+		makeRejectionKey("ds1", "/orm/employee/address_line_1", "EmployeeAddress1"): "",
+	}
+
+	got, src := pickFirstNonRejected(candidates, rejections, "ds1", "/orm/employee/address_line_1")
+	if got != "Address1" {
+		t.Errorf("got %q; want first non-rejected %q", got, "Address1")
+	}
+	if src != "bare_generic" {
+		t.Errorf("source = %q; want %q", src, "bare_generic")
 	}
 }
 

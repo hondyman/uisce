@@ -2,11 +2,13 @@ package boresolver
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
 
 	"github.com/hondyman/uisce/backend/internal/bo"
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -134,12 +136,14 @@ func NewPostgresBORepository(db *sqlx.DB) *PostgresBORepository {
 // this environment - bo_fields is an orphaned table from an earlier BO
 // metadata system and is kept below only as a legacy fallback).
 type semanticField struct {
-	ID            string `db:"id"`
-	FieldName     string `db:"field_name"`
-	TechnicalName string `db:"technical_name"`
-	DisplayName   string `db:"display_name"`
-	DataType      string `db:"data_type"`
-	TermNodeID    string `db:"term_node_id"`
+	ID             string `db:"id"`
+	FieldName      string `db:"field_name"`
+	TechnicalName  string `db:"technical_name"`
+	DisplayName    string `db:"display_name"`
+	DataType       string `db:"data_type"`
+	TermNodeID     string `db:"term_node_id"`
+	TermType       string `db:"term_type"`
+	SensitivityTag string `db:"sensitivity_tag"`
 }
 
 // resolveCatalogPhysicalColumn looks up a physical column for fieldName
@@ -278,13 +282,16 @@ func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, erro
 func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*BODefinition, error) {
 	var fields []semanticField
 	err := r.DB.Select(&fields, `
-		SELECT id, field_name, COALESCE(technical_name, '') AS technical_name,
-		       COALESCE(display_name, field_name) AS display_name,
-		       COALESCE(data_type, '') AS data_type,
-		       term_node_id::text
-		FROM public.business_object_fields
-		WHERE bo_id = $1::uuid
-		ORDER BY display_order, field_name
+		SELECT f.id, f.field_name, COALESCE(f.technical_name, '') AS technical_name,
+		       COALESCE(f.display_name, f.field_name) AS display_name,
+		       COALESCE(f.data_type, '') AS data_type,
+		       f.term_node_id::text,
+		       COALESCE(cn.properties->>'term_type', '') AS term_type,
+		       COALESCE(cn.properties->>'sensitivity_tag', '') AS sensitivity_tag
+		FROM public.business_object_fields f
+		LEFT JOIN catalog_node cn ON cn.id::text = f.term_node_id::text
+		WHERE f.bo_id = $1::uuid
+		ORDER BY f.display_order, f.field_name
 	`, boID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch business_object_fields: %w", err)
@@ -295,11 +302,12 @@ func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*
 
 	var res struct {
 		ID              string  `db:"id"`
+		TenantID        string  `db:"tenant_id"`
 		BOKey           string  `db:"bo_key"`
 		DriverTableName *string `db:"driver_table_name"`
 	}
 	if err := r.DB.Get(&res, `
-		SELECT id, bo_key, driver_table_name
+		SELECT id, tenant_id::text AS tenant_id, bo_key, driver_table_name
 		FROM public.business_objects WHERE id = $1
 	`, boID); err != nil {
 		return nil, fmt.Errorf("failed to fetch BO metadata: %w", err)
@@ -319,7 +327,7 @@ func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*
 
 	for _, f := range fields {
 		physicalColumn, _ := r.resolveCatalogPhysicalColumn(f.ID, drivingTable, f.FieldName, f.TechnicalName)
-		def.Fields = append(def.Fields, BOField{
+		boField := BOField{
 			ID:             f.ID,
 			Name:           f.FieldName,
 			DisplayName:    f.DisplayName,
@@ -327,7 +335,53 @@ func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*
 			SemanticTermID: f.TermNodeID,
 			PhysicalColumn: physicalColumn,
 			Type:           f.DataType,
-		})
+			SourceType:     "COLUMN",
+			TermType:       f.TermType,
+			SensitivityTag: f.SensitivityTag,
+		}
+
+		// Explicit JSON_PATH field_binding wins over column resolution.
+		var jsonPath sql.NullString
+		var srcType sql.NullString
+		_ = r.DB.QueryRow(`
+			SELECT source_type, json_path
+			FROM public.field_bindings
+			WHERE field_id = $1::uuid AND binding_status = 'RESOLVED' AND source_type = 'JSON_PATH'
+			LIMIT 1`, f.ID).Scan(&srcType, &jsonPath)
+		if srcType.Valid && srcType.String == "JSON_PATH" && jsonPath.Valid && jsonPath.String != "" {
+			boField.SourceType = "JSON_PATH"
+			boField.JSONPath = jsonPath.String
+			if boField.PhysicalColumn == "" || !strings.Contains(boField.PhysicalColumn, "custom_attributes") {
+				boField.PhysicalColumn = fmt.Sprintf("%s.custom_attributes", drivingTable)
+			}
+		} else if f.TermNodeID != "" {
+			// attribute_def linked to the same semantic term -> JSONB key binding.
+			// Scoped to THIS business object's tenant using the same rules as
+			// public.attribute_def_effective: the tenant's own active non-shadow
+			// rows, plus the gold copy's active rows unless the tenant has shadowed
+			// or overridden them. Never another tenant's row: the lookup is by
+			// semantic term, which tenants share, so an unscoped query would bind
+			// one tenant's custom-field key into another tenant's query.
+			var fieldCd sql.NullString
+			_ = r.DB.QueryRow(`
+				SELECT a.field_cd FROM public.attribute_def a
+				WHERE a.semantic_term_id = $1::uuid AND a.is_active AND NOT a.is_shadow
+				  AND (
+				        a.tenant_id = $2::uuid
+				        OR (a.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)
+				            AND NOT EXISTS (SELECT 1 FROM public.attribute_def s
+				                            WHERE s.tenant_id = $2::uuid AND s.core_id = a.id))
+				      )
+				ORDER BY (a.tenant_id = $2::uuid) DESC, a.updated_at DESC
+				LIMIT 1`, f.TermNodeID, res.TenantID).Scan(&fieldCd)
+			if fieldCd.Valid && fieldCd.String != "" {
+				boField.SourceType = "JSON_PATH"
+				boField.JSONPath = fieldCd.String
+				boField.PhysicalColumn = fmt.Sprintf("%s.custom_attributes", drivingTable)
+			}
+		}
+
+		def.Fields = append(def.Fields, boField)
 	}
 
 	// Relationship/join inference isn't available from business_object_fields
@@ -558,12 +612,15 @@ func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTer
 			COALESCE(f.description, '') AS description,
 			COALESCE(f.data_type, 'string') AS data_type,
 			COALESCE(f.field_role, 'DIMENSION') AS role,
-			COALESCE(fb.binding_status, 'RESOLVED') AS binding_status
+			COALESCE(fb.binding_status, 'RESOLVED') AS binding_status,
+			COALESCE(cn.properties->>'term_type', '') AS term_type
 		FROM public.business_object_fields f
 		LEFT JOIN public.field_bindings fb
 			ON fb.field_id = f.id
 			AND fb.bo_id = f.bo_id
 			AND (fb.binding_id = $2::uuid OR $2::uuid IS NULL)
+		LEFT JOIN catalog_node cn
+			ON cn.id::text = f.term_node_id::text
 		WHERE f.bo_id = $1::uuid
 		  AND COALESCE(fb.binding_status, 'RESOLVED') = 'RESOLVED'
 		ORDER BY f.display_order, f.field_name
@@ -577,6 +634,7 @@ func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTer
 	var terms []SemanticTermView
 	for rows.Next() {
 		var t SemanticTermView
+		var termType string
 		if err := rows.Scan(
 			&t.TermNodeID,
 			&t.TermKey,
@@ -586,10 +644,16 @@ func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTer
 			&t.DataType,
 			&t.Role,
 			&t.BindingStatus,
+			&termType,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan term: %w", err)
 		}
-		if t.Role == "MEASURE" {
+		if termType == "calculated" {
+			t.TermType = "calculated"
+			// Calc terms define aggregation in their compiled expression;
+			// auto-populating DefaultAggregation would cause the frontend
+			// to fabricate an aggregation wrapper the user didn't choose.
+		} else if t.Role == "MEASURE" {
 			t.DefaultAggregation = "SUM"
 		}
 		terms = append(terms, t)
@@ -627,4 +691,48 @@ func (r *PostgresBORepository) GetBOByTechnicalName(technicalName, tenantID, dat
 
 	// Then get the full definition
 	return r.GetBODefinition(boID)
+}
+
+// GetCalcTermExpressions batch-fetches vm.Expression ASTs for the given
+// catalog node IDs. Each node's config column stores CalcTermConfig JSON
+// with a rule_ast field containing the vm.Expression-shaped AST.
+func (r *PostgresBORepository) GetCalcTermExpressions(nodeIDs []string) (map[string]*vm.Expression, error) {
+	if len(nodeIDs) == 0 {
+		return nil, nil
+	}
+
+	rows, err := r.DB.Query(`
+		SELECT id::text, config FROM catalog_node
+		WHERE id::text = ANY($1)
+	`, nodeIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query calc term expressions: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]*vm.Expression, len(nodeIDs))
+	for rows.Next() {
+		var nodeID string
+		var configJSON []byte
+		if err := rows.Scan(&nodeID, &configJSON); err != nil {
+			return nil, fmt.Errorf("scan calc term expression: %w", err)
+		}
+
+		var config struct {
+			RuleAST json.RawMessage `json:"rule_ast"`
+		}
+		if err := json.Unmarshal(configJSON, &config); err != nil {
+			return nil, fmt.Errorf("unmarshal calc term config node %s: %w", nodeID, err)
+		}
+		if config.RuleAST == nil {
+			continue
+		}
+
+		var expr vm.Expression
+		if err := json.Unmarshal(config.RuleAST, &expr); err != nil {
+			return nil, fmt.Errorf("parse calc term AST node %s: %w", nodeID, err)
+		}
+		result[nodeID] = &expr
+	}
+	return result, rows.Err()
 }

@@ -278,7 +278,7 @@ const SimpleTableAutocomplete: React.FC<SimpleTableAutocompleteProps> = ({
         <TextField
           {...params}
           size="small"
-          autoFocus={autoFocus}
+          
           placeholder={placeholder}
           inputProps={{ ...params.inputProps, autoComplete: 'off' }}
           InputProps={{

@@ -384,7 +384,6 @@ export const ImpersonationTenantPicker: React.FC<ImpersonationTenantPickerProps>
                 placeholder="Search tenants by name or code..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                autoFocus
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">

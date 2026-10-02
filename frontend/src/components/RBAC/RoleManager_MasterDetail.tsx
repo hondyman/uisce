@@ -931,7 +931,6 @@ export const RoleManagerMasterDetail: React.FC<RoleManagerProps> = ({ tenant, da
         <DialogContent sx={{ px: 3, py: 2 }}>
           <Stack spacing={2.5}>
             <TextField
-              autoFocus
               label="Role Key"
               placeholder="e.g., tenant.support_agent"
               fullWidth

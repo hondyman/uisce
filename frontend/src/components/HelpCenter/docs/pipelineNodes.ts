@@ -1,7 +1,7 @@
 export const PIPELINE_NODES_DOC = `
-# Uisce Pipeline Nodes Reference
+# Ivy Pipeline Nodes Reference
 
-Uisce Pipelines allow you to visually define business logic, validations, and integrations. Each pipeline consists of a **Trigger** (input) and a series of **Nodes** (steps).
+Ivy Pipelines allow you to visually define business logic, validations, and integrations. Each pipeline consists of a **Trigger** (input) and a series of **Nodes** (steps).
 
 ## Core Concepts
 

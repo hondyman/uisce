@@ -1,4 +1,6 @@
 #!/bin/bash
+# DEPRECATED: prefer ../START_BACKEND.sh which auto-detects macOS vs Linux.
+# Kept for legacy CI scripts; will be removed in a follow-up cleanup.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

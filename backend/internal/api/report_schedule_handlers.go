@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -17,17 +16,11 @@ import (
 )
 
 type ReportScheduleHandler struct {
-	db                *sqlx.DB
-	burstOrchestrator *reporting.ReportBurstOrchestrator
+	db *sqlx.DB
 }
 
 func NewReportScheduleHandler(db *sqlx.DB) *ReportScheduleHandler {
-	calEval := reporting.NewCalendarEvaluator(db)
-	orchestrator := reporting.NewReportBurstOrchestrator(db, calEval, nil, nil)
-	return &ReportScheduleHandler{
-		db:                db,
-		burstOrchestrator: orchestrator,
-	}
+	return &ReportScheduleHandler{db: db}
 }
 
 // resolveTenantID resolves tenant from security context, identity, JWT, or dev fallback.
@@ -123,44 +116,11 @@ func (h *ReportScheduleHandler) ListCalendars(w http.ResponseWriter, r *http.Req
 }
 
 func (h *ReportScheduleHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := h.resolveTenantID(r)
-	if err != nil {
+	if _, err := h.resolveTenantID(r); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	var schedules []struct {
-		ID                  uuid.UUID  `json:"id" db:"id"`
-		TenantID            uuid.UUID  `json:"tenant_id" db:"tenant_id"`
-		ScheduleName        string     `json:"schedule_name" db:"schedule_name"`
-		CronExpression      string     `json:"cron_expression" db:"cron_expression"`
-		Region              string     `json:"region" db:"region"`
-		CalendarID          *uuid.UUID `json:"calendar_id" db:"calendar_id"`
-		StartOfDayTime      string     `json:"start_of_day_time" db:"start_of_day_time"`
-		UnscheduledBehavior string     `json:"unscheduled_behavior" db:"unscheduled_behavior"`
-		BusinessDayOffset   int        `json:"business_day_offset" db:"business_day_offset"`
-		BurstDimension      string     `json:"burst_dimension" db:"burst_dimension"`
-		ExportFormat        string     `json:"export_format" db:"export_format"`
-		IsActive            bool       `json:"is_active" db:"is_active"`
-		CreatedAt           time.Time  `json:"created_at" db:"created_at"`
-	}
-
-	err = h.db.SelectContext(r.Context(), &schedules, `
-		SELECT id, tenant_id, schedule_name, cron_expression, region, calendar_id, 
-		       start_of_day_time::text, unscheduled_behavior, business_day_offset, 
-		       burst_dimension, export_format, is_active, created_at
-		FROM public.report_schedules 
-		WHERE tenant_id = $1 
-		ORDER BY created_at DESC
-	`, tenantID)
-
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(schedules)
+	writeLegacyScheduleGone(w)
 }
 
 type CreateScheduleRequest struct {
@@ -177,199 +137,51 @@ type CreateScheduleRequest struct {
 }
 
 func (h *ReportScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := h.resolveTenantID(r)
-	if err != nil {
+	if _, err := h.resolveTenantID(r); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	var req CreateScheduleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	scheduleID := uuid.New()
-	notificationJSON, _ := json.Marshal(map[string]bool{
-		"in_app": req.NotifyInApp,
-		"email":  req.NotifyEmail,
-	})
-
-	_, err = h.db.ExecContext(r.Context(), `
-		INSERT INTO public.report_schedules (
-			id, tenant_id, schedule_name, cron_expression, region,
-			unscheduled_behavior, business_day_offset, burst_dimension,
-			export_format, notification_channels, is_active
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
-	`, scheduleID, tenantID, req.ScheduleName, req.CronExpression, req.Region,
-		req.UnscheduledBehavior, req.BusinessDayOffset, req.BurstDimension,
-		req.ExportFormat, notificationJSON)
-
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusCreated)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":      scheduleID,
-		"message": "Schedule created successfully",
-	})
+	writeLegacyScheduleGone(w)
 }
 
 func (h *ReportScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
-	scheduleIDStr := chi.URLParam(r, "id")
-	scheduleID, err := uuid.Parse(scheduleIDStr)
-	if err != nil {
-		http.Error(w, "Invalid Schedule ID", http.StatusBadRequest)
+	if _, err := h.resolveTenantID(r); err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	var schedule struct {
-		ID                  uuid.UUID `json:"id" db:"id"`
-		TenantID            uuid.UUID `json:"tenant_id" db:"tenant_id"`
-		ScheduleName        string    `json:"schedule_name" db:"schedule_name"`
-		CronExpression      string    `json:"cron_expression" db:"cron_expression"`
-		Region              string    `json:"region" db:"region"`
-		UnscheduledBehavior string    `json:"unscheduled_behavior" db:"unscheduled_behavior"`
-		BusinessDayOffset   int       `json:"business_day_offset" db:"business_day_offset"`
-		BurstDimension      string    `json:"burst_dimension" db:"burst_dimension"`
-		ExportFormat        string    `json:"export_format" db:"export_format"`
-		IsActive            bool      `json:"is_active" db:"is_active"`
-	}
-
-	err = h.db.GetContext(r.Context(), &schedule, `
-		SELECT id, tenant_id, schedule_name, cron_expression, region, 
-		       unscheduled_behavior, business_day_offset, burst_dimension, 
-		       export_format, is_active
-		FROM public.report_schedules 
-		WHERE id = $1
-	`, scheduleID)
-
-	if err != nil {
-		http.Error(w, "Schedule not found", http.StatusNotFound)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(schedule)
+	writeLegacyScheduleGone(w)
 }
 
 func (h *ReportScheduleHandler) TriggerScheduleRun(w http.ResponseWriter, r *http.Request) {
-	scheduleIDStr := chi.URLParam(r, "id")
-	scheduleID, err := uuid.Parse(scheduleIDStr)
-	if err != nil {
-		http.Error(w, "Invalid Schedule ID", http.StatusBadRequest)
+	if _, err := h.resolveTenantID(r); err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	result, err := h.burstOrchestrator.ExecuteScheduledBurst(r.Context(), scheduleID, time.Now())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	writeLegacyScheduleGone(w)
 }
 
 func (h *ReportScheduleHandler) ListScheduleBatches(w http.ResponseWriter, r *http.Request) {
-	scheduleIDStr := chi.URLParam(r, "id")
-	scheduleID, err := uuid.Parse(scheduleIDStr)
-	if err != nil {
-		http.Error(w, "Invalid Schedule ID", http.StatusBadRequest)
+	if _, err := h.resolveTenantID(r); err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	var batches []struct {
-		ID                uuid.UUID  `json:"id" db:"id"`
-		ScheduleID        uuid.UUID  `json:"schedule_id" db:"schedule_id"`
-		EffectiveDate     string     `json:"effective_date" db:"effective_date"`
-		TotalClients      int        `json:"total_clients" db:"total_clients"`
-		SuccessfulRenders int        `json:"successful_renders" db:"successful_renders"`
-		FailedRenders     int        `json:"failed_renders" db:"failed_renders"`
-		Status            string     `json:"status" db:"status"`
-		StartedAt         time.Time  `json:"started_at" db:"started_at"`
-		CompletedAt       *time.Time `json:"completed_at" db:"completed_at"`
-	}
-
-	err = h.db.SelectContext(r.Context(), &batches, `
-		SELECT id, schedule_id, effective_date::text, total_clients, 
-		       successful_renders, failed_renders, status, started_at, completed_at
-		FROM public.report_burst_batches 
-		WHERE schedule_id = $1 
-		ORDER BY started_at DESC 
-		LIMIT 20
-	`, scheduleID)
-
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(batches)
+	writeLegacyScheduleGone(w)
 }
 
 func (h *ReportScheduleHandler) GetBatchTelemetry(w http.ResponseWriter, r *http.Request) {
-	batchIDStr := chi.URLParam(r, "id")
-	batchID, err := uuid.Parse(batchIDStr)
-	if err != nil {
-		http.Error(w, "Invalid Batch ID", http.StatusBadRequest)
+	if _, err := h.resolveTenantID(r); err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	tenantID, err := h.resolveTenantID(r)
-	if err != nil {
-		// Verify batch belongs to tenant in DB before servicing
-		err = h.db.GetContext(r.Context(), &tenantID, `SELECT tenant_id FROM public.report_burst_batches WHERE id = $1`, batchID)
-		if err != nil {
-			http.Error(w, "unauthorized: missing or invalid tenant identification", http.StatusUnauthorized)
-			return
-		}
-	}
-
-	svc := reporting.NewTelemetryDLQService(h.db)
-	telemetry, err := svc.GetBatchTelemetry(r.Context(), tenantID, batchID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(telemetry)
+	writeLegacyScheduleGone(w)
 }
 
 func (h *ReportScheduleHandler) RetryBatchDLQ(w http.ResponseWriter, r *http.Request) {
-	batchIDStr := chi.URLParam(r, "id")
-	batchID, err := uuid.Parse(batchIDStr)
-	if err != nil {
-		http.Error(w, "Invalid Batch ID", http.StatusBadRequest)
+	if _, err := h.resolveTenantID(r); err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	tenantID, err := h.resolveTenantID(r)
-	if err != nil {
-		err = h.db.GetContext(r.Context(), &tenantID, `SELECT tenant_id FROM public.report_burst_batches WHERE id = $1`, batchID)
-		if err != nil {
-			http.Error(w, "unauthorized: missing or invalid tenant identification", http.StatusUnauthorized)
-			return
-		}
-	}
-
-	svc := reporting.NewTelemetryDLQService(h.db)
-	newBatchID, err := svc.RetryFailedSlices(r.Context(), tenantID, batchID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":        "Retry batch created",
-		"retry_batch_id": newBatchID,
-	})
+	writeLegacyScheduleGone(w)
 }
 
 type SyncCalendarRequest struct {

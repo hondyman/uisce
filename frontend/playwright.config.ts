@@ -37,7 +37,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')` */
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://localhost:5173',
 
     /* Collect trace when retrying the failed test */
     trace: 'on-first-retry',
@@ -93,7 +93,10 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
+    // Always reuse an existing server on this port rather than trying to
+    // start a new one and failing with "address already in use". Playwright
+    // will only launch 'command' when nothing is already listening on the url.
+    reuseExistingServer: true,
     timeout: 120 * 1000,
   },
 });

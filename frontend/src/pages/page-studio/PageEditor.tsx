@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Box, Typography, Paper, Tabs, Tab, Button, Grid, IconButton, Tooltip, Divider, TextField, Snackbar, Alert, ToggleButton, ToggleButtonGroup, FormControlLabel, Switch } from '@mui/material';
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, pointerWithin, rectIntersection, type CollisionDetection } from '@dnd-kit/core';
@@ -29,12 +29,17 @@ import { mergeGeneratedSpecIntoDraft } from './generatePageDraft';
 import { PagePerformanceDashboard } from './PagePerformanceDashboard';
 import { AIDocumentationViewer } from './AIDocumentationViewer';
 import { AITestGenerator } from './AITestGenerator';
-import { Description as DocIcon, BugReport as TestIcon, Edit as EditIcon, FlashOn as EventsIcon, AutoAwesome as CopilotIcon } from '@mui/icons-material';
+import { Description as DocIcon, BugReport as TestIcon, Edit as EditIcon, FlashOn as EventsIcon, AutoAwesome as CopilotIcon, Hub as AppIcon } from '@mui/icons-material';
 import DraftPreview from './DraftPreview';
 import TemplatePickerDialog from './TemplatePickerDialog';
 import { SelectionProvider } from './SelectionContext';
 import PageArtboard from './PageArtboard';
 import PageBody from './PageBody';
+import { AppRuntimeProvider } from './app/AppRuntime';
+import AppModelPanel from './app/AppModelPanel';
+import { checkPage } from './app/pageChecker';
+import { useResolvedPage } from './app/fragmentLoad';
+import { PageCheckButton, PageCheckDialog } from './app/PageCheckDialog';
 import { CANVAS_SIZES, canvasWidthPx, type CanvasSizeId } from './canvasSizes';
 
 interface PageEditorProps {
@@ -87,7 +92,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
     const [copilot, setCopilot] = useState('');
     const [copilotBusy, setCopilotBusy] = useState(false);
     const [copilotError, setCopilotError] = useState<string | null>(null);
-    const [tab, setTab] = useState(0); // 0: Design, 1: Data, 2: Events, 3: Performance, 4: Docs, 5: Testing
+    const [tab, setTab] = useState(0); // 0: Design, 1: App, 2: Data, 3: Events, 4: Performance, 5: Docs, 6: Testing
     const [selectedId, setSelectedId] = useState<string | null>(null);
     // Design/Preview: the Preview button previously had no onClick handler
     // at all - clicking it did nothing. Preview renders the live in-memory
@@ -107,6 +112,8 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
         return () => window.removeEventListener('resize', onResize);
     }, []);
     const artboardWidth = canvasWidthPx(canvasSize, viewportWidth);
+    // The App tab edits queries and actions - it needs more room than the palette.
+    const leftWidth = tab === 1 ? 360 : 250;
     // A single DndContext for the whole design surface (ComponentPalette,
     // DataBindingsPanel, and both LayoutCanvas instances below) - each
     // LayoutCanvas registers its own onDragEnd via useDndMonitor and only
@@ -230,6 +237,36 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
         }
     };
 
+    // A gold-copy page this tenant inherits (not the gold copy editing its own).
+    const inheritedCore = !!draft.isCore && draft.editable === false;
+    const custom = draft.customization;
+    const canSave = !inheritedCore || (!!draft.canCustomize && custom?.mode !== 'cloned');
+
+    // The page checker runs as the page is edited; errors block publishing.
+    // ...against the page with its fragments applied, once they have loaded (the draft itself is untouched).
+    const withFragments = useResolvedPage(draft);
+    const issues = useMemo(() => (withFragments.pending ? [] : checkPage(withFragments.page)), [withFragments]);
+    const [checkOpen, setCheckOpen] = useState(false);
+    const [publishBlocked, setPublishBlocked] = useState(false);
+
+    // Status only (no new version); unsaved layout edits stay in the draft.
+    const handleTogglePublish = async () => {
+        if (!draft.id) return;
+        try {
+            const next = draft.status === 'published' ? 'draft' : 'published';
+            if (next === 'published' && issues.some((i) => i.severity === 'error')) {
+                setPublishBlocked(true);
+                setCheckOpen(true);
+                return;
+            }
+            const updated = await PageStudioApi.setStatus(draft.id, next);
+            setDraft((prev) => ({ ...prev, status: updated.status }));
+            setSaveNotice({ severity: 'success', message: next === 'published' ? 'Published' : 'Unpublished - back to draft' });
+        } catch (err) {
+            setSaveNotice({ severity: 'error', message: err instanceof Error ? err.message : 'Failed to change publish status' });
+        }
+    };
+
     const handleSave = async () => {
         try {
             // A page opened from the sidebar list carries its real id;
@@ -237,13 +274,16 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
             // branch every save POSTed as a create, so re-saving an
             // existing page hit the (tenant_id, slug) unique constraint
             // as a 409 instead of updating it.
+            // A tenant never writes a core page: its edits are saved as
+            // its customization (extension) of the core version it is on.
+            const extending = !!draft.id && inheritedCore;
             const saved = !draft.id
                 ? await PageStudioApi.savePage(draft)
-                : draft.isCore && draft.editable === false
-                  ? await PageStudioApi.saveOverlay(draft.id, { components: draft.components, layout: draft.layout, tabs: draft.tabs })
+                : extending
+                  ? await PageStudioApi.saveExtension(draft.id, draft)
                   : await PageStudioApi.updatePage(draft.id, draft);
             onSave(saved);
-            setSaveNotice({ severity: 'success', message: draft.isCore && draft.editable === false ? 'Saved as tenant overlay (core unchanged)' : 'Saved' });
+            setSaveNotice({ severity: 'success', message: extending ? `Saved as your customization of core v${saved.customization?.baseVersion ?? saved.version} (the core page is unchanged)` : 'Saved' });
         } catch (err) {
             console.error('Save failed', err);
             setSaveNotice({ severity: 'error', message: err instanceof Error ? err.message : 'Save failed' });
@@ -299,14 +339,31 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                         <Button variant="contained" color="secondary" startIcon={<EditIcon />} size="small" onClick={() => setViewMode('design')}>Back to Design</Button>
                     )}
                     <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
-                    <Button variant="contained" startIcon={<SaveIcon />} size="small" onClick={handleSave}>Save Changes</Button>
+                    <PageCheckButton issues={issues} onClick={() => { setPublishBlocked(false); setCheckOpen(true); }} />
+                    <PageCheckDialog open={checkOpen} issues={issues} blockedPublish={publishBlocked} onClose={() => setCheckOpen(false)}
+                        onPick={(id) => { setSelectedId(id); setViewMode('design'); }} />
+                    {draft.id && !inheritedCore && draft.editable !== false && (
+                        <Button size="small" variant="outlined" color={draft.status === 'published' ? 'inherit' : 'success'} onClick={handleTogglePublish}>
+                            {draft.status === 'published' ? 'Unpublish' : 'Publish'}
+                        </Button>
+                    )}
+                    <Button variant="contained" startIcon={<SaveIcon />} size="small" onClick={handleSave} disabled={!canSave}>
+                        {inheritedCore ? 'Save customization' : 'Save Changes'}
+                    </Button>
                 </Box>
             </Paper>
             {draft.isCore && (
-                <Alert severity={draft.editable === false ? 'info' : 'success'} sx={{ mx: 2, mt: 1 }}>
-                    {draft.editable === false
-                        ? 'This is a gold-copy core page. You can add tenant overlay widgets; core FIX commands cannot be edited here.'
-                        : 'Gold-copy core page. Only gold-copy admins can change core. Tenants inherit and extend via overlay.'}
+                <Alert severity={inheritedCore && custom?.upgradeAvailable ? 'warning' : inheritedCore ? 'info' : 'success'} sx={{ mx: 2, mt: 1 }}>
+                    {!inheritedCore
+                        ? 'Core page (gold copy). Changes here ship to every tenant as a new core version; tenants that extended it review their customizations on upgrade.'
+                        : !draft.canCustomize
+                          ? 'Core page, read-only. A tenant admin can extend, clone or switch it off from the page list.'
+                          : custom?.mode === 'cloned'
+                            ? 'Your environment uses a clone of this core page. Edit the clone, or revert to core from the page list.'
+                            : custom?.mode === 'extended'
+                              ? `You are editing your customization of core v${custom.baseVersion}.${custom.upgradeAvailable ? ` Core v${custom.coreVersion} is available - review and upgrade from the page list.` : ''}`
+                              : 'Core page. Saving extends it: your changes are kept as customizations, compared with the core on every upgrade, and can be kept or removed one by one.'}
+                    {inheritedCore && custom && !custom.active && ' This page is switched off in your environment.'}
                 </Alert>
             )}
             {aiDraft && (
@@ -343,15 +400,17 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                     <DraftPreview draft={draft} tenantId={draft.tenantId || 'default'} framed />
                 </PageArtboard>
             ) : (
+            <AppRuntimeProvider app={draft.app} mode="design">
             <DndContext sensors={dndSensors} collisionDetection={collisionDetection}>
             <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                 {/* Left Panel: Palette */}
                 <Box sx={{ display: 'flex', flexShrink: 0 }}>
-                <Paper elevation={0} sx={{ width: paletteOpen ? 250 : 0, overflow: 'hidden', borderRight: '1px solid rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', transition: 'width 0.2s ease' }}>
-                    <Box sx={{ width: 250, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <Paper elevation={0} sx={{ width: paletteOpen ? leftWidth : 0, overflow: 'hidden', borderRight: '1px solid rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', transition: 'width 0.2s ease' }}>
+                    <Box sx={{ width: leftWidth, height: '100%', display: 'flex', flexDirection: 'column' }}>
                     <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
                         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 48 }}>
                             <Tab label="Design" icon={<DesignIcon sx={{ fontSize: 18 }} />} iconPosition="start" />
+                            <Tab label="App" icon={<AppIcon sx={{ fontSize: 18 }} />} iconPosition="start" />
                             <Tab label="Data Binding" icon={<DataIcon sx={{ fontSize: 18 }} />} iconPosition="start" />
                             <Tab label="Events" icon={<EventsIcon sx={{ fontSize: 18 }} />} iconPosition="start" />
                             <Tab label="Performance" icon={<PerformanceIcon sx={{ fontSize: 18 }} />} iconPosition="start" />
@@ -366,23 +425,24 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                                 <ComponentPalette />
                             </>
                         )}
-                        {tab === 1 && (
+                        {tab === 1 && <AppModelPanel draft={draft} setDraft={setDraft} />}
+                        {tab === 2 && (
                             <DataBindingsPanel
                                 draft={draft}
                                 setDraft={setDraft}
                                 tenantId={draft.tenantId || 'default'}
                             />
                         )}
-                        {tab === 2 && (
+                        {tab === 3 && (
                             <PresentationEventsPanel draft={draft} setDraft={setDraft} />
                         )}
-                        {tab === 3 && (
+                        {tab === 4 && (
                             <PagePerformanceDashboard pageId={draft.id!} />
                         )}
-                        {tab === 4 && (
+                        {tab === 5 && (
                             <AIDocumentationViewer page={draft} />
                         )}
-                        {tab === 5 && (
+                        {tab === 6 && (
                             <AITestGenerator page={draft} />
                         )}
                     </Box>
@@ -443,7 +503,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                         </Tooltip>
                     </Box>
                     <PageArtboard width={artboardWidth} fit={fitToWorkspace}>
-                        <PageBody name={draft.name} slug={draft.slug}>
+                        <PageBody name={draft.name} slug={draft.slug} hidden={draft.app?.chrome === 'none'}>
                         <Box sx={{ mb: 2 }}>
                             <LayoutCanvas
                                 layout={filterBarLayout}
@@ -455,6 +515,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                                 tenantId={draft.tenantId || 'default'}
                                 selectedId={selectedId}
                                 onSelect={setSelectedId}
+                                app={draft.app}
                             />
                         </Box>
                         <LayoutCanvas
@@ -467,6 +528,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                             tenantId={draft.tenantId || 'default'}
                             selectedId={selectedId}
                             onSelect={setSelectedId}
+                            app={draft.app}
                         />
                         </PageBody>
                     </PageArtboard>
@@ -511,6 +573,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                 </Box>
             </Box>
             </DndContext>
+            </AppRuntimeProvider>
             )}
             <TemplatePickerDialog
                 open={templatePickerOpen}

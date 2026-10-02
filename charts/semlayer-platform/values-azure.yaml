@@ -171,45 +171,6 @@ semantic-engine:
     azure.workload.identity/use: "true"
 
 # =============================================================================
-# Cube.js API Configuration
-# =============================================================================
-cube-api:
-  enabled: true
-
-  replicaCount: 5
-
-  resources:
-    requests:
-      cpu: 500m
-      memory: 1Gi
-    limits:
-      cpu: 2000m
-      memory: 4Gi
-
-  autoscaling:
-    enabled: true
-    minReplicas: 5
-    maxReplicas: 100
-
-  # Cube workers tolerate Spot instances
-  tolerations:
-  - key: "kubernetes.azure.com/scalesetpriority"
-    operator: "Equal"
-    value: "spot"
-    effect: "NoSchedule"
-
-  nodeSelector:
-    workload: cube
-
-  serviceAccount:
-    annotations:
-      azure.workload.identity/client-id: ""
-      azure.workload.identity/tenant-id: ""
-
-  podLabels:
-    azure.workload.identity/use: "true"
-
-# =============================================================================
 # Governance Engine Configuration
 # =============================================================================
 governance-engine:
@@ -406,9 +367,6 @@ secretProviderClass:
           objectType: secret
         - |
           objectName: redis-primary-key
-          objectType: secret
-        - |
-          objectName: cube-api-secret
           objectType: secret
 
 # =============================================================================

@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/security"
 	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
@@ -36,38 +37,52 @@ func (h *SchedulerHandlers) Service() *si.Service {
 	return h.service
 }
 
-// RegisterRoutes registers all scheduler routes
+// RegisterRoutes registers all scheduler routes.
+// Slice 5: the entire /scheduler surface is retired (410). Use /api/schedules
+// with target.kind workflow | job_dag (and existing kinds). S2 tables remain
+// until a follow-up drop migration.
 func (h *SchedulerHandlers) RegisterRoutes(r chi.Router) {
 	r.Route("/scheduler", func(r chi.Router) {
-		// Jobs
-		r.Get("/jobs", h.ListJobs)
-		r.Post("/jobs", h.CreateJob)
-		r.Get("/jobs/{id}", h.GetJob)
-		r.Patch("/jobs/{id}", h.UpdateJob)
-		r.Delete("/jobs/{id}", h.DeleteJob)
-		r.Post("/jobs/{id}/run", h.TriggerJob)
-		r.Get("/jobs/{id}/runs", h.GetJobRuns)
+		r.Get("/jobs", h.retiredSurface)
+		r.Post("/jobs", h.retiredSurface)
+		r.Get("/jobs/{id}", h.retiredSurface)
+		r.Patch("/jobs/{id}", h.retiredSurface)
+		r.Delete("/jobs/{id}", h.retiredSurface)
+		r.Post("/jobs/{id}/run", h.retiredSurface)
+		r.Get("/jobs/{id}/runs", h.retiredSurface)
 
-		// DAGs
-		r.Get("/dags", h.ListDAGs)
-		r.Post("/dags", h.CreateDAG)
-		r.Get("/dags/{id}", h.GetDAG)
-		r.Patch("/dags/{id}", h.UpdateDAG)
-		r.Delete("/dags/{id}", h.DeleteDAG)
-		r.Post("/dags/{id}/run", h.TriggerDAG)
-		r.Get("/dags/{id}/runs", h.GetDAGRuns)
+		r.Get("/dags", h.retiredSurface)
+		r.Post("/dags", h.retiredSurface)
+		r.Get("/dags/{id}", h.retiredSurface)
+		r.Patch("/dags/{id}", h.retiredSurface)
+		r.Delete("/dags/{id}", h.retiredSurface)
+		r.Post("/dags/{id}/run", h.retiredSurface)
+		r.Get("/dags/{id}/runs", h.retiredSurface)
 
-		// Runs
-		r.Get("/runs/jobs/{id}", h.GetJobRun)
-		r.Get("/runs/dags/{id}", h.GetDAGRun)
+		r.Get("/runs/jobs/{id}", h.retiredSurface)
+		r.Get("/runs/dags/{id}", h.retiredSurface)
 
-		// AI Suggestions
-		r.Get("/ai/suggestions", h.GetAISuggestions)
-		r.Post("/ai/suggestions/{id}/accept", h.AcceptAISuggestion)
-		r.Post("/ai/suggestions/{id}/dismiss", h.DismissAISuggestion)
+		r.Get("/ai/suggestions", h.retiredSurface)
+		r.Post("/ai/suggestions/{id}/accept", h.retiredSurface)
+		r.Post("/ai/suggestions/{id}/dismiss", h.retiredSurface)
 
-		// Stats
-		r.Get("/stats", h.GetStats)
+		r.Get("/stats", h.retiredSurface)
+	})
+}
+
+// retiredSurface closes S2 /scheduler. Use /api/schedules instead.
+func (h *SchedulerHandlers) retiredSurface(w http.ResponseWriter, r *http.Request) {
+	_, hasAuth := security.AuthInfoFromContext(r.Context())
+	if jwtmiddleware.GetClaimsFromContext(r) == nil && !hasAuth {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Link", "</api/schedules>; rel=\"successor-version\"")
+	w.WriteHeader(http.StatusGone)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":   "scheduler_intelligence_retired",
+		"message": "Use /api/schedules (kinds: report, saved_query, data_pipeline, mastering, workflow, job_dag). The /scheduler API is closed.",
 	})
 }
 

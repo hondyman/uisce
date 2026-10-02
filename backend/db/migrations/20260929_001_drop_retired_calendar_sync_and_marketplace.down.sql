@@ -1,0 +1,18 @@
+-- 20260929_001_drop_retired_calendar_sync_and_marketplace.down.sql
+--
+-- INTENTIONALLY A NO-OP. This migration is not reversible.
+--
+-- Reason: the objects it drops cannot be reconstructed from a down migration.
+-- Recreating 23 empty tables, 3 views, 2 trigger functions, 68 triggers and the
+-- quarterly partition definitions would produce a schema that LOOKS restored
+-- but is not the one that existed, and it could not restore any data.
+--
+-- Every dropped table was verified to hold 0 rows before this migration ran, so
+-- there is no data to recover. Reverting requires a restore from backup or a
+-- `git checkout` of the retired Go code plus a replay of the original CREATE
+-- statements, both of which are a deliberate, manual operation.
+--
+-- The retained objects deliberately excluded from this migration:
+--   marketplace_integration_settings  (FK parent of live table installed_integrations)
+--   marketplace_integrations, installed_integrations, integration_executions
+--                                    (back the retained integration marketplace)

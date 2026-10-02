@@ -143,6 +143,8 @@ export const ScreenBuilder: React.FC<ScreenBuilderProps> = ({
   boType,
   onScreenCreated,
 }) => {
+  const notification = useNotification();
+
   const [screenName, setScreenName] = useState('');
   const [screenType, setScreenType] = useState<ScreenType>('detail');
   const [fields, setFields] = useState<ScreenField[]>([]);
@@ -247,7 +249,6 @@ export const ScreenBuilder: React.FC<ScreenBuilderProps> = ({
   };
 
   const handleSaveScreen = async () => {
-    const notification = useNotification();
     if (!screenName.trim()) {
       notification.error('Please enter a screen name');
       return;

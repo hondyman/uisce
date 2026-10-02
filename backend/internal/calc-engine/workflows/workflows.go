@@ -66,12 +66,6 @@ func MetricComputeWorkflow(ctx workflow.Context, req ComputeRequest) error {
 		// Don't fail the workflow for event publication failures
 	}
 
-	// 4) Trigger Cube pre-aggregation refresh (optional, for instant dashboards)
-	if err := workflow.ExecuteActivity(ctx, RefreshCubePartitions, req).Get(ctx, nil); err != nil {
-		workflow.GetLogger(ctx).Warn("Cube refresh failed (non-fatal)", "error", err)
-		// Don't fail the workflow for Cube refresh failures
-	}
-
 	workflow.GetLogger(ctx).Info("Metric computation workflow completed successfully",
 		"metric_id", req.MetricID, "calc_type", req.CalcType, "period_label", req.PeriodLabel)
 
@@ -100,11 +94,6 @@ func ComputeAndMergeAnomalies(ctx context.Context, req ComputeRequest) error {
 
 // PublishCompletionEvent emits RabbitMQ event for downstream systems
 func PublishCompletionEvent(ctx context.Context, req ComputeRequest) error {
-	return nil // Implementation in activities.go
-}
-
-// RefreshCubePartitions calls Cube.dev API to refresh specific partitions
-func RefreshCubePartitions(ctx context.Context, req ComputeRequest) error {
 	return nil // Implementation in activities.go
 }
 

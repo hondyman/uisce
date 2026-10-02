@@ -350,7 +350,7 @@ export const AbbreviationManager: React.FC<AbbreviationManagerProps> = ({
                                 textTransform: 'uppercase',
                                 letterSpacing: '0.5px',
                               }}
-                              title="Core abbreviation - managed by Uisce, available to all tenants (read-only)"
+                              title="Core abbreviation - managed by Ivy, available to all tenants (read-only)"
                             >
                               CORE
                             </span>

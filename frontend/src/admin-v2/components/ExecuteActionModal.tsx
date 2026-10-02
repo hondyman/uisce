@@ -127,7 +127,6 @@ export function ExecuteActionModal({
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
                 placeholder={`Type '${actionType}' to confirm`}
-                autoFocus
               />
             </div>
           </div>

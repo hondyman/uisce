@@ -17,6 +17,11 @@ import (
 // shadow or switch off a core rule: writes are tenant-scoped (a tenant only ever writes its own
 // nodes), and a custom rule may not reuse a core rule's name or duplicate its conditions.
 
+// GoldCopyTenantID returns the gold-copy tenant's id, or "" if there is none.
+func GoldCopyTenantID(ctx context.Context, db sqlx.QueryerContext) (string, error) {
+	return goldCopyTenantID(ctx, db)
+}
+
 // goldCopyTenantID returns the gold-copy tenant's id, or "" if there is none.
 func goldCopyTenantID(ctx context.Context, db sqlx.QueryerContext) (string, error) {
 	// public.tenants is under RLS and shows a tenant only its own row, so it cannot be read to find the

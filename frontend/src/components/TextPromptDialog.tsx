@@ -22,7 +22,6 @@ export default function TextPromptDialog({ open, title = 'Enter value', label = 
       <DialogContent>
         <Box sx={{ width: 500 }}>
           <TextField
-            autoFocus
             fullWidth
             label={label}
             inputProps={{ 'aria-label': ariaLabel }}

@@ -20,7 +20,10 @@ type CustomizationIntelligenceInput struct {
 // TF-IDF + MiniBatchKMeans, and upserts recommendations to fact_customization_telemetry.
 //
 // Cron schedule: "0 3 * * *" — runs at 03:00 UTC daily, after overnight audit ingestion.
-// This pipeline populates data read by the Go /api/marketplace/product-evolution endpoint.
+// This pipeline writes fact_customization_telemetry. Its former consumer, the
+// /api/marketplace/product-evolution endpoint, was removed with the marketplace
+// feature; the workflow is retained because the fact table is analytics surface
+// in its own right.
 func CustomizationIntelligenceWorkflow(ctx workflow.Context, input CustomizationIntelligenceInput) error {
 	logger := workflow.GetLogger(ctx)
 

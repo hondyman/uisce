@@ -1,235 +1,213 @@
+// Package governance holds the platform's built-in governance policies
+// (trade compliance, semantic-term validation, pipeline validation).
+//
+// Every policy is a set of internal/rules/vm rules - the platform's single
+// rule engine. Each rule states the compliant condition; a rule that does not
+// hold contributes its deny message. The policies were originally Rego (OPA);
+// their decisions are pinned by parity_test.go.
 package governance
 
 import (
 	"context"
-	_ "embed"
+	"encoding/json"
 	"fmt"
+	"sort"
 
-	"github.com/hondyman/uisce/libs/db/queries"
+	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/jmoiron/sqlx"
-	"github.com/open-policy-agent/opa/rego"
 )
-
-//go:embed policies/pipeline_validation.rego
-var defaultPolicy string
-
-//go:embed policies/trade_compliance.rego
-var tradePolicy string
-
-//go:embed policies/semantic_validation.rego
-var semanticPolicy string
 
 type ValidationResult struct {
 	Allowed bool     `json:"allowed"`
 	Reasons []string `json:"reasons,omitempty"`
 }
 
+// GovernanceEngine evaluates the built-in policies. db is kept for API
+// compatibility with existing callers; no policy reads it.
 type GovernanceEngine struct {
-	db             *sqlx.DB
-	pipelinePolicy string
-	tradePolicy    string
-	semanticPolicy string
+	db *sqlx.DB
 }
 
 func NewGovernanceEngine(db *sqlx.DB) *GovernanceEngine {
-	return &GovernanceEngine{
-		db:             db,
-		pipelinePolicy: defaultPolicy,
-		tradePolicy:    tradePolicy,
-		semanticPolicy: semanticPolicy,
-	}
+	return &GovernanceEngine{db: db}
 }
 
-func (e *GovernanceEngine) ValidateSemanticTerm(ctx context.Context, term map[string]interface{}) (*ValidationResult, error) {
-	options := []func(*rego.Rego){
-		rego.Query("data.semlayer.governance.semantic"),
-		rego.Module("semantic_validation.rego", e.semanticPolicy),
-		// Mock data for restricted columns
-		rego.Module("restricted_data.rego", "package restricted_columns\nlist = [\"salary\", \"ssn\"]"),
-	}
+// policyRule is one deny rule: Holds is the compliant condition; when it does
+// not hold, Deny renders the reason(s) from the input.
+type policyRule struct {
+	Name  string
+	Holds vm.RuleNode
+	Deny  func(input map[string]interface{}) []string
+}
 
-	query, err := rego.New(options...).PrepareForEval(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("prepare eval: %w", err)
-	}
+// --- rule-building helpers (vm AST) ----------------------------------
 
-	results, err := query.Eval(ctx, rego.EvalInput(term))
+func cond(field, op string, value interface{}) vm.RuleNode {
+	return vm.RuleNode{Type: vm.NodeTypeCondition, Condition: &vm.RuleCondition{
+		Field: field, FieldPath: field, Operator: op, Value: value,
+	}}
+}
+
+func anyOf(nodes ...vm.RuleNode) vm.RuleNode {
+	return vm.RuleNode{Type: vm.NodeTypeGroup, Group: &vm.RuleGroup{Operator: "OR", Conditions: nodes}}
+}
+
+func not(n vm.RuleNode) vm.RuleNode {
+	return vm.RuleNode{Type: vm.NodeTypeGroup, Group: &vm.RuleGroup{Operator: "NOT", Conditions: []vm.RuleNode{n}}}
+}
+
+// absent reproduces Rego's "rule body is undefined when an input field is
+// missing": the deny never fires for an absent field.
+func absent(field string) vm.RuleNode { return cond(field, "is_null", nil) }
+
+func msg(s string) func(map[string]interface{}) []string {
+	return func(map[string]interface{}) []string { return []string{s} }
+}
+
+// --- policies ------------------------------------------------------------
+
+var restrictedSymbols = []interface{}{"RSTR", "BAD", "LOCKED"}
+
+var tradePolicy = []policyRule{
+	{
+		Name: "high-value trade requires pre-approval",
+		Holds: anyOf(
+			absent("amount"),
+			cond("amount", "<", 1000000.0),
+			cond("compliance_approved", "equals", true),
+		),
+		Deny: msg("High-value trade (>1M) requires pre-approval"),
+	},
+	{
+		Name:  "restricted symbols",
+		Holds: anyOf(absent("symbol"), cond("symbol", "not_in", restrictedSymbols)),
+		Deny: func(in map[string]interface{}) []string {
+			return []string{fmt.Sprintf("Symbol %v is on the restricted list", in["symbol"])}
+		},
+	},
+	{
+		Name:  "portfolio exposure limit",
+		Holds: anyOf(absent("exposure"), cond("exposure", "<=", 5000000.0)),
+		Deny:  msg("Portfolio exposure limit exceeded (5M)"),
+	},
+}
+
+// restrictedColumns are physical columns needing PII access.
+var restrictedColumns = []interface{}{"salary", "ssn"}
+
+var semanticPolicy = []policyRule{
+	{
+		Name: "description length",
+		Holds: anyOf(
+			absent("description"),
+			cond("description", "length_equals", 0),
+			cond("description", "length_greater", 4),
+		),
+		Deny: msg("Description must be at least 5 characters long if provided"),
+	},
+	{
+		Name:  "complexity limit",
+		Holds: anyOf(absent("complexity_score"), cond("complexity_score", "<=", 5.0)),
+		Deny: func(in map[string]interface{}) []string {
+			return []string{fmt.Sprintf("Complexity score %v exceeds limit of 5", in["complexity_score"])}
+		},
+	},
+	{
+		Name: "restricted columns need PII access",
+		Holds: anyOf(
+			cond("user_has_pii_access", "equals", true),
+			absent("referenced_columns"),
+			not(cond("referenced_columns", "contains_any", restrictedColumns)),
+		),
+		Deny: func(in map[string]interface{}) []string {
+			var out []string
+			cols, _ := in["referenced_columns"].([]interface{})
+			for _, c := range cols {
+				for _, r := range restrictedColumns {
+					if fmt.Sprint(c) == r {
+						out = append(out, fmt.Sprintf("Access to restricted column '%v' denied", c))
+					}
+				}
+			}
+			return out
+		},
+	},
+	{
+		Name:  "node name characters",
+		Holds: anyOf(absent("node_name"), cond("node_name", "matches_regex", `^[a-zA-Z0-9_ \-\(\)\.]+$`)),
+		Deny:  msg("Node name contains invalid characters"),
+	},
+}
+
+var pipelinePolicy = []policyRule{
+	{
+		Name:  "at least one node",
+		Holds: anyOf(absent("nodes"), cond("nodes", "is_not_empty", nil)),
+		Deny:  msg("Pipeline must have at least one node"),
+	},
+	{
+		Name:  "start node",
+		Holds: anyOf(absent("nodes"), cond("nodes.type", "contains_any", []interface{}{"start"})),
+		Deny:  msg("Pipeline must have a Start node"),
+	},
+}
+
+// --- evaluation ------------------------------------------------------------
+
+// evaluate runs a policy's rules. A rule the engine cannot evaluate denies
+// (never a silent pass), naming the rule.
+func evaluate(policy []policyRule, raw interface{}) (*ValidationResult, error) {
+	input, err := toInput(raw)
 	if err != nil {
 		return nil, err
 	}
-
-	if len(results) == 0 {
-		return nil, fmt.Errorf("no results for input: %+v", term)
-	}
-
-	isAllowed := true
+	ae := vm.NewAdvancedEvaluator()
 	var reasons []string
-
-	for _, expr := range results[0].Expressions {
-		val := expr.Value
-		if valMap, ok := val.(map[string]interface{}); ok {
-			if allowVal, exists := valMap["allow"]; exists {
-				if b, ok := allowVal.(bool); ok && !b {
-					isAllowed = false
-				}
-			}
-			if denyVal, exists := valMap["deny"]; exists {
-				if denials, ok := denyVal.([]interface{}); ok {
-					for _, d := range denials {
-						reasons = append(reasons, fmt.Sprintf("%v", d))
-					}
-				}
-			}
+	for _, r := range policy {
+		ok, err := ae.Evaluate(r.Holds, input)
+		if err != nil {
+			reasons = append(reasons, fmt.Sprintf("policy rule %q could not be evaluated: %v", r.Name, err))
+			continue
+		}
+		if !ok {
+			reasons = append(reasons, r.Deny(input)...)
 		}
 	}
-
-	if len(reasons) > 0 {
-		isAllowed = false
-	}
-
-	return &ValidationResult{Allowed: isAllowed, Reasons: reasons}, nil
+	sort.Strings(reasons)
+	return &ValidationResult{Allowed: len(reasons) == 0, Reasons: reasons}, nil
 }
 
-// ValidatePipeline executes the OPA policy against the provided pipeline definition
+// toInput normalises any caller payload to the JSON shape rules evaluate
+// (numbers as float64, nested objects as maps) - the same view OPA had.
+func toInput(raw interface{}) (map[string]interface{}, error) {
+	if raw == nil {
+		return map[string]interface{}{}, nil
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("governance input is not JSON-serialisable: %w", err)
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, fmt.Errorf("governance input must be a JSON object: %w", err)
+	}
+	if m == nil {
+		m = map[string]interface{}{}
+	}
+	return m, nil
+}
+
+// ValidateSemanticTerm checks a semantic term against the semantic policy.
+func (e *GovernanceEngine) ValidateSemanticTerm(ctx context.Context, term map[string]interface{}) (*ValidationResult, error) {
+	return evaluate(semanticPolicy, term)
+}
+
+// ValidatePipeline checks a pipeline definition against the pipeline policy.
 func (e *GovernanceEngine) ValidatePipeline(ctx context.Context, tenantID string, pipelineDefinition interface{}) (*ValidationResult, error) {
-	// Prepare input
-	// pipelineDefinition should be the graph or JSON structure
-
-	options := []func(*rego.Rego){
-		rego.Query("data.semlayer.governance.pipelines.allow; data.semlayer.governance.pipelines.deny"),
-		rego.Module("pipeline_validation.rego", e.pipelinePolicy),
-	}
-
-	// Dynamic Policy Loading (if DB is present)
-	if e.db != nil && tenantID != "" {
-		var policies []string
-		start := "package tenant.rules" // Filter ensures we only load relevant scopes
-		err := e.db.SelectContext(ctx, &policies, queries.ListWorkflowPolicies, tenantID)
-		if err == nil {
-			for i, p := range policies {
-				// Only load if it's a valid package
-				if len(p) > len(start) { // Basic check
-					options = append(options, rego.Module(fmt.Sprintf("tenant_policy_%d.rego", i), p))
-				}
-			}
-		}
-	}
-
-	query, err := rego.New(options...).PrepareForEval(ctx)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare rego query: %w", err)
-	}
-
-	results, err := query.Eval(ctx, rego.EvalInput(pipelineDefinition))
-	if err != nil {
-		return nil, fmt.Errorf("failed to evaluate policy: %w", err)
-	}
-
-	if len(results) == 0 {
-		return nil, fmt.Errorf("no results from policy evaluation")
-	}
-
-	// Extract results
-	// We expect two expressions: allow (bool) and deny (array of strings)
-	if len(results[0].Expressions) < 2 {
-		return nil, fmt.Errorf("unexpected policy result format")
-	}
-
-	allowedVal := results[0].Expressions[0].Value
-	denyVal := results[0].Expressions[1].Value
-
-	isAllowed, ok := allowedVal.(bool)
-	if !ok {
-		isAllowed = false
-	}
-
-	var reasons []string
-	if reasonsRaw, ok := denyVal.([]interface{}); ok {
-		for _, r := range reasonsRaw {
-			if s, ok := r.(string); ok {
-				reasons = append(reasons, s)
-			}
-		}
-	}
-
-	return &ValidationResult{
-		Allowed: isAllowed,
-		Reasons: reasons,
-	}, nil
+	return evaluate(pipelinePolicy, pipelineDefinition)
 }
 
-// ValidateTransaction executes the Trade Compliance OPA policy
+// ValidateTransaction checks a trade payload against the trade compliance policy.
 func (e *GovernanceEngine) ValidateTransaction(ctx context.Context, tenantID string, transactionPayload interface{}) (*ValidationResult, error) {
-	// Base query options
-	options := []func(*rego.Rego){
-		rego.Query("data.semlayer.governance.trades; data.tenant.rules"), // Query both base and tenant specifics
-		rego.Module("trade_compliance.rego", e.tradePolicy),
-	}
-
-	// Dynamic Policy Loading
-	if e.db != nil && tenantID != "" {
-		var policies []string
-		// We optimistically load all 'workflow' scope policies for now, assuming they apply to trades/transactions too
-		// In a real system we might distinguish scope='trade' vs 'pipeline'
-		err := e.db.SelectContext(ctx, &policies, queries.ListWorkflowPolicies, tenantID)
-		if err == nil {
-			for i, p := range policies {
-				options = append(options, rego.Module(fmt.Sprintf("tenant_policy_%d.rego", i), p))
-			}
-		}
-	}
-
-	query, err := rego.New(options...).PrepareForEval(ctx)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare rego query for trade: %w", err)
-	}
-
-	results, err := query.Eval(ctx, rego.EvalInput(transactionPayload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to evaluate trade policy: %w", err)
-	}
-
-	if len(results) == 0 {
-		return nil, fmt.Errorf("no results from policy evaluation")
-	}
-
-	// Result processing logic
-	// We gather results from strict base policy AND tenant rules
-	// Base policy returns Object { allow: bool, deny: [] }
-	// Tenant rules (if structured as `package tenant.rules` with `deny[msg]`) returns Object { deny: [] } usually
-
-	isAllowed := true
-	var reasons []string
-
-	for _, expr := range results[0].Expressions {
-		val := expr.Value
-
-		// Case 1: Base Policy Map
-		if valMap, ok := val.(map[string]interface{}); ok {
-			// Check for standard allow/deny structure
-			if allowVal, exists := valMap["allow"]; exists {
-				if b, ok := allowVal.(bool); ok && !b {
-					isAllowed = false
-				}
-			}
-			if denyVal, exists := valMap["deny"]; exists {
-				if denials, ok := denyVal.([]interface{}); ok {
-					for _, d := range denials {
-						reasons = append(reasons, fmt.Sprintf("%v", d))
-					}
-				}
-			}
-		}
-	}
-
-	if len(reasons) > 0 {
-		isAllowed = false
-	}
-
-	return &ValidationResult{
-		Allowed: isAllowed,
-		Reasons: reasons,
-	}, nil
+	return evaluate(tradePolicy, transactionPayload)
 }

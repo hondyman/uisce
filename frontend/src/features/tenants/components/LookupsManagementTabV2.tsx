@@ -600,7 +600,6 @@ export default function LookupsManagementTab({ tenantId, instanceFilter }: { ten
         <DialogTitle>New Lookup</DialogTitle>
         <DialogContent>
           <TextField
-            autoFocus
             margin="dense"
             label="Name"
             fullWidth
@@ -628,7 +627,6 @@ export default function LookupsManagementTab({ tenantId, instanceFilter }: { ten
         <DialogTitle>Edit Lookup</DialogTitle>
         <DialogContent>
           <TextField
-            autoFocus
             margin="dense"
             label="Name"
             fullWidth
@@ -905,7 +903,7 @@ function LookupValuesPanel({ tenantId, lookupId, onRequestDelete }: { tenantId: 
       <Dialog open={createValueOpen} onClose={() => setCreateValueOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>New Lookup Value</DialogTitle>
         <DialogContent>
-          <TextField autoFocus margin="dense" label="Value" fullWidth value={createValueForm.value} onChange={(e) => setCreateValueForm((s) => ({ ...s, value: e.target.value }))} />
+          <TextField margin="dense" label="Value" fullWidth value={createValueForm.value} onChange={(e) => setCreateValueForm((s) => ({ ...s, value: e.target.value }))} />
           <TextField margin="dense" label="Label" fullWidth value={createValueForm.label} onChange={(e) => setCreateValueForm((s) => ({ ...s, label: e.target.value }))} />
           <FormControl fullWidth sx={{ mt: 1 }}>
             <InputLabel id="parent-select-label">Parent</InputLabel>
@@ -946,7 +944,7 @@ function LookupValuesPanel({ tenantId, lookupId, onRequestDelete }: { tenantId: 
       <Dialog open={!!editValue} onClose={() => setEditValue(null)} maxWidth="sm" fullWidth>
         <DialogTitle>Edit Lookup Value</DialogTitle>
         <DialogContent>
-          <TextField autoFocus margin="dense" label="Value" fullWidth value={editValue?.value || ''} onChange={(e) => setEditValue((s) => (s ? { ...s, value: e.target.value } : s))} />
+          <TextField margin="dense" label="Value" fullWidth value={editValue?.value || ''} onChange={(e) => setEditValue((s) => (s ? { ...s, value: e.target.value } : s))} />
           <TextField margin="dense" label="Label" fullWidth value={editValue?.label || ''} onChange={(e) => setEditValue((s) => (s ? { ...s, label: e.target.value } : s))} />
           <FormControl fullWidth sx={{ mt: 1 }}>
             <InputLabel id="parent-select-label">Parent</InputLabel>

@@ -54,24 +54,27 @@ interface PayloadModeProps<T = any> {
 // Union of both
 type ProfessionalSearchInputProps = SuggestionModeProps | PayloadModeProps<any>;
 
-export const ProfessionalSearchInput: React.FC<ProfessionalSearchInputProps> = (props) => {
-  // If props contains 'data' and 'onSelect', treat it as payload mode and delegate to the new search component
-  if ((props as any).data && (props as any).onSelect) {
-    const p = props as PayloadModeProps<any>;
-    return (
-      <PayloadSearch
-        placeholder={p.placeholder}
-        data={p.data}
-        onSelect={p.onSelect}
-        onSearch={p.onSearch}
-        className={p.className}
-        debounceMs={p.debounceMs}
-        initialSelected={p.initialSelected}
-      />
-    );
-  }
+// Payload/data mode.
+const PayloadModeSearch: React.FC<PayloadModeProps<any>> = (p) => (
+  <PayloadSearch
+    placeholder={p.placeholder}
+    data={p.data}
+    onSelect={p.onSelect}
+    onSearch={p.onSearch}
+    className={p.className}
+    debounceMs={p.debounceMs}
+    initialSelected={p.initialSelected}
+  />
+);
 
-  // Otherwise provide the legacy suggestion-based UI (preserve original behavior)
+// Legacy suggestion-based UI (original behavior).
+//
+// This lives in its own module-level component instead of behind an early return in
+// the dispatcher below. The dispatcher's `if (props.data && props.onSelect) return
+// <PayloadSearch/>` sat above these five hooks, so the hook count of a single mounted
+// component depended on its prop shape — switching a call site from payload props to
+// suggestion props without unmounting threw "Rendered more hooks than expected".
+const SuggestionSearchInput: React.FC<SuggestionModeProps> = (props) => {
   const {
     value,
     onChange,
@@ -319,6 +322,15 @@ export const ProfessionalSearchInput: React.FC<ProfessionalSearchInputProps> = (
       )}
     </div>
   );
+};
+
+// Dispatches on prop shape only. Holds no hooks of its own, so it is safe that
+// which branch it picks has no effect on hook count.
+export const ProfessionalSearchInput: React.FC<ProfessionalSearchInputProps> = (props) => {
+  if ((props as any).data && (props as any).onSelect) {
+    return <PayloadModeSearch {...(props as PayloadModeProps<any>)} />;
+  }
+  return <SuggestionSearchInput {...(props as SuggestionModeProps)} />;
 };
 
 export default ProfessionalSearchInput;

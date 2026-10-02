@@ -15,9 +15,6 @@ type CalcEngineConfig struct {
 	// DataFusion configuration (cold tier / embedded Iceberg execution)
 	DataFusion *DataFusionConfig `yaml:"datafusion" json:"datafusion"`
 
-	// CubeJS configuration (semantic layer bridge)
-	Cube *CubeConfig `yaml:"cube" json:"cube"`
-
 	// Hot/Cold tier boundary in days (default: 90)
 	HotColdBoundaryDays int `yaml:"hot_cold_boundary_days" json:"hot_cold_boundary_days"`
 
@@ -47,14 +44,6 @@ type DataFusionConfig struct {
 	Catalog  string        `yaml:"catalog" json:"catalog"`   // e.g., "iceberg"
 	Schema   string        `yaml:"schema" json:"schema"`     // e.g., "wealth"
 	Timeout  time.Duration `yaml:"timeout" json:"timeout"`
-}
-
-// CubeConfig configures the Cube.js semantic layer bridge
-type CubeConfig struct {
-	APIURL     string `yaml:"api_url" json:"api_url"`         // e.g., "http://localhost:4000"
-	Enabled    bool   `yaml:"enabled" json:"enabled"`         // Enable Cube bridge
-	JWTSecret  string `yaml:"jwt_secret" json:"jwt_secret"`   // For authenticated requests
-	RollupOnly bool   `yaml:"rollup_only" json:"rollup_only"` // Force CUBEJS_ROLLUP_ONLY
 }
 
 // NewCalcEngineConfigFromEnv creates CalcEngineConfig from environment variables
@@ -95,16 +84,6 @@ func NewCalcEngineConfigFromEnv() *CalcEngineConfig {
 			Catalog:  getEnvOr("DATAFUSION_CATALOG", "iceberg"),
 			Schema:   getEnvOr("DATAFUSION_SCHEMA", "wealth"),
 			Timeout:  parseDurationOr(os.Getenv("DATAFUSION_TIMEOUT"), 5*time.Minute),
-		}
-	}
-
-	// Cube configuration
-	if apiURL := os.Getenv("CUBEJS_API_URL"); apiURL != "" {
-		cfg.Cube = &CubeConfig{
-			APIURL:     apiURL,
-			Enabled:    parseBool(getEnvOr("CUBEJS_ENABLED", "true")),
-			JWTSecret:  os.Getenv("CUBEJS_JWT_SECRET"),
-			RollupOnly: parseBool(os.Getenv("CUBEJS_ROLLUP_ONLY")),
 		}
 	}
 

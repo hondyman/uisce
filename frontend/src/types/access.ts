@@ -153,7 +153,6 @@ export const FEATURE_REQUIREMENTS: Record<string, FeatureRequirement> = {
   '/access-debugger': { minScope: 'instance', minAccess: 'tenant_admin' },
   '/pre-aggregation-advisor': { minScope: 'instance', minAccess: 'tenant_user' },
   '/frontier-explorer': { minScope: 'instance', minAccess: 'tenant_user' },
-  '/marketplace': { minScope: 'instance', minAccess: 'tenant_user' },
   '/dynamic-ui': { minScope: 'instance', minAccess: 'tenant_admin' },
   '/semantic-layout-builder': { minScope: 'instance', minAccess: 'tenant_admin' },
   '/reporting': { minScope: 'instance', minAccess: 'tenant_user' },

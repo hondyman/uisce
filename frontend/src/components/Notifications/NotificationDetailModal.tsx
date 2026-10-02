@@ -208,7 +208,7 @@ export const NotificationDetailModal: React.FC<NotificationDetailModalProps> = (
             <Button onClick={onReject} variant="outlined" color="error">
               Reject
             </Button>
-            <Button onClick={onApprove} variant="contained" color="primary" autoFocus>
+            <Button onClick={onApprove} variant="contained" color="primary" >
               Approve
             </Button>
           </>

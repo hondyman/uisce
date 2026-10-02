@@ -142,7 +142,7 @@ func evaluateExpressionText(this js.Value, args []js.Value) interface{} {
 }
 
 // compileExpressionText parses expression text and compiles it to SQL
-// via vm.CompileToSQL, resolving each field reference through a
+// via vm.CompileExpressionToSQL, resolving each field reference through a
 // caller-supplied {fieldPath: columnExpr} map - a client-side preview
 // (e.g. "does this compile, and to what?") that doesn't need a server
 // round trip, using the exact same compiler the backend uses for real
@@ -168,7 +168,7 @@ func compileExpressionText(this js.Value, args []js.Value) interface{} {
 		}
 		return col, nil
 	}
-	sql, err := vm.CompileToSQL(expr, resolveColumn)
+	sql, err := vm.CompileExpressionToSQL(expr, resolveColumn)
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
 	}

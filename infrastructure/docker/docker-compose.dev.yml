@@ -12,7 +12,6 @@ services:
       JWT_SECRET: devsecret
       PORT: 29080
       BACKEND_URL: http://host.docker.internal:8080
-      RULE_ENGINE_URL: http://host.docker.internal:8083
     ports:
       - "8082:29080"  # Host 8082 -> container 29080 (proxy listens on 29080 inside container)
 

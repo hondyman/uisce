@@ -33,7 +33,6 @@ const ProductEditDialog: React.FC<ProductEditDialogProps> = ({ open, product, on
           {product?.alpha_product?.product_name}
         </Typography>
         <TextField
-          autoFocus
           margin="dense"
           label="Version"
           type="number"

@@ -767,7 +767,6 @@ export const DataExplorer: React.FC = () => {
                 value={queryName}
                 onChange={(e) => setQueryName(e.target.value)}
                 onBlur={() => setIsEditingName(false)}
-                autoFocus
                 variant="standard"
                 sx={{ width: 300 }}
               />

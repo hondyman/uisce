@@ -12,7 +12,8 @@
  */
 
 import { getSelectedRegion } from './region';
-import { readCachedSelection } from '../utils/tenantScope';
+import { readCachedSelection, whenTenantScopeReady } from '../utils/tenantScope';
+import { acceptLanguage, parseCatalogError, type CatalogErrorBody } from '../utils/catalogError';
 
 /**
  * Helper to get all required headers from localStorage / AccessContext
@@ -77,6 +78,9 @@ function getTenantHeadersInternal(): Record<string, string> {
  *   const data = await apiFetch('/api/semantic-terms', { method: 'POST', body: JSON.stringify(...) });
  */
 export class ApiError extends Error {
+  /** Set when the backend answered with a Message Catalog error. */
+  catalog?: CatalogErrorBody;
+
   constructor(
     message: string,
     public readonly status: number,
@@ -94,6 +98,12 @@ export async function apiFetch(
 ): Promise<Response> {
   const headers = new Headers(init.headers || {});
 
+  // Never scope a request before the Operating Scope is restored.
+  if (!headers.has('X-Tenant-Datasource-ID')) {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    await whenTenantScopeReady(url);
+  }
+
   // Inject tenant headers automatically — but only when the caller has NOT
   // already supplied a value for that header. Caller-supplied values win,
   // so a component that has the React tenant/datasource in scope can pass
@@ -106,16 +116,25 @@ export async function apiFetch(
     }
   });
 
+  if (!headers.has('Accept-Language')) {
+    headers.set('Accept-Language', acceptLanguage());
+  }
+
   const response = await fetch(input, { ...init, headers });
 
   if (!response.ok) {
     const body = await response.text().catch(() => '');
-    throw new ApiError(
-      `API request failed: ${response.status} ${response.statusText}${body ? ': ' + body.slice(0, 200) : ''}`,
+    const catalog = parseCatalogError(body);
+    const err = new ApiError(
+      catalog
+        ? catalog.error
+        : `API request failed: ${response.status} ${response.statusText}${body ? ': ' + body.slice(0, 200) : ''}`,
       response.status,
       response.statusText,
       response
     );
+    if (catalog) err.catalog = catalog;
+    throw err;
   }
 
   return response;
@@ -133,10 +152,12 @@ export function getApiClient(): AxiosInstance {
     axiosInstance = axios.create();
 
     // Request interceptor: inject tenant + region headers
-    axiosInstance.interceptors.request.use((config: any) => {
+    axiosInstance.interceptors.request.use(async (config: any) => {
       if (!config.headers) {
         config.headers = {};
       }
+
+      await whenTenantScopeReady(config.url ?? '');
 
       const tenantHeaders = getTenantHeadersInternal();
       Object.entries(tenantHeaders).forEach(([key, value]) => {

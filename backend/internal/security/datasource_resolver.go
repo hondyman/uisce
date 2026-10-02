@@ -3,9 +3,11 @@ package security
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	uisce_db "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/jmoiron/sqlx"
 )
@@ -24,6 +26,11 @@ func (r *DBDatasourceResolver) Resolve(ctx context.Context, datasourceID string)
 	}
 	if strings.TrimSpace(datasourceID) == "" {
 		return nil, fmt.Errorf("datasource_id is required")
+	}
+	// Not a UUID can never name a datasource; answer as not found rather
+	// than letting the uuid cast fail inside the query.
+	if _, err := uuid.Parse(strings.TrimSpace(datasourceID)); err != nil {
+		return nil, fmt.Errorf("%w: invalid id %q", ErrDatasourceNotAvailable, datasourceID)
 	}
 
 	var row struct {
@@ -64,8 +71,11 @@ func (r *DBDatasourceResolver) Resolve(ctx context.Context, datasourceID string)
 			&row.TenantID, &row.InstanceID, &row.ProductID, &row.DatasourceID, &row.AllowedRegions,
 		)
 	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w: %w", ErrDatasourceNotAvailable, err)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("datasource not found: %w", err)
+		return nil, fmt.Errorf("resolving datasource: %w", err)
 	}
 
 	return &ResolvedDatasource{

@@ -6,17 +6,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/auth"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/pkg/governance"
 	"github.com/hondyman/uisce/backend/pkg/simulation"
 	"github.com/hondyman/uisce/backend/pkg/workflows"
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/sdk/client"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // Pipeline represents a saved Uisce Flow pipeline
@@ -77,28 +77,45 @@ func (h *PipelineHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/api/v1/pipelines/activities/safe", h.GetSafeActivities)
 }
 
-// getContextMetadata extracts trusted user and tenant info from context
-func (h *PipelineHandler) getContextMetadata(r *http.Request) (string, string) {
-	user, _ := auth.GetUserFromContext(r.Context())
-	userID := user.ID
-	if userID == "" {
-		userID = "system"
+// getContextMetadata resolves the caller's user and tenant from the verified
+// auth context (security.AuthInfo, set by AuthContextMiddleware), using the
+// canonical security.ResolveTenantID rule — the same one
+// api.extractTenantUUIDFromRequest applies. There is no fallback: a request
+// without a resolvable tenant is refused (401, or 403 for a requested tenant
+// the caller does not belong to) rather than mapped onto the global/gold-copy
+// tenant, which regular tenants may read from but never write to. Likewise a
+// request without a user is refused rather than attributed to "system".
+// On failure the error response has been written and ok is false.
+func (h *PipelineHandler) getContextMetadata(w http.ResponseWriter, r *http.Request) (userID, tenantID string, ok bool) {
+	authInfo, found := security.AuthInfoFromContext(r.Context())
+	if !found || strings.TrimSpace(authInfo.UserID) == "" {
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return "", "", false
 	}
 
-	tenantID := user.TenantID
-	if tenantID == "" {
-		// Fallback for dev/system tokens that might pass it via header (deprecated)
-		tenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
-		if tenantID == "" {
-			tenantID = "00000000-0000-0000-0000-000000000001" // Default/Global
+	requested := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
+	resolved, resolvedOK := security.ResolveTenantID(authInfo, requested)
+	if !resolvedOK {
+		if requested != "" {
+			http.Error(w, `{"error":"forbidden: requested tenant does not match caller's tenant"}`, http.StatusForbidden)
+			return "", "", false
 		}
+		http.Error(w, `{"error":"no tenant assigned to caller"}`, http.StatusUnauthorized)
+		return "", "", false
 	}
-	return userID, tenantID
+	if _, err := uuid.Parse(resolved); err != nil {
+		http.Error(w, `{"error":"invalid tenant identifier"}`, http.StatusBadRequest)
+		return "", "", false
+	}
+	return authInfo.UserID, resolved, true
 }
 
 // ListPipelines returns all pipelines for a tenant
 func (h *PipelineHandler) ListPipelines(w http.ResponseWriter, r *http.Request) {
-	_, tenantID := h.getContextMetadata(r)
+	_, tenantID, ok := h.getContextMetadata(w, r)
+	if !ok {
+		return
+	}
 
 	boFilter := r.URL.Query().Get("business_object")
 
@@ -136,7 +153,10 @@ func (h *PipelineHandler) ListPipelines(w http.ResponseWriter, r *http.Request) 
 
 // CreatePipeline creates a new pipeline
 func (h *PipelineHandler) CreatePipeline(w http.ResponseWriter, r *http.Request) {
-	userID, tenantID := h.getContextMetadata(r)
+	userID, tenantID, ok := h.getContextMetadata(w, r)
+	if !ok {
+		return
+	}
 
 	var pipeline Pipeline
 	if err := json.NewDecoder(r.Body).Decode(&pipeline); err != nil {
@@ -200,14 +220,9 @@ func (h *PipelineHandler) CreatePipeline(w http.ResponseWriter, r *http.Request)
 func (h *PipelineHandler) GetPipeline(w http.ResponseWriter, r *http.Request) {
 	pipelineID := chi.URLParam(r, "id")
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+	_, tenantID, ok := h.getContextMetadata(w, r)
+	if !ok {
 		return
-	}
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
 
 	var pipeline Pipeline
@@ -234,14 +249,9 @@ func (h *PipelineHandler) GetPipeline(w http.ResponseWriter, r *http.Request) {
 func (h *PipelineHandler) UpdatePipeline(w http.ResponseWriter, r *http.Request) {
 	pipelineID := chi.URLParam(r, "id")
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+	_, tenantID, ok := h.getContextMetadata(w, r)
+	if !ok {
 		return
-	}
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
 
 	var pipeline Pipeline
@@ -305,14 +315,9 @@ func (h *PipelineHandler) UpdatePipeline(w http.ResponseWriter, r *http.Request)
 func (h *PipelineHandler) DeletePipeline(w http.ResponseWriter, r *http.Request) {
 	pipelineID := chi.URLParam(r, "id")
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+	_, tenantID, ok := h.getContextMetadata(w, r)
+	if !ok {
 		return
-	}
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
 
 	result, err := h.db.ExecContext(r.Context(),
@@ -337,14 +342,9 @@ func (h *PipelineHandler) DeletePipeline(w http.ResponseWriter, r *http.Request)
 func (h *PipelineHandler) ExecutePipeline(w http.ResponseWriter, r *http.Request) {
 	pipelineID := chi.URLParam(r, "id")
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+	_, tenantID, ok := h.getContextMetadata(w, r)
+	if !ok {
 		return
-	}
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
 
 	// 1. Parse request
@@ -428,14 +428,9 @@ func (h *PipelineHandler) ExecutePipeline(w http.ResponseWriter, r *http.Request
 func (h *PipelineHandler) SimulatePipeline(w http.ResponseWriter, r *http.Request) {
 	pipelineID := chi.URLParam(r, "id")
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+	_, tenantID, ok := h.getContextMetadata(w, r)
+	if !ok {
 		return
-	}
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
 
 	// 1. Parse request (reuses ExecuteRequest for formData)

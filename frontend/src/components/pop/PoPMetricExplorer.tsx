@@ -92,6 +92,8 @@ type PoPPeriod = 'day' | 'week' | 'month' | 'quarter' | 'year';
 type DeltaView = 'percentage' | 'absolute' | 'both';
 
 export const PoPMetricExplorer: React.FC<PoPMetricExplorerProps> = ({ metrics, onRefresh, onContractUpdate: _onContractUpdate }) => {
+  const notification = useNotification();
+
   const [filteredMetrics, setFilteredMetrics] = useState<PoPMetricWithContract[]>(metrics);
   const [searchTerm, setSearchTerm] = useState('');
   const [domainFilter, setDomainFilter] = useState('');
@@ -200,7 +202,6 @@ export const PoPMetricExplorer: React.FC<PoPMetricExplorerProps> = ({ metrics, o
   };
 
   const handleBulkCompute = async () => {
-      const notification = useNotification();
       const result: any = {};
       notification.success(`Computed ${result.success_count} metrics successfully`);
       notification.error('Failed to compute metrics');
@@ -213,12 +214,10 @@ export const PoPMetricExplorer: React.FC<PoPMetricExplorerProps> = ({ metrics, o
       if (!response.ok) throw new Error('Failed to compute all metrics');
 
       const result = await response.json();
-      const notification = useNotification();
       notification.success(`Computed ${result.success_count} metrics successfully`);
       onRefresh();
     } catch (error) {
       try { devError('Error computing all metrics:', error); } catch {}
-      const notification = useNotification();
       notification.error('Failed to compute metrics');
     }
   };

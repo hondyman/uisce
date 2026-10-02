@@ -28,6 +28,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/altinvest"
 	"github.com/hondyman/uisce/backend/internal/altinvest/alternative_investment"
 	"github.com/hondyman/uisce/backend/internal/analytics"
+	"github.com/hondyman/uisce/backend/internal/attribute"
 	"github.com/hondyman/uisce/backend/internal/audit"
 	"github.com/hondyman/uisce/backend/internal/auth"
 	"github.com/hondyman/uisce/backend/internal/billing"
@@ -58,12 +59,15 @@ import (
 	"github.com/hondyman/uisce/backend/internal/master/personnel"
 	"github.com/hondyman/uisce/backend/internal/master/sales_ledger"
 	"github.com/hondyman/uisce/backend/internal/master/vendor"
+	"github.com/hondyman/uisce/backend/internal/mastering"
 	"github.com/hondyman/uisce/backend/internal/mcp"
 	"github.com/hondyman/uisce/backend/internal/mdm"
-	"github.com/hondyman/uisce/backend/internal/metadata"
+	"github.com/hondyman/uisce/backend/internal/mdm/scoring"
+	catalogmeta "github.com/hondyman/uisce/backend/internal/metadata"
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
 	"github.com/hondyman/uisce/backend/internal/migrations"
 	models "github.com/hondyman/uisce/backend/internal/models"
+	"github.com/hondyman/uisce/backend/internal/msgcat"
 	uisceoauth "github.com/hondyman/uisce/backend/internal/oauth"
 	"github.com/hondyman/uisce/backend/internal/oms/account"
 	"github.com/hondyman/uisce/backend/internal/oms/position"
@@ -78,8 +82,8 @@ import (
 	"github.com/hondyman/uisce/backend/internal/rag"
 	"github.com/hondyman/uisce/backend/internal/region"
 	"github.com/hondyman/uisce/backend/internal/reports"
-	"github.com/hondyman/uisce/backend/internal/rulefabric"
 	"github.com/hondyman/uisce/backend/internal/rules"
+	"github.com/hondyman/uisce/backend/internal/schedule"
 	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
@@ -103,7 +107,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jmoiron/sqlx"
 
-	catalogmeta "github.com/hondyman/uisce/backend/internal/metadata"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 	temporalclientlib "github.com/hondyman/uisce/libs/temporal-client"
 	temporalclient "go.temporal.io/sdk/client"
@@ -187,7 +190,6 @@ type Server struct {
 	NLQService              *services.NLQService
 	FeedbackService         *services.FeedbackService
 	EvalService             *services.EvalService
-	CubeSyncService         *analytics.CubeSyncService
 	LLMConfigSvc            *llm.LLMConfigService
 	TemporalClient          temporalclient.Client
 	EvidenceBundleService   *services.EvidenceBundleService
@@ -204,7 +206,6 @@ type Server struct {
 	WriteHandler      *handlers.WriteHandler
 	IgniteClient      *infrastructure.IgniteClient
 	LineageSvc        *services.LineageService
-	CueEngine         *services.CueEngine
 
 	PageLayoutHandler       *handlers.PageLayoutHandler
 	PipelineHandler         *handlers.PipelineHandler
@@ -214,7 +215,17 @@ type Server struct {
 	CalcHandler             *handlers.CalcHandler
 	DatasourceResolver      security.DatasourceResolver
 	SecurityContextDeps     handlers.SecurityContextDeps
-	BusinessObjectService   *catalogmeta.BusinessObjectService
+	// MessageCatalog renders every user-facing error (msgcat.WriteError).
+	MessageCatalog *msgcat.Catalog
+	// The one scheduler (internal/schedule) and its runners by target kind.
+	ScheduleService       *schedule.Service
+	ScheduleRunners       *schedule.Registry
+	dataPipelineRunner    *dataPipelineRunner
+	BusinessObjectService *catalogmeta.BusinessObjectService
+	DataPipelines         *DataPipelineHandler // set when BO CRUD routes mount; also serves MCP
+	// MasteringEngine masters entities (Product first); the scheduler runs it too.
+	MasteringEngine         *mastering.Engine
+	masteringRunner         *mastering.Runner
 	QueryHandler            *handlers.QueryHandler
 	QueryBuilderHandler     *querybuilder.QueryBuilderHandler
 	BOStatusHandler         *handlers.BOStatusHandler
@@ -231,7 +242,6 @@ type Server struct {
 	RAGHandler              *RAGHandler
 	EventBus                EventBus
 	ExportHandlers          *handlers.ExportHandlers
-	SchedulerHandlers       *handlers.SchedulerHandlers
 	auditService            *audit.ChannelAuditService
 	semanticCache           *cache.SemanticCache
 
@@ -1001,18 +1011,18 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		CalculationHandler:     nil, // Will be set after initialization
 		LineageSvc:             nil, // Will be set after initialization
 
-		CueEngine: services.NewCueEngine(),
-
 		CalcHandler: nil, // Will be set after initialization
 
-		ExportHandlers:    nil, // Will be set after initialization
-		SchedulerHandlers: nil, // Will be set after initialization
+		ExportHandlers: nil, // Will be set after initialization
 	}
 
 	// Register trace proxy and metrics endpoints
 	r.Get("/api/tempo/traces", srv.proxyTempoTraces)
 	r.Get("/api/tempo/traces/{traceId}", srv.proxyTempoGetTrace)
 	r.Get("/api/v1/metrics/commit", srv.commitMetricsV1Handler)
+
+	// Prometheus metrics endpoint (glossary_llm_calls_total, etc.)
+	r.Handle("/metrics", MetricsHandler())
 
 	// Observability Console endpoints
 	r.Get("/api/metrics/global", srv.globalMetricsHandler)
@@ -1183,16 +1193,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	exportService := services.NewPostgresExportService(db, exportStoragePath, exportURLBasePath)
 	srv.ExportHandlers = handlers.NewExportHandlers(exportService)
 
-	// Initialize Job Queue for async operations
-	jobQueue := services.NewPostgresJobQueue(db)
-
-	schedulerService := services.NewPostgresSchedulerService(db)
-	srv.SchedulerHandlers = handlers.NewSchedulerHandlers(schedulerService)
-
-	// Start Scheduler background loop
-	if err := schedulerService.Start(context.Background(), jobQueue); err != nil {
-		log.Printf("[Scheduler] Warning: Failed to start background loop: %v", err)
-	}
+	// The old in-process scheduler (S1: an unlocked every-minute poll loop in
+	// every API replica) is retired; everything schedules through
+	// internal/schedule (Temporal Schedules, /api/schedules).
 
 	// Initialize NLQ Service
 	nlqService := services.NewNLQService(sqlxDB, llmProvider, searchSvc, reasoningEngine, nil)
@@ -1205,11 +1208,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize Quality Services
 	srv.FeedbackService = services.NewFeedbackService(sqlxDB)
 	srv.EvalService = services.NewEvalService(sqlxDB, nlqService)
-
-	// Initialize Cube Sync Service
-	// Defaulting to a local 'cube_schema' directory for now
-	_ = filepath.Join(runtimeBase, "cube_schema")
-	srv.CubeSyncService = nil // Stub: NewCubeSyncService returns interface{}
 
 	// --- Audit & History Wiring ---
 	// Legacy audit chain decommissioned - auditHistoryHandler remains nil
@@ -1269,12 +1267,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	instanceCloneHandler := handlers.NewInstanceCloneHandler(sqlxDB)
 	instanceCloneHandler.RegisterRoutes(r)
 
-	// Initialize RuleFabric (rules/policies CRUD + evaluation, backs the
-	// visual ExpressionBuilder/AdvancedConditionBuilder frontend)
-	if err := rulefabric.RegisterRoutes(r, sqlxDB); err != nil {
-		log.Printf("failed to register rulefabric routes: %v", err)
-	}
-
 	// Initialize Admin Handler
 	adminHandler := NewAdminHandler(qosManager)
 	srv.AdminHandler = adminHandler
@@ -1289,12 +1281,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	valuesHandler := handlers.NewValuesHandler(valuesService)
 	srv.ValuesHandler = valuesHandler
 	valuesHandler.RegisterRoutes(r)
-
-	// Initialize Compliance Service - MOVED to main.go for Epic 12
-	// complianceService := services.NewComplianceService(auditSvc)
-	// complianceHandler := handlers.NewComplianceHandler(complianceService)
-	// srv.ComplianceHandler = complianceHandler
-	// complianceHandler.RegisterRoutes(r)
 
 	// Initialize AI Service (Gemini Integration)
 	aiRuleRepo := rules.NewSQLRuleRepository(db)
@@ -1344,6 +1330,10 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	masterPersonnelHandler.RegisterRoutes(r)
 	masterSalesLedgerHandler.RegisterRoutes(r)
 
+	// Initialize MDM License Source Scoring and Vendor Displacement handler
+	mdmScoringHandler := scoring.NewHandler(scoring.NewService(scoring.NewPostgresRepository(db)))
+	mdmScoringHandler.RegisterRoutes(r)
+
 	// Initialize Gold Copy Engine (full entity suite)
 	// NOTE: GoldCopy routes will be registered inside the main /api Route block below
 	gcPublisher, _ := services.NewGoldCopyPublisher(os.Getenv("KAFKA_BROKERS"))
@@ -1392,6 +1382,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// saved.
 	calcTermSvc := analytics.NewCalcTermService(sqlxDB)
 	calcTermHandler := handlers.NewCalcTermHandler(calcTermSvc)
+
+	// Lakehouse & CDC Streaming handler (Lakekeeper Iceberg catalog & gatekeeper metrics)
+	lakehouseStreamingHandler := handlers.NewLakehouseStreamingHandler(sqlxDB)
 
 	// 2. Execution Engine for recursive NAV/analytics
 	execEngine, _ := mdm.NewExecutionEngine(context.Background(), mdmGraph, nil)
@@ -1523,7 +1516,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	reportGenerationHandler.RegisterRoutes(r)
 
 	// Initialize Catalog Handler (Phase 18)
-	catalogHandler := NewCatalogHandler(boService, schedulerSecurityDeps)
+	catalogHandler := NewCatalogHandler(boService, schedulerSecurityDeps).WithDB(sqlxDB)
 	// Registration moved to /api group below
 
 	// Initialize Semantic Terms handler for catalog_node queries
@@ -1640,8 +1633,15 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Navigation menu
 		navigationMenuHandler.RegisterRoutes(r)
 
+		// ABAC capability map (frontend menu authorization)
+		capsHandler := NewCapabilitiesHandler(sqlxDB)
+		capsHandler.RegisterRoutes(r)
+
 		// Calc terms as catalog nodes (unified rule engine, calc side)
 		calcTermHandler.RegisterRoutes(r)
+
+		// Lakehouse & CDC Streaming routes
+		lakehouseStreamingHandler.RegisterRoutes(r)
 
 		// Multi-tenant & tenant access routes
 		tenantAccessHandler.RegisterRoutes(r)
@@ -1654,9 +1654,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Lookups routes
 		RegisterLookupsRoutes(r, db)
 
-		customAttrSvc := metadata.NewCustomAttributeService(sqlxDB)
-		r.Post("/tenants/custom-attributes", customAttrSvc.RegisterAttributeHandler)
-		r.Get("/tenants/custom-attributes", customAttrSvc.GetAttributesHandler)
+		attribute.NewHandler(sqlxDB, attribute.AlphaValueDB{DB: sqlxDB}).RegisterRoutes(r)
 
 		upgradeSvc := upgrade.NewService(sqlxDB, handlers.SecurityContextDeps{})
 		impactEngine := upgrade.NewImpactEngine(sqlxDB)
@@ -1759,9 +1757,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		if srv.ExportHandlers != nil {
 			routes.RegisterExports(r, srv.ExportHandlers)
 		}
-		if srv.SchedulerHandlers != nil {
-			routes.RegisterScheduler(r, srv.SchedulerHandlers)
-		}
 		srv.registerAdminRoutes(r)
 		srv.registerLineageRoutes(r)
 		srv.registerDebugRoutes(r)
@@ -1772,7 +1767,10 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.registerWorkflowRoutes(r, db, cron.New())
 		srv.registerProcessRoutes(r, db, sqlxDB)
 		srv.registerTriggerEngineRoutes(r, sqlxDB)
+		msgcatStore := msgcat.NewStore(sqlxDB)
+		srv.MessageCatalog = msgcat.NewCatalog(msgcatStore)
 		srv.registerBOCRUDRoutes(r, sqlxDB)
+		srv.registerScheduleRoutes(r, sqlxDB, temporalClient, reportService, reportExecutor)
 		srv.registerNBAEngineRoutes(r, sqlxDB)
 		srv.registerBillingRoutes(r)
 		srv.registerFeedbackRoutes(r)
@@ -1821,7 +1819,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				log.Printf("[mcp-cutover] MCP DB pool mode=%s", mode)
 			}
 		}
-		r.Handle("/mcp", mcp.NewServer(mcpDB).SetTemporal(temporalClient).HTTPHandler())
+		mcpServer := mcp.NewServer(mcpDB).SetTemporal(temporalClient)
+		if srv.DataPipelines != nil {
+			mcpServer.SetPipelines(pipelineMCP{h: srv.DataPipelines})
+		}
+		r.Handle("/mcp", mcpServer.HTTPHandler())
 
 		// Register handlers that were previously orphaned
 		ipWhitelistHandler.RegisterRoutes(r)
@@ -1848,6 +1850,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		glossarySvc := NewGlossaryService(context.Background(), db, srv.AbbreviationSvc, glossaryJobStore)
 		glossaryHandler := NewGlossaryHandler(db, lineage.NewDBLineageRepository(sqlxDB), handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver}, srv.AbbreviationSvc, glossarySvc, glossaryJobStore)
 		glossaryHandler.RegisterRoutes(r)
+
+		// Message Catalog: the one source of user-facing error text, per
+		// language and tenant, edited through /api/message-catalog. (The
+		// catalog itself is created before the handlers that answer with it.)
+		msgcat.NewHandler(msgcatStore, srv.MessageCatalog).RegisterRoutes(r)
 
 		// Semantic Relationships Handler (AI-suggested term relationships,
 		// rejections store, taxonomy classification). This was fully
@@ -1876,7 +1883,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		auditCtx, auditCancel := context.WithCancel(context.Background())
 		_ = auditCancel
 		apiDispatcherHandler.StartAuditWorker(auditCtx)
-		RegisterValidationRulesRoutes(r, db, srv.CueEngine, srv.BusinessObjectService, srv.DatasourceResolver)
+		RegisterValidationRulesRoutes(r, db, srv.BusinessObjectService, srv.DatasourceResolver)
 
 		// Initialize Security Profile Service and Handler
 		secProfileSvc := security.NewProfileService(db)
@@ -1937,9 +1944,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 					complianceDeps.KafkaBrokers,
 				)
 				externalHandler.RegisterRoutes(r)
-
-				survivorshipHandler := NewSurvivorshipHandler(mdm.NewSurvivorshipEngine())
-				survivorshipHandler.RegisterRoutes(r)
 
 				lookthroughHandler := NewLookThroughSQLHandler()
 				lookthroughHandler.RegisterRoutes(r)
@@ -3424,11 +3428,23 @@ func (s *Server) registerExplorerRoutes(r chi.Router) {
 		r.Route("/saved-queries", func(r chi.Router) {
 			r.Get("/", s.SavedQueryHandler.HandleListSavedQueries)
 			r.Post("/", s.SavedQueryHandler.HandleCreateSavedQuery)
+			r.Post("/batch-execute", s.SavedQueryHandler.HandleBatchExecuteSavedQueries)
+			r.Post("/export", s.SavedQueryHandler.HandleExportSavedQueriesBatch)
+			r.Post("/import", s.SavedQueryHandler.HandleImportSavedQueries)
 			r.Get("/duplicates", s.SavedQueryHandler.HandleGetDuplicates)
 			r.Get("/{id}", s.SavedQueryHandler.HandleGetSavedQuery)
+			r.Get("/{id}/usage", s.SavedQueryHandler.HandleGetSavedQueryUsage)
+			r.Get("/{id}/export", s.SavedQueryHandler.HandleExportSavedQuery)
 			r.Put("/{id}", s.SavedQueryHandler.HandleUpdateSavedQuery)
+			r.Patch("/{id}", s.SavedQueryHandler.HandlePatchSavedQuery)
 			r.Delete("/{id}", s.SavedQueryHandler.HandleDeleteSavedQuery)
+			r.Get("/{id}/schema", s.SavedQueryHandler.HandleGetSavedQuerySchema)
+			r.Post("/{id}/execute", s.SavedQueryHandler.HandleExecuteSavedQuery)
 			r.Post("/{id}/clone", s.SavedQueryHandler.HandleCloneSavedQuery)
+			r.Post("/{id}/extend", s.SavedQueryHandler.HandleExtendCoreQuery)
+			r.Get("/{id}/compare", s.SavedQueryHandler.HandleCompareCoreQuery)
+			r.Post("/{id}/upgrade", s.SavedQueryHandler.HandleUpgradeCoreQuery)
+			r.Post("/{id}/revert", s.SavedQueryHandler.HandleRevertCoreQuery)
 			r.Post("/{id}/share", s.SavedQueryHandler.HandleShareQuery)
 			r.Put("/{id}/favorite", s.SavedQueryHandler.HandleSetFavorite)
 			r.Get("/{id}/preview", s.SavedQueryHandler.HandleGetPreview)
@@ -3451,6 +3467,9 @@ func (s *Server) registerExplorerRoutes(r chi.Router) {
 		} else {
 			r.Post("/execute", s.QueryHandler.HandleExecuteQuery)
 		}
+		if s.SavedQueryHandler != nil {
+			r.Post("/batch-execute", s.SavedQueryHandler.HandleBatchExecuteSavedQueries)
+		}
 		r.Post("/compile", s.QueryHandler.HandleCompileQuery)
 		r.Post("/export", s.QueryHandler.HandleExportQuery)
 		r.Get("/history", s.QueryHandler.HandleListHistory)
@@ -3460,9 +3479,13 @@ func (s *Server) registerExplorerRoutes(r chi.Router) {
 	r.Route("/saved", func(r chi.Router) {
 		r.Get("/", s.SavedQueryHandler.HandleListSavedQueries)
 		r.Post("/", s.SavedQueryHandler.HandleCreateSavedQuery)
+		r.Post("/batch-execute", s.SavedQueryHandler.HandleBatchExecuteSavedQueries)
 		r.Get("/{id}", s.SavedQueryHandler.HandleGetSavedQuery)
+		r.Get("/{id}/usage", s.SavedQueryHandler.HandleGetSavedQueryUsage)
 		r.Put("/{id}", s.SavedQueryHandler.HandleUpdateSavedQuery)
+		r.Patch("/{id}", s.SavedQueryHandler.HandlePatchSavedQuery)
 		r.Delete("/{id}", s.SavedQueryHandler.HandleDeleteSavedQuery)
+		r.Post("/{id}/execute", s.SavedQueryHandler.HandleExecuteSavedQuery)
 	})
 
 	// Natural Language Q&A endpoint
@@ -3494,11 +3517,6 @@ func (s *Server) registerAdminRoutes(r chi.Router) {
 	// Admin Eval
 	r.Route("/admin/eval", func(r chi.Router) {
 		r.Post("/run", s.handleRunEval)
-	})
-
-	// Admin Cube Sync
-	r.Route("/admin/cube", func(r chi.Router) {
-		r.Post("/sync", s.handleCubeSync)
 	})
 
 	// Role Management
@@ -3626,6 +3644,12 @@ func (s *Server) registerProcessRoutes(r chi.Router, db *sql.DB, sqlxDB *sqlx.DB
 		Resolver: s.DatasourceResolver,
 	})
 	processTemplateHandler.RegisterRoutes(r)
+
+	// Workflow Extension Compiler & Runtime
+	workflowCompilerHandler := NewWorkflowCompilerHandler(db, handlers.SecurityContextDeps{
+		Resolver: s.DatasourceResolver,
+	})
+	workflowCompilerHandler.RegisterRoutes(r)
 
 	r.Post("/bp/start-execution", StartBPExecution)
 }
@@ -3764,14 +3788,11 @@ func (s *Server) registerMetadataRoutes(r chi.Router, boHandler *BusinessObjectH
 	entitySchemaHandler.RegisterRoutes(r)
 }
 
-// registerCatalogRoutes mounts catalog scan, connection, and marketplace endpoints
+// registerCatalogRoutes mounts catalog scan, connection, and node/edge type endpoints
 func (s *Server) registerCatalogRoutes(r chi.Router, db *sql.DB, routes *Routes, temporalClient temporalclient.Client) {
 	// Node Types endpoints
 	RegisterNodeTypesRoutes(r, db, handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
 	RegisterEdgeTypesRoutes(r, db, handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
-
-	// Marketplace endpoints
-	RegisterMarketplaceRoutes(r, db)
 
 	// Catalog Scan endpoints
 	routes.RegisterCatalogScan(r, s.CatalogScanHandler)
@@ -3779,9 +3800,6 @@ func (s *Server) registerCatalogRoutes(r chi.Router, db *sql.DB, routes *Routes,
 
 	// Calc Engine - Metric computation endpoints
 	RegisterCalcEngineRoutes(r, db, temporalClient)
-
-	// RDL (Rule Definition Language)
-	RegisterRDLRoutes(r, s.SQLXDB)
 
 	// Catalog Chart endpoints
 	r.Post("/catalog/{datasourceId}/refresh-charts", s.handleRefreshCharts)
@@ -3800,15 +3818,6 @@ func (s *Server) registerWorkflowRoutes(r chi.Router, db *sql.DB, cronJob *cron.
 		Resolver: s.DatasourceResolver,
 	})
 	rbacHandlers.RegisterRoutes(r)
-
-	// ── Marketplace Ecosystem (secured) ─────────────────────────────────────────
-	// All /api/marketplace/* routes require at minimum a valid AuthInfo.
-	// Browse (GET) passes through because every authenticated tenant can browse.
-	// Publish and install require their own additional scope checks inside handlers.
-	r.Route("/marketplace", func(mr chi.Router) {
-		mr.Use(appmid.RequireMarketplaceScope(appmid.ScopeMarketplaceInstall))
-		RegisterMarketplaceEcosystemRoutes(mr, rbacHandlers)
-	})
 }
 
 // registerTriggerEngineRoutes mounts the Trigger and Automation engine endpoints
@@ -3838,8 +3847,16 @@ func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 	notifAdapter := &notificationAdapter{svc: s.NotificationSvc}
 	triggerEngine := NewTriggerEngine(sqlxDB, abacEngine, s.EventBus, notifAdapter)
 
-	boCRUDHandler := NewBOCRUDHandler(sqlxDB, triggerEngine)
+	// s.BusinessObjectService is the master rule engine's write gate; a nil
+	// one makes the handler refuse writes rather than skip the rules.
+	var enforcer boWriteEnforcer
+	if s.BusinessObjectService != nil {
+		enforcer = s.BusinessObjectService
+	}
+	boCRUDHandler := NewBOCRUDHandler(sqlxDB, triggerEngine, enforcer)
+	boCRUDHandler.catalog = s.MessageCatalog
 	boCRUDHandler.RegisterRoutes(r)
+	s.registerDataPipelineRoutes(r, sqlxDB, boCRUDHandler)
 }
 
 // registerNBAEngineRoutes mounts next-best-action and recommendation engine endpoints

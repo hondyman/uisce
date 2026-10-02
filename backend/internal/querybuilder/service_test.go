@@ -1,10 +1,15 @@
 package querybuilder
 
 import (
+	"context"
+	"encoding/json"
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/hondyman/uisce/backend/internal/boresolver"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 // TestApplyColumnMetadata_CopiesRootOwnership pins the exact gap found
@@ -121,5 +126,480 @@ func TestApplyColumnMetadata_NoGeneratedColumns_LeavesDBColumnsUnmodified(t *tes
 	applyColumnMetadata(dbColumns, nil)
 	if dbColumns[0].Name != "id" || dbColumns[0].Type != "uuid" {
 		t.Errorf("expected dbColumns unmodified when generated is empty, got: %+v", dbColumns[0])
+	}
+}
+
+// TestSingleBOPreviewColumns_PopulatesBOID_LeavesAggregationEmpty exercises the
+// single-BO path's new column population (the α fix for the
+// "deliberate Needs review" follow-up from PR #113). It pins three
+// facts on the wire:
+//
+//  1. BOID is populated (every single-BO column belongs to the root BO).
+//  2. Aggregation is empty / absent under omitempty (row-grain SQL —
+//     isAdditiveSafe must keep refusing on this column, per the gate's
+//     fail-safe polarity). If someone later "widens" isAdditiveSafe to
+//     accept avg, this test still pins the wire-shape truth.
+//  3. Cardinality and RootOwnership are also absent under omitempty —
+//     single-BO has no related-BO joins, so per-column grain/ownership
+//     metadata is noise; the gate's hasRelatedBOs:false on the saved-query
+//     path is what does the work, and that's already covered by
+//     TestHasRelatedBOs_FalseSurvivesGoJSONMarshal_AsMapLiteral.
+//
+// The wire assertion is byte-level (json.Marshal on the same struct the
+// handler serializes) so a future refactor that changes the omitempty
+// behavior, or accidentally populates Aggregation, breaks here with a
+// concrete diff — not silently.
+func TestSingleBOPreviewColumns_PopulatesBOID_LeavesAggregationEmpty(t *testing.T) {
+	columns := []boresolver.QueryResultColumn{
+		{Name: "Order ID", Type: "unknown", BOID: "bo-orders"},
+		{Name: "Total Amount", Type: "unknown", BOID: "bo-orders"},
+	}
+
+	// Sanity: predicates the gate consumes.
+	for i, c := range columns {
+		if c.BOID != "bo-orders" {
+			t.Errorf("columns[%d].BOID = %q; want %q (every single-BO column belongs to the root BO)", i, c.BOID, "bo-orders")
+		}
+		if c.Aggregation != "" {
+			t.Errorf("columns[%d].Aggregation = %q; want empty (row-grain SQL; isAdditiveSafe must refuse)", i, c.Aggregation)
+		}
+	}
+
+	// Wire-shape pin.
+	b, err := json.Marshal(columns)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	wire := string(b)
+	if !strings.Contains(wire, `"boId":"bo-orders"`) {
+		t.Errorf("expected boId on the wire for both columns, got: %s", wire)
+	}
+	if strings.Contains(wire, `"aggregation":`) {
+		t.Errorf("expected aggregation absent under omitempty (the gate's unsafe sentinel), got: %s", wire)
+	}
+	if strings.Contains(wire, `"cardinality":`) {
+		t.Errorf("expected cardinality absent under omitempty (single-BO has no related-BO joins; grain gate is hasRelatedBOs:false, not per-column), got: %s", wire)
+	}
+	if strings.Contains(wire, `"rootOwnership":`) {
+		t.Errorf("expected rootOwnership absent under omitempty (same reason as cardinality), got: %s", wire)
+	}
+}
+
+// TestSingleBOColumnName_MatchesGeneratorAlias is the cross-check between
+// the preview-side wireName computation (DisplayName || Name) and what
+// BOSQLGenerator.ResolvePathWithLabel emits as the SQL alias. If either
+// side ever drifts, applyColumnMetadata's name-match lookup at
+// Execute time silently no-ops — same drift class as the mapper's
+// dropped-Label bug (comment on Preview's Columns loop). Both sides are
+// pinned against the same input set here so divergence breaks loudly.
+func TestSingleBOColumnName_MatchesGeneratorAlias(t *testing.T) {
+	const boID = "bo_orders"
+	rootDef := &boresolver.BODefinition{
+		ID:           boID,
+		DrivingTable: "public.orders",
+		Fields: []boresolver.BOField{
+			{ID: "f1", Name: "id", DisplayName: "Order ID", PhysicalColumn: "id"},
+			{ID: "f2", Name: "total_amount", DisplayName: "Total Amount", PhysicalColumn: "total_amount"},
+			{ID: "f3", Name: "note", DisplayName: "", PhysicalColumn: "note"},
+		},
+	}
+	// Minimal in-package BORepository implementation. MockBORepository
+	// (the boresolver package's exported test helper) is in a test-only
+	// file and not importable here, so we satisfy the interface with
+	// exactly what NewBOSQLGenerator touches during this test.
+	repo := mockBORepoForTest{
+		rootDef: rootDef,
+	}
+	generator, err := boresolver.NewBOSQLGenerator(repo, "postgres")
+	if err != nil {
+		t.Fatalf("NewBOSQLGenerator: %v", err)
+	}
+
+	ctx := &boresolver.GenerationContext{
+		Request:      boresolver.SQLGenerationRequest{BusinessObjectID: boID, TenantID: "tenant-alpha"},
+		RootBODef:    rootDef,
+		LoadedBOs:    map[string]*boresolver.BODefinition{boID: rootDef},
+		Aliases:      map[string]string{"": "t0"},
+		Joins:        nil,
+		NextAliasIdx: 1,
+	}
+
+	for _, term := range []string{"id", "total_amount", "note"} {
+		_, label, err := generator.ResolvePathWithLabel(ctx, term)
+		if err != nil {
+			t.Errorf("ResolvePathWithLabel(%q): %v", term, err)
+			continue
+		}
+		// Preview-side wireName computation — mirror of the inline
+		// logic in service.go::Preview.
+		var field boresolver.BOField
+		for _, f := range ctx.RootBODef.Fields {
+			if f.Name == term {
+				field = f
+				break
+			}
+		}
+		wireName := field.DisplayName
+		if wireName == "" {
+			wireName = field.Name
+		}
+		if label != wireName {
+			t.Errorf("name-match divergence for %q: ResolvePathWithLabel=%q, preview-wireName=%q — applyColumnMetadata will silently no-op", term, label, wireName)
+		}
+	}
+}
+
+// mockBORepoForTest is a minimal BORepository implementation just for the
+// Name-match cross-check above. Only GetBODefinition is exercised by
+// NewBOSQLGenerator's construction path in this test; the other two
+// methods return zero values because they aren't reached.
+type mockBORepoForTest struct {
+	rootDef *boresolver.BODefinition
+}
+
+// GetCalcTermExpressions satisfies boresolver.BORepository; these tests do not
+// use calculated terms, so it returns none.
+func (m mockBORepoForTest) GetCalcTermExpressions(nodeIDs []string) (map[string]*vm.Expression, error) {
+	return nil, nil
+}
+
+func (m mockBORepoForTest) GetBODefinition(boID string) (*boresolver.BODefinition, error) {
+	return m.rootDef, nil
+}
+
+func (m mockBORepoForTest) GetBOByTechnicalName(technicalName, tenantID, datasourceID string) (*boresolver.BODefinition, error) {
+	return nil, nil
+}
+
+func (m mockBORepoForTest) TableHasColumn(drivingTable, column string) bool {
+	return false
+}
+
+// --- β tests: aggregation support for single-BO queries ---
+
+func TestSingleBOAggregatedMeasure_WireShape(t *testing.T) {
+	repo := mockBORepoForTest{
+		rootDef: &boresolver.BODefinition{
+			ID:           "bo_orders",
+			DrivingTable: "public.orders",
+			Fields: []boresolver.BOField{
+				{ID: "f1", Name: "total_amount", DisplayName: "Total Amount", PhysicalColumn: "total_amount"},
+			},
+		},
+	}
+	generator, err := boresolver.NewBOSQLGenerator(repo, "postgres")
+	if err != nil {
+		t.Fatalf("NewBOSQLGenerator: %v", err)
+	}
+	semReq := &boresolver.SemanticSQLGenerationRequest{
+		BusinessObjectID: "bo_orders",
+		Select: []boresolver.SemanticField{
+			{Term: "total_amount", Aggregation: "sum"},
+		},
+		TenantID: "tenant-alpha",
+		Limit:    10,
+	}
+	sql, _, err := generator.GenerateSQLFromSemantic(semReq, "tenant-alpha", "ds-1")
+	if err != nil {
+		t.Fatalf("GenerateSQLFromSemantic: %v", err)
+	}
+	if !strings.Contains(sql, "SUM(") {
+		t.Errorf("expected SUM( in SQL, got: %s", sql)
+	}
+	if strings.Contains(sql, "GROUP BY") {
+		t.Errorf("aggregate-only query should not have GROUP BY, got: %s", sql)
+	}
+	// Wire shape: aggregation populated, boId present
+	columns := []boresolver.QueryResultColumn{
+		{Name: "Total Amount", Type: "unknown", BOID: "bo_orders", Aggregation: "sum"},
+	}
+	b, _ := json.Marshal(columns)
+	wire := string(b)
+	if !strings.Contains(wire, `"aggregation":"sum"`) {
+		t.Errorf("expected aggregation on wire, got: %s", wire)
+	}
+	if !strings.Contains(wire, `"boId":"bo_orders"`) {
+		t.Errorf("expected boId on wire, got: %s", wire)
+	}
+}
+
+func TestSingleBOAggregatedWithDimensions_GroupByEmitted(t *testing.T) {
+	repo := mockBORepoForTest{
+		rootDef: &boresolver.BODefinition{
+			ID:           "bo_orders",
+			DrivingTable: "public.orders",
+			Fields: []boresolver.BOField{
+				{ID: "f1", Name: "id", DisplayName: "Order ID", PhysicalColumn: "id"},
+				{ID: "f2", Name: "total_amount", DisplayName: "Total Amount", PhysicalColumn: "total_amount"},
+			},
+		},
+	}
+	generator, err := boresolver.NewBOSQLGenerator(repo, "postgres")
+	if err != nil {
+		t.Fatalf("NewBOSQLGenerator: %v", err)
+	}
+	semReq := &boresolver.SemanticSQLGenerationRequest{
+		BusinessObjectID: "bo_orders",
+		Select: []boresolver.SemanticField{
+			{Term: "id"},
+			{Term: "total_amount", Aggregation: "sum"},
+		},
+		TenantID: "tenant-alpha",
+		Limit:    10,
+	}
+	sql, _, err := generator.GenerateSQLFromSemantic(semReq, "tenant-alpha", "ds-1")
+	if err != nil {
+		t.Fatalf("GenerateSQLFromSemantic: %v", err)
+	}
+	if !strings.Contains(sql, "SUM(") {
+		t.Errorf("expected SUM( in SQL, got: %s", sql)
+	}
+	if !strings.Contains(sql, "GROUP BY") {
+		t.Errorf("mixed query should have GROUP BY, got: %s", sql)
+	}
+	if !strings.Contains(sql, "t0.id") {
+		t.Errorf("GROUP BY should reference dimension column t0.id, got: %s", sql)
+	}
+}
+
+func TestBackwardCompat_NoAggregationField_SqlUnchanged(t *testing.T) {
+	repo := mockBORepoForTest{
+		rootDef: &boresolver.BODefinition{
+			ID:           "bo_orders",
+			DrivingTable: "public.orders",
+			Fields: []boresolver.BOField{
+				{ID: "f1", Name: "id", DisplayName: "Order ID", PhysicalColumn: "id"},
+				{ID: "f2", Name: "total_amount", DisplayName: "Total Amount", PhysicalColumn: "total_amount"},
+			},
+		},
+	}
+	generator, err := boresolver.NewBOSQLGenerator(repo, "postgres")
+	if err != nil {
+		t.Fatalf("NewBOSQLGenerator: %v", err)
+	}
+	// No Aggregation fields — simulates an old caller
+	semReq := &boresolver.SemanticSQLGenerationRequest{
+		BusinessObjectID: "bo_orders",
+		Select: []boresolver.SemanticField{
+			{Term: "id"},
+			{Term: "total_amount"},
+		},
+		TenantID: "tenant-alpha",
+		Limit:    10,
+	}
+	sql, _, err := generator.GenerateSQLFromSemantic(semReq, "tenant-alpha", "ds-1")
+	if err != nil {
+		t.Fatalf("GenerateSQLFromSemantic: %v", err)
+	}
+	if strings.Contains(sql, "GROUP BY") {
+		t.Errorf("no-agg query should not have GROUP BY, got: %s", sql)
+	}
+	if strings.Contains(sql, "SUM(") || strings.Contains(sql, "AVG(") {
+		t.Errorf("no-agg query should not have aggregation wraps, got: %s", sql)
+	}
+}
+
+func TestSingleBOAggregatedMeasure_InvalidAggregationErrors(t *testing.T) {
+	repo := mockBORepoForTest{
+		rootDef: &boresolver.BODefinition{
+			ID:           "bo_orders",
+			DrivingTable: "public.orders",
+			Fields: []boresolver.BOField{
+				{ID: "f1", Name: "total_amount", DisplayName: "Total Amount", PhysicalColumn: "total_amount"},
+			},
+		},
+	}
+	generator, err := boresolver.NewBOSQLGenerator(repo, "postgres")
+	if err != nil {
+		t.Fatalf("NewBOSQLGenerator: %v", err)
+	}
+	semReq := &boresolver.SemanticSQLGenerationRequest{
+		BusinessObjectID: "bo_orders",
+		Select: []boresolver.SemanticField{
+			{Term: "total_amount", Aggregation: "median"},
+		},
+		TenantID: "tenant-alpha",
+		Limit:    10,
+	}
+	_, _, err = generator.GenerateSQLFromSemantic(semReq, "tenant-alpha", "ds-1")
+	if err == nil {
+		t.Fatal("expected error for unsupported aggregation 'median', got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported aggregation") {
+		t.Errorf("expected 'unsupported aggregation' in error, got: %v", err)
+	}
+}
+
+func TestSingleBOCountDistinct_EmitsDistinctSyntax(t *testing.T) {
+	repo := mockBORepoForTest{
+		rootDef: &boresolver.BODefinition{
+			ID:           "bo_orders",
+			DrivingTable: "public.orders",
+			Fields: []boresolver.BOField{
+				{ID: "f1", Name: "id", DisplayName: "Order Count", PhysicalColumn: "id"},
+			},
+		},
+	}
+	generator, err := boresolver.NewBOSQLGenerator(repo, "postgres")
+	if err != nil {
+		t.Fatalf("NewBOSQLGenerator: %v", err)
+	}
+	semReq := &boresolver.SemanticSQLGenerationRequest{
+		BusinessObjectID: "bo_orders",
+		Select: []boresolver.SemanticField{
+			{Term: "id", Aggregation: "count_distinct"},
+		},
+		TenantID: "tenant-alpha",
+		Limit:    10,
+	}
+	sql, _, err := generator.GenerateSQLFromSemantic(semReq, "tenant-alpha", "ds-1")
+	if err != nil {
+		t.Fatalf("GenerateSQLFromSemantic: %v", err)
+	}
+	if !strings.Contains(sql, "COUNT(DISTINCT t0.id)") {
+		t.Errorf("expected COUNT(DISTINCT t0.id) in SQL, got: %s", sql)
+	}
+	if strings.Contains(sql, "COUNT_DISTINCT(") {
+		t.Errorf("should not emit COUNT_DISTINCT( — invalid syntax, got: %s", sql)
+	}
+	// Wire value must be "count_distinct" (lowercased)
+	columns := []boresolver.QueryResultColumn{
+		{Name: "Order Count", Type: "unknown", BOID: "bo_orders", Aggregation: "count_distinct"},
+	}
+	b, _ := json.Marshal(columns)
+	wire := string(b)
+	if !strings.Contains(wire, `"aggregation":"count_distinct"`) {
+		t.Errorf("expected count_distinct on wire, got: %s", wire)
+	}
+}
+
+func TestPreviewNONEAggregation_NormalizesToEmpty(t *testing.T) {
+	boDef := &boresolver.BODefinition{
+		ID:           "bo_orders",
+		DrivingTable: "public.orders",
+		Fields: []boresolver.BOField{
+			{ID: "f1", Name: "total_amount", DisplayName: "Total Amount", PhysicalColumn: "total_amount"},
+		},
+	}
+	repo := mockBORepoForTest{rootDef: boDef}
+	generator, err := boresolver.NewBOSQLGenerator(repo, "postgres")
+	if err != nil {
+		t.Fatalf("NewBOSQLGenerator: %v", err)
+	}
+	resolver := mockBOResolverForPreview{rootDef: boDef}
+	svc := NewQueryService(generator, &resolver, nil)
+
+	qd := &boresolver.QueryDef{
+		Context: boresolver.QueryContext{
+			BOID:     "bo_orders",
+			TenantID: "tenant-alpha",
+		},
+		Query: boresolver.QueryRequest{
+			Measures: []boresolver.MeasureDef{
+				{TermNodeID: "total_amount", Alias: "Total Amount", Aggregation: "NONE"},
+			},
+			Limit: 10,
+		},
+	}
+	secCtx := &security.Context{TenantID: "tenant-alpha", DatasourceID: "ds-1"}
+	resp, err := svc.Preview(context.Background(), secCtx, qd)
+	if err != nil {
+		t.Fatalf("Aggregation NONE should not error via Preview, got: %v", err)
+	}
+	if len(resp.Columns) != 1 {
+		t.Fatalf("expected 1 column, got %d", len(resp.Columns))
+	}
+	col := resp.Columns[0]
+	if col.Aggregation != "" {
+		t.Errorf("expected empty aggregation for NONE, got %q", col.Aggregation)
+	}
+	// SQL should have no wrap, no GROUP BY
+	if strings.Contains(resp.SQL, "SUM(") || strings.Contains(resp.SQL, "AVG(") {
+		t.Errorf("Aggregation NONE should not wrap, got SQL: %s", resp.SQL)
+	}
+	if strings.Contains(resp.SQL, "GROUP BY") {
+		t.Errorf("Aggregation NONE should not emit GROUP BY, got SQL: %s", resp.SQL)
+	}
+	// Wire shape: no aggregation key
+	b, _ := json.Marshal(resp.Columns)
+	wire := string(b)
+	if strings.Contains(wire, `"aggregation":`) {
+		t.Errorf("expected no aggregation key on wire for NONE, got: %s", wire)
+	}
+}
+
+// --- Preview-level test: verifies service.go populates Aggregation ---
+
+type mockBOResolverForPreview struct {
+	rootDef *boresolver.BODefinition
+}
+
+func (m mockBOResolverForPreview) GetBODefinition(boID string) (*boresolver.BODefinition, error) {
+	return m.rootDef, nil
+}
+
+func (m mockBOResolverForPreview) GetBusinessObjectBinding(boID, bindingID string) (*boresolver.BOBinding, error) {
+	return &boresolver.BOBinding{DatasourceID: "ds-1"}, nil
+}
+
+func (m mockBOResolverForPreview) GetBOTerms(boID, bindingID string) ([]boresolver.SemanticTermView, error) {
+	return nil, nil
+}
+
+func (m mockBOResolverForPreview) BOBelongsToTenant(boID, tenantID string) (bool, error) {
+	return true, nil
+}
+
+func TestPreviewAggregatedMeasure_PopulatesAggregation(t *testing.T) {
+	boDef := &boresolver.BODefinition{
+		ID:           "bo_orders",
+		DrivingTable: "public.orders",
+		Fields: []boresolver.BOField{
+			{ID: "f1", Name: "total_amount", DisplayName: "Total Amount", PhysicalColumn: "total_amount"},
+		},
+	}
+	repo := mockBORepoForTest{rootDef: boDef}
+	generator, err := boresolver.NewBOSQLGenerator(repo, "postgres")
+	if err != nil {
+		t.Fatalf("NewBOSQLGenerator: %v", err)
+	}
+	resolver := mockBOResolverForPreview{rootDef: boDef}
+	svc := NewQueryService(generator, &resolver, nil)
+
+	qd := &boresolver.QueryDef{
+		Context: boresolver.QueryContext{
+			BOID:     "bo_orders",
+			TenantID: "tenant-alpha",
+		},
+		Query: boresolver.QueryRequest{
+			Measures: []boresolver.MeasureDef{
+				{TermNodeID: "total_amount", Alias: "Total Amount", Aggregation: "sum"},
+			},
+			Limit: 10,
+		},
+	}
+	secCtx := &security.Context{TenantID: "tenant-alpha", DatasourceID: "ds-1"}
+	resp, err := svc.Preview(context.Background(), secCtx, qd)
+	if err != nil {
+		t.Fatalf("Preview: %v", err)
+	}
+	if len(resp.Columns) != 1 {
+		t.Fatalf("expected 1 column, got %d", len(resp.Columns))
+	}
+	col := resp.Columns[0]
+	if col.Aggregation != "sum" {
+		t.Errorf("expected aggregation %q on wire, got %q", "sum", col.Aggregation)
+	}
+	// Marshal to JSON and verify wire shape
+	b, err := json.Marshal(resp.Columns)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	wire := string(b)
+	if !strings.Contains(wire, `"aggregation":"sum"`) {
+		t.Errorf("expected aggregation on wire JSON, got: %s", wire)
+	}
+	if !strings.Contains(wire, `"boId":"bo_orders"`) {
+		t.Errorf("expected boId on wire JSON, got: %s", wire)
 	}
 }

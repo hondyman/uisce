@@ -119,7 +119,7 @@ func TestParseExpression_FuncCallWithExpressionArg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sql, err := CompileToSQL(expr, resolveIdentity)
+	sql, err := CompileExpressionToSQL(expr, resolveIdentity)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +268,7 @@ func TestParseExpression_CompileToSQLRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := CompileToSQL(expr, resolveIdentity)
+	got, err := CompileExpressionToSQL(expr, resolveIdentity)
 	if err != nil {
 		t.Fatal(err)
 	}

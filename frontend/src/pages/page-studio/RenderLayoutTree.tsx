@@ -4,6 +4,10 @@ import { PanelNodeProps } from '../../types/pageStudio';
 import PageComponentRenderer from './PageComponentRenderer';
 import PanelRegion from './PanelRegion';
 import { usePresentationOverlay } from './PresentationRuntime';
+import { OverlayContainer, TabSetContainer } from './app/containers';
+import { useAppRuntime } from './app/AppRuntime';
+import { useCondition } from './app/conditions';
+import type { ConditionNode } from './app/appModel';
 
 const DEFAULT_PANEL_PROPS: PanelNodeProps = { side: 'right', collapsible: true, defaultOpen: true, widthPx: 320, label: 'Panel' };
 
@@ -23,6 +27,7 @@ interface RenderableComponent {
   type: string;
   props?: Record<string, unknown>;
   style?: Record<string, string>;
+  visibleWhen?: ConditionNode;
 }
 
 interface RenderLayoutTreeProps {
@@ -46,16 +51,33 @@ interface RenderLayoutTreeProps {
 const RenderLayoutTree: React.FC<RenderLayoutTreeProps> = ({ nodeId, nodes, components, dataSources, tenantId }) => {
   const overlay = usePresentationOverlay(nodeId);
   const node = nodes[nodeId];
+  // A Row/Column shows only while props.visibleWhen holds (a side panel while a step is selected);
+  // a hidden widget takes no room either - its sized wrapper goes too (a closed side panel).
+  const { scope, mode } = useAppRuntime();
+  const gate = (node ? node.props?.visibleWhen : components[nodeId]?.visibleWhen) as ConditionNode | undefined;
+  const shown = useCondition(gate, scope, false);
   if (!node) {
     const component = components[nodeId];
     if (!component) return null;
+    if (gate && !shown && mode !== 'design') return null;
     return (
-      <Box key={component.id} sx={{ flex: 1, minWidth: 0 }}>
+      <Box key={component.id} sx={{ flex: component.style?.flex ?? 1, minWidth: 0 }}>
         <PageComponentRenderer component={component as any} dataSources={dataSources as any} tenantId={tenantId} />
       </Box>
     );
   }
   if (overlay?.hidden) return null;
+  if (gate && !shown) return null;
+
+  const child = (childId: string) => (
+    <RenderLayoutTree key={childId} nodeId={childId} nodes={nodes} components={components} dataSources={dataSources} tenantId={tenantId} />
+  );
+  if (node.type === 'Drawer' || node.type === 'Dialog') {
+    return <OverlayContainer type={node.type} props={node.props}>{(node.children || []).map(child)}</OverlayContainer>;
+  }
+  if (node.type === 'TabSet') {
+    return <TabSetContainer props={node.props} childIds={node.children || []} renderChild={child} />;
+  }
 
   const body = (
     <Box
@@ -69,9 +91,7 @@ const RenderLayoutTree: React.FC<RenderLayoutTreeProps> = ({ nodeId, nodes, comp
         ...overlay?.style,
       }}
     >
-      {(node.children || []).map((childId) => (
-        <RenderLayoutTree key={childId} nodeId={childId} nodes={nodes} components={components} dataSources={dataSources} tenantId={tenantId} />
-      ))}
+      {(node.children || []).map(child)}
     </Box>
   );
 

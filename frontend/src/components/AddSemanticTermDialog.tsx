@@ -119,7 +119,6 @@ const AddSemanticTermDialog: React.FC<AddSemanticTermDialogProps> = ({
               onChange={(e) => setName(e.target.value)}
               fullWidth
               required
-              autoFocus
             />
             <TextField
               label="Description"

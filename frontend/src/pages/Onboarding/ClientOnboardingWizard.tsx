@@ -80,6 +80,87 @@ interface OnboardingData {
   };
 }
 
+type OnboardingDocument = OnboardingData['documents'][number];
+
+interface DocumentUploadProps {
+  documents: OnboardingDocument[];
+  onUpload: (file: File) => Promise<void>;
+}
+
+/**
+ * Step 3 of the onboarding wizard: the identity-document dropzone.
+ *
+ * This was a `renderDocumentUpload` helper inside the wizard, and it called
+ * useDropzone directly. The wizard dispatches steps through
+ * `renderStepContent(step)`, so the hook only ran while `step === 3`; moving
+ * between wizard steps changed the wizard's hook count and threw
+ * "Rendered fewer hooks than expected" on every Next/Back navigation that
+ * crossed this step.
+ *
+ * Giving the step its own component makes the wizard's hook count constant.
+ * Declared at module level so the component type is stable across renders.
+ */
+const DocumentUpload: React.FC<DocumentUploadProps> = ({ documents, onUpload }) => {
+  const { getRootProps, getInputProps } = useDropzone({
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg'],
+      'application/pdf': ['.pdf'],
+    },
+    maxSize: 10485760, // 10MB
+    onDrop: async (acceptedFiles: any) => {
+      for (const file of acceptedFiles) {
+        await onUpload(file);
+      }
+    },
+  });
+
+  return (
+    <Box>
+      <Typography variant="h6" gutterBottom>
+        Upload Identity Documents
+      </Typography>
+      <Typography variant="body2" color="text.secondary" gutterBottom>
+        We need to verify your identity per federal regulations (KYC/AML).
+      </Typography>
+
+      <Box
+        {...getRootProps()}
+        sx={{
+          border: '2px dashed #ccc',
+          borderRadius: 2,
+          p: 4,
+          textAlign: 'center',
+          cursor: 'pointer',
+          mt: 3,
+          mb: 3,
+          '&:hover': { borderColor: 'primary.main' },
+        }}
+      >
+        <input {...getInputProps()} />
+        <UploadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+        <Typography variant="h6">Drag & drop files here</Typography>
+        <Typography variant="body2" color="text.secondary">
+          or click to select files
+        </Typography>
+        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+          Accepted: Driver's License, Passport, Utility Bill (PDF, JPG, PNG, max 10MB)
+        </Typography>
+      </Box>
+
+      {documents.map((doc) => (
+        <Paper key={doc.documentId} sx={{ p: 2, mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box>
+            <Typography variant="body1">{doc.fileName}</Typography>
+            <Chip label={doc.documentType} size="small" sx={{ mr: 1 }} />
+            <Chip label={doc.status} color={doc.status === 'VERIFIED' ? 'success' : 'default'} size="small" />
+          </Box>
+          <CheckIcon color="success" />
+        </Paper>
+      ))}
+    </Box>
+  );
+};
+
 export const ClientOnboardingWizard: React.FC = () => {
   const { tenant, datasource } = useTenant();
   const [activeStep, setActiveStep] = useState(0);
@@ -599,66 +680,9 @@ export const ClientOnboardingWizard: React.FC = () => {
     </Box>
   );
 
-  const renderDocumentUpload = () => {
-    const { getRootProps, getInputProps } = useDropzone({
-      accept: {
-        'image/*': ['.png', '.jpg', '.jpeg'],
-        'application/pdf': ['.pdf'],
-      },
-      maxSize: 10485760, // 10MB
-      onDrop: async (acceptedFiles: any) => {
-        for (const file of acceptedFiles) {
-          await uploadDocument(file);
-        }
-      },
-    });
-
-    return (
-      <Box>
-        <Typography variant="h6" gutterBottom>
-          Upload Identity Documents
-        </Typography>
-        <Typography variant="body2" color="text.secondary" gutterBottom>
-          We need to verify your identity per federal regulations (KYC/AML).
-        </Typography>
-
-        <Box
-          {...getRootProps()}
-          sx={{
-            border: '2px dashed #ccc',
-            borderRadius: 2,
-            p: 4,
-            textAlign: 'center',
-            cursor: 'pointer',
-            mt: 3,
-            mb: 3,
-            '&:hover': { borderColor: 'primary.main' },
-          }}
-        >
-          <input {...getInputProps()} />
-          <UploadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-          <Typography variant="h6">Drag & drop files here</Typography>
-          <Typography variant="body2" color="text.secondary">
-            or click to select files
-          </Typography>
-          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-            Accepted: Driver's License, Passport, Utility Bill (PDF, JPG, PNG, max 10MB)
-          </Typography>
-        </Box>
-
-        {data.documents.map((doc) => (
-          <Paper key={doc.documentId} sx={{ p: 2, mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Box>
-              <Typography variant="body1">{doc.fileName}</Typography>
-              <Chip label={doc.documentType} size="small" sx={{ mr: 1 }} />
-              <Chip label={doc.status} color={doc.status === 'VERIFIED' ? 'success' : 'default'} size="small" />
-            </Box>
-            <CheckIcon color="success" />
-          </Paper>
-        ))}
-      </Box>
-    );
-  };
+  const renderDocumentUpload = () => (
+    <DocumentUpload documents={data.documents} onUpload={uploadDocument} />
+  );
 
   const uploadDocument = async (file: File) => {
     const formData = new FormData();

@@ -45,7 +45,7 @@ func TestHandleListRelatedRecords_ResolvesJoinAndFiltersByParentId(t *testing.T)
 	defer db.Close()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mock.MatchExpectationsInOrder(false)
-	handler := NewBOCRUDHandler(sqlxDB, nil)
+	handler := NewBOCRUDHandler(sqlxDB, nil, nil)
 	r := newRelationshipTestRouter(handler)
 
 	// resolveBusinessObjectID
@@ -107,38 +107,13 @@ func TestHandleCreateRelatedRecord_ForcesParentFKOverridingClientPayload(t *test
 	defer db.Close()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mock.MatchExpectationsInOrder(false)
-	handler := NewBOCRUDHandler(sqlxDB, nil)
+	enf := &txEnforcer{db: sqlxDB}
+	handler := NewBOCRUDHandler(sqlxDB, nil, enf)
 	r := newRelationshipTestRouter(handler)
 
-	mock.ExpectQuery("SELECT id::text FROM business_objects").
-		WithArgs(sqlmock.AnyArg(), "account").
-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("bo-account"))
-
-	mock.ExpectQuery("FROM business_object_relationships").
-		WithArgs(sqlmock.AnyArg(), "allocations", "bo-account").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "from_bo_id", "to_bo_id", "rel_key"}).
-			AddRow("rel-1", "bo-tradeorder", "bo-account", "allocations"))
-
-	mock.ExpectQuery("SELECT bo_key FROM business_objects").
-		WithArgs("bo-tradeorder", sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"bo_key"}).AddRow("trade_order"))
-
-	mock.ExpectQuery("SELECT COALESCE.*FROM public.business_objects").
-		WithArgs("trade_order", sqlmock.AnyArg()).
-		WillReturnError(sqlmock.ErrCancelled)
-	mock.ExpectQuery("SELECT COALESCE.*FROM public.catalog_node").
-		WithArgs("trade_order", sqlmock.AnyArg()).
-		WillReturnError(sqlmock.ErrCancelled)
-	mock.ExpectQuery("SELECT EXISTS.*information_schema.tables").
-		WithArgs("oms", "trade_order").
-		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
-
-	mock.ExpectQuery("SELECT rb.join_condition_sql").
-		WithArgs(sqlmock.AnyArg(), "rel-1", "bo-tradeorder").
-		WillReturnError(sqlmock.ErrCancelled)
-	mock.ExpectQuery("SELECT EXISTS.*information_schema.columns").
-		WithArgs("oms", "trade_order", "account_id").
-		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	expectCreateRelatedChain(mock)
+	mock.ExpectBegin()
+	mock.ExpectCommit()
 
 	// The client tries to set account_id to a different (unrelated) account — this must be
 	// overridden server-side to "acc-123" (the parent from the URL) regardless of payload content.
@@ -160,6 +135,8 @@ func TestHandleCreateRelatedRecord_ForcesParentFKOverridingClientPayload(t *test
 	var resp map[string]interface{}
 	assert.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, "acc-123", resp["account_id"])
+	// The child BO's rules judge the write, not the parent's.
+	assert.Equal(t, []string{"trade_order"}, enf.boKeys)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -169,7 +146,7 @@ func TestResolveRelationship_UnknownRelKey_Returns404(t *testing.T) {
 	defer db.Close()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mock.MatchExpectationsInOrder(false)
-	handler := NewBOCRUDHandler(sqlxDB, nil)
+	handler := NewBOCRUDHandler(sqlxDB, nil, nil)
 	r := newRelationshipTestRouter(handler)
 
 	mock.ExpectQuery("SELECT id::text FROM business_objects").

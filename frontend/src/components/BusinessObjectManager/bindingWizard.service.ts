@@ -299,11 +299,12 @@ export async function createBinding(
     bindingName?: string;
     baseSql?: string;
     temporalMode?: string;
-    isCore?: boolean;
     coreReferenceBindingId?: string;
     isDefault?: boolean;
   }
 ): Promise<any> {
+  // No isCore: the server decides it from the caller's tenant (core in the
+  // gold copy, custom elsewhere) - see CreateBusinessObjectBinding.
   return fetchAPI(`/business-objects/${boId}/bindings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -454,7 +455,6 @@ export async function saveBindingWithFields(
         ? `${binding.backendName} Binding`
         : `${bo.name} Binding`,
       temporalMode: 'NONE',
-      isCore: false,
     });
     const bindingId = bindingResult?.boBindingId || bindingResult?.bo_binding_id;
 
@@ -635,7 +635,9 @@ export function buildCreateBusinessObjectPayload(
     enable_history: bo.enableHistory,
     history_mode: bo.historyMode,
     driver_table_id: binding.drivingTableId,
-    driver_table_name: binding.drivingTableName,
+    // The qualified path (/schema/table): the semantic field map resolves a
+    // business object's columns under it, so a bare table name finds none.
+    driver_table_name: binding.drivingTableQualifiedPath || binding.drivingTableName,
     config: {
       is_active: publish,
       fields,

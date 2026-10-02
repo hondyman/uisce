@@ -8,11 +8,10 @@ import { useTenant } from '../../contexts/TenantContext';
 import ActionButton from '../ui/ActionButton';
 import { useNotification } from '../../hooks/useNotification';
 import { getTableIdFromVal } from '../../utils/tableHelpers';
-import { useExtensionsService } from '../../services/extensions';
+import { useRouterCapability } from '../RouteBlocker/RouterCapabilityContext';
 
-// Local typed fallbacks to avoid blanket `as any` casts in test/no-provider environments
+// Local typed fallback to avoid blanket `as any` casts in test/no-provider environments
 type TenantCtx = { tenant: unknown | null; product: unknown | null; datasource?: { id?: string } | null; base_model_key?: string | undefined };
-type ExtService = { validateExtension: (datasourceId: string, payload: unknown) => Promise<{ issues: Array<Record<string, unknown>> }> };
 
 interface CoreOption {
   name: string;
@@ -91,13 +90,15 @@ const EnhancedTileForm: FC<EnhancedTileFormProps> = ({
   readOnly = false
 }) => {
   const notification = useNotification();
-  // Guard context hooks for test environments without providers
-  const tenant: TenantCtx = (() => {
-    try { return useTenant(); } catch { return { tenant: null, product: null, datasource: null } as TenantCtx; }
-  })();
-  const { validateExtension } = (() => {
-    try { return useExtensionsService(); } catch { return { validateExtension: async () => ({ issues: [] }) } as ExtService; }
-  })();
+  // `useExtensionsService` reaches the router (useAuthFetch -> useNavigate/useLocation),
+  // so it used to be wrapped in try/catch with an inert fallback. A hook inside a try is
+  // a conditional hook call, so the hook count depended on whether a Router was mounted.
+  // RouterCapability carries the degradation instead: null validateExtension outside a
+  // Router, which is the same value the old catch returned.
+  const { validateExtension: validateExtensionCapability } = useRouterCapability();
+  const validateExtension = validateExtensionCapability
+    ?? (async (_datasourceId: string, _payload: Record<string, any>) => ({ issues: [] }));
+  const tenant: TenantCtx = useTenant();
   const [selectedCore, setSelectedCore] = useState<string>('');
   // formData strongly-typed as TileElement to avoid blanket `any`
   const [formData, setFormData] = useState<TileElement>(element ?? ({} as TileElement));

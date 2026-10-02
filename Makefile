@@ -101,5 +101,11 @@ check-migrations:
 check-migrations-git:
 	@python3 backend/scripts/check_migration_parity.py --git-base origin/main
 
+.PHONY: test-integration
+test-integration:
+	@MASTERING_ALPHA_DSN="$${MASTERING_ALPHA_DSN:-host=100.84.50.65 port=5432 user=postgres password=postgres dbname=alpha sslmode=verify-full sslrootcert=$(HOME)/.uisce/certs/ca.crt sslcert=$(HOME)/.uisce/certs/postgres-client.crt sslkey=$(HOME)/.uisce/certs/postgres-client.key}" \
+	 MASTERING_DATA_DSN="$${MASTERING_DATA_DSN:-host=100.84.50.65 port=5432 user=postgres password=postgres dbname=crims sslmode=verify-full sslrootcert=$(HOME)/.uisce/certs/ca.crt sslcert=$(HOME)/.uisce/certs/postgres-client.crt sslkey=$(HOME)/.uisce/certs/postgres-client.key}" \
+	 go test -v -tags integration ./backend/internal/mastering/...
+
 shell:
 	@docker compose -f $(COMPOSE_FILE) run --rm runner "sh"

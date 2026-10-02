@@ -166,7 +166,7 @@ const SimpleColumnAutocomplete: React.FC<SimpleColumnAutocompleteProps> = ({
         <TextField
           {...params}
           size="small"
-          autoFocus={autoFocus}
+          
           placeholder={placeholder}
           inputProps={{ ...params.inputProps, autoComplete: 'off' }}
           InputProps={{

@@ -136,4 +136,62 @@ describe('SavedQueryWidget - rollup-safety gate composition', () => {
       expect(screen.getByText('Needs review')).toBeInTheDocument();
     });
   });
+
+  // Pins the post-fix single-BO wire shape end-to-end: with boId now
+  // populated on the saved-query preview response (backend/internal/querybuilder/service.go),
+  // the gate must still
+  // render "Needs review" because Aggregation stays empty under
+  // omitempty (row-grain output). This is the wire-side companion to
+  // TestSingleBOPreviewColumns_PopulatesBOID_LeavesAggregationEmpty
+  // (which pins JSON shape); this one pins the consumer-side
+  // outcome so a future "widening" of isAdditiveSafe — or a future
+  // refactor that special-cases missing-Aggregation when boId is
+  // set — regresses here with the failure text rather than silently.
+  it('renders "Needs review" for a single-BO column with boId populated but aggregation absent', async () => {
+    const result: SavedQueryRunResult = {
+      columns: [
+        { name: 'Order ID', type: 'number', boId: 'bo-orders' },
+        { name: 'Total Amount', type: 'number', boId: 'bo-orders' },
+      ],
+      rows: [{ 'Order ID': 1, 'Total Amount': 100 }, { 'Order ID': 2, 'Total Amount': 200 }],
+      rowCount: 2,
+      chartType: 'bar',
+      name: 'populated-boId-single-bo',
+      hasRelatedBOs: false,
+    };
+    mockRunSavedQuery.mockResolvedValueOnce(result);
+
+    render(<SavedQueryWidget savedQueryId="q1" widgetType="gauge" />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Needs review')).toBeInTheDocument();
+    });
+  });
+
+  // β gate-open proof: aggregation:"sum" on a single-BO column (hasRelatedBOs:false)
+  // passes both isSafeToRollUpAcrossRows and isAdditiveSafe, so the gauge renders
+  // the summed value instead of "Needs review". This is a gate-predicate proof with
+  // a mock shape; the actual end-to-end claim (backend emits aggregation:"sum" →
+  // widget renders) is proven by the combination of querybuilder wire tests
+  // (TestSingleBOAggregatedMeasure_WireShape) + this test.
+  it('renders the sum for an aggregated single-BO column with hasRelatedBOs:false and aggregation sum', async () => {
+    const result: SavedQueryRunResult = {
+      columns: [
+        { name: 'Total Amount', type: 'number', boId: 'bo-orders', aggregation: 'sum' },
+      ],
+      rows: [{ 'Total Amount': 300 }],
+      rowCount: 1,
+      chartType: 'bar', // result chart type; the gauge branch is chosen by the widgetType prop
+      name: 'aggregated-single-bo',
+      hasRelatedBOs: false,
+    };
+    mockRunSavedQuery.mockResolvedValueOnce(result);
+
+    render(<SavedQueryWidget savedQueryId="q1" widgetType="gauge" />);
+
+    await waitFor(() => {
+      expect(screen.getByText('300')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Needs review')).not.toBeInTheDocument();
+  });
 });

@@ -156,7 +156,6 @@ const FunctionPickerMenu: React.FC<Props> = ({ anchorEl, onClose, fieldName, onS
       <Box sx={{ p: 1.5, borderBottom: '1px solid #1E293B', flexShrink: 0 }}>
         <TextField
           size="small"
-          autoFocus
           placeholder="Search SQL functions, aggregates, JSON, windows…"
           value={search}
           onChange={e => setSearch(e.target.value)}

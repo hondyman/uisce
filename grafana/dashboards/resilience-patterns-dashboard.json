@@ -106,7 +106,7 @@
       },
       "targets": [
         {
-          "expr": "circuit_breaker_state{name=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"}",
+          "expr": "circuit_breaker_state{name=~\"notifications-service|search-service|policy-service\"}",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
@@ -190,7 +190,7 @@
       },
       "targets": [
         {
-          "expr": "100 * circuit_breaker_failure_rate{name=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"}",
+          "expr": "100 * circuit_breaker_failure_rate{name=~\"notifications-service|search-service|policy-service\"}",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
@@ -274,7 +274,7 @@
       },
       "targets": [
         {
-          "expr": "100 * rate_limit_deny_rate{name=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"}",
+          "expr": "100 * rate_limit_deny_rate{name=~\"notifications-service|search-service|policy-service\"}",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
@@ -349,12 +349,12 @@
       },
       "targets": [
         {
-          "expr": "bulkhead_current_concurrent{name=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"}",
+          "expr": "bulkhead_current_concurrent{name=~\"notifications-service|search-service|policy-service\"}",
           "legendFormat": "{{name}} - current",
           "refId": "A"
         },
         {
-          "expr": "bulkhead_peak_concurrent{name=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"}",
+          "expr": "bulkhead_peak_concurrent{name=~\"notifications-service|search-service|policy-service\"}",
           "legendFormat": "{{name}} - peak",
           "refId": "B"
         }
@@ -438,7 +438,7 @@
       },
       "targets": [
         {
-          "expr": "100 * bulkhead_reject_rate{name=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"}",
+          "expr": "100 * bulkhead_reject_rate{name=~\"notifications-service|search-service|policy-service\"}",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
@@ -522,7 +522,7 @@
       },
       "targets": [
         {
-          "expr": "100 * retry_total_attempts{service=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"} / (retry_successful{service=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"} + retry_exhausted{service=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"} + 1)",
+          "expr": "100 * retry_total_attempts{service=~\"notifications-service|search-service|policy-service\"} / (retry_successful{service=~\"notifications-service|search-service|policy-service\"} + retry_exhausted{service=~\"notifications-service|search-service|policy-service\"} + 1)",
           "legendFormat": "{{service}}",
           "refId": "A"
         }
@@ -606,7 +606,7 @@
       },
       "targets": [
         {
-          "expr": "100 * timeout_timed_out_count{service=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"} / (timeout_total_operations{service=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"} + 1)",
+          "expr": "100 * timeout_timed_out_count{service=~\"notifications-service|search-service|policy-service\"} / (timeout_total_operations{service=~\"notifications-service|search-service|policy-service\"} + 1)",
           "legendFormat": "{{service}}",
           "refId": "A"
         }
@@ -682,186 +682,18 @@
       },
       "targets": [
         {
-          "expr": "1000 * timeout_avg_operation_seconds{service=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"}",
+          "expr": "1000 * timeout_avg_operation_seconds{service=~\"notifications-service|search-service|policy-service\"}",
           "legendFormat": "{{service}} - avg",
           "refId": "A"
         },
         {
-          "expr": "1000 * timeout_max_operation_seconds{service=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"}",
+          "expr": "1000 * timeout_max_operation_seconds{service=~\"notifications-service|search-service|policy-service\"}",
           "legendFormat": "{{service}} - max",
           "refId": "B"
         }
       ],
       "title": "Operation Latency (Average & Max)",
       "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 0,
-        "y": 24
-      },
-      "id": 10,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "8.0.0",
-      "targets": [
-        {
-          "expr": "circuit_breaker_total_calls{name=\"validation-service\"}",
-          "legendFormat": "Total Calls",
-          "refId": "A"
-        }
-      ],
-      "title": "Validation CB - Total Calls",
-      "type": "stat"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 25
-              },
-              {
-                "color": "red",
-                "value": 50
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 4,
-        "y": 24
-      },
-      "id": 11,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "8.0.0",
-      "targets": [
-        {
-          "expr": "100 * circuit_breaker_failure_rate{name=\"validation-service\"}",
-          "legendFormat": "Failure Rate",
-          "refId": "A"
-        }
-      ],
-      "title": "Validation CB - Failure Rate",
-      "type": "stat"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 8,
-        "y": 24
-      },
-      "id": 12,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "8.0.0",
-      "targets": [
-        {
-          "expr": "circuit_breaker_rejected_calls{name=\"validation-service\"}",
-          "legendFormat": "Rejected",
-          "refId": "A"
-        }
-      ],
-      "title": "Validation CB - Rejected Calls",
-      "type": "stat"
     }
   ],
   "refresh": "30s",

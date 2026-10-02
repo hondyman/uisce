@@ -28,7 +28,6 @@ BACKEND_DIR="$SCRIPT_DIR/backend"
 FRONTEND_DIR="$SCRIPT_DIR/frontend"
 LOG_DIR="$SCRIPT_DIR/logs"
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
-RULE_ENGINE_PORT=8084
 
 # Create logs directory
 mkdir -p "$LOG_DIR"
@@ -71,7 +70,6 @@ cleanup() {
     jobs -p | xargs -r kill 2>/dev/null || true
     # Kill any recorded PIDs for started services
     [ -f "$BACKEND_DIR/.backend.pid" ] && xargs -r kill 2>/dev/null < "$BACKEND_DIR/.backend.pid" || true
-    [ -f "$BACKEND_DIR/.rule-engine.pid" ] && xargs -r kill 2>/dev/null < "$BACKEND_DIR/.rule-engine.pid" || true
     [ -f "$FRONTEND_DIR/.frontend.pid" ] && xargs -r kill 2>/dev/null < "$FRONTEND_DIR/.frontend.pid" || true
     print_info "System shutdown complete"
 }
@@ -158,14 +156,6 @@ if is_port_in_use 8080; then
 fi
 print_success "Port 8080 (Backend) is available"
 
-# Check rule-engine port (used by lightweight rule service)
-if is_port_in_use $RULE_ENGINE_PORT; then
-    print_info "Port $RULE_ENGINE_PORT (rule-engine-service) is in use. Killing existing process..."
-    lsof -ti:$RULE_ENGINE_PORT | xargs kill -9 2>/dev/null || true
-    sleep 2
-fi
-print_success "Port $RULE_ENGINE_PORT (rule-engine-service) is available"
-
 # Check port 5173 (Frontend)
 if is_port_in_use 5173; then
     print_info "Port 5173 (Frontend) is in use. Killing existing process..."
@@ -224,19 +214,6 @@ if [ ! -f "server" ]; then
     exit 1
 fi
 print_success "Server executable ready"
-
-###############################################################################
-#                         BUILD RULE-ENGINE SERVICE
-###############################################################################
-
-print_header "Building Rule Engine Service"
-
-if go build -o rule-engine-service cmd/rule-engine-service/main.go 2>&1 | tee "$LOG_DIR/rule_engine_build_${TIMESTAMP}.log"; then
-    print_success "rule-engine-service built successfully"
-else
-    print_error "rule-engine-service build failed. Check logs: $LOG_DIR/rule_engine_build_${TIMESTAMP}.log"
-    exit 1
-fi
 
 
 ###############################################################################
@@ -376,42 +353,6 @@ print_header "Starting Rule-Engine Service"
 
 cd "$BACKEND_DIR"
 
-# Ensure any stale rule-engine process is cleaned up
-if [ -f ".rule-engine.pid" ]; then
-    OLD_PID=$(cat ".rule-engine.pid" 2>/dev/null || echo "")
-    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" >/dev/null 2>&1; then
-        print_info "Killing stale rule-engine process (PID: $OLD_PID)"
-        kill -9 "$OLD_PID" >/dev/null 2>&1 || true
-        sleep 1
-    fi
-    rm -f ".rule-engine.pid" >/dev/null 2>&1 || true
-fi
-
-# Start rule-engine-service on reserved port
-print_info "Starting rule-engine-service on port $RULE_ENGINE_PORT..."
-PORT=$RULE_ENGINE_PORT ./rule-engine-service > "$LOG_DIR/rule_engine_${TIMESTAMP}.log" 2>&1 &
-RULE_ENGINE_PID=$!
-echo $RULE_ENGINE_PID > ".rule-engine.pid"
-
-# Wait for rule-engine to be healthy
-HEALTH_CHECK_ATTEMPTS=0
-MAX_HEALTH_ATTEMPTS=15
-while [ $HEALTH_CHECK_ATTEMPTS -lt $MAX_HEALTH_ATTEMPTS ]; do
-    if curl -s "http://localhost:$RULE_ENGINE_PORT/health" > /dev/null 2>&1; then
-        print_success "rule-engine-service started (PID: $RULE_ENGINE_PID)"
-        print_info "rule-engine URL: http://localhost:$RULE_ENGINE_PORT"
-        break
-    fi
-    HEALTH_CHECK_ATTEMPTS=$((HEALTH_CHECK_ATTEMPTS + 1))
-    sleep 1
-done
-
-if [ $HEALTH_CHECK_ATTEMPTS -eq $MAX_HEALTH_ATTEMPTS ]; then
-    print_error "rule-engine-service failed to become responsive. Check logs: $LOG_DIR/rule_engine_${TIMESTAMP}.log"
-    tail -n 40 "$LOG_DIR/rule_engine_${TIMESTAMP}.log" || true
-    # Not fatal — continue, but warn
-    print_info "Continuing startup despite rule-engine health check failure"
-fi
 
 
 ###############################################################################

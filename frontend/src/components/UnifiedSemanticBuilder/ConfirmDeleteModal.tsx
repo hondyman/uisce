@@ -71,7 +71,6 @@ const ConfirmDeleteModal: FC<Props> = ({ open, title = 'Confirm delete', message
           <button 
             className="btn-confirm" 
             onClick={onConfirm}
-            autoFocus
           >
             <TablerIcons.IconTrash size={16} style={{ marginRight: '6px' }} />
             Delete

@@ -45,17 +45,14 @@ func mapQueryDefToSemanticRequest(
 		if err != nil {
 			return nil, err
 		}
-		// The current generator does not have a first-class aggregation concept in
-		// SemanticField. We encode the aggregation into the alias as a hint and rely
-		// on the generator selecting the column. When the generator gains aggregation
-		// support, this mapping should be updated.
-		label := measure.Alias
-		if measure.Aggregation != "" && strings.ToUpper(measure.Aggregation) != "NONE" {
-			label = fmt.Sprintf("%s(%s)", strings.ToUpper(measure.Aggregation), label)
+		agg := measure.Aggregation
+		if strings.ToUpper(agg) == "NONE" {
+			agg = ""
 		}
 		req.Select = append(req.Select, boresolver.SemanticField{
-			Term:  field.Name,
-			Label: label,
+			Term:        field.Name,
+			Label:       measure.Alias,
+			Aggregation: agg,
 		})
 	}
 

@@ -1,7 +1,6 @@
 package security
 
 import (
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,8 +9,8 @@ import (
 
 func TestResolveTenantForRequest(t *testing.T) {
 	const (
-		tenantA = "11111111-1111-1111-1111-111111111111"
-		tenantB = "22222222-2222-2222-2222-222222222222"
+		tenantA     = "11111111-1111-1111-1111-111111111111"
+		tenantB     = "22222222-2222-2222-2222-222222222222"
 		adminTenant = "33333333-3333-3333-3333-333333333333"
 	)
 
@@ -78,10 +77,10 @@ func TestResolveTenantForRequest(t *testing.T) {
 		{
 			name: "admin JWT + header matches another tenant — admin override honored",
 			auth: AuthInfo{
-				UserID:         "admin-1",
-				TenantIDs:      []string{adminTenant},
-				Roles:          []string{"global_admin"},
-				IsGlobalAdmin:  true,
+				UserID:        "admin-1",
+				TenantIDs:     []string{adminTenant},
+				Roles:         []string{"global_admin"},
+				IsGlobalAdmin: true,
 			},
 			header:     tenantA,
 			wantTenant: tenantA,
@@ -90,10 +89,10 @@ func TestResolveTenantForRequest(t *testing.T) {
 		{
 			name: "admin JWT — no header — returns admin's own tenant",
 			auth: AuthInfo{
-				UserID:         "admin-1",
-				TenantIDs:      []string{adminTenant},
-				Roles:          []string{"global_admin"},
-				IsGlobalAdmin:  true,
+				UserID:        "admin-1",
+				TenantIDs:     []string{adminTenant},
+				Roles:         []string{"global_admin"},
+				IsGlobalAdmin: true,
 			},
 			header:     "",
 			wantTenant: adminTenant,
@@ -111,7 +110,7 @@ func TestResolveTenantForRequest(t *testing.T) {
 			errContains: "not authorized",
 		},
 		{
-			name: "no auth info — returns error",
+			name:        "no auth info — returns error",
 			auth:        AuthInfo{},
 			header:      "",
 			wantErr:     true,
@@ -167,90 +166,4 @@ func TestResolveTenantForRequest(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestResolveTenantForRequestWarn_SpoofDegradedToNoOp(t *testing.T) {
-	const (
-		tenantA = "11111111-1111-1111-1111-111111111111"
-		tenantB = "22222222-2222-2222-2222-222222222222"
-	)
-
-	r := httptest.NewRequest("GET", "/", nil)
-	r.Header.Set("X-Tenant-ID", tenantB) // spoof attempt
-	ctx := WithAuthInfo(r.Context(), AuthInfo{
-		UserID:    "user-1",
-		TenantIDs: []string{tenantA},
-		Roles:     []string{"user"},
-	})
-	r = r.WithContext(ctx)
-
-	// Capture log output
-	var logLines []string
-	logger := log.Default()
-	oldOut := logger.Writer()
-	logger.SetOutput(&logWriter{lines: &logLines})
-
-	got, err := ResolveTenantForRequestWarn(r)
-	logger.SetOutput(oldOut)
-
-	if err != nil {
-		t.Errorf("ResolveTenantForRequestWarn(): unexpected error: %v", err)
-		return
-	}
-	// Spoof should be silently degraded to JWT tenant
-	if got != tenantA {
-		t.Errorf("ResolveTenantForRequestWarn(): got %q, want %q (JWT tenant)", got, tenantA)
-	}
-	// Should have logged the spoof attempt
-	foundLog := false
-	for _, l := range logLines {
-		if strings.Contains(l, "tenant-spoof-blocked") || strings.Contains(l, tenantB) {
-			foundLog = true
-			break
-		}
-	}
-	if !foundLog {
-		t.Logf("log lines: %v", logLines)
-		// Not a hard failure — log presence is best-effort
-	}
-}
-
-func TestResolveTenantForRequestWarn_NoSpoof(t *testing.T) {
-	const tenantA = "11111111-1111-1111-1111-111111111111"
-
-	r := httptest.NewRequest("GET", "/", nil)
-	r.Header.Set("X-Tenant-ID", tenantA) // legitimate use of header
-	ctx := WithAuthInfo(r.Context(), AuthInfo{
-		UserID:    "user-1",
-		TenantIDs: []string{tenantA},
-		Roles:     []string{"user"},
-	})
-	r = r.WithContext(ctx)
-
-	got, err := ResolveTenantForRequestWarn(r)
-	if err != nil {
-		t.Errorf("ResolveTenantForRequestWarn(): unexpected error: %v", err)
-		return
-	}
-	if got != tenantA {
-		t.Errorf("ResolveTenantForRequestWarn(): got %q, want %q", got, tenantA)
-	}
-}
-
-func TestResolveTenantForRequestWarn_NoAuth(t *testing.T) {
-	r := httptest.NewRequest("GET", "/", nil)
-	// No auth context
-	_, err := ResolveTenantForRequestWarn(r)
-	if err == nil {
-		t.Error("ResolveTenantForRequestWarn(): expected error for missing auth context, got nil")
-	}
-}
-
-type logWriter struct {
-	lines *[]string
-}
-
-func (lw *logWriter) Write(p []byte) (int, error) {
-	*lw.lines = append(*lw.lines, string(p))
-	return len(p), nil
 }

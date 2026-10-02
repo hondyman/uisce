@@ -86,7 +86,7 @@
       },
       "targets": [
         {
-          "expr": "slo_target_percentage{service=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"}",
+          "expr": "slo_target_percentage{service=~\"notifications-service|search-service|policy-service\"}",
           "legendFormat": "{{service}} - {{slo_name}}",
           "refId": "A"
         }
@@ -170,7 +170,7 @@
       },
       "targets": [
         {
-          "expr": "sli_current_percentage{service=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"}",
+          "expr": "sli_current_percentage{service=~\"notifications-service|search-service|policy-service\"}",
           "legendFormat": "{{service}} - {{slo_name}}",
           "refId": "A"
         }
@@ -254,7 +254,7 @@
       },
       "targets": [
         {
-          "expr": "error_budget_remaining_minutes{service=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"}",
+          "expr": "error_budget_remaining_minutes{service=~\"notifications-service|search-service|policy-service\"}",
           "legendFormat": "{{service}} - {{slo_name}}",
           "refId": "A"
         }
@@ -338,7 +338,7 @@
       },
       "targets": [
         {
-          "expr": "error_budget_percentage{service=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"}",
+          "expr": "error_budget_percentage{service=~\"notifications-service|search-service|policy-service\"}",
           "legendFormat": "{{service}} - {{slo_name}}",
           "refId": "A"
         }
@@ -434,121 +434,13 @@
       },
       "targets": [
         {
-          "expr": "error_budget_status{service=~\"validation-service|rule-engine|notifications-service|search-service|policy-service\"}",
+          "expr": "error_budget_status{service=~\"notifications-service|search-service|policy-service\"}",
           "legendFormat": "{{service}} - {{slo_name}}",
           "refId": "A"
         }
       ],
       "title": "SLO Compliance Alert Status",
       "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 0,
-        "y": 24
-      },
-      "id": 7,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "8.0.0",
-      "targets": [
-        {
-          "expr": "sli_current_percentage{service=\"validation-service\",slo_name=\"Availability\"}",
-          "legendFormat": "SLI",
-          "refId": "A"
-        }
-      ],
-      "title": "Validation Service SLI",
-      "type": "stat"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 4,
-        "y": 24
-      },
-      "id": 8,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "8.0.0",
-      "targets": [
-        {
-          "expr": "sli_current_percentage{service=\"rule-engine\",slo_name=\"Availability\"}",
-          "legendFormat": "SLI",
-          "refId": "A"
-        }
-      ],
-      "title": "Rule Engine Service SLI",
-      "type": "stat"
     },
     {
       "datasource": "Prometheus",

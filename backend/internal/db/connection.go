@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/dscreds"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/models"
 	_ "github.com/jackc/pgx/v5/stdlib" // PostgreSQL driver
@@ -43,16 +45,19 @@ type DBStatus struct {
 	Duration  string `json:"duration"`
 }
 
-// GetDatasourceConfigByID retrieves the JSON config and type for a specific datasource.
+// GetDatasourceConfigByID retrieves the JSON config and type for a specific
+// datasource, with credentials resolved from the secrets store.
 func GetDatasourceConfigByID(db *sqlx.DB, id string) (DBConfig, string, error) {
 	var configJSON []byte
 	var datasourceType string
+	var tenantID sql.NullString
 	var cfg DBConfig
 
 	query := `
         SELECT
             tpd.config,
-            ad.datasource_code
+            ad.datasource_code,
+            tpd.tenant_id::text
         FROM
             public.tenant_product_datasource tpd
         JOIN
@@ -60,7 +65,7 @@ func GetDatasourceConfigByID(db *sqlx.DB, id string) (DBConfig, string, error) {
         WHERE
             tpd.id = $1`
 
-	err := db.QueryRowx(query, id).Scan(&configJSON, &datasourceType)
+	err := db.QueryRowx(query, id).Scan(&configJSON, &datasourceType, &tenantID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return cfg, "", fmt.Errorf("no datasource found with id: %s", id)
@@ -68,12 +73,16 @@ func GetDatasourceConfigByID(db *sqlx.DB, id string) (DBConfig, string, error) {
 		return cfg, "", fmt.Errorf("error querying for datasource config: %w", err)
 	}
 
-	logging.GetLogger().Sugar().Debugf("Raw config JSON from database: %s", string(configJSON))
+	// Never log configJSON or cfg: they carry credentials.
+	configJSON, err = dscreds.Default().Hydrate(context.Background(), dscreds.KindDatasource, tenantID.String, id, configJSON)
+	if err != nil {
+		return cfg, "", err
+	}
 	if err := json.Unmarshal(configJSON, &cfg); err != nil {
 		return cfg, "", fmt.Errorf("error unmarshalling datasource config json: %w", err)
 	}
 
-	logging.GetLogger().Sugar().Debugf("datasourceType from DB: %s, config: %+v", datasourceType, cfg)
+	logging.GetLogger().Sugar().Debugf("datasourceType from DB: %s, host: %s", datasourceType, cfg.Host)
 	return cfg, datasourceType, nil
 }
 

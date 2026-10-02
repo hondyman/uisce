@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -155,6 +157,7 @@ type derivedTermNames struct {
 	SemanticName    string
 	BusinessName    string
 	BaseGenericTerm string
+	ContextSensitive bool   // true iff any derivation rule consulted table/schema context
 	source          string // one of: "pascal", "abbrev_map", "addr_line_context", "bare_generic"
 }
 
@@ -167,6 +170,41 @@ func (d derivedTermNames) GetSource() string {
 type CandidateTerm struct {
 	Name   string
 	Source string
+}
+
+// computeGroupKeyForItem returns the grouping key for pre-grouped dispatch.
+// The key is sha256(tenantID || semanticName || contextPart) where contextPart
+// is tableSchemaContext only when ContextSensitive=true. Items with the same
+// key share identical LLM inputs and can safely share one LLM call.
+//
+// Conservative default: when in doubt whether a rule consumed context,
+// ContextSensitive=true → contextPart included → separate groups. A smaller
+// dedup win is acceptable cost; a wrong shared suggestion is a bug.
+func computeGroupKeyForItem(tenantID, rawName, tableSchemaContext string, abbrMap map[string]string) string {
+	tokens := tokenizeColumnName(rawName)
+	if len(tokens) == 0 {
+		return ""
+	}
+
+	// Resolve abbreviations using the pre-loaded map (same logic as deriveTermNames)
+	resolved := make([]string, len(tokens))
+	for i, tok := range tokens {
+		if full, ok := abbrMap[strings.ToUpper(tok)]; ok {
+			resolved[i] = full
+		} else {
+			resolved[i] = tok
+		}
+	}
+
+	derived := deriveTermNamesDeterministic(resolved, rawName, tableSchemaContext)
+
+	contextPart := ""
+	if derived.ContextSensitive {
+		contextPart = tableSchemaContext
+	}
+
+	h := sha256.Sum256([]byte(tenantID + derived.SemanticName + contextPart))
+	return fmt.Sprintf("%x", h)
 }
 
 // deriveTermNamesCandidates returns a ranked list of candidate semantic term names,
@@ -247,10 +285,12 @@ func deriveTermNamesDeterministic(resolvedTokens []string, rawName string, table
 	semanticName := pascalCase(resolvedTokens)
 	businessName := titleCase(resolvedTokens)
 	var baseGenericTerm string
+	contextSensitive := false
 
 	tableName := extractTableNameFromContext(tableSchemaContext)
 
 	if addrMatch := addrLineRe.FindStringSubmatch(strings.ToLower(rawName)); addrMatch != nil && tableName != "" {
+		contextSensitive = true // address-line rule consults table name
 		lineNum := addrMatch[1]
 		tableTokens := tokenizeColumnName(tableName)
 		var entityParts []string
@@ -269,6 +309,7 @@ func deriveTermNamesDeterministic(resolvedTokens []string, rawName string, table
 		baseGenericTerm = "Address"
 	} else if len(resolvedTokens) == 1 && strings.EqualFold(resolvedTokens[0], rawName) && isGenericWord(resolvedTokens[0]) && tableSchemaContext != "" {
 		if tableName != "" && !strings.EqualFold(tableName, rawName) {
+			contextSensitive = true // bare-generic rule consults table name
 			baseGenericTerm = strings.Title(strings.ToLower(resolvedTokens[0]))
 		}
 	}
@@ -281,10 +322,11 @@ func deriveTermNamesDeterministic(resolvedTokens []string, rawName string, table
 	}
 
 	return derivedTermNames{
-		SemanticName:    semanticName,
-		BusinessName:    businessName,
-		BaseGenericTerm: baseGenericTerm,
-		source:          source,
+		SemanticName:     semanticName,
+		BusinessName:     businessName,
+		BaseGenericTerm:  baseGenericTerm,
+		ContextSensitive: contextSensitive,
+		source:           source,
 	}
 }
 

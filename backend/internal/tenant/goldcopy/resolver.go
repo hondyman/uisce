@@ -38,6 +38,9 @@ type Resolver struct {
 }
 
 func NewResolver(db *sqlx.DB, redisClient RedisClient, log *slog.Logger) *Resolver {
+	if log == nil {
+		log = slog.Default()
+	}
 	return &Resolver{
 		db:    db,
 		redis: redisClient,

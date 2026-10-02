@@ -3,6 +3,7 @@ package bp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -23,8 +24,15 @@ type TriggerEngine struct {
 	workflowInitiator WorkflowInitiator
 	tenantID          string
 	stopChan          chan bool
+	stopOnce          sync.Once
 	wg                sync.WaitGroup
 	logger            *log.Logger
+
+	// listener is created in Start so Stop (and context cancellation) can
+	// Close it: pq.Listener.Listen blocks until a connection exists and only
+	// Close unblocks it.
+	listenerMu sync.Mutex
+	listener   *pq.Listener
 }
 
 // WorkflowInitiator interface for starting Temporal workflows
@@ -60,31 +68,18 @@ func NewTriggerEngine(db *sqlx.DB, initiator WorkflowInitiator, tenantID string,
 	}
 }
 
-// Start begins listening for PostgreSQL notifications
-func (te *TriggerEngine) Start(ctx context.Context) error {
+// Start begins listening for PostgreSQL notifications on the bp_trigger_events
+// channel. pgURL is the connection string for the dedicated LISTEN connection
+// (a Listener cannot reuse the pooled *sqlx.DB); the caller supplies it from
+// configuration rather than it being baked in here.
+func (te *TriggerEngine) Start(ctx context.Context, pgURL string) error {
+	if pgURL == "" {
+		return errors.New("trigger engine: pgURL is required")
+	}
 	te.logger.Println("🚀 TriggerEngine starting, listening for bp_trigger_events...")
 
-	te.wg.Add(1)
-	go te.listenForNotifications(ctx)
-
-	return nil
-}
-
-// Stop stops the trigger engine
-func (te *TriggerEngine) Stop() {
-	te.logger.Println("⏹️  TriggerEngine stopping...")
-	close(te.stopChan)
-	te.wg.Wait()
-	te.logger.Println("✅ TriggerEngine stopped")
-}
-
-// listenForNotifications listens for PostgreSQL NOTIFY events
-func (te *TriggerEngine) listenForNotifications(ctx context.Context) {
-	defer te.wg.Done()
-
-	// Create listener
 	listener := pq.NewListener(
-		"postgres://app_user:password@localhost:5432/alpha?sslmode=disable",
+		pgURL,
 		10*time.Second,
 		time.Minute,
 		func(ev pq.ListenerEventType, err error) {
@@ -93,11 +88,45 @@ func (te *TriggerEngine) listenForNotifications(ctx context.Context) {
 			}
 		},
 	)
+	te.listenerMu.Lock()
+	te.listener = listener
+	te.listenerMu.Unlock()
+
+	// A cancelled context must unblock Listen too, not just Stop.
+	context.AfterFunc(ctx, func() { _ = listener.Close() })
+
+	te.wg.Add(1)
+	go te.listenForNotifications(ctx, listener)
+
+	return nil
+}
+
+// Stop stops the trigger engine. It is safe to call more than once.
+func (te *TriggerEngine) Stop() {
+	te.logger.Println("⏹️  TriggerEngine stopping...")
+	te.stopOnce.Do(func() { close(te.stopChan) })
+
+	// Closing the listener unblocks a Listen that is still waiting for a
+	// connection; without it wg.Wait below never returns when the database is
+	// unreachable.
+	te.listenerMu.Lock()
+	l := te.listener
+	te.listenerMu.Unlock()
+	if l != nil {
+		_ = l.Close()
+	}
+
+	te.wg.Wait()
+	te.logger.Println("✅ TriggerEngine stopped")
+}
+
+// listenForNotifications listens for PostgreSQL NOTIFY events
+func (te *TriggerEngine) listenForNotifications(ctx context.Context, listener *pq.Listener) {
+	defer te.wg.Done()
 	defer listener.Close()
 
-	// Listen for bp_trigger_events channel
-	err := listener.Listen("bp_trigger_events")
-	if err != nil {
+	// Blocks until connected; returns net.ErrClosed once Stop or ctx closes it.
+	if err := listener.Listen("bp_trigger_events"); err != nil {
 		te.logger.Printf("❌ Failed to listen: %v", err)
 		return
 	}

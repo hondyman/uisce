@@ -148,6 +148,44 @@ func init() {
 		},
 		SQLEmit: map[Dialect]SQLEmitter{DialectStarRocks: math1ArgSQL("SQRT")},
 	})
+
+	reg(&FunctionSpec{
+		Name: "ABS", Signature: "(x number) -> number", Category: "math",
+		Description: "Absolute value - e.g. the size of a deviation, whichever side it falls on.",
+		Native: func(args []any) (any, error) {
+			x, err := require1Float(args, "ABS")
+			if err != nil {
+				return nil, err
+			}
+			return math.Abs(x), nil
+		},
+		SQLEmit: map[Dialect]SQLEmitter{DialectStarRocks: math1ArgSQL("ABS")},
+	})
+
+	reg(&FunctionSpec{
+		Name: "COUNT", Signature: "(values any[]) -> number", Category: "aggregation",
+		Description: "Number of values present (nulls not counted) - of a field across grouped rows, or of a collection such as the other sources' values.",
+		Native: func(args []any) (any, error) {
+			n := 0
+			for _, a := range args {
+				switch v := a.(type) {
+				case nil:
+				case []any:
+					for _, e := range v {
+						if e != nil {
+							n++
+						}
+					}
+				case []float64:
+					n += len(v)
+				default:
+					n++
+				}
+			}
+			return float64(n), nil
+		},
+		SQLEmit: map[Dialect]SQLEmitter{DialectStarRocks: aggPassthrough("COUNT")},
+	})
 }
 
 func math1ArgSQL(sqlName string) SQLEmitter {

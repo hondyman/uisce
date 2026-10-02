@@ -153,56 +153,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-  validation-service:
-    build:
-      context: .
-      dockerfile: ./backend/cmd/validation-service/Dockerfile
-    container_name: semlayer-validation-service
-    restart: always
-    environment:
-    - PORT=8082
-    - DATABASE_URL=${DATABASE_URL_DOCKER}
-    - KAFKA_BROKERS=redpanda:9092
-    ports:
-    - 8082:8082
-    depends_on:
-    - redpanda
-    - backend
-    healthcheck:
-      test:
-      - CMD
-      - curl
-      - -f
-      - http://localhost:8082/health
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-  rule-engine-service:
-    build:
-      context: .
-      dockerfile: ./backend/cmd/rule-engine-service/Dockerfile
-    container_name: semlayer-rule-engine-service
-    restart: always
-    environment:
-    - PORT=8083
-    - DATABASE_URL=${DATABASE_URL_DOCKER}
-    - KAFKA_BROKERS=redpanda:9092
-    ports:
-    - 8083:8083
-    depends_on:
-    - redpanda
-    - backend
-    healthcheck:
-      test:
-      - CMD
-      - curl
-      - -f
-      - http://localhost:8083/health
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
   notifications-service:
     build:
       context: .
