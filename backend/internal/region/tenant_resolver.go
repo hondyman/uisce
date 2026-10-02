@@ -29,48 +29,6 @@ func NewTenantRegionResolver(db *sql.DB, goldcopyResolve *goldcopy.Resolver) *Te
 	}
 }
 
-// InferRegionForTenant returns the home region for a given tenant
-// Returns (region, true) if tenant exists and has a region configured
-// Returns ("", false) if tenant doesn't exist or has no region
-//
-// This is pure lookup — no authorization logic.
-func (r *TenantRegionResolver) InferRegionForTenant(tenantID string) (string, bool) {
-	if r.isGoldCopyTenant(tenantID) {
-		return "", false
-	}
-
-	if tenantID == "" {
-		return "", false
-	}
-
-	var region sql.NullString
-	// public.tenants has no home_region/metadata columns (that was a stale
-	// assumption from an earlier schema draft); default_region/region are
-	// the real columns.
-	query := `
-		SELECT COALESCE(default_region, region)
-		FROM public.tenants
-		WHERE id = $1
-		LIMIT 1
-	`
-
-	err := r.db.QueryRow(query, tenantID).Scan(&region)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return "", false
-		}
-		// Log the error but don't expose it
-		fmt.Printf("[TenantRegionResolver] Error querying tenant region: %v\n", err)
-		return "", false
-	}
-
-	if !region.Valid || region.String == "" {
-		return "", false
-	}
-
-	return region.String, true
-}
-
 // IsRegionAllowedForTenant checks if a tenant is allowed to operate in a specific region
 // Returns true if:
 //   - tenant is Gold Copy (always allowed)

@@ -38,6 +38,8 @@ func withAuthContext(req *http.Request, tenantID string) *http.Request {
 	}
 	ctx := identity.WithActorTenant(req.Context(), "test-user-001", tenantID)
 	ctx = security.WithAuthInfo(ctx, authInfo)
+	// A real client states its region; there is no default region.
+	req.Header.Set("X-Region", "us-east-1")
 	return req.WithContext(ctx)
 }
 

@@ -163,7 +163,7 @@ const SSRSReportBuilderContent: React.FC = () => {
       'Content-Type': 'application/json',
       'X-Tenant-ID': tenantId || '',
       'X-Tenant-Datasource-ID': datasourceId || '',
-      'X-Tenant-Region': getSelectedRegion() || 'us-west',
+      'X-Tenant-Region': getSelectedRegion(),
       ...additionalHeaders,
     };
   }, [tenant, datasource]);
@@ -297,7 +297,7 @@ const SSRSReportBuilderContent: React.FC = () => {
       accountId: typeof localStorage !== 'undefined' ? localStorage.getItem('account_id') || 'acc-institutional-001' : 'acc-institutional-001',
       clientId: typeof localStorage !== 'undefined' ? localStorage.getItem('client_id') || 'client-001' : 'client-001',
       branchId: typeof localStorage !== 'undefined' ? localStorage.getItem('branch_id') || 'NYC-MAIN' : 'NYC-MAIN',
-      region: getSelectedRegion() || 'us-west',
+      region: getSelectedRegion(),
     };
   }, [tenant]);
 

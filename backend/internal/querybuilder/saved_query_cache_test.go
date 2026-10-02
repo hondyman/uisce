@@ -139,6 +139,7 @@ func TestBatchExecute_SingleflightCoalescing(t *testing.T) {
 	}
 	b, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/api/query/batch-execute", bytes.NewReader(b))
+	req.Header.Set("X-Region", "us-east-1") // a real client states its region; there is no default
 	req.Header.Set("Content-Type", "application/json")
 	auth := security.AuthInfo{TenantIDs: []string{tenantID}, UserID: "user-1"}
 
@@ -180,6 +181,7 @@ func TestBatchExecute_DuplicateKeysInSingleBatch(t *testing.T) {
 	reqBody := BatchExecuteSavedQueryRequest{Queries: queries}
 	b, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/api/query/batch-execute", bytes.NewReader(b))
+	req.Header.Set("X-Region", "us-east-1") // a real client states its region; there is no default
 	req.Header.Set("Content-Type", "application/json")
 	auth := security.AuthInfo{TenantIDs: []string{tenantID}, UserID: "user-1"}
 
@@ -223,6 +225,7 @@ func TestBatchExecute_ABACCacheIsolation(t *testing.T) {
 		}
 		b, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest(http.MethodPost, "/api/query/batch-execute", bytes.NewReader(b))
+		req.Header.Set("X-Region", "us-east-1") // a real client states its region; there is no default
 		req.Header.Set("Content-Type", "application/json")
 		reqWithAuth := req.WithContext(security.WithAuthInfo(req.Context(), auth))
 
@@ -279,6 +282,7 @@ func TestBatchExecute_MaskedTermCrossFilterProbe(t *testing.T) {
 	}
 	b, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/api/query/batch-execute", bytes.NewReader(b))
+	req.Header.Set("X-Region", "us-east-1") // a real client states its region; there is no default
 	req.Header.Set("Content-Type", "application/json")
 	auth := security.AuthInfo{TenantIDs: []string{tenantID}, UserID: "user-1"}
 
@@ -318,6 +322,7 @@ func TestBatchExecute_WatermarkInvalidation(t *testing.T) {
 		}
 		b, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest(http.MethodPost, "/api/query/batch-execute", bytes.NewReader(b))
+		req.Header.Set("X-Region", "us-east-1") // a real client states its region; there is no default
 		req.Header.Set("Content-Type", "application/json")
 		auth := security.AuthInfo{TenantIDs: []string{tenantID}, UserID: "user-1"}
 

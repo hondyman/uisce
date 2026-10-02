@@ -289,6 +289,7 @@ func TestSavedQueryCore_HTTPHandlerRouting(t *testing.T) {
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Datasource-Id", "ds-1")
+		req.Header.Set("X-Region", "us-east-1") // a real client states its region; there is no default
 		auth := security.AuthInfo{
 			TenantIDs: []string{tenantID},
 			UserID:    userID,
@@ -322,6 +323,7 @@ func TestSavedQueryCore_HTTPHandlerRouting(t *testing.T) {
 
 	// 4. Extend without admin role returns 403 Forbidden
 	unauthorizedReq := httptest.NewRequest("POST", "/api/explorer/saved-queries/core-1/extend", strings.NewReader(`{}`))
+	unauthorizedReq.Header.Set("X-Region", "us-east-1") // a real client states its region; there is no default
 	unauthorizedReq.Header.Set("Content-Type", "application/json")
 	unauthAuth := security.AuthInfo{
 		TenantIDs: []string{"tenant-a"},
