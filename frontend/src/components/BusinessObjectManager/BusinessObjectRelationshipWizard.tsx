@@ -25,7 +25,8 @@ import {
   InputLabel,
   Select,
   Stack,
-  Autocomplete
+  Autocomplete,
+  Chip,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';

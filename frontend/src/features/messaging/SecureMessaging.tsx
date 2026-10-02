@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send as SendIcon, AttachFile as PaperclipIcon, Search as SearchIcon, Check as CheckIcon, CheckCircle as CheckCheckIcon, Security as ShieldIcon, Lock as LockIcon } from '@mui/icons-material';
+import { Send as SendIcon, Send as Send, AttachFile as PaperclipIcon, AttachFile as Paperclip, Search as SearchIcon, Search as Search, Check as CheckIcon, Check as Check, CheckCircle as CheckCheckIcon, CheckCircle as CheckCheck, Security as ShieldIcon, Security as Shield, Lock as LockIcon, Lock as Lock } from '@mui/icons-material';
 
 interface Message {
   messageId: string;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  PieChart as PieChartIcon, TrendingUp as TrendingUpIcon, AttachMoney as DollarSignIcon, CalendarToday as CalendarIcon, Warning as AlertCircleIcon,
-  NorthEast as ArrowUpRightIcon, SouthEast as ArrowDownRightIcon, Description as FileTextIcon
+  PieChart as PieChartIcon, PieChart as PieChart, TrendingUp as TrendingUpIcon, TrendingUp as TrendingUp, AttachMoney as DollarSignIcon, AttachMoney as DollarSign, CalendarToday as CalendarIcon, Warning as AlertCircleIcon, Warning as AlertCircle,
+  NorthEast as ArrowUpRightIcon, SouthEast as ArrowDownRightIcon, Description as FileTextIcon, Description as FileText
 } from '@mui/icons-material';
 import { fetchAPI } from '../../../api';
 
@@ -59,7 +59,7 @@ export const AltInvestDashboard: React.FC<AltInvestDashboardProps> = ({ clientId
           <p className="text-gray-500 mt-1">Private Equity, Hedge Funds, and Real Estate Portfolio</p>
         </div>
         <button className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 hover:bg-blue-700">
-          <FileText size={16} /> Upload K-1 / Statement
+          <FileText sx={{ fontSize: 16 }} /> Upload K-1 / Statement
         </button>
       </div>
 

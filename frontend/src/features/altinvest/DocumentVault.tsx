@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Description as FileTextIcon, CloudUpload as UploadIcon, Download as DownloadIcon, Visibility as EyeIcon, CheckCircle as CheckCircleIcon, Warning as AlertCircleIcon, Schedule as ClockIcon } from '@mui/icons-material';
+import { Description as FileTextIcon, Description as FileText, CloudUpload as UploadIcon, CloudUpload as Upload, Download as DownloadIcon, Download as Download, Visibility as EyeIcon, Visibility as Eye, CheckCircle as CheckCircleIcon, CheckCircle as CheckCircle, Warning as AlertCircleIcon, Warning as AlertCircle, Schedule as ClockIcon, Schedule as Clock } from '@mui/icons-material';
 import { fetchAPI } from '../../api';
 
 // Types
@@ -91,7 +91,7 @@ export const DocumentVault: React.FC<DocumentVaultProps> = ({ investmentId, fund
       case 'COMPLETED':
         return (
           <span className="flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-full text-xs">
-            <CheckCircle size={12} />
+            <CheckCircle sx={{ fontSize: 12 }} />
             Processed
           </span>
         );
@@ -99,21 +99,21 @@ export const DocumentVault: React.FC<DocumentVaultProps> = ({ investmentId, fund
       case 'IN_PROGRESS':
         return (
           <span className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs">
-            <Clock size={12} />
+            <Clock sx={{ fontSize: 12 }} />
             Processing
           </span>
         );
       case 'MANUAL_REVIEW_REQUIRED':
         return (
           <span className="flex items-center gap-1 px-2 py-1 bg-orange-50 text-orange-700 rounded-full text-xs">
-            <AlertCircle size={12} />
+            <AlertCircle sx={{ fontSize: 12 }} />
             Review Needed
           </span>
         );
       case 'FAILED':
         return (
           <span className="flex items-center gap-1 px-2 py-1 bg-red-50 text-red-700 rounded-full text-xs">
-            <AlertCircle size={12} />
+            <AlertCircle sx={{ fontSize: 12 }} />
             Failed
           </span>
         );
@@ -137,7 +137,7 @@ export const DocumentVault: React.FC<DocumentVaultProps> = ({ investmentId, fund
           <p className="text-sm text-gray-500 mt-1">{fundName}</p>
         </div>
         <label className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 hover:bg-blue-700 cursor-pointer">
-          <Upload size={16} />
+          <Upload sx={{ fontSize: 16 }} />
           Upload Document
           <input 
             type="file" 
@@ -153,7 +153,7 @@ export const DocumentVault: React.FC<DocumentVaultProps> = ({ investmentId, fund
       {documents.some(d => d.extraction_status === 'PENDING' || d.extraction_status === 'IN_PROGRESS') && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex items-center gap-3">
-            <Clock className="text-blue-600" size={20} />
+            <Clock className="text-blue-600" sx={{ fontSize: 20 }} />
             <div>
               <h3 className="font-medium text-blue-900">AI Processing in Progress</h3>
               <p className="text-sm text-blue-700">
@@ -183,7 +183,7 @@ export const DocumentVault: React.FC<DocumentVaultProps> = ({ investmentId, fund
               {documents.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                    <FileText className="mx-auto mb-2 text-gray-400" size={48} />
+                    <FileText className="mx-auto mb-2 text-gray-400" sx={{ fontSize: 48 }} />
                     No documents uploaded yet
                   </td>
                 </tr>
@@ -192,7 +192,7 @@ export const DocumentVault: React.FC<DocumentVaultProps> = ({ investmentId, fund
                   <tr key={doc.document_id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <FileText className="text-gray-400" size={20} />
+                        <FileText className="text-gray-400" sx={{ fontSize: 20 }} />
                         <span className="font-medium text-gray-900">{doc.file_name || 'Unnamed Document'}</span>
                       </div>
                     </td>
@@ -236,10 +236,10 @@ export const DocumentVault: React.FC<DocumentVaultProps> = ({ investmentId, fund
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
                         <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                          <Eye size={16} className="text-gray-600" />
+                          <Eye sx={{ fontSize: 16 }} className="text-gray-600" />
                         </button>
                         <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                          <Download size={16} className="text-gray-600" />
+                          <Download sx={{ fontSize: 16 }} className="text-gray-600" />
                         </button>
                       </div>
                     </td>

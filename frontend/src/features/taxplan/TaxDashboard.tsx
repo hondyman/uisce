@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  AutoAwesome as SparklesIcon, AttachMoney as DollarSignIcon, TrendingDown as TrendingDownIcon, Repeat as RepeatIcon,
-  CheckCircle as CheckCircleIcon, Schedule as ClockIcon, Close as CloseIcon, NavigateNext as ChevronRightIcon
+  AutoAwesome as SparklesIcon, AutoAwesome as Sparkles, AttachMoney as DollarSignIcon, AttachMoney as DollarSign, TrendingDown as TrendingDownIcon, TrendingDown as TrendingDown, Repeat as RepeatIcon, Repeat as Repeat,
+  CheckCircle as CheckCircleIcon, CheckCircle as CheckCircle, Schedule as ClockIcon, Schedule as Clock, Close as CloseIcon, NavigateNext as ChevronRightIcon
 } from '@mui/icons-material';
 import { fetchAPI } from '../../../api';
 
@@ -118,7 +118,7 @@ export const TaxDashboard: React.FC<TaxDashboardProps> = ({ clientId }) => {
         ))}
         {opportunities.length === 0 && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center text-gray-500">
-            <Sparkles size={48} className="mx-auto mb-4 text-gray-300" />
+            <Sparkles sx={{ fontSize: 48 }} className="mx-auto mb-4 text-gray-300" />
             <p>No tax optimization opportunities detected.</p>
             <button className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
               Run Detection
@@ -134,7 +134,7 @@ export const TaxDashboard: React.FC<TaxDashboardProps> = ({ clientId }) => {
             <div className="flex justify-between items-start mb-4">
               <h2 className="text-xl font-bold">{formatOpportunityType(selectedOpp.opportunity_type)}</h2>
               <button onClick={() => setSelectedOpp(null)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
+                <CloseIcon sx={{ fontSize: 24 }} />
               </button>
             </div>
             <div className="space-y-4">
@@ -210,7 +210,7 @@ const OpportunityCard: React.FC<{ opportunity: TaxOpportunity; onClick: () => vo
           <div className="text-xs text-gray-500 uppercase">Est. Tax Savings</div>
           <div className="text-2xl font-bold text-green-600">${(opportunity.estimated_tax_savings / 1000).toFixed(1)}k</div>
           <div className="flex items-center gap-1 text-orange-600 text-xs mt-1">
-            <Clock size={12} />
+            <Clock sx={{ fontSize: 12 }} />
             {opportunity.time_sensitivity.replace('_', ' ')}
           </div>
         </div>

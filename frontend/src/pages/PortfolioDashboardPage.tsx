@@ -260,7 +260,7 @@ export const PortfolioDashboardPage: React.FC = () => {
             onClick={() => setShowCreateForm(true)}
             className={`${getButtonClasses('primary')} flex items-center gap-2`}
           >
-            <Plus className="w-5 h-5" />
+            <AddIcon className="w-5 h-5" />
             New Portfolio
           </button>
         </div>

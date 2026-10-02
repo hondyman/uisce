@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Group as UsersIcon, Business as BuildingIcon, Description as FileTextIcon, NavigateNext as ChevronRightIcon, ExpandMore as ChevronDownIcon,
-  Add as PlusIcon, ArrowForward as ArrowRightIcon, AttachMoney as DollarSignIcon, Work as BriefcaseIcon, Home as HomeIcon
+  Group as UsersIcon, Group as Users, Business as BuildingIcon, Business as Building, Description as FileTextIcon, Description as FileText, NavigateNext as ChevronRightIcon, NavigateNext as ChevronRight, ExpandMore as ChevronDownIcon, ExpandMore as ChevronDown,
+  Add as PlusIcon, Add as Plus, ArrowForward as ArrowRightIcon, AttachMoney as DollarSignIcon, Work as BriefcaseIcon, Work as Briefcase, Home as HomeIcon, Home as Home
 } from '@mui/icons-material';
 import { fetchAPI } from '../../../api';
 
@@ -82,7 +82,7 @@ export const HouseholdDashboard: React.FC<HouseholdDashboardProps> = ({ househol
           <p className="text-gray-500 mt-1">Manage complex entity relationships and ownership</p>
         </div>
         <button className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 hover:bg-blue-700">
-          <Plus size={16} /> Add Entity
+          <Plus sx={{ fontSize: 16 }} /> Add Entity
         </button>
       </div>
 
@@ -168,7 +168,7 @@ export const HouseholdDashboard: React.FC<HouseholdDashboardProps> = ({ househol
             </div>
           ) : (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center text-gray-500">
-              <Users size={48} className="mx-auto mb-4 text-gray-300" />
+              <Users sx={{ fontSize: 48 }} className="mx-auto mb-4 text-gray-300" />
               <p>Select an entity to view details</p>
             </div>
           )}
@@ -197,7 +197,7 @@ const EntityNode: React.FC<{ node: any; onSelect: (e: Entity) => void; selectedI
           onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
           className={`p-0.5 rounded hover:bg-gray-200 ${hasChildren ? 'visible' : 'invisible'}`}
         >
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          {expanded ? <ChevronDown sx={{ fontSize: 14 }} /> : <ChevronRight sx={{ fontSize: 14 }} />}
         </button>
         <EntityIcon type={node.entity_type} size={16} />
         <span className="text-sm font-medium truncate">{node.entity_name}</span>
@@ -222,13 +222,13 @@ const EntityNode: React.FC<{ node: any; onSelect: (e: Entity) => void; selectedI
 
 const EntityIcon: React.FC<{ type: string; size?: number }> = ({ type, size = 20 }) => {
   switch (type) {
-    case 'INDIVIDUAL': return <Users size={size} />;
-    case 'JOINT': return <Users size={size} />;
-    case 'TRUST': return <FileText size={size} />;
-    case 'LLC': return <Briefcase size={size} />;
-    case 'FOUNDATION': return <Building size={size} />;
-    case 'ESTATE': return <Home size={size} />;
-    default: return <Users size={size} />;
+    case 'INDIVIDUAL': return <Users sx={{ fontSize: size }} />;
+    case 'JOINT': return <Users sx={{ fontSize: size }} />;
+    case 'TRUST': return <FileText sx={{ fontSize: size }} />;
+    case 'LLC': return <Briefcase sx={{ fontSize: size }} />;
+    case 'FOUNDATION': return <Building sx={{ fontSize: size }} />;
+    case 'ESTATE': return <Home sx={{ fontSize: size }} />;
+    default: return <Users sx={{ fontSize: size }} />;
   }
 };
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Videocam as VideoIcon, VideocamOff as VideoOffIcon, Mic as MicIcon, MicOff as MicOffIcon, CallEnd as PhoneOffIcon, Computer as MonitorIcon, Settings as SettingsIcon } from '@mui/icons-material';
+import { Videocam as VideoIcon, Videocam as Video, VideocamOff as VideoOffIcon, VideocamOff as VideoOff, Mic as MicIcon, Mic as Mic, MicOff as MicOffIcon, MicOff as MicOff, CallEnd as PhoneOffIcon, CallEnd as PhoneOff, Computer as MonitorIcon, Computer as Monitor, Settings as SettingsIcon } from '@mui/icons-material';
 import { Device } from 'twilio-video';
 
 interface VideoConferenceProps {

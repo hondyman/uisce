@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingDown as TrendingDownIcon, WarningAmber as AlertTriangleIcon, AttachMoney as DollarSignIcon, CalendarToday as CalendarIcon, CheckCircle as CheckCircleIcon, Close as CloseIcon, TrendingUp as TrendingUpIcon } from '@mui/icons-material';
+import { TrendingDown as TrendingDownIcon, TrendingDown as TrendingDown, WarningAmber as AlertTriangleIcon, WarningAmber as AlertTriangle, AttachMoney as DollarSignIcon, AttachMoney as DollarSign, CalendarToday as CalendarIcon, CalendarToday as Calendar, CheckCircle as CheckCircleIcon, CheckCircle as CheckCircle, Close as CloseIcon, TrendingUp as TrendingUpIcon, TrendingUp as TrendingUp } from '@mui/icons-material';
 
 interface TaxOpportunity {
   opportunityId: string;
@@ -260,7 +260,7 @@ export const TaxOptimizationDashboard: React.FC = () => {
                             onClick={() => updateOpportunityStatus(opp.opportunityId, 'REJECTED')}
                             className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
                           >
-                            <X className="w-4 h-4 inline mr-2" />
+                            <CloseIcon className="w-4 h-4 inline mr-2" />
                             Decline
                           </button>
                         </>

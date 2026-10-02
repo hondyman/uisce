@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Group as UsersIcon, TrendingUp as TrendingUpIcon, CalendarToday as CalendarIcon, Warning as AlertCircleIcon, AttachMoney as DollarSignIcon, ArrowForward as ArrowRightIcon } from '@mui/icons-material';
+import { Group as UsersIcon, Group as Users, TrendingUp as TrendingUpIcon, TrendingUp as TrendingUp, CalendarToday as CalendarIcon, CalendarToday as Calendar, Warning as AlertCircleIcon, AttachMoney as DollarSignIcon, AttachMoney as DollarSign, ArrowForward as ArrowRightIcon, ArrowForward as ArrowRight } from '@mui/icons-material';
 
 interface SuccessionPlan {
   planId: string;

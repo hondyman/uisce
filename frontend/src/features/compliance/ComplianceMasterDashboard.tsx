@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Security as ShieldIcon, Security as ShieldAlertIcon, Search as FileSearchIcon, FilterList as FilterIcon, PlayArrow as PlayIcon, CheckCircle as CheckCircle2Icon, Cancel as XCircleIcon } from '@mui/icons-material';
+import { Security as ShieldIcon, Security as Shield, Security as ShieldAlertIcon, Security as ShieldAlert, Search as FileSearchIcon, Search as FileSearch, FilterList as FilterIcon, FilterList as Filter, PlayArrow as PlayIcon, PlayArrow as Play, CheckCircle as CheckCircle2Icon, CheckCircle as CheckCircle2, Cancel as XCircleIcon } from '@mui/icons-material';
 
 const ComplianceMasterDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'rules' | 'evaluations' | 'breaches'>('rules');

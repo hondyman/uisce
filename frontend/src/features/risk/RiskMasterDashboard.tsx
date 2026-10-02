@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Timeline as ActivityIcon, Speed as GaugeIcon, BarChart as BarChart3Icon, FlashOn as CloudLightningIcon, FilterList as FilterIcon, Download as DownloadIcon, NorthEast as ArrowUpRightIcon, SouthEast as ArrowDownRightIcon } from '@mui/icons-material';
+import { Timeline as ActivityIcon, Timeline as Activity, Speed as GaugeIcon, Speed as Gauge, BarChart as BarChart3Icon, BarChart as BarChart3, FlashOn as CloudLightningIcon, FlashOn as CloudLightning, FilterList as FilterIcon, FilterList as Filter, Download as DownloadIcon, Download as Download, NorthEast as ArrowUpRightIcon, NorthEast as ArrowUpRight, SouthEast as ArrowDownRightIcon, SouthEast as ArrowDownRight } from '@mui/icons-material';
 
 const RiskMasterDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'factors' | 'exposures' | 'portfolio' | 'scenarios'>('portfolio');
