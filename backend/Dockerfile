@@ -48,7 +48,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=1 GOOS=linux GOWORK=off go build -ldflags="-w -s" -o /app/migrate ./cmd/migrate/migrate.go ./cmd/migrate/migrate_audit.go ./cmd/migrate/migrate_engagement_notifications.go
+    CGO_ENABLED=1 GOOS=linux GOWORK=off go build -ldflags="-w -s" -o /app/migrate ./cmd/migrate
 
 # Stage 2: Runner
 FROM debian:bookworm-slim
