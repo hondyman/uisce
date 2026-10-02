@@ -136,14 +136,14 @@ func NewPostgresBORepository(db *sqlx.DB) *PostgresBORepository {
 // this environment - bo_fields is an orphaned table from an earlier BO
 // metadata system and is kept below only as a legacy fallback).
 type semanticField struct {
-	ID              string `db:"id"`
-	FieldName       string `db:"field_name"`
-	TechnicalName   string `db:"technical_name"`
-	DisplayName     string `db:"display_name"`
-	DataType        string `db:"data_type"`
-	TermNodeID      string `db:"term_node_id"`
-	TermType        string `db:"term_type"`
-	SensitivityTag  string `db:"sensitivity_tag"`
+	ID             string `db:"id"`
+	FieldName      string `db:"field_name"`
+	TechnicalName  string `db:"technical_name"`
+	DisplayName    string `db:"display_name"`
+	DataType       string `db:"data_type"`
+	TermNodeID     string `db:"term_node_id"`
+	TermType       string `db:"term_type"`
+	SensitivityTag string `db:"sensitivity_tag"`
 }
 
 // resolveCatalogPhysicalColumn looks up a physical column for fieldName
@@ -302,11 +302,12 @@ func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*
 
 	var res struct {
 		ID              string  `db:"id"`
+		TenantID        string  `db:"tenant_id"`
 		BOKey           string  `db:"bo_key"`
 		DriverTableName *string `db:"driver_table_name"`
 	}
 	if err := r.DB.Get(&res, `
-		SELECT id, bo_key, driver_table_name
+		SELECT id, tenant_id::text AS tenant_id, bo_key, driver_table_name
 		FROM public.business_objects WHERE id = $1
 	`, boID); err != nil {
 		return nil, fmt.Errorf("failed to fetch BO metadata: %w", err)
@@ -326,17 +327,61 @@ func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*
 
 	for _, f := range fields {
 		physicalColumn, _ := r.resolveCatalogPhysicalColumn(f.ID, drivingTable, f.FieldName, f.TechnicalName)
-		def.Fields = append(def.Fields, BOField{
-			ID:              f.ID,
-			Name:            f.FieldName,
-			DisplayName:     f.DisplayName,
+		boField := BOField{
+			ID:             f.ID,
+			Name:           f.FieldName,
+			DisplayName:    f.DisplayName,
 			Path:           f.FieldName,
-			SemanticTermID:  f.TermNodeID,
-			PhysicalColumn:  physicalColumn,
-			Type:            f.DataType,
-			TermType:        f.TermType,
-			SensitivityTag:  f.SensitivityTag,
-		})
+			SemanticTermID: f.TermNodeID,
+			PhysicalColumn: physicalColumn,
+			Type:           f.DataType,
+			SourceType:     "COLUMN",
+			TermType:       f.TermType,
+			SensitivityTag: f.SensitivityTag,
+		}
+
+		// Explicit JSON_PATH field_binding wins over column resolution.
+		var jsonPath sql.NullString
+		var srcType sql.NullString
+		_ = r.DB.QueryRow(`
+			SELECT source_type, json_path
+			FROM public.field_bindings
+			WHERE field_id = $1::uuid AND binding_status = 'RESOLVED' AND source_type = 'JSON_PATH'
+			LIMIT 1`, f.ID).Scan(&srcType, &jsonPath)
+		if srcType.Valid && srcType.String == "JSON_PATH" && jsonPath.Valid && jsonPath.String != "" {
+			boField.SourceType = "JSON_PATH"
+			boField.JSONPath = jsonPath.String
+			if boField.PhysicalColumn == "" || !strings.Contains(boField.PhysicalColumn, "custom_attributes") {
+				boField.PhysicalColumn = fmt.Sprintf("%s.custom_attributes", drivingTable)
+			}
+		} else if f.TermNodeID != "" {
+			// attribute_def linked to the same semantic term -> JSONB key binding.
+			// Scoped to THIS business object's tenant using the same rules as
+			// public.attribute_def_effective: the tenant's own active non-shadow
+			// rows, plus the gold copy's active rows unless the tenant has shadowed
+			// or overridden them. Never another tenant's row: the lookup is by
+			// semantic term, which tenants share, so an unscoped query would bind
+			// one tenant's custom-field key into another tenant's query.
+			var fieldCd sql.NullString
+			_ = r.DB.QueryRow(`
+				SELECT a.field_cd FROM public.attribute_def a
+				WHERE a.semantic_term_id = $1::uuid AND a.is_active AND NOT a.is_shadow
+				  AND (
+				        a.tenant_id = $2::uuid
+				        OR (a.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)
+				            AND NOT EXISTS (SELECT 1 FROM public.attribute_def s
+				                            WHERE s.tenant_id = $2::uuid AND s.core_id = a.id))
+				      )
+				ORDER BY (a.tenant_id = $2::uuid) DESC, a.updated_at DESC
+				LIMIT 1`, f.TermNodeID, res.TenantID).Scan(&fieldCd)
+			if fieldCd.Valid && fieldCd.String != "" {
+				boField.SourceType = "JSON_PATH"
+				boField.JSONPath = fieldCd.String
+				boField.PhysicalColumn = fmt.Sprintf("%s.custom_attributes", drivingTable)
+			}
+		}
+
+		def.Fields = append(def.Fields, boField)
 	}
 
 	// Relationship/join inference isn't available from business_object_fields

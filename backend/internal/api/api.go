@@ -28,6 +28,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/altinvest"
 	"github.com/hondyman/uisce/backend/internal/altinvest/alternative_investment"
 	"github.com/hondyman/uisce/backend/internal/analytics"
+	"github.com/hondyman/uisce/backend/internal/attribute"
 	"github.com/hondyman/uisce/backend/internal/audit"
 	"github.com/hondyman/uisce/backend/internal/auth"
 	"github.com/hondyman/uisce/backend/internal/billing"
@@ -62,7 +63,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/mcp"
 	"github.com/hondyman/uisce/backend/internal/mdm"
 	"github.com/hondyman/uisce/backend/internal/mdm/scoring"
-	"github.com/hondyman/uisce/backend/internal/metadata"
+	catalogmeta "github.com/hondyman/uisce/backend/internal/metadata"
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
 	"github.com/hondyman/uisce/backend/internal/migrations"
 	models "github.com/hondyman/uisce/backend/internal/models"
@@ -106,7 +107,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jmoiron/sqlx"
 
-	catalogmeta "github.com/hondyman/uisce/backend/internal/metadata"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 	temporalclientlib "github.com/hondyman/uisce/libs/temporal-client"
 	temporalclient "go.temporal.io/sdk/client"
@@ -1654,9 +1654,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Lookups routes
 		RegisterLookupsRoutes(r, db)
 
-		customAttrSvc := metadata.NewCustomAttributeService(sqlxDB)
-		r.Post("/tenants/custom-attributes", customAttrSvc.RegisterAttributeHandler)
-		r.Get("/tenants/custom-attributes", customAttrSvc.GetAttributesHandler)
+		attribute.NewHandler(sqlxDB, attribute.AlphaValueDB{DB: sqlxDB}).RegisterRoutes(r)
 
 		upgradeSvc := upgrade.NewService(sqlxDB, handlers.SecurityContextDeps{})
 		impactEngine := upgrade.NewImpactEngine(sqlxDB)
