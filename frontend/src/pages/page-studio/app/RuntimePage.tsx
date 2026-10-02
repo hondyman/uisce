@@ -6,7 +6,9 @@ import { AppRuntimeProvider, useAppRuntime } from './AppRuntime';
 import RenderLayoutTree from '../RenderLayoutTree';
 import PageBody from '../PageBody';
 
-interface RuntimeLayout { root: string; nodes: Record<string, { id: string; type: string; children?: string[]; props?: Record<string, unknown>; style?: Record<string, string> }> }
+// root/nodes are optional because a grid-kind (or empty) page layout has neither; RuntimeBody
+// below already treats a missing root as "no components yet".
+interface RuntimeLayout { root?: string; nodes?: Record<string, { id: string; type: string; children?: string[]; props?: Record<string, unknown>; style?: Record<string, string> }> }
 export interface RuntimeTab { id: string; label: string; layout: RuntimeLayout; badge?: string; visibleWhen?: ConditionNode }
 
 export interface RuntimePageProps {
@@ -43,7 +45,7 @@ function RuntimeBody(props: RuntimePageProps) {
     <>
       {filterBar?.root && (
         <Box sx={{ mb: 2 }}>
-          <RenderLayoutTree nodeId={filterBar.root} nodes={filterBar.nodes} components={components} dataSources={dataSources} tenantId={tenantId} />
+          <RenderLayoutTree nodeId={filterBar.root} nodes={filterBar.nodes ?? {}} components={components} dataSources={dataSources} tenantId={tenantId} />
         </Box>
       )}
       {visibleTabs.length > 1 && active && (
@@ -54,7 +56,7 @@ function RuntimeBody(props: RuntimePageProps) {
         </Tabs>
       )}
       {active?.layout?.root ? (
-        <RenderLayoutTree nodeId={active.layout.root} nodes={active.layout.nodes} components={components} dataSources={dataSources} tenantId={tenantId} />
+        <RenderLayoutTree nodeId={active.layout.root} nodes={active.layout.nodes ?? {}} components={components} dataSources={dataSources} tenantId={tenantId} />
       ) : tabs.length === 0 || !tabs[0]?.layout?.root ? (
         <Alert severity="info">This page has no components yet.</Alert>
       ) : null}

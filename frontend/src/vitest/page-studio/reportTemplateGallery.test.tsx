@@ -11,8 +11,8 @@ describe('ReportTemplateGallery & Scaffolding (Phase 6.3)', () => {
   it('scaffoldBlankGridReport returns a layoutKind grid with parameterBar and starter tiles', () => {
     const draft = scaffoldBlankGridReport('Monthly Sales Overview');
     expect(draft.name).toBe('Monthly Sales Overview');
-    expect(draft.layout?.nodes['root'].props?.layoutKind).toBe('grid');
-    expect(draft.layout?.nodes['root'].props?.columns).toBe(12);
+    expect(draft.layout?.nodes?.['root'].props?.layoutKind).toBe('grid');
+    expect(draft.layout?.nodes?.['root'].props?.columns).toBe(12);
 
     const components = draft.components || [];
     const paramBar = components.find((c) => c.type === 'report_parameter_bar');

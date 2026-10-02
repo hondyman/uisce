@@ -17,6 +17,7 @@ import type { FieldLayoutEntry } from './FormFieldsDesigner';
 import type { RelatedObjectDragPayload } from '../../studio-core/binding/boRelationships';
 import { widgetTypeForCardinality } from '../../studio-core/binding/boRelationships';
 import { ensureRelatedDataSource, isBindableWidget } from '../../studio-core/binding/ensureRelatedDataSource';
+import { nodesOf } from './layoutNodes';
 
 /** Selecting one field of a Form (Design mode) reuses the same `selectedId`
  * string LayoutCanvas already tracks for nodes/components, as
@@ -285,8 +286,10 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
             const props = isAppWidget(componentType) ? structuredClone(APP_WIDGET_DEFAULTS[componentType]) : {};
             onComponentsChange((prev) => ({ ...prev, [newId]: { id: newId, type: componentType, props } }));
             onLayoutChange((prev) => {
-                const parent = prev.nodes[parentId];
-                return { ...prev, nodes: { ...prev.nodes, [parentId]: { ...parent, children: [...(parent.children || []), newId] } } };
+                const nodes = nodesOf(prev);
+                const parent = nodes[parentId];
+                if (!parent) return prev;
+                return { ...prev, nodes: { ...nodes, [parentId]: { ...parent, children: [...(parent.children || []), newId] } } };
             });
         }
 
@@ -304,7 +307,7 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
     };
 
     const handleRelatedObjectDrop = async (payload: RelatedObjectDragPayload, parentId: string) => {
-        if (!(parentId in layout.nodes)) return;
+        if (!(parentId in nodesOf(layout))) return;
         const sourceId = await applyRelatedSource(payload);
         if (!sourceId) return;
         const widgetType = widgetTypeForCardinality(payload.cardinality);
@@ -314,9 +317,10 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
             [newId]: { id: newId, type: widgetType, label: payload.relatedObjectName, props: { dataSourceId: sourceId } },
         }));
         onLayoutChange((prev) => {
-            const parent = prev.nodes[parentId];
+            const nodes = nodesOf(prev);
+            const parent = nodes[parentId];
             if (!parent) return prev;
-            return { ...prev, nodes: { ...prev.nodes, [parentId]: { ...parent, children: [...(parent.children || []), newId] } } };
+            return { ...prev, nodes: { ...nodes, [parentId]: { ...parent, children: [...(parent.children || []), newId] } } };
         });
         onSelect(newId);
     };
@@ -324,13 +328,13 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
     const handleRelatedBindExisting = async (payload: RelatedObjectDragPayload, compId: string) => {
         const comp = components[compId];
         if (!comp || !isBindableWidget(comp.type)) {
-            const parentId = Object.keys(layout.nodes).find((id) => (layout.nodes[id].children || []).includes(compId));
+            const parentId = Object.keys(nodesOf(layout)).find((id) => (nodesOf(layout)[id].children || []).includes(compId));
             if (parentId) await handleRelatedObjectDrop(payload, parentId);
             return;
         }
         const unbound = !comp.props?.dataSourceId;
         if (!unbound) {
-            const parentId = Object.keys(layout.nodes).find((id) => (layout.nodes[id].children || []).includes(compId));
+            const parentId = Object.keys(nodesOf(layout)).find((id) => (nodesOf(layout)[id].children || []).includes(compId));
             if (parentId) await handleRelatedObjectDrop(payload, parentId);
             return;
         }
@@ -423,7 +427,7 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
                 const payload = data.payload as RelatedObjectDragPayload;
                 if (overId.startsWith('slot:')) {
                     const nodeId = overId.slice(5);
-                    if (nodeId in layout.nodes) void handleRelatedObjectDrop(payload, nodeId);
+                    if (nodeId in nodesOf(layout)) void handleRelatedObjectDrop(payload, nodeId);
                     return;
                 }
                 if (overId.startsWith('comp:')) {
@@ -435,7 +439,7 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
             }
             if (overId.startsWith('slot:') && data.kind === 'component' && data.componentType) {
                 const nodeId = overId.slice(5);
-                if (nodeId in layout.nodes) handleDrop(data.componentType, nodeId);
+                if (nodeId in nodesOf(layout)) handleDrop(data.componentType, nodeId);
                 return;
             }
             if (overId.startsWith('comp:') && data.kind === 'field' && data.payload) {
@@ -538,11 +542,11 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
 function isReachable(layout: PageLayout, id: string): boolean {
     const seen = new Set<string>();
     const walk = (nodeId: string): boolean => {
-        if (nodeId === id && !layout.nodes[nodeId]) return true;
-        const node = layout.nodes[nodeId];
+        if (nodeId === id && !nodesOf(layout)[nodeId]) return true;
+        const node = nodesOf(layout)[nodeId];
         if (!node || seen.has(nodeId)) return false;
         seen.add(nodeId);
-        return (node.children || []).some((childId) => (childId === id && !layout.nodes[childId]) || walk(childId));
+        return (node.children || []).some((childId) => (childId === id && !nodesOf(layout)[childId]) || walk(childId));
     };
     return walk(layout.root);
 }

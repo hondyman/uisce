@@ -12,6 +12,7 @@ import { PageStudioApi } from '../../api/pageStudio';
 import { fetchBusinessObjectBindings, fetchBOTerms } from '../../features/query-builder/services/queryBuilderApi';
 import type { SemanticTermView } from '../../features/query-builder/types/queryDef';
 import type { CorePageDefinition, ComponentDefinition } from '../../types/pageStudio';
+import { nodesOf } from './layoutNodes';
 
 const slugify = (name: string) =>
   `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'page'}-${Math.random().toString(36).slice(2, 6)}`;
@@ -240,9 +241,10 @@ const NewPageWizard: React.FC<NewPageWizardProps> = ({ open, onClose, onCreate }
       const tableId = `comp_${Math.random().toString(36).slice(2, 8)}`;
       const { layout: listLayout } = LAYOUT_TEMPLATES[0].build(); // single-column: facets above table
       const rootChildren = facetIds.length > 0 ? [facetsRowId, tableId] : [tableId];
+      const listNodes = nodesOf(listLayout);
       listLayout.nodes = {
-        ...listLayout.nodes,
-        root: { ...listLayout.nodes.root, children: rootChildren },
+        ...listNodes,
+        root: { ...listNodes.root, children: rootChildren },
         ...(facetIds.length > 0
           ? { [facetsRowId]: { id: facetsRowId, type: 'Row', children: facetIds } }
           : {}),
