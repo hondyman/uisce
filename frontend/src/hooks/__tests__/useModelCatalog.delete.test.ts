@@ -32,7 +32,7 @@ describe('useModelCatalog.deleteModel', () => {
     // Use a small harness component to access hook instance
     let hookApi: any = null;
     function Harness() {
-      hookApi = useModelCatalog('tenant-1', 'ds-1');
+      hookApi = useModelCatalog();
       return null;
     }
 

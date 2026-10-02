@@ -170,8 +170,6 @@ export const useModelCatalog = (): UseModelCatalogResult => {
   if (!validToken && !DEV_ALLOW_UNAUTH_MODELS) throw new Error('Not authenticated');
 
   const updateUrlObj = new URL(resolveApiUrl(`/api/models/${modelId}`));
-      if (tenantId) updateUrlObj.searchParams.set('tenant_id', tenantId);
-      if (datasourceId) updateUrlObj.searchParams.set('tenant_instance_id', datasourceId);
       const resp = await authFetch(
         updateUrlObj.toString(),
         { method: 'PATCH', json: updates }
@@ -205,7 +203,7 @@ export const useModelCatalog = (): UseModelCatalogResult => {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenantId, datasourceId, models, selectedModel]);
+  }, [models, selectedModel]);
 
   const deleteModel = useCallback(async (modelId: string, _isCore?: boolean, _modelKey?: string) => {
     // Accept either a UUID model id or a model_key/display name; try to resolve
@@ -235,8 +233,6 @@ export const useModelCatalog = (): UseModelCatalogResult => {
   if (!validToken && !DEV_ALLOW_UNAUTH_MODELS) throw new Error('Not authenticated');
 
   const deleteUrlObj = new URL(resolveApiUrl(`/api/models/${resolvedId}`));
-      if (tenantId) deleteUrlObj.searchParams.set('tenant_id', tenantId);
-      if (datasourceId) deleteUrlObj.searchParams.set('tenant_instance_id', datasourceId);
       const resp = await authFetch(
         deleteUrlObj.toString(),
         { method: 'DELETE' }
@@ -258,8 +254,6 @@ export const useModelCatalog = (): UseModelCatalogResult => {
           if (altFound && altFound.id && altFound.id !== resolvedId) {
             const retryId = altFound.id;
             const retryDeleteUrlObj = new URL(resolveApiUrl(`/api/models/${retryId}`));
-            if (tenantId) retryDeleteUrlObj.searchParams.set('tenant_id', tenantId);
-            if (datasourceId) retryDeleteUrlObj.searchParams.set('tenant_instance_id', datasourceId);
             const retryResp = await authFetch(
               retryDeleteUrlObj.toString(),
               { method: 'DELETE' }
@@ -295,7 +289,7 @@ export const useModelCatalog = (): UseModelCatalogResult => {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenantId, datasourceId, models, selectedModel]);
+  }, [models, selectedModel]);
 
   const refreshModels = useCallback(async () => {
     await fetchModels();
