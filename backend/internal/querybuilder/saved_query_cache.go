@@ -138,20 +138,48 @@ func ComputeCanonicalParamsHash(params map[string]interface{}, runtimeFilters []
 
 // BuildCompositeCacheKey builds the 6-component cache key:
 // SHA256(tenantId + ":" + queryContentHash + ":" + canonicalResolvedParams + ":" + abacContextHash + ":" + routeTier + ":" + boSchemaVersion)
-func BuildCompositeCacheKey(tenantID, queryContentHash, canonicalParamsHash, abacContextHash, routeTier, boSchemaVersion string) string {
+// NoCubeCacheTerm is the stable marker used in a cache key when no cube is
+// live for the query.
+//
+// It must be a real, non-empty, constant value. An omitted or empty term would
+// let a payload cached BEFORE a cube was deployed be served AFTER, because the
+// pre-deploy key would be indistinguishable from the post-undo deploy key.
+// That is the mirror-image of the undeploy bug and is just as wrong.
+const NoCubeCacheTerm = "nocube"
+
+// BuildCompositeCacheKey composes the batch-execute cache key.
+//
+// cubeContentHash participates because a cube deploy or edit changes which
+// materialization serves a query. Without it, a payload computed against a
+// materialization that has since been undeployed keeps serving its rows: the
+// cache path never consults the router, so none of the router's gates
+// (ABAC-below-grain, staleness, decomposability) would catch it. Those gates
+// only protect the miss path.
+//
+// Callers MUST pass NoCubeCacheTerm rather than "" when no cube is live.
+//
+// The previous 6-argument form is retained for callers that do not participate
+// in cube routing; it delegates with the no-cube marker, so it cannot silently
+// produce a key that collides with an omitted term.
+func BuildCompositeCacheKey(tenantID, queryContentHash, canonicalParamsHash, abacContextHash, routeTier, boSchemaVersion string, cubeContentHash ...string) string {
 	if routeTier == "" {
 		routeTier = "hot"
 	}
 	if boSchemaVersion == "" {
 		boSchemaVersion = "v1"
 	}
-	raw := fmt.Sprintf("%s:%s:%s:%s:%s:%s",
+	cubeTerm := NoCubeCacheTerm
+	if len(cubeContentHash) > 0 && cubeContentHash[0] != "" {
+		cubeTerm = cubeContentHash[0]
+	}
+	raw := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%s",
 		tenantID,
 		queryContentHash,
 		canonicalParamsHash,
 		abacContextHash,
 		routeTier,
 		boSchemaVersion,
+		cubeTerm,
 	)
 	h := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(h[:])
@@ -330,14 +358,35 @@ func (h *SavedQueryHandler) HandleBatchExecuteSavedQueries(w http.ResponseWriter
 				return
 			}
 
-			// Check and build composite cache key
+			// Check and build composite cache key.
+			//
+			// Both terms below are load-bearing, and both were previously
+			// missing or hardcoded at this call site.
+			//
+			// boSchemaVersion: the saved query's own content hash, so any
+			// semantic change to the query invalidates its cached rows. A
+			// literal "v1" here meant no catalog change could ever invalidate
+			// a batch-execute entry.
+			//
+			// cubeContentHash: the live cube's content hash, or the stable
+			// NoCubeCacheTerm marker when no cube serves this query. Omitting
+			// it meant a payload computed against a since-undeployed
+			// materialization kept serving its rows, bypassing every router
+			// gate because the cache path never consults the router.
+			// Query content hash doubles as the BO schema version term: it
+			// changes whenever the saved query's semantics change.
 			contentHash := ComputeContentHash(contentFromSavedQuery(sq))
+			boSchemaVersion := contentHash
+			cubeContentHash := NoCubeCacheTerm
+			if h.service != nil {
+				cubeContentHash = h.service.CubeContentHashForCache(ctx, secCtx, tenantID, sq)
+			}
 			paramsHash := ComputeCanonicalParamsHash(qItem.Params, qItem.RuntimeFilters)
 			tier := qItem.RouteTier
 			if tier == "" {
 				tier = "hot"
 			}
-			cacheKey := BuildCompositeCacheKey(tenantID, contentHash, paramsHash, abacHash, tier, "v1")
+			cacheKey := BuildCompositeCacheKey(tenantID, contentHash, paramsHash, abacHash, tier, boSchemaVersion, cubeContentHash)
 
 			currentWM := GlobalQueryCache.GetWatermark(tenantID, sq.BOID)
 			if cached, hit := GlobalQueryCache.Get(cacheKey, currentWM); hit {

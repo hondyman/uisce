@@ -30,6 +30,23 @@ reviewer who asserts "X is wired" from a service being *constructed* has made
 the same error as an author who asserts it from a test passing. Both must
 check whether the *scheduler* or *caller* actually runs.
 
+### Extension: the rule binds gate claims too (ADR-022)
+
+**A test proves only what it executes.** A gate tied to a function must name
+that function's **production call site** in the gate report.
+
+This extension was not theoretical. During cubed-tables merge review, gate #10
+passed while validating `ComputeQueryAndMetricsAndCubeCacheKey` — a function with
+zero production callers. The live seam was `BuildCompositeCacheKey`, which had
+no cube term, so a payload computed against an undeployed materialization kept
+serving its rows. The gate was green and the guarantee was fictional. The same
+shape as a dormant component, reached through the test suite instead of the
+deployment path.
+
+**Practice:** before claiming a gate, name the function it exercises, then
+`grep` for a non-test call site of that exact function. If the grep is empty,
+the gate is measuring a fiction.
+
 ---
 
 ## Imported historical decisions (ADR-001 … ADR-010)
@@ -266,20 +283,46 @@ deferred, not planned. Preferring the conservative rule means the router can
 never be the cause of a wrong answer, only of a slow one.
 
 ### ADR-016: Cube Content Hash Participates in the Query Cache Key
-**Status:** accepted · **Date:** 2026-10-01 · **Scope:** Caching
+**Status:** accepted — **corrected at merge review** · **Date:** 2026-10-01 · **Scope:** Caching
 
-**Context.** The query cache key (`ComputeQueryAndMetricsCacheKey`,
-`backend/internal/querybuilder/metric_compiler.go:181`) composes tenant, query
-content hash, sorted metric content hashes, params, ABAC context, route tier,
-and BO schema version. A cube deployment or edit changes the answer a query
-returns, so it must invalidate dependent entries.
+**Context.** A cube deploy or edit changes which materialization serves a
+query, so dependent cache entries must be invalidated.
 
-**Decision.** Add a `cubeContentHash` term to the key, following the existing
-sort-and-join hash pattern. No new cache machinery.
+**Decision.** A cube content hash term participates in the cache key. The
+no-cube case uses a stable, non-empty marker (`NoCubeCacheTerm`), never an
+omitted term.
 
-**Consequences.** Deploying or editing a cube invalidates dependent entries, and
-a cached envelope can never claim `cubeHit: true` for a cube that has since been
-undeployed. Reuses a proven invalidation pattern.
+**Correction record (2026-10-02, merge review).** The first implementation of
+this decision validated `ComputeQueryAndMetricsAndCubeCacheKey` with passing
+tests, and that function **had no production call site**. The live batch-execute
+seam is `BuildCompositeCacheKey`, which had no cube term at all, and whose
+`boSchemaVersion` argument was a hardcoded literal `"v1"` at the call site.
+
+Two real defects followed, and both are now fixed with the production call site
+cited:
+
+- A payload computed against a materialization that was later undeployed kept
+  serving its **rows**. The cache path never consults the router, so every gate
+  the router applies (ABAC-below-grain, staleness, decomposability) protects
+  only the *miss* path and none of them could catch a stale cache hit.
+- No semantic catalog change could ever invalidate a batch-execute entry, since
+  the schema-version term was a constant.
+
+**Why it survived delivery:** the gate test (#10) passed against a function with
+no callers. This is the test-suite analogue of the dormant-component pattern,
+and it is the reason test #13 now extends from "wired claims" to "gate claims."
+
+**Evidence (production call sites).** `BuildCompositeCacheKey` is called from
+`backend/internal/querybuilder/saved_query_cache.go` in the batch-execute loop
+and now takes the cube term; the hash is resolved by
+`QueryService.CubeContentHashForCache`, which reads the router installed at
+`backend/internal/api/api.go:1151`. The BO schema-version term is now the saved
+query's own content hash rather than a literal.
+
+**Consequences.** A cube deploy, edit, or undeploy invalidates exactly the
+entries it should. Failure to resolve a cube hash degrades to
+`NoCubeCacheTerm`, which is the safe direction: the entry misses and
+re-executes rather than serving a cube-keyed payload.
 
 ### ADR-017: The Pre-Aggregation Scheduler Stays Separate From `/api/schedules`
 **Status:** accepted · **Date:** 2026-10-01 · **Scope:** Scheduling
@@ -378,6 +421,41 @@ rather than being silently mis-rolled-up. This is the conservative direction:
 the router can be slow, never wrong. The test that guards it omits the time
 dimension deliberately, which is what makes it a real rollup case rather than an
 exact-grain match.
+
+### ADR-023: Guardrails Are DB-Only, With No Filesystem Fallback
+**Status:** accepted · **Date:** 2026-10-02 · **Scope:** Bundle validation
+
+**Context.** `loadGuardrails` read `guardrail_rules` from the database and, when
+that was empty or unavailable, fell back to probing `GUARDRAILS_PATH` and then
+`guardrails.yaml`, `../guardrails.yaml`, `../../guardrails.yaml`.
+
+**Decision.** The database is the only source. There is no YAML file fallback
+and no `GUARDRAILS_PATH` probing. A nil DB yields an empty configuration. A
+request for the removed `"yaml"` source is an explicit error, not a silent
+empty result.
+
+**Consequences.** The fallback made configuration depend on ambient
+working-directory state: a stray file on disk could silently override the
+database, and the same rule set could be served from two different sources
+depending on where the process was started. It also made the test suite
+order-dependent — a test that wrote `guardrails.yaml` could still have it
+present when a sibling asserted the file was absent, and `os.Remove` failures
+were discarded with `_ =`, so the residue survived and failed unrelated runs on
+any machine where deletion was restricted.
+
+This is the same lesson as ADR-012, applied to configuration rather than
+routing: **a path that can be satisfied two ways is a path whose behaviour is
+ambient.** Removing the second way made the guardrail tests independent of the
+filesystem and of test order.
+
+**Evidence (production call sites).** `loadGuardrails` (`internal/bundles/handler.go`)
+is the single loader, reached by `getGuardrails` and `ReloadGuardrailsHandler`
+(registered at the `/guardrails/reload` route). `GUARDRAILS_PATH` and every
+`guardrails.yaml` probe path are removed from the package.
+
+**Unrelated and deliberately untouched:** the `config.yaml` DSN probe in the
+same file is a database-connection helper, not a guardrail source, and still
+uses the `yaml` package.
 
 ## Open items
 

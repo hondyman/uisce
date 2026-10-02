@@ -53,6 +53,35 @@ func (s *QueryService) SetCubeRouter(r *CubeRouter) {
 	s.cubes = r
 }
 
+// CubeContentHashForCache returns the cube term for a saved query's cache key,
+// or NoCubeCacheTerm when no cube serves it.
+//
+// It exists because the cube term is an INPUT to the cache key, so it must be
+// resolved before the lookup — it cannot be learned from a cache hit. Any
+// failure degrades to NoCubeCacheTerm, which is a distinct stable value: a
+// query that previously hit a cube will miss and re-execute rather than serve
+// the cube-keyed payload. That is the safe direction.
+func (s *QueryService) CubeContentHashForCache(ctx context.Context, secCtx *security.Context, tenantID string, sq *SavedQuery) string {
+	if s == nil || s.cubes == nil || sq == nil || secCtx == nil {
+		return NoCubeCacheTerm
+	}
+	limit := sq.State.Limit
+	if limit <= 0 {
+		limit = 1000
+	}
+	qd := savedQueryDef(*sq, tenantID, nil, limit)
+	decision := s.cubes.Route(ctx, secCtx.TenantID, qd, abacRestrictedGrainsFrom(secCtx))
+	if decision.Route == nil {
+		return NoCubeCacheTerm
+	}
+	if decision.Route.ContentHash == "" {
+		// A route with no content hash would collide with any other unhashed
+		// route. Treat it as no-cube rather than risking a shared entry.
+		return NoCubeCacheTerm
+	}
+	return decision.Route.ContentHash
+}
+
 // NewQueryService creates a QueryService for the given generator, resolver,
 // and relationship resolver. relationships may be nil, in which case
 // QueryDefs with RelatedBOIDs are rejected rather than silently ignoring
