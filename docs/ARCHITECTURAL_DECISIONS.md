@@ -546,6 +546,83 @@ migration encodes. The legacy creator is
 `internal/bundles/optimizer.go:70`; its only caller is
 `internal/bundles/optimizer.go:86`.
 
+### ADR-025: The Metric Compiler's Expression Surface Is Frozen Until C3
+
+**Decision.** The metric compiler may not gain expression capability while
+C1-C3 unify it onto `internal/rules/vm`. New operators, functions, parsers, or
+a second evaluator are refused by a guard, not by convention. The freeze is
+enforced by `internal/archguard/metric_compiler_freeze_test.go`.
+
+**Context.** Three expression systems exist: the metric compiler (A),
+`internal/rules/vm` (B, the intended survivor, with dialect emission, an
+allowlist and a PII gate), and `internal/calcengine` (C, Go-native NAV/VaR). The
+existing `TestSingleRuleEngine` guard polices *engine library imports*; it says
+nothing about a second evaluator growing inside the metric compiler, which is
+exactly where the next one would appear.
+
+**Why a guard and not a comment.** Comments do not fail builds. The freeze has
+to be something CI runs, and something that fails *loudly and specifically* when
+someone adds the capability anyway.
+
+**How the freeze is expressed.** There is no operator dispatch in the compiler
+to enumerate: `compileFormula` (`metric_compiler.go:127`) splits the formula on
+whitespace and substitutes `@var` with positional placeholders, passing every
+other token straight through. So the enforceable invariant is the
+**tokenization contract**, pinned by golden cases that call the exported
+`CompileMetric` and assert the exact SQL and arguments, plus a structural pin
+on the file's declared func and import surface (methods receiver-qualified, so
+a name cannot be shadowed onto another type).
+
+**The freeze expires on evidence, with a date backstop.** The primary trigger
+is the C3 gate landing — `internal/querybuilder/metric_compiler_c3_gate_test.go`
+— at which point the guard tells you to delete the freeze and let the C3 gate
+police the surface. This is ADR-020 applied to the freeze itself: staleness is
+status-driven, not clock-driven. The backstop date (`2026-12-31`) exists only so
+the freeze cannot outlive its reason without a deliberate human decision; if it
+passes without C3 landing, the guard fails and the date must be extended with a
+reason rather than quietly edited. No C3 date was defined anywhere in version
+control, so inventing a calendar expiry as the *primary* trigger was rejected
+rather than guessed.
+
+**Two defects the freeze found on its first run, both pinned as-is.**
+
+1. `metricFormulaUnspacedOperatorIsOneToken` — `"@a*@b"` is a *single*
+   whitespace token beginning with `@`, so it is looked up as a variable named
+   `a*@b`, misses, and falls through to the neutral `1.0` multiplier. The
+   multiplication is silently dropped and the metric compiles to a constant.
+   No error is raised.
+2. `metricDerivedTwoMetricsTakeNumeratorFromAlphabeticalOrder` —
+   `BaseMetricIDs` are sorted alphabetically (`:86`), and the first entry
+   becomes the numerator. A declared `revenue / cost` ratio therefore compiles
+   to `cost / revenue`. Numerator and denominator are decided by how the metric
+   IDs are *spelled*, not by the order the author declared.
+
+Both are pinned as current behaviour on purpose. A freeze records what the code
+does; changing it must be a decision, lifted deliberately and recorded, not a
+side effect of unrelated work. Fixing them is C1-C3 work.
+
+**A comment that outruns its code.** `metric_compiler.go:70` says "Formula AST
+compilation with allowlisted operators" and `:125-126` says it compiles "safe
+arithmetic". Neither is true: there is no operator parsing and no allowlist for
+formulas. Aggregation *is* allowlisted (`:58`); formula is not. There is no
+upstream validator either. The single production caller of `CompileMetric` is
+the cube DDL generator (`cube_ddl.go:138`), so a formula's raw text reaches
+StarRocks DDL. The formula path should be read as unvalidated until C2 routes
+it through the `vm` resolver. Correcting the comments is folded into C1-C3, not
+done here, because changing them now would be a claim about a fix that has not
+happened.
+
+**Consequence to expect.** C2 adds the `vm` resolver and will break
+`metricCompilerImportPins` **by design**. That is the freeze working, not a bug
+in it: it forces the freeze to be lifted consciously.
+
+**Evidence (production call sites).** `CompileMetric`
+(`internal/querybuilder/metric_compiler.go:35`) is the compiler's only public
+entry, called from `internal/querybuilder/cube_ddl.go:138` — the only
+non-test caller in the tree. `compileFormula` (`:127`) is the formula path.
+The freeze guard is `internal/archguard/metric_compiler_freeze_test.go`,
+alongside the existing `TestSingleRuleEngine`.
+
 ## Open items
 
 - **Call-site verification for ADR-001 … ADR-010.** The imported entries assert
