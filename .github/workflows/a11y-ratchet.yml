@@ -16,6 +16,9 @@ jobs:
   a11y-ratchet:
     name: A11y Ratchet Gate
     runs-on: ubuntu-latest
+    # Job-level so the baseline crawl gets it too; it refuses to run without a real JWT.
+    env:
+      E2E_JWT: ${{ secrets.E2E_JWT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -49,8 +52,6 @@ jobs:
       - name: Run locale-matrix smoke tests
         working-directory: frontend
         run: npx playwright test --config=playwright.a11y.config.ts locale-matrix.spec.ts
-        env:
-          E2E_JWT: ${{ secrets.E2E_JWT }}
 
       - name: Run a11y baseline crawl
         working-directory: frontend
