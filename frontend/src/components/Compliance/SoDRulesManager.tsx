@@ -46,8 +46,8 @@ export const SoDRulesManager: React.FC = () => {
 
   const fetchRules = async () => {
     try {
-      const res = await apiClient.get('/api/compliance/gsifi/sod');
-      const data = await res.json();
+      // apiClient already parses JSON responses.
+      const data = await apiClient<unknown>('/api/compliance/gsifi/sod');
       setRules(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch SoD rules:', error);
@@ -65,8 +65,10 @@ export const SoDRulesManager: React.FC = () => {
       return;
     }
     try {
-      await apiClient.post('/api/compliance/gsifi/sod', {
-        body: JSON.stringify(form)
+      await apiClient('/api/compliance/gsifi/sod', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
       });
       setOpenModal(false);
       setForm({ role_key_a: '', role_key_b: '', conflict_type: '' });
@@ -79,7 +81,7 @@ export const SoDRulesManager: React.FC = () => {
   const handleDelete = async (ruleId: string) => {
     if (!confirm('Are you sure you want to delete this SoD rule?')) return;
     try {
-      await apiClient.delete(`/api/compliance/gsifi/sod/${ruleId}`);
+      await apiClient(`/api/compliance/gsifi/sod/${ruleId}`, { method: 'DELETE' });
       fetchRules();
     } catch (error) {
       console.error('Failed to delete SoD rule:', error);

@@ -59,8 +59,8 @@ const WIDEN_TARGET = 164; // 164 from the damage run, 0 documented excludes (wav
  *                   AND tenantContextStub.identity.test.ts, 6 tests, the
  *                   identity + shape guard for the fixture extensions)
  */
-const RUNNING_FILE_BASELINE = 106; // 105 after #277, +1 tenantScopeGate.test.ts, +1 useCanEditCoreItem.test.tsx, -1 dataExplorerApi.test.ts (data-explorer dropped)
-const EXECUTED_TEST_BASELINE = 600; // measured with `vitest --reporter=json`: 594 after #277, +6 tenantScopeGate.test.ts, +5 useCanEditCoreItem.test.tsx, -5 dataExplorerApi.test.ts
+const RUNNING_FILE_BASELINE = 107; // 105 after #277, +1 tenantScopeGate.test.ts, +1 useCanEditCoreItem.test.tsx, -1 dataExplorerApi.test.ts (data-explorer dropped), +1 gsifiManagers.test.tsx
+const EXECUTED_TEST_BASELINE = 609; // measured with `vitest --reporter=json`: 594 after #277, +6 tenantScopeGate.test.ts, +5 useCanEditCoreItem.test.tsx, -5 dataExplorerApi.test.ts, +9 gsifiManagers.test.tsx
 
 function globFiles(roots: string[], patterns: string[]): string[] {
   const out: string[] = [];
@@ -138,7 +138,7 @@ describe('test suite inclusion counter', () => {
   it('executed test count matches the baseline (bump per wave)', () => {
     // Includes this file's own 4 assertions. Bump on every wave that adds/removes
     // assertions; the comment names the wave.
-    expect(EXECUTED_TEST_BASELINE).toBe(600);
+    expect(EXECUTED_TEST_BASELINE).toBe(609);
   });
 
   it('widened target is larger than the current run, so widening has work to do', () => {
