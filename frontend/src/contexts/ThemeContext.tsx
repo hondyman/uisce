@@ -1,3 +1,4 @@
+import { DEFAULT_THEME_STYLE, isThemeStyle, type ThemeStyle } from '../theme/themeStyles';
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
 export type Theme = 'light' | 'dark' | 'system';
@@ -6,6 +7,9 @@ interface ThemeContextType {
   theme: Theme;
   systemTheme: 'light' | 'dark';
   effectiveTheme: 'light' | 'dark';
+  /** Visual style (palette family), independent of light/dark. */
+  style: ThemeStyle;
+  setStyle: (style: ThemeStyle) => void;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
 }
@@ -13,6 +17,7 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_STORAGE_KEY = 'app-theme-preference';
+const STYLE_STORAGE_KEY = 'app-theme-style';
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Detect system preference
@@ -30,6 +35,25 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
     return 'system';
   });
+
+  const [style, setStyleState] = useState<ThemeStyle>(() => {
+    try {
+      const stored = localStorage.getItem(STYLE_STORAGE_KEY);
+      if (isThemeStyle(stored)) return stored;
+    } catch (e) {
+      // Silently fail if localStorage is not available
+    }
+    return DEFAULT_THEME_STYLE;
+  });
+
+  const setStyle = (next: ThemeStyle) => {
+    setStyleState(next);
+    try {
+      localStorage.setItem(STYLE_STORAGE_KEY, next);
+    } catch (e) {
+      // Silently fail if localStorage is not available
+    }
+  };
 
   // Detect system preference on mount and when it changes
   useEffect(() => {
@@ -64,7 +88,32 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     // Uisce brand CSS variables for nav
     const r = document.documentElement.style;
-    if (effectiveTheme === 'dark') {
+    if (style === 'ivy') {
+      const dark = effectiveTheme === 'dark';
+      const accent = dark ? '#66BB6A' : '#2E7D32';
+      const rgb = dark ? '102, 187, 106' : '46, 125, 50';
+      const surface = dark ? '#161B22' : '#FFFFFF';
+      const line = dark ? '#21262D' : '#E5E7EB';
+      r.setProperty('--nav-accent', accent);
+      r.setProperty('--nav-bg', dark ? '#0D1117' : '#F5F7FA');
+      r.setProperty('--nav-text', dark ? '#FFFFFF' : '#1A1A2E');
+      r.setProperty('--nav-appbar-bg', surface);
+      r.setProperty('--nav-appbar-border', line);
+      r.setProperty('--nav-border-accent', `rgba(${rgb}, 0.5)`);
+      r.setProperty('--nav-accent-muted', `rgba(${rgb}, 0.10)`);
+      r.setProperty('--nav-hover-fill', `rgba(${rgb}, 0.06)`);
+      r.setProperty('--nav-glass-bg', surface);
+      r.setProperty('--nav-glass-border', line);
+      r.setProperty('--nav-menu-shadow', dark ? '0 8px 32px rgba(0, 0, 0, 0.5)' : '0 4px 16px rgba(0, 0, 0, 0.08)');
+      r.setProperty('--nav-item-active', `rgba(${rgb}, 0.12)`);
+      r.setProperty('--nav-item-text', dark ? '#FFFFFF' : '#1A1A2E');
+      r.setProperty('--nav-item-hover', `rgba(${rgb}, 0.06)`);
+      r.setProperty('--nav-sidebar-bg', surface);
+      r.setProperty('--nav-sidebar-border', line);
+      r.setProperty('--nav-rail-accent', accent);
+      r.setProperty('--nav-text-dim', dark ? '#B0B8C4' : '#5A6072');
+      r.setProperty('--nav-glow-color', `rgba(${rgb}, 0.35)`);
+    } else if (effectiveTheme === 'dark') {
       r.setProperty('--nav-accent', '#F5C518');
       r.setProperty('--nav-bg', '#0A0C12');
       r.setProperty('--nav-text', '#E2E8F0');
@@ -105,7 +154,8 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       r.setProperty('--nav-text-dim', '#8B7D6B');
       r.setProperty('--nav-glow-color', 'rgba(212, 160, 23, 0.3)');
     }
-  }, [effectiveTheme]);
+    html.dataset.themeStyle = style;
+  }, [effectiveTheme, style]);
 
   // Save theme preference to localStorage
   const setTheme = (newTheme: Theme) => {
@@ -132,6 +182,8 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     theme,
     systemTheme,
     effectiveTheme,
+    style,
+    setStyle,
     setTheme,
     toggleTheme,
   };
