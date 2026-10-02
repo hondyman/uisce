@@ -248,7 +248,7 @@ const categoryConfigs: CategoryConfig[] = [
     label: 'Build',
     key: 'weave',
     icon: <BuildIcon />,
-    defaultPath: '/views',
+    defaultPath: '/business-objects',
     color: {
       primary: '#9C27B0',
       light: '#F3E5F5',
