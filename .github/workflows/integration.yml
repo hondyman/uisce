@@ -71,7 +71,12 @@ jobs:
         curl -s http://localhost:8080/api/roles | head -c 200 || true
 
     - name: Build gateway
-      run: go build -o bin/api-gateway ./api-gateway
+      # api-gateway is its own Go module and is not in go.work, so `go build
+      # ./api-gateway` from the repo root cannot see it. Build from inside it.
+      working-directory: api-gateway
+      env:
+        GOWORK: 'off'
+      run: go build -o ../bin/api-gateway .
 
     - name: Start gateway
       env:
@@ -87,7 +92,14 @@ jobs:
         curl -s http://localhost:8001/health || true
 
     - name: Run integration test
-      run: go test ./api-gateway -v -run TestGatewayRolesProxy
+      # NOTE: RUN_INTEGRATION_TESTS is not set here, so TestGatewayRolesProxy SKIPS.
+      # Running it for real needs a Temporal service (the gateway only listens once
+      # it can reach Temporal) and RUN_INTEGRATION_TESTS=1. Until then this step
+      # proves the gateway compiles, not that it proxies.
+      working-directory: api-gateway
+      env:
+        GOWORK: 'off'
+      run: go test . -v -run TestGatewayRolesProxy
 
     - name: Upload logs on failure
       if: failure()
