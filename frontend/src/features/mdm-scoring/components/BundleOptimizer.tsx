@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Box, Card, CardContent, Typography, Slider, Button, Grid, Chip, Stack,
+  Box, Card, CardContent, Typography, Slider, Button, GridLegacy as Grid, Chip, Stack,
   Alert, CircularProgress, Paper, LinearProgress, Divider
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -110,7 +110,7 @@ export const BundleOptimizer: React.FC<BundleOptimizerProps> = ({ onViewDisplace
             variant="contained"
             color="primary"
             startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <SpeedIcon />}
-            onClick={runOptimization}
+            onClick={() => runOptimization()}
             disabled={loading}
           >
             {loading ? 'Solving...' : 'Recalculate Optimal Stack'}

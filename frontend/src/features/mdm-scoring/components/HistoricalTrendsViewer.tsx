@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Card, CardContent, Typography, Grid, Chip, Button, Stack,
+  Box, Card, CardContent, Typography, GridLegacy as Grid, Chip, Button, Stack,
   CircularProgress, Alert, MenuItem, Select, FormControl, InputLabel,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper
 } from '@mui/material';
