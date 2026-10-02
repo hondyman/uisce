@@ -38,6 +38,21 @@ func unitsMetric() MetricDefinition {
 	}
 }
 
+func costMetric() MetricDefinition {
+	return MetricDefinition{
+		ID:   "m_cost",
+		Name: "Cost",
+		BOID: "bo_sales",
+		Expression: MetricExpression{
+			Kind:       "aggregation",
+			Fn:         "sum",
+			TermNodeID: "cost",
+		},
+		GrainAllowlist: []string{"country", "product", "order_date"},
+		Decomposable:   true,
+	}
+}
+
 func ddlFixture() (CubeDefinition, map[string]MetricDefinition) {
 	cube := sampleCube()
 	cube.Grains = [][]string{{"country", "product", "order_date"}}
@@ -211,5 +226,112 @@ func TestGenerateCubeMaterializationDDL_ValidatesInput(t *testing.T) {
 		bad.MetricIDs = nil
 		_, err := gen.GenerateCubeMaterializationDDL("t", false, bad, grain, "oms.sales", lookup, nil)
 		require.ErrorIs(t, err, ErrCubeNoMetrics)
+	})
+}
+
+// TestGenerateCubeMaterializationDDL_DerivedMetricKeepsOperandOrder closes the
+// gap that let a derived-metric defect survive: every other test in this file
+// used an aggregation or a formula, and the cube DDL generator is the ONLY
+// production consumer of CompileMetric. A derived ratio therefore never went
+// through the one path that turns a metric into StarRocks DDL.
+//
+// The generated measure must carry revenue over cost, because that is the
+// order the metric declared. It used to emit cost over revenue, because the
+// compiler sorted the operands and the numerator was whichever ID sorted
+// first. See ADR-025.
+func TestGenerateCubeMaterializationDDL_DerivedMetricKeepsOperandOrder(t *testing.T) {
+	gen := NewCubeDDLGenerator("starrocks")
+	cube, lookup := ddlFixture()
+	lookup["m_cost"] = costMetric()
+
+	grain := []string{"country", "product", "order_date"}
+	schema := "oms.sales"
+
+	t.Run("declared order is numerator over denominator", func(t *testing.T) {
+		cube.MetricIDs = []string{"m_margin"}
+		lookup["m_margin"] = MetricDefinition{
+			ID:   "m_margin",
+			Name: "Margin Ratio",
+			BOID: "bo_sales",
+			Expression: MetricExpression{
+				Kind:          "derived",
+				BaseMetricIDs: []string{"m_revenue", "m_cost"},
+			},
+			GrainAllowlist: []string{"country", "product", "order_date"},
+			Decomposable:   true,
+		}
+
+		ddl, err := gen.GenerateCubeMaterializationDDL("t", false, cube, grain, schema, lookup, nil)
+		require.NoError(t, err)
+		assert.Contains(t, ddl.DDL, "SUM(t0.revenue)) / NULLIF((SUM(t0.cost)",
+			"a ratio declared revenue/cost must materialize as revenue over cost")
+		assert.NotContains(t, ddl.DDL, "SUM(t0.cost)) / NULLIF((SUM(t0.revenue)")
+	})
+
+	t.Run("explicit operands override baseMetricIds order", func(t *testing.T) {
+		lookup["m_margin"] = MetricDefinition{
+			ID:   "m_margin",
+			Name: "Margin Ratio",
+			BOID: "bo_sales",
+			Expression: MetricExpression{
+				Kind:          "derived",
+				BaseMetricIDs: []string{"m_cost", "m_revenue"},
+				NumeratorID:   "m_revenue",
+				DenominatorID: "m_cost",
+			},
+			GrainAllowlist: []string{"country", "product", "order_date"},
+			Decomposable:   true,
+		}
+
+		ddl, err := gen.GenerateCubeMaterializationDDL("t", false, cube, grain, schema, lookup, nil)
+		require.NoError(t, err)
+		assert.Contains(t, ddl.DDL, "SUM(t0.revenue)) / NULLIF((SUM(t0.cost)")
+	})
+
+	t.Run("formula with an unspaced operator keeps both operands", func(t *testing.T) {
+		cube.MetricIDs = []string{"m_fx"}
+		lookup["m_fx"] = MetricDefinition{
+			ID:   "m_fx",
+			Name: "Revenue In USD",
+			BOID: "bo_sales",
+			Expression: MetricExpression{
+				Kind:    "formula",
+				Formula: "SUM(t0.revenue)*@fx_rate",
+			},
+			Variables: []MetricVariable{
+				{Name: "fx_rate", Type: "number", DefaultValue: 1.0},
+			},
+			GrainAllowlist: []string{"country", "product", "order_date"},
+			Decomposable:   true,
+		}
+
+		// The multiplication survives compilation - the point of the
+		// tokenizer fix - but the measure is still parameterized, and a
+		// materialized view cannot bind $1. So generation must refuse it with
+		// a real reason rather than emitting DDL StarRocks cannot run.
+		_, err := gen.GenerateCubeMaterializationDDL("t", false, cube, grain, schema, lookup, map[string]interface{}{"fx_rate": 1.2})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "parameterized formula")
+		assert.Contains(t, err.Error(), "self-contained")
+	})
+
+	t.Run("an unparameterized formula still materializes with its operator intact", func(t *testing.T) {
+		cube.MetricIDs = []string{"m_plain"}
+		lookup["m_plain"] = MetricDefinition{
+			ID:   "m_plain",
+			Name: "Revenue Scaled",
+			BOID: "bo_sales",
+			Expression: MetricExpression{
+				Kind:    "formula",
+				Formula: "SUM(t0.revenue)*2",
+			},
+			GrainAllowlist: []string{"country", "product", "order_date"},
+			Decomposable:   true,
+		}
+
+		ddl, err := gen.GenerateCubeMaterializationDDL("t", false, cube, grain, schema, lookup, nil)
+		require.NoError(t, err)
+		assert.Contains(t, ddl.DDL, "SUM(t0.revenue)*2",
+			"a literal-only formula must keep its operator and be materializable")
 	})
 }

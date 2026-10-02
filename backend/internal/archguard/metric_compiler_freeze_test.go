@@ -37,15 +37,25 @@ import (
 // substitutes @var, passing every other token straight through. So the
 // enforceable invariant is the tokenization contract, pinned by golden cases.
 //
-// THE GOLDEN CASES PIN CURRENT BEHAVIOUR, INCLUDING BEHAVIOUR THAT IS WRONG.
-// metricFormulaUnspacedOperatorIsOneToken is the sharpest one: "@a*@b" is a
-// single whitespace token that starts with "@", so it is looked up as a
-// variable named "a*@b", not found, and falls through to the neutral 1.0
-// multiplier - the multiplication is silently dropped and the metric compiles
-// to a constant. That is a real defect. It is pinned here on purpose: a freeze
-// records what the code does, and changing it must be a decision (lift the
-// freeze, or amend the case deliberately) rather than a side effect. Fixing it
-// is C1-C3 work, not something to smuggle through this guard.
+// HISTORY: this freeze found two real defects on its first run, and both were
+// fixed deliberately rather than pinned:
+//
+//  1. "@a*@b" was one whitespace token, was looked up as a variable named
+//     "a*@b", missed, and fell through to the neutral 1.0 multiplier - the
+//     multiplication was silently dropped and the metric compiled to a
+//     constant. Now pinned by metricFormulaUnspacedOperatorBindsBothOperands
+//     and its neighbours.
+//  2. BaseMetricIDs were sorted alphabetically and the first entry became the
+//     numerator, so a declared revenue/cost ratio compiled to cost/revenue.
+//     Now pinned by metricDerivedTwoMetricsUseDeclaredOrder and
+//     metricDerivedTwoMetricsUseExplicitOperands.
+//
+// Both were wrong answers reaching StarRocks DDL through the cube DDL
+// generator. They were fixed BEFORE the golden corpus (8.3) was built, on the
+// ruling that a corpus which snapshots inverted semantics would enshrine the
+// bug as the reference. The cases below are the new baseline, and the freeze
+// still holds them: changing any of them again is a decision, not a side
+// effect.
 
 const (
 	// metricCompilerPath is backend-relative.
@@ -157,15 +167,53 @@ func TestMetricCompilerExpressionSurfaceIsFrozen(t *testing.T) {
 			wantArgs: []string{"1.25"},
 		},
 		{
-			// The load-bearing freeze case. "@a*@b" is ONE whitespace token
-			// that starts with "@", so it is looked up as a variable named
-			// "a*@b", misses, and falls to the neutral 1.0 multiplier. The
-			// multiplication is silently dropped. See the file comment.
-			name:     "metricFormulaUnspacedOperatorIsOneToken",
+			// The tokenizer regression, fixed. "@a*@b" is one whitespace token
+			// beginning with "@"; it used to be looked up as a variable named
+			// "a*@b", miss, and fall to the neutral 1.0 multiplier - dropping
+			// the multiplication and compiling to a constant with no error.
+			// Both operands now bind, and the "*" is preserved verbatim.
+			name:     "metricFormulaUnspacedOperatorBindsBothOperands",
 			expr:     querybuilder.MetricExpression{Kind: "formula", Formula: "@a*@b"},
 			vars:     []querybuilder.MetricVariable{required("a"), required("b")},
 			bindings: map[string]interface{}{"a": 2.0, "b": 3.0},
-			wantSQL:  "$1",
+			wantSQL:  "$1*$2",
+			wantArgs: []string{"2", "3"},
+		},
+		{
+			// Neighbour: the spaced form must be unchanged by the fix.
+			name:     "metricFormulaSpacedOperatorBindsBothOperands",
+			expr:     querybuilder.MetricExpression{Kind: "formula", Formula: "@a * @b"},
+			vars:     []querybuilder.MetricVariable{required("a"), required("b")},
+			bindings: map[string]interface{}{"a": 2.0, "b": 3.0},
+			wantSQL:  "$1 * $2",
+			wantArgs: []string{"2", "3"},
+		},
+		{
+			// Neighbour: variable adjacent to a literal.
+			name:     "metricFormulaVariableAdjacentToLiteralBinds",
+			expr:     querybuilder.MetricExpression{Kind: "formula", Formula: "@a*2"},
+			vars:     []querybuilder.MetricVariable{required("a")},
+			bindings: map[string]interface{}{"a": 5.0},
+			wantSQL:  "$1*2",
+			wantArgs: []string{"5"},
+		},
+		{
+			// The reason substitution must happen IN PLACE, with no whitespace
+			// inserted: a Postgres cast and a JSON operator both break if a
+			// space is added at the substitution point.
+			name:     "metricFormulaCastAndJsonOperatorSurviveSubstitution",
+			expr:     querybuilder.MetricExpression{Kind: "formula", Formula: "@a::numeric + @a->>'k'"},
+			vars:     []querybuilder.MetricVariable{required("a")},
+			bindings: map[string]interface{}{"a": 1.0},
+			wantSQL:  "$1::numeric + $2->>'k'",
+			wantArgs: []string{"1", "1"},
+		},
+		{
+			name:     "metricFormulaBareAtIsNotAVariable",
+			expr:     querybuilder.MetricExpression{Kind: "formula", Formula: "email @ @a"},
+			vars:     []querybuilder.MetricVariable{required("a")},
+			bindings: map[string]interface{}{"a": 1.0},
+			wantSQL:  "email @ $1",
 			wantArgs: []string{"1"},
 		},
 		{
@@ -208,17 +256,64 @@ func TestMetricCompilerExpressionSurfaceIsFrozen(t *testing.T) {
 			wantErr: `unsupported aggregation function "MEDIAN"`,
 		},
 		{
-			// The freeze's second load-bearing case, and a real defect.
-			// BaseMetricIDs are sorted alphabetically (metric_compiler.go:86),
-			// so the FIRST entry is the NUMERATOR - which means numerator and
-			// denominator are decided by how the metric IDs happen to be
-			// spelled, not by the order the author declared. Declaring
-			// [m_revenue, m_cost] yields cost/revenue. Pinned as-is; fixing
-			// it is C1-C3 work, not something to slip past this guard.
-			name:    "metricDerivedTwoMetricsTakeNumeratorFromAlphabeticalOrder",
+			// The derived-ratio regression, fixed. BaseMetricIDs are no longer
+			// sorted, so the declared order survives: [m_revenue, m_cost] is
+			// revenue over cost. It used to compile to cost over revenue,
+			// because the numerator was whichever ID sorted first.
+			name:    "metricDerivedTwoMetricsUseDeclaredOrder",
 			expr:    querybuilder.MetricExpression{Kind: "derived", BaseMetricIDs: []string{"m_revenue", "m_cost"}},
 			lookup:  lookup,
+			wantSQL: "(SUM(t0.revenue)) / NULLIF((SUM(t0.cost)), 0)",
+		},
+		{
+			// The inverse declaration must keep its own direction - the
+			// original bug was not order-preserving in either direction.
+			name:    "metricDerivedTwoMetricsUseDeclaredOrderInverted",
+			expr:    querybuilder.MetricExpression{Kind: "derived", BaseMetricIDs: []string{"m_cost", "m_revenue"}},
+			lookup:  lookup,
 			wantSQL: "(SUM(t0.cost)) / NULLIF((SUM(t0.revenue)), 0)",
+		},
+		{
+			// Explicit operands override a baseMetricIds order that disagrees,
+			// which is the whole point of the field existing.
+			name: "metricDerivedTwoMetricsUseExplicitOperands",
+			expr: querybuilder.MetricExpression{
+				Kind:          "derived",
+				BaseMetricIDs: []string{"m_cost", "m_revenue"},
+				NumeratorID:   "m_revenue",
+				DenominatorID: "m_cost",
+			},
+			lookup:  lookup,
+			wantSQL: "(SUM(t0.revenue)) / NULLIF((SUM(t0.cost)), 0)",
+		},
+		{
+			name: "metricDerivedExplicitOperandsMustBothAppearInBaseIds",
+			expr: querybuilder.MetricExpression{
+				Kind:          "derived",
+				BaseMetricIDs: []string{"m_cost", "m_revenue"},
+				NumeratorID:   "m_revenue",
+			},
+			wantErr: "derived ratio needs both numeratorId and denominatorId",
+		},
+		{
+			name: "metricDerivedExplicitOperandsMustAppearInBaseIds",
+			expr: querybuilder.MetricExpression{
+				Kind:          "derived",
+				BaseMetricIDs: []string{"m_cost", "m_revenue"},
+				NumeratorID:   "m_units",
+				DenominatorID: "m_cost",
+			},
+			wantErr: "numeratorId and denominatorId must both appear in baseMetricIds",
+		},
+		{
+			name: "metricDerivedExplicitOperandsAreForARatioOnly",
+			expr: querybuilder.MetricExpression{
+				Kind:          "derived",
+				BaseMetricIDs: []string{"m_revenue", "m_cost", "m_units"},
+				NumeratorID:   "m_revenue",
+				DenominatorID: "m_cost",
+			},
+			wantErr: "numeratorId/denominatorId describe a 2-metric ratio, but baseMetricIds has 3 entries",
 		},
 		{
 			name:    "metricDerivedThreeMetricsCompileToSum",

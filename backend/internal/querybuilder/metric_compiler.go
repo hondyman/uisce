@@ -67,7 +67,9 @@ func (mc *MetricCompiler) compileMetricWithCycleDetection(
 		sqlExpr = fmt.Sprintf("%s(%s)", fn, colRef)
 
 	case "formula":
-		// Formula AST compilation with allowlisted operators and bound variable parameterization
+		// Formula compilation: @var references are substituted with bound
+		// parameters. Operators are NOT parsed, validated or allowlisted - they
+		// pass through to SQL as authored. See ADR-025.
 		compiled, formArgs, err := mc.compileFormula(m.Expression.Formula, m.Variables, varBindings)
 		if err != nil {
 			return nil, err
@@ -76,17 +78,48 @@ func (mc *MetricCompiler) compileMetricWithCycleDetection(
 		args = append(args, formArgs...)
 
 	case "derived":
-		// Derived metric: combine base metrics
+		// Derived metric: combine base metrics.
 		if len(m.Expression.BaseMetricIDs) == 0 {
 			return nil, fmt.Errorf("%w: derived metric requires baseMetricIds", ErrInvalidMetricFormula)
 		}
-		// Sort base metric IDs for deterministic argument placeholder ordering
-		sortedBaseIDs := make([]string, len(m.Expression.BaseMetricIDs))
-		copy(sortedBaseIDs, m.Expression.BaseMetricIDs)
-		sort.Strings(sortedBaseIDs)
+
+		// Operand order. ADR-025: a derived metric's meaning must not depend on
+		// how its base metric IDs happen to be spelled. An explicit
+		// numeratorId/denominatorId wins; otherwise the author's declared order
+		// is the order. Only the N-operand sum - where operand order cannot
+		// change the value - is sorted, which keeps its output deterministic.
+		ids := make([]string, len(m.Expression.BaseMetricIDs))
+		copy(ids, m.Expression.BaseMetricIDs)
+
+		if num, den := m.Expression.NumeratorID, m.Expression.DenominatorID; num != "" || den != "" {
+			if num == "" || den == "" {
+				return nil, fmt.Errorf("%w: derived ratio needs both numeratorId and denominatorId", ErrInvalidMetricFormula)
+			}
+			if num == den {
+				return nil, fmt.Errorf("%w: derived ratio numeratorId and denominatorId are the same metric", ErrInvalidMetricFormula)
+			}
+			if len(ids) != 2 {
+				return nil, fmt.Errorf("%w: numeratorId/denominatorId describe a 2-metric ratio, but baseMetricIds has %d entries", ErrInvalidMetricFormula, len(ids))
+			}
+			hasNum, hasDen := false, false
+			for _, id := range ids {
+				if id == num {
+					hasNum = true
+				}
+				if id == den {
+					hasDen = true
+				}
+			}
+			if !hasNum || !hasDen {
+				return nil, fmt.Errorf("%w: numeratorId and denominatorId must both appear in baseMetricIds", ErrInvalidMetricFormula)
+			}
+			ids = []string{num, den}
+		} else if len(ids) > 2 {
+			sort.Strings(ids)
+		}
 
 		var baseSubExprs []string
-		for _, baseID := range sortedBaseIDs {
+		for _, baseID := range ids {
 			baseMetric, exists := metricLookup[baseID]
 			if !exists {
 				return nil, fmt.Errorf("%w: base metric %s not found", ErrMissingMetricDep, baseID)
@@ -100,7 +133,8 @@ func (mc *MetricCompiler) compileMetricWithCycleDetection(
 		}
 
 		if len(baseSubExprs) == 2 {
-			// Default ratio for derived 2-metric combinations
+			// Explicitly a ratio: baseSubExprs[0] is the numerator by
+			// construction now, not by alphabetical accident.
 			sqlExpr = fmt.Sprintf("%s / NULLIF(%s, 0)", baseSubExprs[0], baseSubExprs[1])
 		} else {
 			sqlExpr = strings.Join(baseSubExprs, " + ")
@@ -122,8 +156,14 @@ func (mc *MetricCompiler) compileMetricWithCycleDetection(
 	}, nil
 }
 
-// compileFormula parses and compiles a formula string (e.g. "(SUM(price * quantity)) * @fx_rate")
-// substituting variables into parameterized arguments and compiling safe arithmetic.
+// compileFormula substitutes @variable references in a formula string (e.g.
+// "(SUM(price * quantity)) * @fx_rate") with positional parameters and returns
+// the remaining text unchanged.
+//
+// It does not parse, validate or allowlist arithmetic, despite what this
+// function's comment used to claim. A formula is authored, governed input: its
+// operators are the author's responsibility, and the only allowlist in this
+// compiler is the one on aggregation functions in CompileMetric. See ADR-025.
 func (mc *MetricCompiler) compileFormula(formula string, variables []MetricVariable, bindings map[string]interface{}) (string, []interface{}, error) {
 	formula = strings.TrimSpace(formula)
 	if formula == "" {
@@ -141,8 +181,45 @@ func (mc *MetricCompiler) compileFormula(formula string, variables []MetricVaria
 	var processedTokens []string
 
 	for _, token := range tokens {
-		if strings.HasPrefix(token, "@") {
-			varName := strings.TrimPrefix(token, "@")
+		// Substitute every @var occurrence inside the token, not just when the
+		// token is entirely a variable. Previously "@a*@b" was one token, was
+		// looked up as a variable named "a*@b", missed, and fell through to the
+		// neutral 1.0 multiplier - silently dropping the multiplication.
+		//
+		// Replacements are made in place and the surrounding text is kept
+		// verbatim, so no whitespace is inserted: "@a*@b" becomes "$1*$2", and
+		// casts and JSON operators ("@a::numeric", "@a->>'k'") survive intact.
+		// Inserting spaces around the substitution point would corrupt them.
+		rest := token
+		var expanded []string
+		for len(rest) > 0 {
+			at := strings.IndexByte(rest, '@')
+			if at < 0 {
+				expanded = append(expanded, rest)
+				break
+			}
+			// Consume the identifier characters after '@'. Done inline rather
+			// than via a helper because the C0 freeze pins this file's func
+			// surface (ADR-025).
+			end := at + 1
+			for end < len(rest) {
+				c := rest[end]
+				if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' {
+					end++
+					continue
+				}
+				break
+			}
+			if end == at+1 {
+				// A bare '@' is not a variable reference; pass it through.
+				expanded = append(expanded, rest[:at+1])
+				rest = rest[at+1:]
+				continue
+			}
+			if at > 0 {
+				expanded = append(expanded, rest[:at])
+			}
+			varName := rest[at+1 : end]
 			varDef, exists := varMap[varName]
 			var val interface{}
 			if bindings != nil && bindings[varName] != nil {
@@ -155,11 +232,13 @@ func (mc *MetricCompiler) compileFormula(formula string, variables []MetricVaria
 				val = 1.0 // Neutral multiplier fallback
 			}
 			args = append(args, val)
-			placeholder := fmt.Sprintf("$%d", len(args))
-			processedTokens = append(processedTokens, placeholder)
-		} else {
-			processedTokens = append(processedTokens, token)
+			expanded = append(expanded, fmt.Sprintf("$%d", len(args)))
+			rest = rest[end:]
 		}
+		// Join with "" so the segments of one original token are re-assembled
+		// verbatim. Joining with " " would insert whitespace at every
+		// substitution point and corrupt casts and JSON operators.
+		processedTokens = append(processedTokens, strings.Join(expanded, ""))
 	}
 
 	compiled := strings.Join(processedTokens, " ")

@@ -18,6 +18,16 @@ verified against the repository.
 This file is that missing artifact. **Decisions land here in the same session
 they are made.**
 
+### Standing rule: registry edits rebase against current `main`
+
+A registry edit is a **rebase-against-current-`main`** operation, never a
+branch-off operation. The same-session rule binds the *base* as well as the
+timing. A working copy of this file that descends from a pre-merge ancestor
+silently lacks every ADR added since, and committing against that copy deletes
+them: an edit here once shipped as `+425/−60` and would have reverted ADR-024
+outright. Read the diffstat before pushing any change to this file, and confirm
+the ADR count did not drop. `git diff --stat` is the only signal that caught it.
+
 ## Standing evidence rule
 
 A decision marked as *implemented* or *wired* must cite a **production call
@@ -601,16 +611,58 @@ Both are pinned as current behaviour on purpose. A freeze records what the code
 does; changing it must be a decision, lifted deliberately and recorded, not a
 side effect of unrelated work. Fixing them is C1-C3 work.
 
-**A comment that outruns its code.** `metric_compiler.go:70` says "Formula AST
-compilation with allowlisted operators" and `:125-126` says it compiles "safe
-arithmetic". Neither is true: there is no operator parsing and no allowlist for
-formulas. Aggregation *is* allowlisted (`:58`); formula is not. There is no
-upstream validator either. The single production caller of `CompileMetric` is
-the cube DDL generator (`cube_ddl.go:138`), so a formula's raw text reaches
-StarRocks DDL. The formula path should be read as unvalidated until C2 routes
-it through the `vm` resolver. Correcting the comments is folded into C1-C3, not
-done here, because changing them now would be a claim about a fix that has not
-happened.
+**A comment that outruns its code.** `metric_compiler.go:70` said "Formula AST
+compilation with allowlisted operators" and `:125-126` said it compiles "safe
+arithmetic". Neither was true: there is no operator parsing and no allowlist for
+formulas. Aggregation *is* allowlisted (`:58`); formula is not, and there was no
+upstream validator. The comments now state the actual contract — operators are
+authored, governed input and pass through unvalidated — because a comment
+asserting a safety property nobody implemented is worse than no comment. The
+behaviour is unchanged; only the false claim was removed.
+
+### Amendment: the two defects are fixed, and a third was found
+
+Fixed before the golden corpus (8.3) was built, on the ruling that a corpus
+which snapshots inverted semantics would enshrine the bug as the reference.
+
+1. **Derived operand order.** `MetricExpression` gained `NumeratorID` and
+   `DenominatorID`. Explicit operands win and are validated against
+   `BaseMetricIDs`; absent them, the author's **declared order** is the order.
+   The alphabetical sort survives only for the N-operand sum, where operand
+   order cannot change the value. Semantic identity no longer depends on how
+   IDs are spelled.
+
+2. **`ComputeMetricContentHash` no longer sorts `BaseMetricIDs`.** This was the
+   more dangerous half and it was missed on the first pass. Operand order is now
+   semantic, and the hash is the cube deploy identity *and* part of the query
+   cache key (ADR-011, ADR-016) — so leaving the sort in place would have given
+   `revenue/cost` and `cost/revenue` the **same content hash** and the same cache
+   entry. The hash would have carried the defect into the one place that decides
+   cache correctness. Expect a one-time cache invalidation and cube redeploy for
+   existing derived metrics; that is the intended consequence of a changed
+   content hash, not a regression.
+
+3. **Tokenizer.** `@var` substitution now happens in place, inside any token,
+   so `"@a*@b"` binds both operands and keeps the `*` verbatim. Segments are
+   rejoined with `""` precisely so no whitespace is inserted — a Postgres cast
+   (`@a::numeric`) and a JSON operator (`@a->>'k'`) would both break if a space
+   landed at the substitution point. Bare `@` is not a variable reference.
+
+4. **Third defect, found incidentally.** `cube_ddl.go` consumed
+   `compiled.SQLExpr` and ignored `compiled.Args`, so a parameterised formula
+   produced `CREATE MATERIALIZED VIEW ... SUM(t0.revenue)*$1` — an unbound
+   placeholder in a statement StarRocks must execute. It failed loudly rather
+   than silently, which is why it ranks below the other two, but the generator
+   was knowingly emitting DDL it could not render. It now refuses a
+   parameterised measure with a real reason; a literal-only formula still
+   materializes with its operator intact.
+
+`TestMetricEquivalence_Matrix/Case_3` had encoded defect (1) as its
+expectation — the metric is named "Margin Ratio", declares revenue first, and
+asserted cost/revenue, with a comment reading "Sorted base IDs" as if
+determinism were the intent. The cube DDL suite had **no derived metric at
+all**, which is how the defect reached the one production consumer of
+`CompileMetric`. Both are now covered.
 
 **Consequence to expect.** C2 adds the `vm` resolver and will break
 `metricCompilerImportPins` **by design**. That is the freeze working, not a bug
