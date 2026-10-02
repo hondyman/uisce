@@ -1,6 +1,7 @@
 import { Box, Stack, AppBar, Toolbar } from '@mui/material';
 import { GlobalSearch } from './GlobalSearch';
 import { TenantSwitcher } from './TenantSwitcher';
+import RegionPicker from '../components/RegionPicker';
 import { ActiveSessionsIndicator } from '../components/admin/ActiveSessionsIndicator';
 import { useAuth } from '../contexts/AuthContext';
 import { useImpersonation } from '../contexts/ImpersonationContext';
@@ -36,6 +37,7 @@ export function ConsoleTopBar() {
           <GlobalSearch />
           <DriftBadge tenantId={tenant?.id ?? ''} />
           <TenantSwitcher />
+          <RegionPicker />
         </Stack>
       </Toolbar>
 

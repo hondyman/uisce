@@ -38,7 +38,7 @@ interface RegionSelectorProps {
 export const RegionSelector: React.FC<RegionSelectorProps> = ({
   tenantId = 'default',
   onRegionSelect,
-  selectedRegion = 'us-east-1',
+  selectedRegion,
   loading = false,
   regions,
 }) => {

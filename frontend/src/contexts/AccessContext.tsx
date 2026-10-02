@@ -13,7 +13,7 @@ import {
 import { Tenant, TenantInstance, Product, DataSource } from '../types';
 import { useAuth } from './AuthContext';
 import { devLog, devWarn, devError } from '../utils/devLogger';
-import { setSelectedRegion } from '../lib/region';
+import { clearSelectedRegion, setSelectedRegion } from '../lib/region';
 import { apiFetch } from '../lib/apiClient';
 import { beginScopeRestore, markScopeRestored } from '../utils/tenantScope';
 
@@ -266,14 +266,19 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
     } catch (_) {}
     markScopeRestored();
     
-    // Set region from tenant
-    if (tenant.region) {
-      try {
+    // The region follows the tenant exactly. A tenant with no region clears the
+    // selection rather than leaving the previous tenant's region in place, which
+    // would send the wrong region for this tenant; the user then picks one explicitly.
+    try {
+      if (tenant.region) {
         setSelectedRegion(tenant.region);
         devLog(`Set region from tenant: ${tenant.region}`);
-      } catch (error) {
-        devError('Error setting region:', error);
+      } else {
+        clearSelectedRegion();
+        devLog('Tenant has no region; selection cleared');
       }
+    } catch (error) {
+      devError('Error setting region:', error);
     }
     
     devLog('Scope set to datasource:', datasource.source_name);

@@ -76,6 +76,7 @@ import { MenuCardsPage, MenuCardItem } from './ui/MenuCardsPage';
 import { ViewModule as ViewModuleIcon, Menu as MenuListIcon } from '@mui/icons-material';
 import ScopeBadge from './ScopeBadge';
 import TenantSwitcher from './TenantSwitcher';
+import RegionPicker from './RegionPicker';
 import TenantTreeView from './TenantTreeView';
 import { PageStudioApi } from '../api/pageStudio';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -974,6 +975,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
             )}
             {/* New unified tenant/scope switcher */}
             <TenantSwitcher compact={false} />
+            <RegionPicker />
           </Box>
 
           {/* Spacer */}
