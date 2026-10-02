@@ -126,7 +126,7 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 			)
 		`
 		_, txErr := tx.ExecContext(ctx, insertQuery,
-			execID, tmpl.TenantID, tmpl.ID, scheduleIDStr, tmpl.TemplateName, paramsJSON,
+			execID, tmpl.TenantID, tmpl.ID, scheduleID, tmpl.TemplateName, paramsJSON,
 			reqBy, triggeredBy, metaJSON,
 		)
 		if txErr != nil {

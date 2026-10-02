@@ -39,6 +39,8 @@ func TestWriter1_CreatedEvent_AtomicityRollback(t *testing.T) {
 	sqlMock.ExpectBegin()
 	sqlMock.ExpectExec("SELECT set_config").
 		WillReturnResult(sqlmock.NewResult(0, 0))
+	sqlMock.ExpectExec("SELECT set_config").
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("INSERT INTO public.report_executions").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectExec("INSERT INTO public.report_execution_events").
@@ -80,6 +82,8 @@ func TestWriter1_CreatedEvent_ActorVocabulary_TriggeredBySet(t *testing.T) {
 	sqlMock.ExpectBegin()
 	sqlMock.ExpectExec("SELECT set_config").
 		WillReturnResult(sqlmock.NewResult(0, 0))
+	sqlMock.ExpectExec("SELECT set_config").
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("INSERT INTO public.report_executions").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectExec("INSERT INTO public.report_execution_events").
@@ -89,6 +93,8 @@ func TestWriter1_CreatedEvent_ActorVocabulary_TriggeredBySet(t *testing.T) {
 
 	// Writer 2: STARTED transaction (needed to satisfy the full ExecuteReport flow)
 	sqlMock.ExpectBegin()
+	sqlMock.ExpectExec("SELECT set_config").
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("SELECT set_config").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("UPDATE public.report_executions").
@@ -129,6 +135,8 @@ func TestWriter1_CreatedEvent_ActorVocabulary_SystemSchedulerFallback(t *testing
 	sqlMock.ExpectBegin()
 	sqlMock.ExpectExec("SELECT set_config").
 		WillReturnResult(sqlmock.NewResult(0, 0))
+	sqlMock.ExpectExec("SELECT set_config").
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("INSERT INTO public.report_executions").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectExec("INSERT INTO public.report_execution_events").
@@ -138,6 +146,8 @@ func TestWriter1_CreatedEvent_ActorVocabulary_SystemSchedulerFallback(t *testing
 
 	// Writer 2: STARTED transaction
 	sqlMock.ExpectBegin()
+	sqlMock.ExpectExec("SELECT set_config").
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("SELECT set_config").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("UPDATE public.report_executions").
@@ -181,6 +191,8 @@ func TestWriter1_CreatedEvent_DetailWithScheduleID(t *testing.T) {
 	sqlMock.ExpectBegin()
 	sqlMock.ExpectExec("SELECT set_config").
 		WillReturnResult(sqlmock.NewResult(0, 0))
+	sqlMock.ExpectExec("SELECT set_config").
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("INSERT INTO public.report_executions").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectExec("INSERT INTO public.report_execution_events").
@@ -189,6 +201,8 @@ func TestWriter1_CreatedEvent_DetailWithScheduleID(t *testing.T) {
 
 	// Writer 2: STARTED transaction
 	sqlMock.ExpectBegin()
+	sqlMock.ExpectExec("SELECT set_config").
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("SELECT set_config").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("UPDATE public.report_executions").
@@ -232,6 +246,7 @@ func TestWriter2_StartedEvent_AtomicityRollback(t *testing.T) {
 	// Writer 1: CREATED transaction (succeeds)
 	sqlMock.ExpectBegin()
 	sqlMock.ExpectExec("SELECT set_config").WillReturnResult(sqlmock.NewResult(0, 0))
+	sqlMock.ExpectExec("SELECT set_config").WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("INSERT INTO public.report_executions").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectExec("INSERT INTO public.report_execution_events").
@@ -240,6 +255,7 @@ func TestWriter2_StartedEvent_AtomicityRollback(t *testing.T) {
 
 	// Writer 2: STARTED transaction — UPDATE succeeds, event insert fails → ROLLBACK
 	sqlMock.ExpectBegin()
+	sqlMock.ExpectExec("SELECT set_config").WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("SELECT set_config").WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("UPDATE public.report_executions").
 		WillReturnResult(sqlmock.NewResult(1, 1))
@@ -270,6 +286,7 @@ func TestWriter3_FailedEvent_AtomicityRollback(t *testing.T) {
 	// markExecutionFailed: UPDATE succeeds, event insert fails → ROLLBACK
 	sqlMock.ExpectBegin()
 	sqlMock.ExpectExec("SELECT set_config").WillReturnResult(sqlmock.NewResult(0, 0))
+	sqlMock.ExpectExec("SELECT set_config").WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("UPDATE public.report_executions").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectExec("INSERT INTO public.report_execution_events").
@@ -295,6 +312,7 @@ func TestWriter3_FailedEvent_ActorIsSystemExecutor(t *testing.T) {
 	mockTemporal.On("Close").Return(nil)
 
 	sqlMock.ExpectBegin()
+	sqlMock.ExpectExec("SELECT set_config").WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("SELECT set_config").WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("UPDATE public.report_executions").
 		WillReturnResult(sqlmock.NewResult(1, 1))
