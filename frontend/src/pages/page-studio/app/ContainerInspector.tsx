@@ -5,6 +5,7 @@ import type { ContainerButton, OverlayNodeProps, TabSetNodeProps, TextSpec } fro
 import {
   ActionsEditor, BindingField, ConditionEditor, JsonField, ListEditor, Section, SelectField, TextSpecField, scopePaths,
 } from './editors';
+import { nodesOf } from '../layoutNodes';
 
 /**
  * Properties of a Drawer, Dialog or TabSet layout node. Opening is a
@@ -23,7 +24,7 @@ export default function ContainerInspector({ node, layout, onLayoutChange, draft
   const vars = (draft.app?.variables ?? []).map((v) => ({ value: v.name, label: v.name }));
   const props = (node.props ?? {}) as Record<string, unknown>;
   const setNode = (next: Partial<LayoutNode>) => onLayoutChange((prev) => ({
-    ...prev, nodes: { ...prev.nodes, [node.id]: { ...prev.nodes[node.id], ...next } },
+    ...prev, nodes: { ...nodesOf(prev), [node.id]: { ...nodesOf(prev)[node.id], ...next } },
   }));
   const setProps = (patch: Record<string, unknown>) => setNode({ props: { ...props, ...patch } });
 
@@ -32,9 +33,9 @@ export default function ContainerInspector({ node, layout, onLayoutChange, draft
     const p = props as TabSetNodeProps;
     const tabs = p.tabs ?? [];
     const setTabs = (next: NonNullable<TabSetNodeProps['tabs']>) => onLayoutChange((prev) => {
-      const current = prev.nodes[node.id];
+      const current = nodesOf(prev)[node.id];
       const oldChildren = current.children ?? [];
-      const nodes = { ...prev.nodes };
+      const nodes = { ...nodesOf(prev) };
       // Keep each surviving tab's body; give new tabs an empty Column.
       const children = next.map((t) => {
         const i = tabs.findIndex((x) => x.id === t.id);

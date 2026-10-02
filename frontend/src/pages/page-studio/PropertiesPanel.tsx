@@ -24,6 +24,7 @@ import AppWidgetInspector from './app/AppWidgetInspector';
 import { isAppWidget } from './app/AppWidgets';
 import ContainerInspector from './app/ContainerInspector';
 import { isContainerType } from './app/containers';
+import { nodesOf } from './layoutNodes';
 
 interface PropertiesPanelProps {
   selectedId: string | null;
@@ -240,8 +241,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, onSelectC
       onLayoutChange((prev) => ({
         ...prev,
         nodes: {
-          ...prev.nodes,
-          [componentId!]: { ...prev.nodes[componentId!], style: { ...prev.nodes[componentId!].style, ...patch } },
+          ...nodesOf(prev),
+          [componentId!]: { ...nodesOf(prev)[componentId!], style: { ...nodesOf(prev)[componentId!].style, ...patch } },
         },
       }));
     } else if (component) {
@@ -287,8 +288,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, onSelectC
     onLayoutChange((prev) => ({
       ...prev,
       nodes: {
-        ...prev.nodes,
-        [componentId!]: { ...prev.nodes[componentId!], props: { ...prev.nodes[componentId!].props, ...patch } },
+        ...nodesOf(prev),
+        [componentId!]: { ...nodesOf(prev)[componentId!], props: { ...nodesOf(prev)[componentId!].props, ...patch } },
       },
     }));
   };

@@ -39,6 +39,6 @@ describe('mergeGeneratedSpecIntoDraft', () => {
     const next = await mergeGeneratedSpecIntoDraft(draft(), spec);
     const types = Object.values(next.components).map((c) => c.type).sort();
     expect(types).toEqual(['Form', 'Table']);
-    expect(next.layout.nodes.root.children).toContain('t1');
+    expect(next.layout.nodes?.root.children).toContain('t1');
   });
 });

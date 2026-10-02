@@ -67,9 +67,10 @@ const placeSections = (
       props: { dataSourceId: dataSourceIdByBOKey.get(section.boKey) || fallbackSourceId },
     };
     const sectionId = sectionIds[Math.min(i, Math.max(0, sectionIds.length - 1))];
-    const layoutSection = layout.nodes[sectionId];
+    const nodes = layout.nodes ?? (layout.nodes = {});
+    const layoutSection = nodes[sectionId];
     if (!layoutSection) return;
-    layout.nodes[sectionId] = { ...layoutSection, children: [...(layoutSection.children || []), id] };
+    nodes[sectionId] = { ...layoutSection, children: [...(layoutSection.children || []), id] };
   });
 };
 
@@ -178,6 +179,8 @@ export async function mergeGeneratedSpecIntoDraft(
     nodes: { ...draft.layout.nodes },
   };
   const rootId = layout.root;
+  // A grid-kind (or empty) draft has no tree to place sections into.
+  if (!rootId) return draft;
   const root = layout.nodes[rootId];
   const overflowId = (root?.children || []).slice(-1)[0] || rootId;
 
