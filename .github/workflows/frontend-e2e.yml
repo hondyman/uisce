@@ -9,6 +9,9 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    # A hung Cypress run otherwise holds a runner for the 6h default and starves
+    # the account's concurrency (19 of these sat 3-7h and blocked all of CI).
+    timeout-minutes: 20
     steps:
     - uses: actions/checkout@v4
     - name: Use Node.js
