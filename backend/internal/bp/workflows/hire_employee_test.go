@@ -3,6 +3,7 @@ package workflows_test
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -145,11 +146,11 @@ func TestHireEmployeeWorkflow_ProvisioningFailure(t *testing.T) {
 	env.OnActivity("RequestHRApprovalActivity", mock.Anything, mock.Anything).Return(true, nil)
 
 	// Simulate partial provisioning failure
-	call := 0
+	// Activities run concurrently, so the call counter must be atomic.
+	var call atomic.Int32
 	env.OnActivity("ProvisionSystemActivity", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, empID, systemType string, params interface{}) (map[string]interface{}, error) {
-			call++
-			if call == 3 { // Fail GitHub provisioning
+			if call.Add(1) == 3 { // Fail GitHub provisioning
 				return nil, fmt.Errorf("timeout")
 			}
 			return map[string]interface{}{"status": "provisioned"}, nil

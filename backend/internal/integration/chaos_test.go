@@ -318,10 +318,12 @@ func TestChaosPortalFailure(t *testing.T) {
 
 	// Check event distribution
 	totalReceived := 0
+	mu.Lock()
 	for region, count := range eventsByRegion {
 		t.Logf("Region %s received: %d events", region, count)
 		totalReceived += count
 	}
+	mu.Unlock()
 
 	t.Logf("Total events received: %d/30", totalReceived)
 	t.Logf("✅ Portal failure resilience: %.1f%% delivery rate", float64(totalReceived)/30*100)
