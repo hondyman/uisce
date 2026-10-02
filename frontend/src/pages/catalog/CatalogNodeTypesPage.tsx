@@ -1,26 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Box, Typography, Grid, Paper, TextField, InputAdornment, 
-  Card, CardContent, Chip, IconButton, useTheme, alpha, Skeleton,
-  Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Dialog, DialogTitle, DialogContent, DialogActions, FormControlLabel, Switch,
-  Tooltip
-} from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import { Box, Typography, TextField, Chip, IconButton, useTheme, Button, Dialog, DialogTitle, DialogContent, DialogActions, FormControlLabel, Switch, Menu, MenuItem, Stack } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import ViewAgendaIcon from '@mui/icons-material/ViewAgenda';
-import ViewComfyIcon from '@mui/icons-material/ViewComfy';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
 import PaletteIcon from '@mui/icons-material/Palette';
 import { useNavigate } from 'react-router-dom';
 import { useNodeTypes, NodeType, useUpdateNodeType, useDeleteNodeType, useCreateNodeType } from '../../api/nodeTypes';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useNotification } from '../../hooks/useNotification';
 import { ColorPaletteEditor } from '../../components/ColorPaletteEditor';
-import { CoreIcon, CustomIcon } from '../../components/common/CoreCustomIcons';
+import CatalogList from '../../components/common/CatalogList';
 
 export const CatalogNodeTypesPage: React.FC = () => {
   const theme = useTheme();
@@ -28,7 +15,7 @@ export const CatalogNodeTypesPage: React.FC = () => {
   const confirm = useConfirm();
   const notification = useNotification();
   const [search, setSearch] = useState('');
-  const [viewMode, setViewMode] = useState<'tiles' | 'table'>('tiles');
+  const [actionsMenu, setActionsMenu] = useState<{ el: HTMLElement; type: NodeType } | null>(null);
   const [editingType, setEditingType] = useState<NodeType | null>(null);
   const [editDescription, setEditDescription] = useState('');
   const [editColor, setEditColor] = useState('');
@@ -66,11 +53,6 @@ export const CatalogNodeTypesPage: React.FC = () => {
       default: return theme.palette.grey[500];
     }
   };
-
-  const filteredTypes = nodeTypes?.filter(t => 
-    t.catalog_type_name.toLowerCase().includes(search.toLowerCase()) || 
-    t.description?.toLowerCase().includes(search.toLowerCase())
-  );
 
   const handleEditOpen = (type: NodeType) => {
     setEditingType(type);
@@ -202,33 +184,6 @@ export const CatalogNodeTypesPage: React.FC = () => {
             </Box>
           )}
 
-          {/* View Toggles & Actions */}
-          <Box sx={{ display: 'flex', gap: 0.5, border: `1px solid ${C.border}`, borderRadius: 2, p: 0.5, bgcolor: C.panel }}>
-            <IconButton 
-              size="small"
-              onClick={() => setViewMode('tiles')}
-              sx={{ 
-                bgcolor: viewMode === 'tiles' ? C.accentDim : 'transparent', 
-                color: viewMode === 'tiles' ? C.accent : C.textMuted,
-                borderRadius: 1.5,
-                border: viewMode === 'tiles' ? `1px solid ${C.accent}66` : '1px solid transparent',
-              }}
-            >
-              <ViewComfyIcon fontSize="small" />
-            </IconButton>
-            <IconButton 
-              size="small"
-              onClick={() => setViewMode('table')}
-              sx={{ 
-                bgcolor: viewMode === 'table' ? C.accentDim : 'transparent', 
-                color: viewMode === 'table' ? C.accent : C.textMuted,
-                borderRadius: 1.5,
-                border: viewMode === 'table' ? `1px solid ${C.accent}66` : '1px solid transparent',
-              }}
-            >
-              <ViewAgendaIcon fontSize="small" />
-            </IconButton>
-          </Box>
           <Button 
             variant="contained" 
             startIcon={<AddIcon />}
@@ -246,291 +201,43 @@ export const CatalogNodeTypesPage: React.FC = () => {
         </Box>
       </Box>
 
-      {/* Search and Filter */}
-      <Box 
-        sx={{ 
-          p: 1.5, 
-          mb: 3, 
-          borderRadius: 2.5, 
-          border: `1px solid ${C.border}`,
-          bgcolor: C.panel,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1.5
-        }}
-      >
-        <TextField
-          fullWidth
-          variant="outlined"
-          placeholder="Search node types by name or description..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon sx={{ color: C.textMuted }} />
-              </InputAdornment>
-            ),
-            sx: { 
-              borderRadius: 2,
-              bgcolor: isDark ? '#0A0C12' : '#F8FAFC',
-              color: C.text,
-              '& fieldset': { borderColor: C.border },
-              '&:hover fieldset': { borderColor: `${C.accent}88` },
-              '&.Mui-focused fieldset': { borderColor: C.accent },
-            }
-          }}
-          size="small"
-        />
-        <IconButton sx={{ border: `1px solid ${C.border}`, borderRadius: 2, color: C.textMuted, '&:hover': { color: C.text, bgcolor: C.accentDim } }}>
-          <FilterListIcon fontSize="small" />
-        </IconButton>
-      </Box>
-
-      {/* Node Types Grid or Table */}
-      {viewMode === 'tiles' ? (
-        <Grid container spacing={2.5}>
-          {isLoading ? (
-            Array.from({ length: 8 }).map((_, i) => (
-              <Grid key={i} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-                <Skeleton 
-                  variant="rectangular" 
-                  height={190} 
-                  sx={{ borderRadius: 3, bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} 
-                />
-              </Grid>
-            ))
-          ) : filteredTypes?.map((type) => {
-            const category = getNodeCategory(type);
-            const color = getCategoryColor(category);
-            const nodeColor = type.config?.color;
-            
-            return (
-              <Grid key={type.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-                <Card 
-                  elevation={0}
-                  onClick={() => navigate(`/catalog/node-types/${type.id}`)}
-                  sx={{ 
-                    height: '100%', 
-                    borderRadius: 3,
-                    bgcolor: C.panel,
-                    border: `1px solid ${C.border}`,
-                    transition: 'all 0.2s ease-in-out',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    overflow: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    '&:hover': {
-                      transform: 'translateY(-3px)',
-                      borderColor: nodeColor || color,
-                      boxShadow: isDark ? `0 8px 24px rgba(0,0,0,0.5)` : `0 8px 24px rgba(0,0,0,0.08)`,
-                      bgcolor: C.panelHover,
-                    }
-                  }}
-                >
-                  {nodeColor && (
-                    <Box sx={{ height: 3, bgcolor: nodeColor, width: '100%' }} />
-                  )}
-                  <CardContent sx={{ p: 2.5, flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', padding: '2px 8px',
-                        borderRadius: 9999, fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
-                        color: color, background: isDark ? `${color}18` : `${color}12`,
-                        border: `1px solid ${color}44`, fontFamily: 'monospace', textTransform: 'uppercase',
-                      }}>
-                        {category}
-                      </span>
-                      {type.is_active && (
-                        <Tooltip title="Active">
-                          <Box 
-                            sx={{ 
-                              width: 8, 
-                              height: 8, 
-                              borderRadius: '50%', 
-                              bgcolor: C.success,
-                              boxShadow: `0 0 8px ${C.success}`
-                            }} 
-                          />
-                        </Tooltip>
-                      )}
-                    </Box>
-                    
-                    <Typography variant="h6" fontWeight="bold" sx={{ color: C.text, fontSize: '1.05rem', mb: 0.5 }} noWrap>
-                      {type.catalog_type_name}
-                    </Typography>
-                    
-                    <Typography 
-                      variant="body2" 
-                      sx={{ 
-                        color: C.textMuted,
-                        fontSize: '0.85rem',
-                        lineHeight: 1.45,
-                        mb: 'auto',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 3,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden'
-                      }}
-                    >
-                      {type.description || 'No description available.'}
-                    </Typography>
-
-                    <Box sx={{ mt: 2.5, pt: 1.5, borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="caption" sx={{ color: C.textMuted, fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                        {new Date(type.created_at).toLocaleDateString()}
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
-                        <IconButton 
-                          size="small"
-                          onClick={() => handleEditOpen(type)}
-                          sx={{ color: C.textMuted, '&:hover': { color: C.accent, bgcolor: C.accentDim } }}
-                          title="Edit"
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton 
-                          size="small"
-                          onClick={() => navigate(`/catalog/node-types/${type.id}`)}
-                          sx={{ color: C.textMuted, '&:hover': { color: C.text, bgcolor: C.accentDim } }}
-                          title="View Details"
-                        >
-                          <ArrowForwardIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton 
-                          size="small"
-                          onClick={() => handleDelete(type)}
-                          sx={{ color: C.textMuted, '&:hover': { color: C.danger, bgcolor: `${C.danger}18` } }}
-                          title="Delete"
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Box>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            );
-          })}
-        </Grid>
-      ) : (
-        <TableContainer 
-          component={Paper} 
-          elevation={0} 
-          sx={{ 
-            border: `1px solid ${C.border}`, 
-            borderRadius: 3, 
-            bgcolor: C.panel,
-            overflow: 'hidden' 
-          }}
-        >
-          <Table>
-            <TableHead>
-              <TableRow sx={{ bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderBottom: `1px solid ${C.border}` }}>
-                <TableCell sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Name</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Description</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Category</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Created</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
-                      <TableCell key={j}>
-                        <Skeleton variant="text" sx={{ bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : (
-                filteredTypes?.map((type) => {
-                  const category = getNodeCategory(type);
-                  const color = getCategoryColor(category);
-                  const nodeColor = type.config?.color;
-                  
-                  return (
-                    <TableRow 
-                      key={type.id}
-                      hover
-                      sx={{ 
-                        '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.02) !important' : 'rgba(0,0,0,0.01) !important' },
-                        borderLeft: nodeColor ? `3px solid ${nodeColor}` : 'none',
-                        borderBottom: `1px solid ${C.border}`,
-                      }}
-                    >
-                      <TableCell sx={{ fontWeight: 600, color: C.text }}>{type.catalog_type_name}</TableCell>
-                      <TableCell sx={{ maxWidth: 320 }}>
-                        <Typography variant="body2" sx={{ color: C.textMuted }} noWrap>
-                          {type.description || '-'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        {category === 'Core' ? <CoreIcon fontSize="small" /> : category === 'Custom' ? <CustomIcon fontSize="small" /> : (
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', padding: '2px 8px',
-                          borderRadius: 9999, fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
-                          color: color, background: isDark ? `${color}18` : `${color}12`,
-                          border: `1px solid ${color}44`, fontFamily: 'monospace', textTransform: 'uppercase',
-                        }}>
-                          {category}
-                        </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', padding: '2px 8px',
-                          borderRadius: 9999, fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
-                          color: type.is_active ? C.success : C.textMuted,
-                          background: type.is_active ? (isDark ? `${C.success}18` : `${C.success}12`) : 'transparent',
-                          border: `1px solid ${type.is_active ? C.success : C.border}44`,
-                          fontFamily: 'monospace', textTransform: 'uppercase',
-                        }}>
-                          {type.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" sx={{ color: C.textMuted, fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                          {new Date(type.created_at).toLocaleDateString()}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="right">
-                        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-                          <IconButton 
-                            size="small"
-                            onClick={() => handleEditOpen(type)}
-                            sx={{ color: C.textMuted, '&:hover': { color: C.accent, bgcolor: C.accentDim } }}
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton 
-                            size="small"
-                            onClick={() => navigate(`/catalog/node-types/${type.id}`)}
-                            sx={{ color: C.textMuted, '&:hover': { color: C.text, bgcolor: C.accentDim } }}
-                          >
-                            <ArrowForwardIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton 
-                            size="small"
-                            onClick={() => handleDelete(type)}
-                            sx={{ color: C.textMuted, '&:hover': { color: C.danger, bgcolor: `${C.danger}18` } }}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+      <CatalogList<NodeType>
+        items={nodeTypes ?? []}
+        getId={(t) => t.id}
+        getTitle={(t) => t.catalog_type_name}
+        getDescription={(t) => t.description || undefined}
+        isCore={(t) => getNodeCategory(t) === 'Core'}
+        search={search}
+        onSearchChange={setSearch}
+        storageKey="node-types-view"
+        searchPlaceholder="Search node types by name or description..."
+        loading={isLoading}
+        emptyMessage="No node types yet."
+        noMatchMessage="No node types match your search."
+        onOpen={(t) => navigate(`/catalog/node-types/${t.id}`)}
+        onActions={(t, el) => setActionsMenu({ el, type: t })}
+        createLabel="Create Type"
+        onCreate={() => setIsCreateModalOpen(true)}
+        renderTileMeta={(t) => (
+          <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap" alignItems="center">
+            <Chip size="small" variant="outlined" label={getNodeCategory(t)} sx={{ color: getCategoryColor(getNodeCategory(t)), borderColor: getCategoryColor(getNodeCategory(t)) }} />
+            <Chip size="small" color={t.is_active ? 'success' : 'default'} variant={t.is_active ? 'filled' : 'outlined'} label={t.is_active ? 'Active' : 'Inactive'} />
+            {t.config?.color && <Box sx={{ width: 14, height: 14, borderRadius: '50%', bgcolor: t.config.color, border: `1px solid ${C.border}` }} />}
+            <Typography variant="caption" color="text.secondary">{new Date(t.created_at).toLocaleDateString()}</Typography>
+          </Stack>
+        )}
+        columns={[
+          { key: 'description', header: 'Description', render: (t) => t.description || '-' },
+          { key: 'category', header: 'Category', render: (t) => getNodeCategory(t) },
+          { key: 'status', header: 'Status', render: (t) => <Chip size="small" color={t.is_active ? 'success' : 'default'} variant={t.is_active ? 'filled' : 'outlined'} label={t.is_active ? 'Active' : 'Inactive'} /> },
+          { key: 'created', header: 'Created', render: (t) => new Date(t.created_at).toLocaleDateString() },
+        ]}
+      />
+      <Menu anchorEl={actionsMenu?.el} open={!!actionsMenu} onClose={() => setActionsMenu(null)}>
+        <MenuItem onClick={() => { const t = actionsMenu!.type; setActionsMenu(null); navigate(`/catalog/node-types/${t.id}`); }}>View Details</MenuItem>
+        <MenuItem onClick={() => { const t = actionsMenu!.type; setActionsMenu(null); handleEditOpen(t); }}>Edit</MenuItem>
+        <MenuItem sx={{ color: 'error.main' }} onClick={() => { const t = actionsMenu!.type; setActionsMenu(null); void handleDelete(t); }}>Delete</MenuItem>
+      </Menu>
 
       {/* Edit Dialog */}
       <Dialog 

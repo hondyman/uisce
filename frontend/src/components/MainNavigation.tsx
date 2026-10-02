@@ -78,7 +78,6 @@ import ScopeBadge from './ScopeBadge';
 import TenantSwitcher from './TenantSwitcher';
 import RegionPicker from './RegionPicker';
 import TenantTreeView from './TenantTreeView';
-import { PageStudioApi } from '../api/pageStudio';
 import DescriptionIcon from '@mui/icons-material/Description';
 import LanguageSelector from './LanguageSelector';
 import Dialog from '@mui/material/Dialog';
@@ -88,7 +87,6 @@ import DialogActions from '@mui/material/DialogActions';
 import { Tenant } from '../types';
 import { IvyLogo } from './brand/IvyLogo';
 import { useCapabilities } from '../hooks/useCapabilities';
-import { NavigationMenuApi, type NavigationMenuNode } from '../api/navigationMenu';
 
 export interface NavigationItem {
   label: string;
@@ -297,7 +295,7 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <BuildIcon />,
         items: [
           { label: 'Page Designer', path: '/page-studio', icon: <BuildIcon />, description: 'Build CRUD pages against a Business Object' },
-          { label: 'Browse Pages', path: '/pages', icon: <ApiIcon />, description: 'View pages as a consumer would' },
+          { label: 'Menu Designer', path: '/menu-designer', icon: <AccountTreeIcon />, description: 'Arrange pages into the portal menu' },
           { label: 'API Designer', path: '/api-studio', icon: <ApiIcon />, description: 'Visual API builder', badge: { label: 'New', color: 'success' } },
           { label: 'API Catalog', path: '/api-catalog', icon: <ApiIcon />, description: 'Published APIs' },
         ]
@@ -561,66 +559,6 @@ interface MainNavigationProps {
   // No longer needed - ThemeToggleButton handles theme internally
 }
 
-// DB icon keys are free text set in the Menu Designer. Map the ones that have
-// an obvious equivalent to existing MUI icons and fall back to a neutral glyph
-// rather than rendering nothing.
-const DESIGNER_ICON_MAP: Record<string, React.ReactNode> = {
-  settings: <SettingsIcon />,
-  business: <BusinessIcon />,
-  security: <SecurityIcon />,
-  system: <SystemUpdateAltIcon />,
-  book: <MenuBookIcon />,
-  description: <DescriptionIcon />,
-  timeline: <TimelineIcon />,
-  api: <ApiIcon />,
-  build: <BuildIcon />,
-  folder: <CreateNewFolderIcon />,
-  default: <FolderIcon />,
-};
-
-function designerIcon(key?: string | null): React.ReactNode {
-  if (!key) return <FolderIcon />;
-  return DESIGNER_ICON_MAP[key] ?? DESIGNER_ICON_MAP[key.toLowerCase()] ?? <FolderIcon />;
-}
-
-/**
- * Flatten the Menu Designer's navigation_menu_nodes tree into nav items for
- * Build -> Pages & APIs.
- *
- * This tree is a tree of Page Studio business pages (seeded by the page
- * migrations: Master Data, Orders, and their children), NOT a model of the
- * platform navigation. Its roots are grouping folders; only nodes that carry a
- * targetPageKey are reachable pages, so folders are skipped and their leaves
- * surface directly.
- *
- * Grouping is preserved in the item label so "Master Data > Vendor registry"
- * stays legible in a flat menu. required_entitlement is carried through so
- * filterNavigationByCapabilities can drop nodes the caller's profile does not
- * hold.
- */
-export function flattenDesignerPages(nodes: NavigationMenuNode[]): NavigationItem[] {
-  const out: NavigationItem[] = [];
-  const walk = (list: NavigationMenuNode[] | undefined, trail: string[]) => {
-    for (const node of list ?? []) {
-      if (!node || !node.label) continue;
-      if (node.targetPageKey) {
-        out.push({
-          label: trail.length > 0 ? `${trail.join(' › ')} › ${node.label}` : node.label,
-          path: `/pages/${node.targetPageKey}`,
-          icon: designerIcon(node.icon),
-          description: 'Menu Designer page',
-          requiredEntitlement: node.requiredEntitlement || undefined,
-        });
-      } else {
-        // A folder: descend, but only if it actually has children.
-        walk(node.children, [...trail, node.label]);
-      }
-    }
-  };
-  walk(nodes, []);
-  return out;
-}
-
 export const MainNavigation: React.FC<MainNavigationProps> = () => {
   const theme = useTheme();
   const location = useLocation();
@@ -632,25 +570,6 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   const { user, logout } = useAuth();
   const organizationAccess = useOrganizationEntitlement();
   const { capabilities, profile: resolvedProfile } = useCapabilities();
-
-  // The platform nav is the hardcoded categoryConfigs below. The Menu
-  // Designer's navigation_menu_nodes tree is a DIFFERENT thing: it is a tree of
-  // Page Studio business pages (Master Data, Orders, ...), seeded by the
-  // 20261118/20261129 page migrations, not a replacement for the platform nav.
-  // It is merged in as leaf items under Build -> Pages & APIs alongside the
-  // plain page list, so designer work adds pages without ever displacing the
-  // Platform / Catalog / Operations categories.
-  //
-  // required_entitlement on those nodes is enforced here: a node whose profile
-  // the caller does not hold is filtered out of the merged list.
-  const [designerPages, setDesignerPages] = useState<NavigationItem[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    NavigationMenuApi.listTree()
-      .then((tree) => { if (!cancelled) setDesignerPages(flattenDesignerPages(tree)); })
-      .catch(() => { if (!cancelled) setDesignerPages([]); });
-    return () => { cancelled = true; };
-  }, []);
 
   // Capability-filtered navigation config.  The backend decides which menus
   // the user is allowed to see; the frontend only renders the allowed subset.
@@ -669,48 +588,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
     [capabilities, isPlatformOperator, organizationAccess, resolvedProfile],
   );
 
-  // Real Page Studio pages, listed dynamically under Build -> Pages so a
-  // newly-authored page (e.g. "Order Management Dashboard") shows up as its
-  // own menu item without anyone having to hand-curate the separate
-  // Menu Designer nav tree first - fetched once and merged into the static
-  // categoryConfigs below rather than making the whole config data-driven.
-  const [pageStudioPages, setPageStudioPages] = useState<{ id?: string; name: string; slug: string }[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    PageStudioApi.listPages()
-      .then((pages) => { if (!cancelled) setPageStudioPages(pages.map((p) => ({ id: p.id, name: p.name, slug: p.slug }))); })
-      .catch(() => { if (!cancelled) setPageStudioPages([]); });
-    return () => { cancelled = true; };
-  }, []);
-
-  const filteredCategoryConfigs = useMemo(() => {
-    if (pageStudioPages.length === 0 && designerPages.length === 0) return baseCategoryConfigs;
-    return baseCategoryConfigs.map((cat) => {
-      if (cat.key !== 'weave') return cat;
-      return {
-        ...cat,
-        menus: cat.menus.map((menu) => {
-          if (menu.label !== 'Pages & APIs') return menu;
-          const pageItems: NavigationItem[] = pageStudioPages.map((p) => ({
-            label: p.name,
-            path: `/pages/${p.slug}`,
-            icon: <DescriptionIcon />,
-            description: 'Page Studio page',
-          }));
-          // Drop duplicates: a designer-tree node and a plain page can point at
-          // the same slug, and two identical rows in the menu look like a bug.
-          const deduped: NavigationItem[] = [];
-          const paths = new Set<string>();
-          for (const item of [...menu.items, ...pageItems, ...designerPages]) {
-            if (paths.has(item.path)) continue;
-            paths.add(item.path);
-            deduped.push(item);
-          }
-          return { ...menu, items: deduped };
-        }),
-      };
-    });
-  }, [baseCategoryConfigs, pageStudioPages, designerPages]);
+  const filteredCategoryConfigs = baseCategoryConfigs;
 
   const [categoryMenuAnchorEl, setCategoryMenuAnchorEl] = useState<null | HTMLElement>(null);
   // Default to Tenants category on initial load

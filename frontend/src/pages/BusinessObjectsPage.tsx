@@ -7,28 +7,22 @@ import {
   DialogContent,
   DialogActions,
   Typography,
-  Switch,
   Box,
   Button,
-  CircularProgress,
   AppBar,
   Toolbar,
   Container,
   Grid,
-  Card,
-  CardContent,
-  CardActions,
   Chip,
   Paper,
   Stack,
   IconButton,
   Avatar,
-  Divider,
   useTheme,
-  Alert,
-  Tooltip,
-  TextField,
-  InputAdornment,
+  Menu,
+  MenuItem,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -51,6 +45,7 @@ import {
 import { EditBusinessObjectModal } from '../components/BusinessObjectManager/EditBusinessObjectModal';
 import BusinessObjectBindingWizard from '../components/BusinessObjectManager/BusinessObjectBindingWizard';
 import BOAIAssistantModal from '../components/BusinessObjectManager/BOAIAssistantModal';
+import CatalogList from '../components/common/CatalogList';
 import { filterBusinessObjectsBySearch } from '../utils/businessObjectSearch';
 
 import { useTenant } from '../contexts/TenantContext';
@@ -113,8 +108,7 @@ export default function BusinessObjectsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
-  const [businessObjectsSearch, setBusinessObjectsSearch] = useState('');
+  const [actionsMenu, setActionsMenu] = useState<{ el: HTMLElement; object: BusinessObject } | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'draft'>('all');
   const [scopeFilter, setScopeFilter] = useState<'all' | 'core' | 'custom'>('all');
 
@@ -162,30 +156,10 @@ export default function BusinessObjectsPage() {
     return [];
   };
 
-  // Filtered business objects based on search, status, and scope
-  const filteredBusinessObjects = useMemo(() => {
-    let filtered = businessObjects;
-    
-    // Search filter (type-ahead: every word must match name, display name, description, driving table or category)
-    filtered = filterBusinessObjectsBySearch(filtered, businessObjectsSearch);
-
-    // Scope Filter (Core vs Custom)
-    if (scopeFilter !== 'all') {
-      filtered = filtered.filter(obj => 
-        scopeFilter === 'core' ? !!obj.is_core : !obj.is_core
-      );
-    }
-
-    // Status Filter
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(obj => 
-        statusFilter === 'active' ? !!obj.is_active : !obj.is_active
-      );
-    }
-    
-    // Sort by name
-    return [...filtered].sort((a, b) => (a.display_name ?? a.name ?? '').localeCompare(b.display_name ?? b.name ?? ''));
-  }, [businessObjects, businessObjectsSearch, statusFilter, scopeFilter]);
+  const sortedBusinessObjects = useMemo(
+    () => [...businessObjects].sort((a, b) => (a.display_name ?? a.name ?? '').localeCompare(b.display_name ?? b.name ?? '')),
+    [businessObjects],
+  );
 
   // Executive KPI summary metrics
   const metrics = useMemo(() => {
@@ -619,507 +593,68 @@ export default function BusinessObjectsPage() {
             </Grid>
           </Grid>
 
-          {/* Controls Toolbar */}
-          <Paper 
-            elevation={0}
-            sx={{ 
-              p: 2, 
-              mb: 3,
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 2,
-            }}
-          >
-            <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2} alignItems={{ lg: 'center' }}>
-              
-              {/* Type-ahead search: filters the list below as you type */}
-              <Box sx={{ flex: 1 }}>
-                <TextField
-                  fullWidth
-                  size="small"
-                  placeholder="Search business objects by name, description or driving table (e.g. mdm party)"
-                  value={businessObjectsSearch}
-                  onChange={(e) => setBusinessObjectsSearch(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Escape') setBusinessObjectsSearch(''); }}
-                  inputProps={{ 'aria-label': 'Search business objects' }}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon fontSize="small" />
-                      </InputAdornment>
-                    ),
-                    endAdornment: businessObjectsSearch ? (
-                      <InputAdornment position="end">
-                        <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5, whiteSpace: 'nowrap' }}>
-                          {filteredBusinessObjects.length} of {businessObjects.length}
-                        </Typography>
-                        <IconButton size="small" aria-label="Clear search" onClick={() => setBusinessObjectsSearch('')}>
-                          <CloseIcon fontSize="small" />
-                        </IconButton>
-                      </InputAdornment>
-                    ) : null,
-                  }}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
-                />
-              </Box>
-
-              {/* Filters */}
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ overflow: 'auto', pb: { xs: 1, lg: 0 }, minWidth: 'fit-content' }}>
-                <Typography variant="caption" sx={{ fontWeight: 700, whiteSpace: 'nowrap', color: 'text.secondary' }}>
-                  Scope:
-                </Typography>
-                <Chip
-                  label="All"
-                  variant={scopeFilter === 'all' ? 'filled' : 'outlined'}
-                  color={scopeFilter === 'all' ? 'primary' : 'default'}
-                  onClick={() => setScopeFilter('all')}
-                  size="small"
-                />
-                <Chip
-                  label="Core Master"
-                  variant={scopeFilter === 'core' ? 'filled' : 'outlined'}
-                  color={scopeFilter === 'core' ? 'primary' : 'default'}
-                  onClick={() => setScopeFilter('core')}
-                  size="small"
-                />
-                <Chip
-                  label="Custom Tenant"
-                  variant={scopeFilter === 'custom' ? 'filled' : 'outlined'}
-                  color={scopeFilter === 'custom' ? 'secondary' : 'default'}
-                  onClick={() => setScopeFilter('custom')}
-                  size="small"
-                />
-
-                <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-
-                <Typography variant="caption" sx={{ fontWeight: 700, whiteSpace: 'nowrap', color: 'text.secondary' }}>
-                  Status:
-                </Typography>
-                <Chip
-                  label="All"
-                  variant={statusFilter === 'all' ? 'filled' : 'outlined'}
-                  color={statusFilter === 'all' ? 'primary' : 'default'}
-                  onClick={() => setStatusFilter('all')}
-                  size="small"
-                />
-                <Chip
-                  label="Active"
-                  variant={statusFilter === 'active' ? 'filled' : 'outlined'}
-                  color={statusFilter === 'active' ? 'success' : 'default'}
-                  onClick={() => setStatusFilter('active')}
-                  size="small"
-                />
-                <Chip
-                  label="Draft"
-                  variant={statusFilter === 'draft' ? 'filled' : 'outlined'}
-                  color={statusFilter === 'draft' ? 'warning' : 'default'}
-                  onClick={() => setStatusFilter('draft')}
-                  size="small"
-                />
-
-                <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-
-                {/* View Toggle */}
-                <Stack direction="row" spacing={0.5} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 0.5 }}>
-                  <IconButton 
-                    size="small"
-                    onClick={() => setViewMode('card')}
-                    sx={{ 
-                      color: viewMode === 'card' ? 'primary.main' : 'action.disabled',
-                      backgroundColor: viewMode === 'card' ? 'action.selected' : 'transparent',
-                    }}
-                    title="Card View"
-                  >
-                    <ViewWeekIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton 
-                    size="small"
-                    onClick={() => setViewMode('table')}
-                    sx={{ 
-                      color: viewMode === 'table' ? 'primary.main' : 'action.disabled',
-                      backgroundColor: viewMode === 'table' ? 'action.selected' : 'transparent',
-                    }}
-                    title="Table View"
-                  >
-                    <ViewAgendaIcon fontSize="small" />
-                  </IconButton>
-                </Stack>
-
-                <IconButton 
-                  size="small"
-                  onClick={fetchBusinessObjects}
-                  disabled={loading}
-                  sx={{ display: { xs: 'none', sm: 'flex' } }}
-                  title="Refresh"
-                >
-                  <RefreshIcon sx={{ animation: loading ? 'spin 1s linear infinite' : 'none', '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } } }} />
+          <CatalogList<BusinessObject>
+            items={sortedBusinessObjects}
+            getId={(o) => o.id}
+            getTitle={(o) => o.display_name ?? o.name}
+            getSubtitle={(o) => o.driver_table_name || undefined}
+            getDescription={(o) => o.description || 'No description provided.'}
+            isCore={(o) => !!o.is_core}
+            matchesSearch={(o, q) => filterBusinessObjectsBySearch([o], q).length > 0}
+            filter={(o) => statusFilter === 'all' || (statusFilter === 'active' ? !!o.is_active : !o.is_active)}
+            scope={scopeFilter}
+            onScopeChange={setScopeFilter}
+            storageKey="business-objects-view"
+            searchPlaceholder="Search business objects by name, description or driving table (e.g. mdm party)"
+            loading={loading}
+            error={error}
+            onDismissError={() => setError(null)}
+            emptyMessage="No business objects yet. Create your first one or select a driving table."
+            noMatchMessage="No business objects match your search."
+            onOpen={handleViewDetails}
+            onActions={(o, el) => setActionsMenu({ el, object: o })}
+            createLabel="Create Business Object"
+            onCreate={handleCreateObject}
+            toolbarExtra={(
+              <Stack direction="row" spacing={1} alignItems="center">
+                <ToggleButtonGroup exclusive size="small" value={statusFilter} onChange={(_, v) => v && setStatusFilter(v)}>
+                  <ToggleButton value="all" sx={{ textTransform: 'none', px: 2 }}>Any status</ToggleButton>
+                  <ToggleButton value="active" sx={{ textTransform: 'none', px: 2 }}>Active</ToggleButton>
+                  <ToggleButton value="draft" sx={{ textTransform: 'none', px: 2 }}>Draft</ToggleButton>
+                </ToggleButtonGroup>
+                <IconButton size="small" onClick={fetchBusinessObjects} disabled={loading} title="Refresh">
+                  <RefreshIcon />
                 </IconButton>
               </Stack>
-            </Stack>
-          </Paper>
+            )}
+            renderTileMeta={(o) => (
+              <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap" alignItems="center">
+                <Chip label={o.is_active ? 'Active' : 'Draft'} size="small" color={o.is_active ? 'success' : 'warning'} />
+                {o.enable_history && <Chip label="Historical" size="small" color="info" variant="outlined" />}
+                <Chip icon={<SchemaIcon />} label={`${o.config?.fields?.length || 0} fields`} size="small" variant="outlined" />
+                <Chip icon={<CategoryIcon />} label={`${Object.keys(o.subtypes || {}).length} subtypes`} size="small" variant="outlined" />
+              </Stack>
+            )}
+            columns={[
+              { key: 'driver', header: 'Driver Table', render: (o) => <span style={{ fontFamily: 'monospace' }}>{o.driver_table_name || '—'}</span> },
+              { key: 'description', header: 'Description', render: (o) => o.description || '—' },
+              { key: 'status', header: 'Status', render: (o) => <Chip label={o.is_active ? 'Active' : 'Draft'} size="small" color={o.is_active ? 'success' : 'warning'} /> },
+              { key: 'fields', header: 'Fields', render: (o) => o.config?.fields?.length || 0 },
+              { key: 'subtypes', header: 'Subtypes', render: (o) => Object.keys(o.subtypes || {}).length },
+            ]}
+          />
 
-          {/* Error Alert */}
-          {error && (
-            <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 3 }}>
-              {error}
-            </Alert>
-          )}
-
-          {/* Loading State */}
-          {loading && filteredBusinessObjects.length === 0 ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
-              <CircularProgress />
-            </Box>
-          ) : filteredBusinessObjects.length === 0 ? (
-            /* Empty State */
-            <Paper 
-              elevation={0}
-              sx={{ 
-                p: 6, 
-                textAlign: 'center',
-                border: '2px dashed',
-                borderColor: 'divider',
-                borderRadius: 2,
-              }}
-            >
-              <Avatar 
-                sx={{ 
-                  width: 64, 
-                  height: 64, 
-                  mx: 'auto', 
-                  mb: 2,
-                  bgcolor: 'action.hover',
-                  color: 'text.secondary',
-                }}
-              >
-                📊
-              </Avatar>
-              <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
-                No Business Objects Found
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 400, mx: 'auto' }}>
-                {businessObjectsSearch 
-                  ? `No matches for "${businessObjectsSearch}"` 
-                  : 'Get started by creating your first business object or selecting a driving table.'}
-              </Typography>
-              {!businessObjectsSearch && (
-                <Button 
-                  variant="contained" 
-                  color="primary"
-                  startIcon={<AddIcon />}
-                  onClick={handleCreateObject}
-                >
-                  Create Object
-                </Button>
-              )}
-            </Paper>
-          ) : (
-            viewMode === 'card' ? (
-              /* Card Grid Layout */
-              <Grid container spacing={3}>
-                {filteredBusinessObjects.map((object) => (
-                  <Grid key={object.id} size={{ 'xs': 12, 'sm': 6, 'md': 4, 'lg': 3 }}>
-                    <Card
-                      onClick={() => handleViewDetails(object)}
-                      sx={{
-                        cursor: 'pointer',
-                        height: '100%',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        transition: 'all 0.3s ease',
-                        border: '1px solid',
-                        borderColor: object.is_core ? 'primary.light' : 'divider',
-                        '&:hover': {
-                          transform: 'translateY(-4px)',
-                          boxShadow: theme.shadows[6],
-                          borderColor: 'primary.main',
-                        },
-                      }}
-                    >
-                      <CardContent sx={{ flex: 1 }}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1} sx={{ mb: 1.5 }}>
-                          <Stack direction="column" spacing={0.75} sx={{ flex: 1 }}>
-                            <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.05rem', lineHeight: 1.3 }}>
-                              {object.display_name}
-                            </Typography>
-                            <Stack direction="row" spacing={0.5} flexWrap="wrap" gap={0.5}>
-                              <Chip 
-                                label={object.is_core ? 'Core Master' : 'Tenant Custom'}
-                                size="small"
-                                color={object.is_core ? 'primary' : 'secondary'}
-                                variant="outlined"
-                                sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
-                              />
-                              <Chip 
-                                label={object.is_active ? 'Active' : 'Draft'}
-                                size="small"
-                                color={object.is_active ? 'success' : 'warning'}
-                                variant="filled"
-                                sx={{ height: 20, fontSize: '0.65rem' }}
-                              />
-                              {object.enable_history && (
-                                <Chip 
-                                  label="Historical"
-                                  size="small"
-                                  color="info"
-                                  variant="outlined"
-                                  sx={{ height: 20, fontSize: '0.65rem' }}
-                                />
-                              )}
-                            </Stack>
-                          </Stack>
-                        </Stack>
-
-                        {/* Driver Table pill */}
-                        {object.driver_table_name && (
-                          <Chip
-                            icon={<StorageIcon sx={{ fontSize: '0.85rem !important' }} />}
-                            label={object.driver_table_name}
-                            size="small"
-                            variant="outlined"
-                            sx={{ mb: 1.5, height: 22, fontSize: '0.7rem', maxWidth: '100%' }}
-                          />
-                        )}
-
-                        <Typography 
-                          variant="body2" 
-                          color="text.secondary" 
-                          sx={{ 
-                            mb: 2,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            minHeight: 38,
-                            fontSize: '0.825rem',
-                          }}
-                        >
-                          {object.description || 'No description provided.'}
-                        </Typography>
-                      </CardContent>
-
-                      <Divider />
-
-                      <CardActions sx={{ justifyContent: 'space-between', py: 1, px: 2 }}>
-                        <Stack direction="row" spacing={2} sx={{ fontSize: '0.75rem' }}>
-                          <Stack 
-                            direction="row" 
-                            spacing={0.5} 
-                            alignItems="center"
-                            title="Number of Fields"
-                          >
-                            <SchemaIcon sx={{ fontSize: '0.95rem', color: 'text.secondary' }} />
-                            <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                              {object.config?.fields?.length || 0}
-                            </Typography>
-                          </Stack>
-                          <Stack 
-                            direction="row" 
-                            spacing={0.5} 
-                            alignItems="center"
-                            title="Number of Subtypes"
-                          >
-                            <CategoryIcon sx={{ fontSize: '0.95rem', color: 'text.secondary' }} />
-                            <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                              {Object.keys(object.subtypes || {}).length}
-                            </Typography>
-                          </Stack>
-                        </Stack>
-                        <Stack direction="row" spacing={0.5} sx={{ ml: 'auto', alignItems: 'center' }}>
-                          <Tooltip title="Live Query Explorer">
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleViewDetails(object);
-                              }}
-                              color="primary"
-                            >
-                              <RunIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Edit">
-                            <IconButton
-                              size="small"
-                              onClick={(e) => handleEditObject(object, e)}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Delete">
-                            <IconButton
-                              size="small"
-                              onClick={(e) => handleDeleteObject(object, e)}
-                              color="error"
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </Stack>
-                      </CardActions>
-
-                    </Card>
-                  </Grid>
-                ))}
-
-                {/* Create New Card */}
-                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4, 'lg': 3 }}>
-                  <Card
-                    onClick={handleCreateObject}
-                    sx={{
-                      cursor: 'pointer',
-                      height: '100%',
-                      minHeight: 220,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: '2px dashed',
-                      borderColor: 'divider',
-                      bgcolor: 'action.hover',
-                      transition: 'all 0.3s ease',
-                      '&:hover': {
-                        borderColor: 'primary.main',
-                        bgcolor: 'primary.50',
-                      },
-                    }}
-                  >
-                    <Stack direction="column" alignItems="center" spacing={1}>
-                      <Avatar 
-                        sx={{ 
-                          bgcolor: 'transparent',
-                          color: 'primary.main',
-                          border: '2px dashed',
-                          borderColor: 'primary.main',
-                          width: 48,
-                          height: 48,
-                        }}
-                      >
-                        <AddIcon sx={{ fontSize: 28 }} />
-                      </Avatar>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        Create Business Object
-                      </Typography>
-                    </Stack>
-                  </Card>
-                </Grid>
-              </Grid>
-            ) : (
-              /* Table View */
-              <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
-                <Box sx={{ overflowX: 'auto' }}>
-                  <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <Box component="thead">
-                      <Box component="tr" sx={{ backgroundColor: theme.palette.action.hover, borderBottom: `1px solid ${theme.palette.divider}` }}>
-                        <Box component="th" sx={{ padding: '16px', textAlign: 'left', fontWeight: 700, color: theme.palette.text.secondary }}>Name</Box>
-                        <Box component="th" sx={{ padding: '16px', textAlign: 'left', fontWeight: 700, color: theme.palette.text.secondary }}>Scope</Box>
-                        <Box component="th" sx={{ padding: '16px', textAlign: 'left', fontWeight: 700, color: theme.palette.text.secondary }}>Driver Table</Box>
-                        <Box component="th" sx={{ padding: '16px', textAlign: 'left', fontWeight: 700, color: theme.palette.text.secondary }}>Description</Box>
-                        <Box component="th" sx={{ padding: '16px', textAlign: 'center', fontWeight: 700, color: theme.palette.text.secondary }}>Status</Box>
-                        <Box component="th" sx={{ padding: '16px', textAlign: 'center', fontWeight: 700, color: theme.palette.text.secondary }}>Fields</Box>
-                        <Box component="th" sx={{ padding: '16px', textAlign: 'center', fontWeight: 700, color: theme.palette.text.secondary }}>Subtypes</Box>
-                        <Box component="th" sx={{ padding: '16px', textAlign: 'right', fontWeight: 700, color: theme.palette.text.secondary }}>Actions</Box>
-                      </Box>
-                    </Box>
-                    <Box component="tbody">
-                      {filteredBusinessObjects.map((object, idx) => (
-                        <Box 
-                          component="tr"
-                          key={object.id} 
-                          onClick={() => handleViewDetails(object)}
-                          sx={{ 
-                            borderBottom: `1px solid ${theme.palette.divider}`,
-                            backgroundColor: idx % 2 === 0 ? 'transparent' : theme.palette.action.hover,
-                            cursor: 'pointer',
-                            transition: 'background-color 0.2s ease',
-                          }}
-                          onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLElement).style.backgroundColor = theme.palette.action.selected;
-                          }}
-                          onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLElement).style.backgroundColor = idx % 2 === 0 ? 'transparent' : theme.palette.action.hover;
-                          }}
-                        >
-                          <Box component="td" sx={{ padding: '16px', fontWeight: 600, color: theme.palette.text.primary }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {object.display_name}
-                              {object.enable_history && (
-                                <Tooltip title="Effective Dated / History Enabled">
-                                  <Chip label="H" size="small" color="info" variant="outlined" sx={{ height: 16, fontSize: '0.6rem' }} />
-                                </Tooltip>
-                              )}
-                            </Box>
-                          </Box>
-                          <Box component="td" sx={{ padding: '16px' }}>
-                            <Chip 
-                              label={object.is_core ? 'Core Master' : 'Tenant Custom'}
-                              size="small"
-                              color={object.is_core ? 'primary' : 'secondary'}
-                              variant="outlined"
-                              sx={{ height: 22, fontSize: '0.65rem' }}
-                            />
-                          </Box>
-                          <Box component="td" sx={{ padding: '16px', color: theme.palette.text.secondary, fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                            {object.driver_table_name || '—'}
-                          </Box>
-                          <Box component="td" sx={{ padding: '16px', color: theme.palette.text.secondary, maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {object.description || '—'}
-                          </Box>
-                          <Box component="td" sx={{ padding: '16px', textAlign: 'center' }}>
-                            <Chip 
-                              label={object.is_active ? 'Active' : 'Draft'}
-                              size="small"
-                              color={object.is_active ? 'success' : 'warning'}
-                              variant="filled"
-                            />
-                          </Box>
-                          <Box component="td" sx={{ padding: '16px', textAlign: 'center', fontWeight: 600 }}>
-                            {object.config?.fields?.length || 0}
-                          </Box>
-                          <Box component="td" sx={{ padding: '16px', textAlign: 'center', fontWeight: 600 }}>
-                            {Object.keys(object.subtypes || {}).length}
-                          </Box>
-                          <Box component="td" sx={{ padding: '16px', textAlign: 'right' }}>
-                            <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-                              <Tooltip title="Live Query Explorer">
-                                <IconButton
-                                  size="small"
-                                  color="primary"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleViewDetails(object);
-                                  }}
-                                >
-                                  <RunIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title="Edit">
-                                <IconButton
-                                  size="small"
-                                  onClick={(e) => handleEditObject(object, e)}
-                                >
-                                  <EditIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title="Delete">
-                                <IconButton
-                                  size="small"
-                                  color="error"
-                                  onClick={(e) => handleDeleteObject(object, e)}
-                                >
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                            </Stack>
-                          </Box>
-                        </Box>
-                      ))}
-                    </Box>
-                  </Box>
-                </Box>
-              </Paper>
-            )
-          )}
+          <Menu anchorEl={actionsMenu?.el} open={!!actionsMenu} onClose={() => setActionsMenu(null)}>
+            <MenuItem onClick={() => { const o = actionsMenu!.object; setActionsMenu(null); handleViewDetails(o); }}>
+              <RunIcon fontSize="small" sx={{ mr: 1 }} /> Live Query Explorer
+            </MenuItem>
+            <MenuItem onClick={() => { const o = actionsMenu!.object; setActionsMenu(null); handleEditObject(o); }}>
+              <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
+            </MenuItem>
+            <MenuItem sx={{ color: 'error.main' }} onClick={() => { const o = actionsMenu!.object; setActionsMenu(null); handleDeleteObject(o); }}>
+              <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
+            </MenuItem>
+          </Menu>
         </Container>
       </Box>
 
