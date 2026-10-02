@@ -514,6 +514,81 @@ module "redis_security_group" {
 }
 
 # =============================================================================
+# Amazon MQ (RabbitMQ)
+# =============================================================================
+
+resource "aws_mq_broker" "rabbitmq" {
+  broker_name = "${var.cluster_name}-rabbitmq"
+
+  engine_type        = "RabbitMQ"
+  engine_version     = "3.11.28"
+  host_instance_type = var.environment == "production" ? "mq.m5.large" : "mq.t3.micro"
+  deployment_mode    = var.environment == "production" ? "CLUSTER_MULTI_AZ" : "SINGLE_INSTANCE"
+
+  security_groups = [module.mq_security_group.security_group_id]
+  subnet_ids      = var.environment == "production" ? slice(module.vpc.private_subnets, 0, 2) : [module.vpc.private_subnets[0]]
+
+  user {
+    username = "semlayer"
+    password = random_password.mq_password.result
+  }
+
+  encryption_options {
+    use_aws_owned_key = false
+    kms_key_id        = aws_kms_key.main.arn
+  }
+
+  logs {
+    general = true
+  }
+
+  maintenance_window_start_time {
+    day_of_week = "MONDAY"
+    time_of_day = "02:00"
+    time_zone   = "UTC"
+  }
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "random_password" "mq_password" {
+  length  = 32
+  special = false
+}
+
+module "mq_security_group" {
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 5.0"
+
+  name        = "${var.cluster_name}-mq-sg"
+  description = "Security group for Amazon MQ RabbitMQ"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress_with_source_security_group_id = [
+    {
+      from_port                = 5671
+      to_port                  = 5671
+      protocol                 = "tcp"
+      description              = "AMQPS access from EKS"
+      source_security_group_id = module.eks.node_security_group_id
+    },
+    {
+      from_port                = 443
+      to_port                  = 443
+      protocol                 = "tcp"
+      description              = "Management console access"
+      source_security_group_id = module.eks.node_security_group_id
+    }
+  ]
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+# =============================================================================
 # KMS Key for Encryption
 # =============================================================================
 
@@ -585,6 +660,25 @@ resource "aws_secretsmanager_secret_version" "database" {
     host     = module.rds.db_instance_address
     port     = module.rds.db_instance_port
     database = "semlayer"
+  })
+}
+
+resource "aws_secretsmanager_secret" "rabbitmq" {
+  name        = "${var.cluster_name}/rabbitmq"
+  description = "RabbitMQ credentials for Semlayer"
+  kms_key_id  = aws_kms_key.main.arn
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "rabbitmq" {
+  secret_id = aws_secretsmanager_secret.rabbitmq.id
+  secret_string = jsonencode({
+    username = "semlayer"
+    password = random_password.mq_password.result
+    host     = aws_mq_broker.rabbitmq.instances[0].endpoints[0]
   })
 }
 
@@ -824,6 +918,11 @@ output "rds_endpoint" {
 output "redis_endpoint" {
   description = "Redis endpoint"
   value       = module.elasticache.cluster_cache_nodes
+}
+
+output "rabbitmq_endpoint" {
+  description = "RabbitMQ endpoint"
+  value       = aws_mq_broker.rabbitmq.instances[0].endpoints[0]
 }
 
 output "kms_key_arn" {
