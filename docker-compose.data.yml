@@ -2,7 +2,10 @@ version: '3.8'
 
 services:
   minio:
-    image: minio/minio
+    build:
+      context: ./docker/minio
+      target: minio
+    image: uisce/minio:RELEASE.2025-10-15T17-29-55Z
     container_name: uisce-minio
     command: server /data --console-address ":9001"
     environment:
