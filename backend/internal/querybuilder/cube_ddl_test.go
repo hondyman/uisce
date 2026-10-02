@@ -247,8 +247,52 @@ func TestGenerateCubeMaterializationDDL_DerivedMetricKeepsOperandOrder(t *testin
 	grain := []string{"country", "product", "order_date"}
 	schema := "oms.sales"
 
-	t.Run("declared order is numerator over denominator", func(t *testing.T) {
+	t.Run("explicit operands are numerator over denominator", func(t *testing.T) {
 		cube.MetricIDs = []string{"m_margin"}
+		lookup["m_margin"] = MetricDefinition{
+			ID:   "m_margin",
+			Name: "Margin Ratio",
+			BOID: "bo_sales",
+			Expression: MetricExpression{
+				Kind:          "derived",
+				BaseMetricIDs: []string{"m_revenue", "m_cost"},
+				NumeratorID:   "m_revenue",
+				DenominatorID: "m_cost",
+			},
+			GrainAllowlist: []string{"country", "product", "order_date"},
+			Decomposable:   true,
+		}
+
+		ddl, err := gen.GenerateCubeMaterializationDDL("t", false, cube, grain, schema, lookup, nil)
+		require.NoError(t, err)
+		assert.Contains(t, ddl.DDL, "SUM(t0.revenue)) / NULLIF((SUM(t0.cost)",
+			"a ratio naming revenue as numerator must materialize as revenue over cost")
+		assert.NotContains(t, ddl.DDL, "SUM(t0.cost)) / NULLIF((SUM(t0.revenue)")
+	})
+
+	t.Run("inverting the named operands inverts the measure", func(t *testing.T) {
+		lookup["m_margin"] = MetricDefinition{
+			ID:   "m_margin",
+			Name: "Cost Ratio",
+			BOID: "bo_sales",
+			Expression: MetricExpression{
+				Kind:          "derived",
+				BaseMetricIDs: []string{"m_revenue", "m_cost"},
+				NumeratorID:   "m_cost",
+				DenominatorID: "m_revenue",
+			},
+			GrainAllowlist: []string{"country", "product", "order_date"},
+			Decomposable:   true,
+		}
+
+		ddl, err := gen.GenerateCubeMaterializationDDL("t", false, cube, grain, schema, lookup, nil)
+		require.NoError(t, err)
+		assert.Contains(t, ddl.DDL, "SUM(t0.cost)) / NULLIF((SUM(t0.revenue)")
+	})
+
+	t.Run("a ratio with no named operands is refused", func(t *testing.T) {
+		// ADR-026: the ordered form is ambiguous by design and is never
+		// guessed at. It must not reach the materialization as a guess.
 		lookup["m_margin"] = MetricDefinition{
 			ID:   "m_margin",
 			Name: "Margin Ratio",
@@ -261,11 +305,9 @@ func TestGenerateCubeMaterializationDDL_DerivedMetricKeepsOperandOrder(t *testin
 			Decomposable:   true,
 		}
 
-		ddl, err := gen.GenerateCubeMaterializationDDL("t", false, cube, grain, schema, lookup, nil)
-		require.NoError(t, err)
-		assert.Contains(t, ddl.DDL, "SUM(t0.revenue)) / NULLIF((SUM(t0.cost)",
-			"a ratio declared revenue/cost must materialize as revenue over cost")
-		assert.NotContains(t, ddl.DDL, "SUM(t0.cost)) / NULLIF((SUM(t0.revenue)")
+		_, err := gen.GenerateCubeMaterializationDDL("t", false, cube, grain, schema, lookup, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "requires numeratorId and denominatorId")
 	})
 
 	t.Run("explicit operands override baseMetricIds order", func(t *testing.T) {

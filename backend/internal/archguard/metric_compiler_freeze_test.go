@@ -256,57 +256,58 @@ func TestMetricCompilerExpressionSurfaceIsFrozen(t *testing.T) {
 			wantErr: `unsupported aggregation function "MEDIAN"`,
 		},
 		{
-			// The derived-ratio regression, fixed. BaseMetricIDs are no longer
-			// sorted, so the declared order survives: [m_revenue, m_cost] is
-			// revenue over cost. It used to compile to cost over revenue,
-			// because the numerator was whichever ID sorted first.
-			name:    "metricDerivedTwoMetricsUseDeclaredOrder",
+			// ADR-026: the ordered form is refused, not honoured. This case
+			// previously asserted that [m_revenue, m_cost] meant revenue over
+			// cost; the ruling went further and made the direction data the
+			// author must state, so a bare ordering is an error.
+			name:    "metricDerivedOrderedRatioIsRefused",
 			expr:    querybuilder.MetricExpression{Kind: "derived", BaseMetricIDs: []string{"m_revenue", "m_cost"}},
+			lookup:  lookup,
+			wantErr: "derived ratio requires numeratorId and denominatorId",
+		},
+		{
+			// The inverse declaration is equally refused: the rule is about
+			// ambiguity, not about a preferred direction.
+			name:    "metricDerivedOrderedRatioInvertedIsRefusedToo",
+			expr:    querybuilder.MetricExpression{Kind: "derived", BaseMetricIDs: []string{"m_cost", "m_revenue"}},
+			lookup:  lookup,
+			wantErr: "derived ratio requires numeratorId and denominatorId",
+		},
+		{
+			// The surviving contract: direction is named, and inverting the
+			// named operands inverts the measure.
+			name: "metricDerivedRatioUsesNamedOperands",
+			expr: querybuilder.MetricExpression{
+				Kind:          "derived",
+				BaseMetricIDs: []string{"m_cost", "m_revenue"},
+				NumeratorID:   "m_revenue",
+				DenominatorID: "m_cost",
+			},
 			lookup:  lookup,
 			wantSQL: "(SUM(t0.revenue)) / NULLIF((SUM(t0.cost)), 0)",
 		},
 		{
-			// The inverse declaration must keep its own direction - the
-			// original bug was not order-preserving in either direction.
-			name:    "metricDerivedTwoMetricsUseDeclaredOrderInverted",
-			expr:    querybuilder.MetricExpression{Kind: "derived", BaseMetricIDs: []string{"m_cost", "m_revenue"}},
+			name: "metricDerivedRatioInvertingNamedOperandsInvertsTheMeasure",
+			expr: querybuilder.MetricExpression{
+				Kind:          "derived",
+				BaseMetricIDs: []string{"m_revenue", "m_cost"},
+				NumeratorID:   "m_cost",
+				DenominatorID: "m_revenue",
+			},
 			lookup:  lookup,
 			wantSQL: "(SUM(t0.cost)) / NULLIF((SUM(t0.revenue)), 0)",
 		},
 		{
-			// Explicit operands override a baseMetricIds order that disagrees,
-			// which is the whole point of the field existing.
-			name: "metricDerivedTwoMetricsUseExplicitOperands",
-			expr: querybuilder.MetricExpression{
-				Kind:          "derived",
-				BaseMetricIDs: []string{"m_cost", "m_revenue"},
-				NumeratorID:   "m_revenue",
-				DenominatorID: "m_cost",
-			},
-			lookup:  lookup,
-			wantSQL: "(SUM(t0.revenue)) / NULLIF((SUM(t0.cost)), 0)",
-		},
-		{
-			name: "metricDerivedExplicitOperandsMustBothAppearInBaseIds",
+			name: "metricDerivedExplicitOperandsMustBothBeSet",
 			expr: querybuilder.MetricExpression{
 				Kind:          "derived",
 				BaseMetricIDs: []string{"m_cost", "m_revenue"},
 				NumeratorID:   "m_revenue",
 			},
-			wantErr: "derived ratio needs both numeratorId and denominatorId",
+			wantErr: "derived ratio requires numeratorId and denominatorId",
 		},
 		{
-			name: "metricDerivedExplicitOperandsMustAppearInBaseIds",
-			expr: querybuilder.MetricExpression{
-				Kind:          "derived",
-				BaseMetricIDs: []string{"m_cost", "m_revenue"},
-				NumeratorID:   "m_units",
-				DenominatorID: "m_cost",
-			},
-			wantErr: "numeratorId and denominatorId must both appear in baseMetricIds",
-		},
-		{
-			name: "metricDerivedExplicitOperandsAreForARatioOnly",
+			name: "metricDerivedExplicitOperandsMustBeExactlyTheBaseIds",
 			expr: querybuilder.MetricExpression{
 				Kind:          "derived",
 				BaseMetricIDs: []string{"m_revenue", "m_cost", "m_units"},
@@ -314,6 +315,17 @@ func TestMetricCompilerExpressionSurfaceIsFrozen(t *testing.T) {
 				DenominatorID: "m_cost",
 			},
 			wantErr: "numeratorId/denominatorId describe a 2-metric ratio, but baseMetricIds has 3 entries",
+		},
+		{
+			name: "metricDerivedRatioOperandsMustNotBeTheSameMetric",
+			expr: querybuilder.MetricExpression{
+				Kind:          "derived",
+				BaseMetricIDs: []string{"m_revenue", "m_cost"},
+				NumeratorID:   "m_revenue",
+				DenominatorID: "m_revenue",
+			},
+			lookup:  lookup,
+			wantErr: "numeratorId and denominatorId are the same metric",
 		},
 		{
 			name:    "metricDerivedThreeMetricsCompileToSum",

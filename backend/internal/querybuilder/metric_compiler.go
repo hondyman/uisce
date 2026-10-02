@@ -78,43 +78,24 @@ func (mc *MetricCompiler) compileMetricWithCycleDetection(
 		args = append(args, formArgs...)
 
 	case "derived":
-		// Derived metric: combine base metrics.
-		if len(m.Expression.BaseMetricIDs) == 0 {
-			return nil, fmt.Errorf("%w: derived metric requires baseMetricIds", ErrInvalidMetricFormula)
+		// One validator, shared with the cube validation path, so the compiler
+		// and the authoring path can never disagree about what a derived metric
+		// is allowed to be. See ADR-026.
+		if err := ValidateMetricExpression(m); err != nil {
+			return nil, err
 		}
 
-		// Operand order. ADR-025: a derived metric's meaning must not depend on
-		// how its base metric IDs happen to be spelled. An explicit
-		// numeratorId/denominatorId wins; otherwise the author's declared order
-		// is the order. Only the N-operand sum - where operand order cannot
-		// change the value - is sorted, which keeps its output deterministic.
+		// Operand order. A 2-operand derived metric is a ratio and MUST name its
+		// numerator and denominator: reading the direction off positional order
+		// is what inverted revenue/cost, and guessing at it is how a named
+		// business metric silently became its reciprocal. Only the N-operand sum
+		// - where order cannot change the value - is sorted, which keeps its
+		// output deterministic.
 		ids := make([]string, len(m.Expression.BaseMetricIDs))
 		copy(ids, m.Expression.BaseMetricIDs)
-
-		if num, den := m.Expression.NumeratorID, m.Expression.DenominatorID; num != "" || den != "" {
-			if num == "" || den == "" {
-				return nil, fmt.Errorf("%w: derived ratio needs both numeratorId and denominatorId", ErrInvalidMetricFormula)
-			}
-			if num == den {
-				return nil, fmt.Errorf("%w: derived ratio numeratorId and denominatorId are the same metric", ErrInvalidMetricFormula)
-			}
-			if len(ids) != 2 {
-				return nil, fmt.Errorf("%w: numeratorId/denominatorId describe a 2-metric ratio, but baseMetricIds has %d entries", ErrInvalidMetricFormula, len(ids))
-			}
-			hasNum, hasDen := false, false
-			for _, id := range ids {
-				if id == num {
-					hasNum = true
-				}
-				if id == den {
-					hasDen = true
-				}
-			}
-			if !hasNum || !hasDen {
-				return nil, fmt.Errorf("%w: numeratorId and denominatorId must both appear in baseMetricIds", ErrInvalidMetricFormula)
-			}
-			ids = []string{num, den}
-		} else if len(ids) > 2 {
+		if len(ids) == 2 {
+			ids = []string{m.Expression.NumeratorID, m.Expression.DenominatorID}
+		} else {
 			sort.Strings(ids)
 		}
 

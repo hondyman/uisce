@@ -116,6 +116,8 @@ func TestMetricEquivalence_Matrix(t *testing.T) {
 			Expression: MetricExpression{
 				Kind:          "derived",
 				BaseMetricIDs: []string{"m_base_rev", "m_base_cost"},
+				NumeratorID:   "m_base_rev",
+				DenominatorID: "m_base_cost",
 			},
 			GrainAllowlist: []string{"rep", "region"},
 		}
@@ -128,52 +130,52 @@ func TestMetricEquivalence_Matrix(t *testing.T) {
 		res, err := compiler.CompileMetric(derivedMetric, nil, lookup)
 		require.NoError(t, err)
 
-		// Declared order is the semantic order: m_base_rev was declared first,
-		// so revenue is the numerator. This used to assert the opposite -
-		// "Sorted base IDs: m_base_cost, m_base_rev" - which made a metric
-		// named "Margin Ratio" compile to cost/revenue. Sorting the operands
-		// meant the ratio's direction was decided by metric ID spelling. See
-		// ADR-025.
+		// The ratio names its operands, so its direction is data rather than a
+		// convention. This case used to assert the opposite - "(SUM(t0.cost)) /
+		// NULLIF((SUM(t0.revenue)), 0)" with a comment reading "Sorted base
+		// IDs" - which made a metric named "Margin Ratio" compile to
+		// cost/revenue. See ADR-025 and ADR-026.
 		expectedSQL := "(SUM(t0.revenue)) / NULLIF((SUM(t0.cost)), 0)"
 		assert.Equal(t, expectedSQL, res.SQLExpr)
 
-		// Operand order is semantic, so it must also reach the content hash:
-		// the inverted metric must not share this metric's identity, because
-		// that hash is the cube deploy key and part of the query cache key.
+		// Naming the operands the other way round must produce the reciprocal,
+		// not the same number: that is what "explicit" has to mean.
 		inverted := MetricDefinition{
 			ID:   "m_margin_ratio",
 			Name: "Margin Ratio",
 			BOID: "bo_sales",
 			Expression: MetricExpression{
 				Kind:          "derived",
-				BaseMetricIDs: []string{"m_base_cost", "m_base_rev"},
+				BaseMetricIDs: []string{"m_base_rev", "m_base_cost"},
+				NumeratorID:   "m_base_cost",
+				DenominatorID: "m_base_rev",
 			},
 			GrainAllowlist: []string{"rep", "region"},
 		}
 		invertedSQL, err := compiler.CompileMetric(inverted, nil, lookup)
 		require.NoError(t, err)
 		assert.Equal(t, "(SUM(t0.cost)) / NULLIF((SUM(t0.revenue)), 0)", invertedSQL.SQLExpr)
-		assert.NotEqual(t, ComputeMetricContentHash(derivedMetric), ComputeMetricContentHash(inverted),
-			"opposite operand order must not collapse to the same content hash")
 
-		// Explicit operands win over baseMetricIds order, and are hashed too.
-		explicit := MetricDefinition{
+		// And the ordered form is refused outright, so the direction can never
+		// be inferred again (ADR-026).
+		ordered := MetricDefinition{
 			ID:   "m_margin_ratio",
 			Name: "Margin Ratio",
 			BOID: "bo_sales",
 			Expression: MetricExpression{
 				Kind:          "derived",
-				BaseMetricIDs: []string{"m_base_cost", "m_base_rev"},
-				NumeratorID:   "m_base_rev",
-				DenominatorID: "m_base_cost",
+				BaseMetricIDs: []string{"m_base_rev", "m_base_cost"},
 			},
 			GrainAllowlist: []string{"rep", "region"},
 		}
-		explicitSQL, err := compiler.CompileMetric(explicit, nil, lookup)
-		require.NoError(t, err)
-		assert.Equal(t, expectedSQL, explicitSQL.SQLExpr)
-		assert.NotEqual(t, ComputeMetricContentHash(inverted), ComputeMetricContentHash(explicit),
-			"explicit operands must not collapse to the same content hash as the inverted spelling")
+		_, err = compiler.CompileMetric(ordered, nil, lookup)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "requires numeratorId and denominatorId")
+
+		// Opposite operand order must not collapse to one content hash: that
+		// hash is the cube deploy key and part of the query cache key.
+		assert.NotEqual(t, ComputeMetricContentHash(derivedMetric), ComputeMetricContentHash(inverted),
+			"opposite operand order must not share a content hash")
 
 		// Hand-authored equivalent hash check
 		derivedHash := ComputeMetricContentHash(derivedMetric)

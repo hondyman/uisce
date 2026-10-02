@@ -466,6 +466,60 @@ func ExportMetricBundle(metrics []MetricDefinition) (*MetricBundle, error) {
 
 // ValidateQueryMetricDependencies verifies that all metric IDs referenced in a query
 // exist in the tenant's metric definitions (or bundle dependencies). Fails closed (422) if missing.
+// ValidateMetricExpression is the canonical validation for a governed metric's
+// expression. It is the artifact a save path must call, so an unusable metric
+// is rejected at authoring time rather than at query or deploy time.
+//
+// NOTE ON SCOPE: as of this writing there is no user-facing CRUD endpoint for
+// data_explorer.metric_definition.expression - rows arrive via migration, seed
+// or import, and the reconciler only backfills catalog_term_id. So there is no
+// 422 to return today. The check is wired into ValidateCubeMetricReferences
+// (the earliest enforcement point that exists) and into CompileMetric, and it
+// is exported so a future save endpoint cannot skip it. See ADR-026.
+func ValidateMetricExpression(m MetricDefinition) error {
+	expr := m.Expression
+	switch strings.ToLower(strings.TrimSpace(expr.Kind)) {
+	case "aggregation", "formula", "":
+		return nil
+	case "derived":
+	default:
+		return fmt.Errorf("%w: unsupported expression kind %q", ErrInvalidMetricFormula, expr.Kind)
+	}
+
+	if len(expr.BaseMetricIDs) == 0 {
+		return fmt.Errorf("%w: derived metric requires baseMetricIds", ErrInvalidMetricFormula)
+	}
+
+	num, den := expr.NumeratorID, expr.DenominatorID
+	if num == "" && den == "" {
+		if len(expr.BaseMetricIDs) == 2 {
+			// A two-operand derived metric is a ratio, and a ratio's direction
+			// is the whole meaning. Reading it off positional order is how
+			// revenue/cost silently became cost/revenue: the sort decided the
+			// numerator. So the ordered form is rejected outright rather than
+			// guessed at.
+			return fmt.Errorf("%w: derived ratio requires numeratorId and denominatorId - the positional/ordered form was ambiguous by design (ADR-026)", ErrInvalidMetricFormula)
+		}
+		return nil // N-operand sum: order cannot change the value.
+	}
+	if num == "" || den == "" {
+		return fmt.Errorf("%w: derived ratio requires numeratorId and denominatorId (ADR-026)", ErrInvalidMetricFormula)
+	}
+	if num == den {
+		return fmt.Errorf("%w: derived ratio numeratorId and denominatorId are the same metric", ErrInvalidMetricFormula)
+	}
+	if len(expr.BaseMetricIDs) != 2 {
+		return fmt.Errorf("%w: numeratorId/denominatorId describe a 2-metric ratio, but baseMetricIds has %d entries", ErrInvalidMetricFormula, len(expr.BaseMetricIDs))
+	}
+	for _, id := range expr.BaseMetricIDs {
+		if id == num || id == den {
+			continue
+		}
+		return fmt.Errorf("%w: baseMetricIds contains %q, which is neither numeratorId nor denominatorId (ADR-026)", ErrInvalidMetricFormula, id)
+	}
+	return nil
+}
+
 func ValidateQueryMetricDependencies(referencedMetricIDs []string, availableMetricIDs map[string]bool) error {
 	var missing []string
 	for _, id := range referencedMetricIDs {

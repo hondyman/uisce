@@ -28,6 +28,20 @@ them: an edit here once shipped as `+425/−60` and would have reverted ADR-024
 outright. Read the diffstat before pushing any change to this file, and confirm
 the ADR count did not drop. `git diff --stat` is the only signal that caught it.
 
+### Standing rule: authored identity is deliberate, not ambient
+
+The author recorded on a commit is a decision, like any other in this file, and
+not an artifact of whatever git config happened to be live when a commit was
+built. Two commits on the C0 freeze PR were authored `opencode <opencode@local>`
+while the merged cube work is `mavis <mavis@uisce.local>`, purely because a
+plumbing commit path took the ambient identity. Provenance is load-bearing in
+this repo, so a reviewer seeing an unexpected author is entitled to ask.
+
+Automation is the obvious guard — a workflow check on protected branches that
+compares commit author identity against an expected set is cheap — but the rule
+stands on its own even unenforced: **set the author deliberately, and check
+`git log --format="%an <%ae>"` before pushing.**
+
 ## Standing evidence rule
 
 A decision marked as *implemented* or *wired* must cite a **production call
@@ -594,6 +608,13 @@ reason rather than quietly edited. No C3 date was defined anywhere in version
 control, so inventing a calendar expiry as the *primary* trigger was rejected
 rather than guessed.
 
+The backstop is a **decision checkpoint, not a deadline**. On that date — or
+when C3 lands, whichever comes first — the freeze's status is reviewed and one
+of two things is registered: C3 shipped, so the freeze is deleted and the gate
+takes over, or C3 slipped, so a reasoned extension is written down saying why it
+slipped and what the new date is. A backstop that forces a written justification
+is the honest form of a deadline for a freeze whose purpose is protective.
+
 **Two defects the freeze found on its first run, both pinned as-is.**
 
 1. `metricFormulaUnspacedOperatorIsOneToken` — `"@a*@b"` is a *single*
@@ -657,6 +678,12 @@ which snapshots inverted semantics would enshrine the bug as the reference.
    parameterised measure with a real reason; a literal-only formula still
    materializes with its operator intact.
 
+   **Scope of that refusal.** Nothing shipped uses `kind: formula`, so the
+   refusal refuses nothing today while closing the raw-text-to-StarRocks path
+   before its first user. It is deliberately *not* a soft warning. When formulas
+   become supported — post-C3, on the unified core — the gate lifts by
+   **implementing the validator**, not by deleting the refusal.
+
 `TestMetricEquivalence_Matrix/Case_3` had encoded defect (1) as its
 expectation — the metric is named "Margin Ratio", declares revenue first, and
 asserted cost/revenue, with a comment reading "Sorted base IDs" as if
@@ -674,6 +701,88 @@ entry, called from `internal/querybuilder/cube_ddl.go:138` — the only
 non-test caller in the tree. `compileFormula` (`:127`) is the formula path.
 The freeze guard is `internal/archguard/metric_compiler_freeze_test.go`,
 alongside the existing `TestSingleRuleEngine`.
+
+### ADR-026: A Two-Operand Derived Metric Must Name Its Numerator And Denominator
+
+**Decision.** A derived metric with exactly two operands is a ratio, and a ratio
+must state `numeratorId` and `denominatorId` explicitly. The bare
+`baseMetricIds: [a, b]` form is **rejected**, not honoured and not guessed at.
+The N-operand sum is unaffected: order cannot change the value there, so it
+stays sorted for determinism.
+
+**Context.** ADR-025 fixed the mechanical defect — operands were sorted and the
+first entry became the numerator, so a declared `revenue / cost` compiled to
+`cost / revenue`. Honouring the author's declared order was the first fix, but
+it leaves the real hazard in place: a ratio's entire meaning is its direction,
+and positional order is invisible, undocumented, and decided by nothing more
+substantial than array order. Reading intent from a name is how this started; a
+correctness fix that reverses a *named* business metric is exactly the change
+that deserves a second opinion, and a convention still needs one.
+
+**Evidence, not inference.** There are **no shipped derived metrics**:
+`base_metric_ids` appears in no migration, and the only `Margin Ratio` in the
+tree is a test fixture. So this ruling costs nothing today and lands before the
+first real ratio exists — which is the cheapest moment to require the explicit
+form. The alternative, a positional convention, is precisely the thing that
+silently inverts the first metric someone authors.
+
+**One validator, three call sites.** `ValidateMetricExpression`
+(`metric_definition.go`) is canonical and is called from `CompileMetric`,
+`ValidateCubeMetricReferences`, and is exported for any future save path — so
+the compiler and the authoring path cannot drift into disagreeing about what a
+derived metric may be.
+
+**Honest note on the requested 422.** The ruling asked for rejection at save
+time with a 422. There is **no user-facing save path** for
+`data_explorer.metric_definition.expression` today: `internal/metrics` is wired
+to a handler but writes a *different* table (`metric_definitions`, with
+`aggregation_function`/`base_query`), rows arrive by migration/seed/import, and
+the reconciler only backfills `catalog_term_id`. So there is no endpoint to
+return 422 from. The check is instead enforced at the earliest point that
+exists — cube validation, which resolves real metric definitions — plus compile
+time. When a CRUD endpoint for governed metric expressions lands, it **must**
+call `ValidateMetricExpression`; the function is exported and the omission would
+be the defect.
+
+**Evidence (production call sites).** `ValidateMetricExpression`
+(`internal/querybuilder/metric_definition.go`) is called from
+`CompileMetric` (`metric_compiler.go:80`) and
+`ValidateCubeMetricReferences` (`internal/querybuilder/cube_definition.go`),
+which is called by the cube deploy path. `MetricExpression.NumeratorID` /
+`DenominatorID` are the authored data.
+
+### ADR-027: A Cube's Content Hash Covers Its Referenced Metrics' Content
+
+**Decision.** `ComputeCubeContentHash` folds in the content hashes of every
+metric the cube names, sorted and normalized exactly as the query cache key
+does. A metric definition edit is therefore a cube change: the hash moves, and
+under ADR-011 the next deploy is a real redeploy rather than a no-op.
+
+**Context and the asymmetry it closes.** The two invalidation layers disagreed.
+The *query cache* already self-healed — `ComputeQueryAndMetricsAndCubeCacheKey`
+folds each referenced metric's content hash into the key, so a changed metric
+simply never hits its old entry. The *deploy* did not: `ComputeCubeContentHash`
+hashed metric **IDs** only, never their content. So a metric edit left the cube
+hash untouched, ADR-011's "unchanged hash ⇒ deploy is a no-op" rule kept the
+deploy from firing, and a materialized view served the pre-edit expression
+indefinitely. Cache and deploy were asymmetric, and only one of them was safe.
+
+This is the same class as the ADR-016 defect: **a hash that cannot see the thing
+it must distinguish**. That one put a cube state into a cache key; this one
+removed a cube's own change from its identity.
+
+**Consequence.** A deploy caller must pass the resolved metrics' content
+hashes. An empty slice is tolerated for validation-time use but yields a hash
+that does not track the cube's metrics, so the deploy path is the one place
+that must not pass nil. There is no migration concern: **no cube is deployed or
+seeded anywhere**, so there are no live hashes to invalidate — the rule lands
+before the first real cube, the same way ADR-026 did.
+
+**Evidence (production call sites).** `ComputeCubeContentHash`
+(`internal/querybuilder/cube_definition.go:106`). The symmetric behaviour it now
+mirrors is `ComputeQueryAndMetricsAndCubeCacheKey`
+(`internal/querybuilder/metric_compiler.go:194`). The test is
+`TestComputeCubeContentHash_TracksReferencedMetricContent`.
 
 ## Open items
 
