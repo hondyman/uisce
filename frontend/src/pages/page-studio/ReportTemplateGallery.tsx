@@ -35,6 +35,10 @@ export interface ReportTemplate {
   buildDraft: (name: string) => Partial<CorePageDefinition>;
 }
 
+// CorePageDefinition.components is keyed by id (layout nodes reference those ids), not a list.
+const componentMap = (list: ComponentDefinition[]): Record<string, ComponentDefinition> =>
+  Object.fromEntries(list.map((c) => [c.id, c]));
+
 export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
   {
     id: 'exec-kpi-dashboard',
@@ -52,7 +56,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
         {
           id: 'param-bar',
           type: 'report_parameter_bar',
-          config: {
+          props: {
             title: 'Report Parameters',
             variables: ['v_date_range', 'v_region', 'v_status'],
             allowReset: true,
@@ -61,7 +65,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
         {
           id: 'kpi-rev',
           type: 'kpi_tile',
-          config: {
+          props: {
             title: 'Total Revenue',
             aggregation: 'sum',
             format: 'currency',
@@ -72,7 +76,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
         {
           id: 'kpi-aum',
           type: 'kpi_tile',
-          config: {
+          props: {
             title: 'Assets Under Management',
             aggregation: 'sum',
             format: 'currency',
@@ -83,7 +87,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
         {
           id: 'kpi-acc',
           type: 'kpi_tile',
-          config: {
+          props: {
             title: 'Active Accounts',
             aggregation: 'count',
             format: 'number',
@@ -93,7 +97,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
         {
           id: 'chart-trend',
           type: 'saved_query_widget',
-          config: {
+          props: {
             title: 'Revenue & Inflow Trend',
             chartType: 'combo',
             gridSpan: { colSpan: 8, rowSpan: 2 },
@@ -102,7 +106,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
         {
           id: 'slicer-reg',
           type: 'slicer',
-          config: {
+          props: {
             dimensionTermId: 'term-region',
             slicerMode: 'checkbox',
             gridSpan: { colSpan: 4, rowSpan: 2 },
@@ -119,7 +123,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
           nodes: {
             root: {
               id: 'root',
-              type: 'Grid',
+              type: 'Column',
               children: components.map((c) => c.id),
               props: {
                 layoutKind: 'grid',
@@ -129,13 +133,13 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
             },
           },
         },
-        components,
+        components: componentMap(components),
         dataSources: [],
         app: {
           variables: [
-            { name: 'v_date_range', type: 'string', defaultValue: 'YTD' },
-            { name: 'v_region', type: 'string', defaultValue: 'ALL' },
-            { name: 'v_status', type: 'string', defaultValue: 'ACTIVE' },
+            { name: 'v_date_range', default: 'YTD' },
+            { name: 'v_region', default: 'ALL' },
+            { name: 'v_status', default: 'ACTIVE' },
           ],
           queries: [],
         },
@@ -158,7 +162,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
         {
           id: 'param-bar',
           type: 'report_parameter_bar',
-          config: {
+          props: {
             title: 'Trading Filters',
             variables: ['v_desk', 'v_ccy', 'v_asset_class'],
             allowReset: true,
@@ -167,7 +171,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
         {
           id: 'kpi-notional',
           type: 'kpi_tile',
-          config: {
+          props: {
             title: 'Gross Notional Traded',
             aggregation: 'sum',
             format: 'currency',
@@ -177,7 +181,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
         {
           id: 'kpi-trades',
           type: 'kpi_tile',
-          config: {
+          props: {
             title: 'Executed Orders',
             aggregation: 'count',
             format: 'number',
@@ -187,7 +191,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
         {
           id: 'table-ledger',
           type: 'saved_query_widget',
-          config: {
+          props: {
             title: 'Trade Allocations & Executions',
             chartType: 'table',
             gridSpan: { colSpan: 12, rowSpan: 3 },
@@ -204,7 +208,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
           nodes: {
             root: {
               id: 'root',
-              type: 'Grid',
+              type: 'Column',
               children: components.map((c) => c.id),
               props: {
                 layoutKind: 'grid',
@@ -214,13 +218,13 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
             },
           },
         },
-        components,
+        components: componentMap(components),
         dataSources: [],
         app: {
           variables: [
-            { name: 'v_desk', type: 'string', defaultValue: 'ALL' },
-            { name: 'v_ccy', type: 'string', defaultValue: 'USD' },
-            { name: 'v_asset_class', type: 'string', defaultValue: 'EQUITY' },
+            { name: 'v_desk', default: 'ALL' },
+            { name: 'v_ccy', default: 'USD' },
+            { name: 'v_asset_class', default: 'EQUITY' },
           ],
           queries: [],
         },
@@ -243,7 +247,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
         {
           id: 'param-bar',
           type: 'report_parameter_bar',
-          config: {
+          props: {
             title: 'Risk Parameters',
             variables: ['v_portfolio', 'v_benchmark', 'v_as_of_date'],
             allowReset: true,
@@ -252,7 +256,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
         {
           id: 'kpi-vol',
           type: 'kpi_tile',
-          config: {
+          props: {
             title: 'Portfolio Volatility',
             aggregation: 'avg',
             format: 'percentage',
@@ -262,7 +266,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
         {
           id: 'kpi-sharpe',
           type: 'kpi_tile',
-          config: {
+          props: {
             title: 'Sharpe Ratio',
             aggregation: 'avg',
             format: 'number',
@@ -272,7 +276,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
         {
           id: 'chart-risk-scatter',
           type: 'saved_query_widget',
-          config: {
+          props: {
             title: 'Risk vs Return Scatter',
             chartType: 'scatter',
             gridSpan: { colSpan: 12, rowSpan: 2 },
@@ -289,7 +293,7 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
           nodes: {
             root: {
               id: 'root',
-              type: 'Grid',
+              type: 'Column',
               children: components.map((c) => c.id),
               props: {
                 layoutKind: 'grid',
@@ -299,13 +303,13 @@ export const BUILT_IN_REPORT_TEMPLATES: ReportTemplate[] = [
             },
           },
         },
-        components,
+        components: componentMap(components),
         dataSources: [],
         app: {
           variables: [
-            { name: 'v_portfolio', type: 'string', defaultValue: 'GLOBAL_GROWTH' },
-            { name: 'v_benchmark', type: 'string', defaultValue: 'SP500' },
-            { name: 'v_as_of_date', type: 'string', defaultValue: 'TODAY' },
+            { name: 'v_portfolio', default: 'GLOBAL_GROWTH' },
+            { name: 'v_benchmark', default: 'SP500' },
+            { name: 'v_as_of_date', default: 'TODAY' },
           ],
           queries: [],
         },
@@ -321,7 +325,7 @@ export const scaffoldBlankGridReport = (name: string): Partial<CorePageDefinitio
     {
       id: 'param-bar-default',
       type: 'report_parameter_bar',
-      config: {
+      props: {
         title: 'Report Parameters',
         variables: ['v_date_range'],
         allowReset: true,
@@ -330,7 +334,7 @@ export const scaffoldBlankGridReport = (name: string): Partial<CorePageDefinitio
     {
       id: 'starter-kpi',
       type: 'kpi_tile',
-      config: {
+      props: {
         title: 'Primary Metric',
         gridSpan: { colSpan: 4, rowSpan: 1 },
       },
@@ -338,7 +342,7 @@ export const scaffoldBlankGridReport = (name: string): Partial<CorePageDefinitio
     {
       id: 'starter-chart',
       type: 'saved_query_widget',
-      config: {
+      props: {
         title: 'Overview Chart',
         chartType: 'bar',
         gridSpan: { colSpan: 8, rowSpan: 2 },
@@ -355,7 +359,7 @@ export const scaffoldBlankGridReport = (name: string): Partial<CorePageDefinitio
       nodes: {
         root: {
           id: 'root',
-          type: 'Grid',
+          type: 'Column',
           children: components.map((c) => c.id),
           props: {
             layoutKind: 'grid',
@@ -365,10 +369,10 @@ export const scaffoldBlankGridReport = (name: string): Partial<CorePageDefinitio
         },
       },
     },
-    components,
+    components: componentMap(components),
     dataSources: [],
     app: {
-      variables: [{ name: 'v_date_range', type: 'string', defaultValue: 'YTD' }],
+      variables: [{ name: 'v_date_range', default: 'YTD' }],
       queries: [],
     },
   };
