@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -443,12 +444,17 @@ func setupTestDB(t *testing.T) *sql.DB {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
-	dsn := "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
+	// An explicit opt-in DSN only. These tests DROP and recreate the discovery
+	// tables (setupSchema), so they must never fall back to a shared database.
+	dsn := os.Getenv("UISCE_TEST_DB_DSN")
+	if dsn == "" {
+		t.Skip("skipping: set UISCE_TEST_DB_DSN to an ISOLATED test database (these tests drop and recreate the discovery tables)")
+	}
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		t.Fatalf("Failed to open DB connection: %v", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := db.PingContext(ctx); err != nil {
 		t.Skipf("Skipping test: DB not reachable: %v", err)

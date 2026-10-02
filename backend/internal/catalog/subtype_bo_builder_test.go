@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/testcontainers/testcontainers-go"
 	"testing"
 	"time"
 
@@ -27,9 +28,9 @@ func (m *mockLoaderForBuilder) LoadAllForTenant(ctx context.Context, db *sql.DB,
 }
 
 type mockDBForBO struct {
-	execResults []mockExecResult
-	txStarted  bool
-	txCommitted bool
+	execResults  []mockExecResult
+	txStarted    bool
+	txCommitted  bool
 	txRolledBack bool
 }
 
@@ -53,14 +54,14 @@ func TestSubtypeBOBuilder_BuildForTenant_LoadError(t *testing.T) {
 
 func TestSubtypeBOBuilder_QualifiedPath(t *testing.T) {
 	_ = SubtypeRow{
-		ID:                uuid.New(),
-		TenantID:          uuid.New(),
-		RootObject:        "account",
-		SubtypeCode:       "institutional",
-		DisplayName:       "Institutional Account",
-		FieldAllowlist:    []string{"account_number", "sponsor_id"},
-		IsActive:          true,
-		CreatedAt:         time.Now(),
+		ID:             uuid.New(),
+		TenantID:       uuid.New(),
+		RootObject:     "account",
+		SubtypeCode:    "institutional",
+		DisplayName:    "Institutional Account",
+		FieldAllowlist: []string{"account_number", "sponsor_id"},
+		IsActive:       true,
+		CreatedAt:      time.Now(),
 	}
 
 	expectedPath := "oms.account/institutional"
@@ -104,6 +105,8 @@ func TestSubtypeBOBuilder_ParentBOsGetCoreFields(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
+	// Skip (not fail) when there is no Docker daemon; a real container failure still fails.
+	testcontainers.SkipIfProviderIsNotHealthy(t)
 
 	ctx := context.Background()
 	pg, err := postgres.RunContainer(ctx,
@@ -271,9 +274,9 @@ func TestSubtypeBOBuilder_ParentBOsGetCoreFields(t *testing.T) {
 
 	// [REGRESSION CHECK] Parent BO must have CoreFields
 	var parentFields []struct {
-		ID               string `db:"id"`
-		FieldName        string `db:"field_name"`
-		InheritsDefaults bool   `db:"inherits_defaults"`
+		ID               string  `db:"id"`
+		FieldName        string  `db:"field_name"`
+		InheritsDefaults bool    `db:"inherits_defaults"`
 		SubtypeScope     *string `db:"subtype_scope"`
 	}
 	err = db.SelectContext(ctx, &parentFields, `
