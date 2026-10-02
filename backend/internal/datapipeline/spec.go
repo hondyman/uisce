@@ -27,11 +27,13 @@ const SpecVersion = 1
 const (
 	NodeFileSource  = "file_source"
 	NodeBOSource    = "bo_source"
+	NodeQueueSource = "queue_source"
 	NodeValidate    = "validate"
 	NodeRuleCheck   = "rule_check"
 	NodeMap         = "map"
 	NodeBOSink      = "bo_sink"
 	NodeStagingSink = "staging_sink"
+	NodeQueueSink   = "queue_sink"
 	NodeFileSink    = "file_sink"
 	NodeIcebergSink = "iceberg_sink"
 	// NodeMaster masters the load its staging sink committed (after the
@@ -171,6 +173,39 @@ type StagingSinkConfig struct {
 	Columns map[string]string `json:"columns,omitempty"`
 }
 
+// QueueSourceConfig pulls a bounded batch from a message queue/topic.
+// Credentials come from environment variable names in the Spec — never literals.
+type QueueSourceConfig struct {
+	Broker        string `json:"broker"`                    // kafka|redpanda|aws_sqs|azure_servicebus
+	TopicOrQueue  string `json:"topic_or_queue"`            // Kafka topic or queue name/URL
+	Format        string `json:"format,omitempty"`          // json (default)
+	ConsumerGroup string `json:"consumer_group,omitempty"`  // Kafka consumer group
+	MaxMessages   int    `json:"max_messages,omitempty"`    // default 1000
+	IdleTimeoutMS int    `json:"idle_timeout_ms,omitempty"` // stop after idle; default 3000
+	// BrokersEnv names the env var holding Kafka brokers (default KAFKA_BROKERS).
+	BrokersEnv string `json:"brokers_env,omitempty"`
+	// QueueURLEnv names the env var holding the SQS queue URL (default AWS_SQS_QUEUE_URL)
+	// when topic_or_queue is empty.
+	QueueURLEnv string `json:"queue_url_env,omitempty"`
+	// ConnectionStringEnv names the env var for Azure Service Bus connection string
+	// (default AZURE_SERVICEBUS_CONNECTION_STRING).
+	ConnectionStringEnv string `json:"connection_string_env,omitempty"`
+	Region              string `json:"region,omitempty"` // AWS region
+}
+
+// QueueSinkConfig publishes each row as a JSON message to a queue/topic.
+type QueueSinkConfig struct {
+	Broker              string `json:"broker"`
+	TopicOrQueue        string `json:"topic_or_queue"`
+	Format              string `json:"format,omitempty"`
+	KeyField            string `json:"key_field,omitempty"` // Kafka partition key from row field
+	BrokersEnv          string `json:"brokers_env,omitempty"`
+	QueueURLEnv         string `json:"queue_url_env,omitempty"`
+	ConnectionStringEnv string `json:"connection_string_env,omitempty"`
+	Region              string `json:"region,omitempty"`
+	DryRun              bool   `json:"dry_run,omitempty"`
+}
+
 // FileSinkConfig exports rows to a file via the DataFusion engine.
 type FileSinkConfig struct {
 	URI       string `json:"uri"`
@@ -190,7 +225,7 @@ type IcebergSinkConfig struct {
 // VendorScoringConfig evaluates vendor sufficiency, tolerance compliance,
 // and quality scores against the golden master or certified reference set.
 type VendorScoringConfig struct {
-	Entity         string `json:"entity"`                   // e.g. "SECURITY" or "PRODUCT"
+	Entity         string `json:"entity"`                  // e.g. "SECURITY" or "PRODUCT"
 	VendorID       string `json:"vendor_id,omitempty"`     // e.g. "BLOOMBERG"
 	UniverseSize   int    `json:"universe_size,omitempty"` // default 42000
 	ToleranceCheck bool   `json:"tolerance_check,omitempty"`
@@ -228,9 +263,9 @@ func (s *Spec) Validate() []error {
 		}
 		ids[n.ID] = n
 		switch n.Type {
-		case NodeFileSource, NodeBOSource:
+		case NodeFileSource, NodeBOSource, NodeQueueSource:
 			sources++
-		case NodeBOSink, NodeFileSink, NodeStagingSink, NodeIcebergSink, NodeVendorScoring:
+		case NodeBOSink, NodeFileSink, NodeStagingSink, NodeIcebergSink, NodeVendorScoring, NodeQueueSink:
 			sinks++
 		case NodeValidate, NodeMap, NodeRuleCheck, NodeMaster:
 		default:
@@ -266,7 +301,7 @@ func (s *Spec) Validate() []error {
 	}
 	for id, n := range ids {
 		switch n.Type {
-		case NodeFileSource, NodeBOSource:
+		case NodeFileSource, NodeBOSource, NodeQueueSource:
 			if in[id] > 0 {
 				add("node %q: source cannot have inputs", id)
 			}
@@ -437,6 +472,36 @@ func validateNodeConfig(n *Node) []error {
 		if c.SourceCd == "" || c.Domain == "" {
 			add("source_cd and domain are required")
 		}
+	case NodeQueueSource:
+		var c QueueSourceConfig
+		if !decode(&c) {
+			return errs
+		}
+		validQueueEnvNames(add, map[string]string{"brokers_env": c.BrokersEnv, "queue_url_env": c.QueueURLEnv, "connection_string_env": c.ConnectionStringEnv})
+		if !validQueueBroker(c.Broker) {
+			add("broker must be kafka, redpanda, aws_sqs, or azure_servicebus")
+		}
+		if strings.TrimSpace(c.TopicOrQueue) == "" && c.QueueURLEnv == "" {
+			add("topic_or_queue is required (or queue_url_env for SQS)")
+		}
+		if c.Format != "" && c.Format != "json" {
+			add("format must be json when set")
+		}
+	case NodeQueueSink:
+		var c QueueSinkConfig
+		if !decode(&c) {
+			return errs
+		}
+		validQueueEnvNames(add, map[string]string{"brokers_env": c.BrokersEnv, "queue_url_env": c.QueueURLEnv, "connection_string_env": c.ConnectionStringEnv})
+		if !validQueueBroker(c.Broker) {
+			add("broker must be kafka, redpanda, aws_sqs, or azure_servicebus")
+		}
+		if strings.TrimSpace(c.TopicOrQueue) == "" && c.QueueURLEnv == "" {
+			add("topic_or_queue is required (or queue_url_env for SQS)")
+		}
+		if c.Format != "" && c.Format != "json" {
+			add("format must be json when set")
+		}
 	case NodeFileSink:
 		var c FileSinkConfig
 		if !decode(&c) {
@@ -482,4 +547,21 @@ func validType(t string) bool {
 		return true
 	}
 	return false
+}
+
+func validQueueBroker(b string) bool {
+	switch strings.ToLower(strings.TrimSpace(b)) {
+	case "kafka", "redpanda", "aws_sqs", "azure_servicebus":
+		return true
+	}
+	return false
+}
+
+// validQueueEnvNames checks the env-var names a queue node may reference.
+func validQueueEnvNames(add func(string, ...any), names map[string]string) {
+	for field, v := range names {
+		if v != "" && !queueEnvAllowed(v) {
+			add("%s %q is not allowed: queue settings may only read KAFKA_*, REDPANDA_*, AWS_SQS_*, AZURE_SERVICEBUS_* or DATAPIPELINE_QUEUE_* variables", field, v)
+		}
+	}
 }
