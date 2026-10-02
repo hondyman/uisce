@@ -103,7 +103,20 @@ type CubeDefinition struct {
 // cube hashes identically regardless of authoring order. Content — not
 // identity or timestamps — is what is hashed, which is what makes deploy
 // idempotent: an unchanged hash means there is nothing to do.
-func ComputeCubeContentHash(c CubeDefinition) string {
+//
+// It also covers what the cube COMPUTES, not just which metrics it NAMES. The
+// referenced metrics' content hashes are folded in, sorted, exactly as the
+// query cache key does with referenced metrics. Without this, a metric
+// definition edit left the cube hash untouched, the deploy stayed a no-op under
+// ADR-011, and a materialized view kept serving the pre-edit expression
+// indefinitely - the same class as the ADR-016 cache-key defect: a hash that
+// cannot see the thing it must distinguish. See ADR-027.
+//
+// metricContentHashes must hold the content hash of every metric the cube
+// names. Callers about to deploy should always pass them; an empty slice is
+// tolerated for validation-time use but yields a hash that does not track the
+// cube's metrics.
+func ComputeCubeContentHash(c CubeDefinition, metricContentHashes []string) string {
 	// Metric IDs are a set, not a sequence: authoring order must not change
 	// the hash, and a duplicate is a validation error rather than a
 	// meaningful distinction.
@@ -113,6 +126,14 @@ func ComputeCubeContentHash(c CubeDefinition) string {
 		metricIDs[i] = strings.ToLower(strings.TrimSpace(id))
 	}
 	sort.Strings(metricIDs)
+
+	// Same rule for the referenced content hashes: a set, sorted, so the order
+	// metrics happen to be resolved in cannot change the cube's identity.
+	contentHashes := make([]string, len(metricContentHashes))
+	for i, h := range metricContentHashes {
+		contentHashes[i] = strings.ToLower(strings.TrimSpace(h))
+	}
+	sort.Strings(contentHashes)
 
 	// Each grain is also a set of dimensions, so sort within each. The set of
 	// grains is not sorted: grain order can carry intent about which shape is
@@ -144,21 +165,23 @@ func ComputeCubeContentHash(c CubeDefinition) string {
 	}
 
 	canonicalDoc := struct {
-		Name            string                    `json:"name"`
-		BOID            string                    `json:"boId"`
-		Dimensions      []CubeDimension           `json:"dimensions"`
-		TimeDimension   *CubeTimeDimension        `json:"timeDimension"`
-		MetricIDs       []string                  `json:"metricIds"`
-		Grains          [][]string                `json:"grains"`
-		Materialization CubeMaterializationConfig `json:"materialization"`
+		Name               string                    `json:"name"`
+		BOID               string                    `json:"boId"`
+		Dimensions         []CubeDimension           `json:"dimensions"`
+		TimeDimension      *CubeTimeDimension        `json:"timeDimension"`
+		MetricIDs          []string                  `json:"metricIds"`
+		MetricContentHashes []string                 `json:"metricContentHashes"`
+		Grains             [][]string                `json:"grains"`
+		Materialization    CubeMaterializationConfig `json:"materialization"`
 	}{
-		Name:            strings.TrimSpace(c.Name),
-		BOID:            strings.TrimSpace(c.BOID),
-		Dimensions:      dims,
-		TimeDimension:   c.TimeDimension,
-		MetricIDs:       metricIDs,
-		Grains:          grains,
-		Materialization: c.Materialization,
+		Name:                strings.TrimSpace(c.Name),
+		BOID:                strings.TrimSpace(c.BOID),
+		Dimensions:          dims,
+		TimeDimension:       c.TimeDimension,
+		MetricIDs:           metricIDs,
+		MetricContentHashes: contentHashes,
+		Grains:              grains,
+		Materialization:     c.Materialization,
 	}
 
 	b, _ := json.Marshal(canonicalDoc)
@@ -231,11 +254,23 @@ func ValidateCubeStructural(c CubeDefinition) error {
 // ad-hoc aggregate: a cube can only aggregate metrics that exist, and it
 // inherits their AST safety and decomposability. known is the set of metric IDs
 // that resolved for this tenant (both core and own-tenant metrics).
-func ValidateCubeMetricReferences(c CubeDefinition, known map[string]bool) error {
+// ValidateCubeMetricReferences checks that every metric a cube names exists,
+// and that each one is a metric the cube could actually materialize. metrics
+// maps normalized metric ID to the definition, so an expression is validated
+// here rather than being discovered to be unusable at DDL generation.
+//
+// This is the earliest enforcement point that exists today: there is no CRUD
+// endpoint for governed metric expressions (see ValidateMetricExpression), so
+// a cube is where an ambiguous metric is first caught. See ADR-026.
+func ValidateCubeMetricReferences(c CubeDefinition, metrics map[string]MetricDefinition) error {
 	for _, id := range c.MetricIDs {
 		norm := strings.ToLower(strings.TrimSpace(id))
-		if !known[norm] {
+		m, ok := metrics[norm]
+		if !ok {
 			return fmt.Errorf("%w: %q", ErrCubeUnknownMetric, norm)
+		}
+		if err := ValidateMetricExpression(m); err != nil {
+			return fmt.Errorf("cube %q references metric %q, which is not materializable: %w", c.Name, norm, err)
 		}
 	}
 	return nil
