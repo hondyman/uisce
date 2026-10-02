@@ -47,6 +47,34 @@ deployment path.
 `grep` for a non-test call site of that exact function. If the grep is empty,
 the gate is measuring a fiction.
 
+### Merge record: cubed tables (2026-10-02)
+
+`feat/cubed-tables` merged to `main` as `f6c241f1e` (merge commit, `--no-ff`),
+carrying four commits: the registry itself, the `PreAggScheduler` activation,
+the cube schema/model/DDL generator, and the router plus the cache-seam and
+guardrails fixes.
+
+Two findings came out of merge review rather than delivery, and both are
+recorded here because the pattern recurs:
+
+- **ADR-016** was accepted on a passing test over a function with no caller.
+  Found by reading the live call path while writing the gate-#11 test, not by
+  running the suite. Hence ADR-022.
+- **The guardrails YAML fallback** (ADR-023) was found by investigating a
+  "failing test" instead of waiving it. The test was genuinely fragile: it
+  depended on `os.Remove` succeeding.
+
+Post-merge verification was run against `main`'s tree, not the branch, because
+a registry edit that merges as a conflict-resolution casualty would otherwise
+be invisible: ADR-019/020/021/023 and the ADR-016 correction record are all
+present, `go build ./...` is clean, and the named gates pass on `main`.
+
+**Residue note.** Nine untracked files remain in the feature worktree (a
+diagnostic probe, a now-harmless `guardrails.yaml`, an emptied red-proof test,
+and editor temp files). None were staged, so they do not affect the merge or
+CI, which reflects tracked content only. They are pending deletion on
+workstation access; the closeout does not claim a clean workspace until then.
+
 ---
 
 ## Imported historical decisions (ADR-001 … ADR-010)
