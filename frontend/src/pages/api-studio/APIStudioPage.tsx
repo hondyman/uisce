@@ -33,7 +33,7 @@ const APIStudioPage: React.FC = () => {
         try {
             const [boData, epList] = await Promise.all([
                 apiClient<any>('/business-objects'),
-                ApiStudioApi.listEndpoints(env, tenantId)
+                ApiStudioApi.listEndpoints(env)
             ]);
             const boList = Array.isArray(boData) ? boData : Object.values(boData || {});
             setBos(boList);

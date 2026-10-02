@@ -34,7 +34,7 @@ export const NodeTypeDetailPage: React.FC = () => {
   const [editDescription, setEditDescription] = useState('');
   const [editColor, setEditColor] = useState('');
   const [editIsActive, setEditIsActive] = useState(false);
-  const { data: edgeTypes } = useEdgeTypes(tenant?.id || '');
+  const { data: edgeTypes } = useEdgeTypes();
   const [editIsSaving, setEditIsSaving] = useState(false);
   const [editPropsOpen, setEditPropsOpen] = useState(false);
   const [editProps, setEditProps] = useState<PropertyDefinition[]>([]);

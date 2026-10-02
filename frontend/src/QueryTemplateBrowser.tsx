@@ -19,7 +19,7 @@ export default function QueryTemplateBrowser({ datasourceId, onSelect }: QueryTe
 
   useEffect(() => {
     setLoading(true);
-    listQueryTemplates(datasourceId)
+    listQueryTemplates()
       .then(setTemplates)
   .catch((e) => { import('./utils/devLogger').then(({ devError }) => devError(e)).catch(() => {}); })
       .finally(() => setLoading(false));

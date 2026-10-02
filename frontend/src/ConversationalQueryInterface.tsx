@@ -45,7 +45,7 @@ export default function ConversationalQueryInterface({
   const handleStartConversation = async () => {
     try {
       setIsLoading(true);
-      const context = await startConversation(currentUser, currentTenant, currentDatasource);
+      const context = await startConversation(currentUser);
       setConversationId(context.conversation_id);
       // Initialize refinement context
       const initialRefinement: RefinementContext = {

@@ -39,7 +39,7 @@ export const CatalogEdgeTypesPage: React.FC = () => {
   const [colorPaletteOpen, setColorPaletteOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createForm, setCreateForm] = useState({ edge_type_name: '', description: '', subjectNodeTypeId: '', objectNodeTypeId: '', isActive: true });
-  const { data: edgeTypes, isLoading } = useEdgeTypes(tenant?.id || '');
+  const { data: edgeTypes, isLoading } = useEdgeTypes();
   const { data: nodeTypes } = useNodeTypes('');
   const updateMutation = useUpdateEdgeType();
   const deleteMutation = useDeleteEdgeType();

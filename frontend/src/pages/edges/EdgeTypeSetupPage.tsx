@@ -36,7 +36,7 @@ export const EdgeTypeSetupPage: React.FC = () => {
     return '';
   });
 
-  const { data: edgeTypes, isLoading, error } = useEdgeTypes(tenantId);
+  const { data: edgeTypes, isLoading, error } = useEdgeTypes();
   const { data: nodeTypes } = useNodeTypes(tenantId);
   const deleteEdgeType = useDeleteEdgeType();
 
