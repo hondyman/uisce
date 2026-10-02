@@ -1359,6 +1359,36 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	mdmGraph.RegisterChangeListener(analytics.PreAggInvalidationListener(sqlxDB, preAggInvalidationSvc))
 	preAggHandler := handlers.NewPreAggregationHandler(preAggSvc)
 
+	// Pre-aggregation scheduler: the periodic driver for materialization
+	// refresh. PreAggLifecycleService above holds the state machine, but
+	// nothing ticked it - NewPreAggScheduler had no call site, so scheduled
+	// refresh never ran despite Refresh being reachable over HTTP. This is the
+	// wiring-debt payment for the materialization layer (ADR-013); the cube
+	// work is the first consumer that needs it live.
+	//
+	// Three-stage activation, because the blast radius includes tenants who
+	// never opted into cubes:
+	//   1. shadow      - default; reports what it would do, mutates nothing
+	//   2. enabled     - PREAGG_SCHEDULER_ENABLED=true
+	//   3. per-node    - refresh_strategy='manual' freezes one node regardless
+	preAggScheduler := analytics.NewPreAggScheduler(sqlxDB, preAggLifecycleSvc, preAggSvc)
+	preAggScheduler.SetMode(analytics.SchedulerModeFromEnv(os.Getenv("PREAGG_SCHEDULER_ENABLED")))
+	// A refresh that fails silently turns staleness from an edge case into the
+	// steady state, so surface it rather than only recording it in the catalog.
+	preAggScheduler.SetFailureHook(func(nodeID uuid.UUID, err error) {
+		log.Printf("[PreAggScheduler] ALERT: materialization %s refresh failed: %v", nodeID, err)
+	})
+	if preAggScheduler.Enabled() {
+		// Background lifetime follows the surrounding SetupRouter convention
+		// (see the other background workers in this function). The scheduler
+		// exits on context cancellation; Enable-mode callers that need a
+		// bounded lifetime can call SetMode(SchedulerModeShadow) instead.
+		go preAggScheduler.Start(context.Background(), analytics.DefaultPreAggTickInterval)
+		log.Println("[NewServer] PreAggScheduler ENABLED")
+	} else {
+		log.Println("[NewServer] PreAggScheduler in shadow mode (set PREAGG_SCHEDULER_ENABLED=true to enable)")
+	}
+
 	// Validation rules as catalog nodes - the unified-engine replacement
 	// for the retired catalog_validation_rules table (see
 	// docs/validation_rules_migration_report.json). Same storage
