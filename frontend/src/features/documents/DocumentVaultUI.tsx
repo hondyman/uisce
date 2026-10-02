@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { CloudUpload as UploadIcon, Description as FileTextIcon, CheckCircle as CheckCircleIcon, Warning as AlertCircleIcon, Download as DownloadIcon, Visibility as EyeIcon, Delete as Trash2Icon, Security as ShieldIcon } from '@mui/icons-material';
+import { CloudUpload as UploadIcon, CloudUpload as Upload, Description as FileTextIcon, Description as FileText, CheckCircle as CheckCircleIcon, CheckCircle as CheckCircle, Warning as AlertCircleIcon, Warning as AlertCircle, Download as DownloadIcon, Download as Download, Visibility as EyeIcon, Visibility as Eye, Delete as Trash2Icon, Delete as Trash2, Security as ShieldIcon, Security as Shield } from '@mui/icons-material';
 import { useDropzone } from 'react-dropzone';
 
 interface Document {

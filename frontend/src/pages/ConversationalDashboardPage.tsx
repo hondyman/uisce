@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
+import CallSplitIcon from '@mui/icons-material/CallSplit';
 import { devLog } from '../utils/devLogger';
 import { DashboardConversationInterface } from './DashboardConversationInterface';
 import { DashboardPreview } from './DashboardPreview';
@@ -185,7 +186,7 @@ export const ConversationalDashboardPage: React.FC<ConversationalDashboardPagePr
             ) : (
               <div className="h-full bg-white rounded-lg shadow-lg flex items-center justify-center">
                 <div className="text-center text-gray-500">
-                  <Split className="w-16 h-16 mx-auto mb-4" />
+                  <CallSplitIcon className="w-16 h-16 mx-auto mb-4" />
                   <h3 className="text-lg font-medium mb-2">No Dashboard to Preview</h3>
                   <p className="text-sm">
                     Switch to conversation mode to start building a dashboard

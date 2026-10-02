@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
-  TrendingUp as TrendingUpIcon, Group as UsersIcon, AttachMoney as DollarSignIcon, TrackChanges as TargetIcon,
-  EmojiEvents as AwardIcon, WarningAmber as AlertTriangleIcon, CheckCircle as CheckCircleIcon
+  TrendingUp as TrendingUpIcon, TrendingUp as TrendingUp, Group as UsersIcon, Group as Users, AttachMoney as DollarSignIcon, AttachMoney as DollarSign, TrackChanges as TargetIcon, TrackChanges as Target,
+  EmojiEvents as AwardIcon, EmojiEvents as Award, WarningAmber as AlertTriangleIcon, WarningAmber as AlertTriangle, CheckCircle as CheckCircleIcon, CheckCircle as CheckCircle
 } from '@mui/icons-material';
 
 // Types
@@ -192,12 +192,12 @@ const SuccessorCard: React.FC<{ name: string; compatibilityScore: number; streng
     <div className="flex justify-between items-start mb-3">
       <div className="flex items-center gap-3">
         <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-          <Users className="text-blue-600" size={24} />
+          <Users className="text-blue-600" sx={{ fontSize: 24 }} />
         </div>
         <div>
           <h3 className="font-semibold text-gray-900">{name}</h3>
           <div className="flex items-center gap-2 mt-1">
-            <Award size={14} className="text-yellow-500" />
+            <Award sx={{ fontSize: 14 }} className="text-yellow-500" />
             <span className="text-sm text-gray-600">Compatibility: {(compatibilityScore * 100).toFixed(0)}%</span>
           </div>
         </div>

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Phone as PhoneIcon, Email as MailIcon, CalendarToday as CalendarIcon, ArrowForward as ArrowRightIcon, CheckCircle as CheckCircleIcon, Cancel as XCircleIcon,
-  WarningAmber as AlertTriangleIcon, TrendingUp as TrendingUpIcon, AttachMoney as DollarSignIcon, Schedule as ClockIcon, FilterList as FilterIcon,
-  ExpandMore as ChevronDownIcon, MoreHoriz as MoreHorizontalIcon, PlayArrow as PlayIcon, BarChart as BarChart2Icon
+  Phone as PhoneIcon, Phone as Phone, Email as MailIcon, Email as Mail, CalendarToday as CalendarIcon, ArrowForward as ArrowRightIcon, CheckCircle as CheckCircleIcon, CheckCircle as CheckCircle, Cancel as XCircleIcon, Cancel as XCircle,
+  WarningAmber as AlertTriangleIcon, WarningAmber as AlertTriangle, TrendingUp as TrendingUpIcon, TrendingUp as TrendingUp, AttachMoney as DollarSignIcon, AttachMoney as DollarSign, Schedule as ClockIcon, Schedule as Clock, FilterList as FilterIcon,
+  ExpandMore as ChevronDownIcon, MoreHoriz as MoreHorizontalIcon, PlayArrow as PlayIcon, PlayArrow as Play, BarChart as BarChart2Icon
 } from '@mui/icons-material';
 import { fetchAPI } from '../../../api';
 
@@ -98,13 +98,13 @@ export const AdvisorNBADashboard: React.FC<NBADashboardProps> = ({ advisorId }) 
             label="High Urgency" 
             active={filter === 'HIGH_URGENCY'} 
             onClick={() => setFilter('HIGH_URGENCY')} 
-            icon={<AlertTriangle size={16} />}
+            icon={<AlertTriangle sx={{ fontSize: 16 }} />}
           />
           <FilterButton 
             label="High Value" 
             active={filter === 'HIGH_VALUE'} 
             onClick={() => setFilter('HIGH_VALUE')} 
-            icon={<DollarSign size={16} />}
+            icon={<DollarSign sx={{ fontSize: 16 }} />}
           />
         </div>
       </div>
@@ -169,7 +169,7 @@ const ActionCard: React.FC<{
           <div className={`p-3 rounded-lg ${
             action.urgency_score > 0.8 ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'
           }`}>
-            {action.recommended_channel === 'PHONE' ? <Phone size={24} /> : <Mail size={24} />}
+            {action.recommended_channel === 'PHONE' ? <Phone sx={{ fontSize: 24 }} /> : <Mail sx={{ fontSize: 24 }} />}
           </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -207,7 +207,7 @@ const ActionCard: React.FC<{
             onClick={onExecute}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
           >
-            <Play size={16} /> Execute Action
+            <Play sx={{ fontSize: 16 }} /> Execute Action
           </button>
         </div>
       </div>
@@ -247,7 +247,7 @@ const ActionExecutionModal: React.FC<{
         <div className="p-6 border-b border-gray-200 flex justify-between items-center">
           <h2 className="text-xl font-bold text-gray-900">Execute Action</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close" title="Close">
-            <XCircle size={24} />
+            <XCircle sx={{ fontSize: 24 }} />
           </button>
         </div>
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
-  AttachMoney as DollarSignIcon, TrendingUp as TrendingUpIcon, Receipt as ReceiptIcon, Schedule as ClockIcon,
-  CheckCircle as CheckCircleIcon, Warning as AlertCircleIcon, Download as DownloadIcon
+  AttachMoney as DollarSignIcon, TrendingUp as TrendingUpIcon, Receipt as ReceiptIcon, Receipt as Receipt, Schedule as ClockIcon, Schedule as Clock,
+  CheckCircle as CheckCircleIcon, CheckCircle as CheckCircle, Warning as AlertCircleIcon, Warning as AlertCircle, Download as DownloadIcon, Download as Download
 } from '@mui/icons-material';
 
 // Types
@@ -72,7 +72,7 @@ export const BillingCenter: React.FC = () => {
             <option value="2024-Q2">2024 Q2</option>
           </select>
           <button className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 hover:bg-blue-700">
-            <Download size={16} /> Export Report
+            <Download sx={{ fontSize: 16 }} /> Export Report
           </button>
         </div>
       </div>

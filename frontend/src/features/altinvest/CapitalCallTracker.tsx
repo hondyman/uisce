@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarToday as CalendarIcon, WarningAmber as AlertTriangleIcon, CheckCircle as CheckCircle2Icon, Schedule as ClockIcon, AttachMoney as DollarSignIcon, TrendingUp as TrendingUpIcon } from '@mui/icons-material';
+import { CalendarToday as CalendarIcon, CalendarToday as Calendar, WarningAmber as AlertTriangleIcon, WarningAmber as AlertTriangle, CheckCircle as CheckCircle2Icon, CheckCircle as CheckCircle2, Schedule as ClockIcon, Schedule as Clock, AttachMoney as DollarSignIcon, AttachMoney as DollarSign, TrendingUp as TrendingUpIcon } from '@mui/icons-material';
 import { fetchAPI } from '../../api';
 
 // Types
@@ -51,9 +51,9 @@ export const CapitalCallTracker: React.FC<CapitalCallTrackerProps> = ({ clientId
   };
 
   const getLiquidityIcon = (passed: boolean | null) => {
-    if (passed === null) return <Clock size={16} className="text-gray-400" />;
-    if (passed) return <CheckCircle2 size={16} className="text-green-500" />;
-    return <AlertTriangle size={16} className="text-red-500" />;
+    if (passed === null) return <Clock sx={{ fontSize: 16 }} className="text-gray-400" />;
+    if (passed) return <CheckCircle2 sx={{ fontSize: 16 }} className="text-green-500" />;
+    return <AlertTriangle sx={{ fontSize: 16 }} className="text-red-500" />;
   };
 
   if (loading) return <div className="p-8 text-center">Loading capital calls...</div>;
@@ -64,7 +64,7 @@ export const CapitalCallTracker: React.FC<CapitalCallTrackerProps> = ({ clientId
       {calls.some(c => c.days_until_due <= 3) && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center gap-3">
-            <AlertTriangle className="text-red-600" size={24} />
+            <AlertTriangle className="text-red-600" sx={{ fontSize: 24 }} />
             <div>
               <h3 className="font-semibold text-red-900">Urgent Capital Calls</h3>
               <p className="text-sm text-red-700">
@@ -79,7 +79,7 @@ export const CapitalCallTracker: React.FC<CapitalCallTrackerProps> = ({ clientId
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="p-6 border-b border-gray-200">
           <h2 className="font-semibold text-lg flex items-center gap-2">
-            <Calendar size={20} />
+            <Calendar sx={{ fontSize: 20 }} />
             Upcoming Capital Calls
           </h2>
         </div>
@@ -125,7 +125,7 @@ export const CapitalCallTracker: React.FC<CapitalCallTrackerProps> = ({ clientId
 
                     <div className="flex items-center gap-4 mt-3 text-sm">
                       <div className="flex items-center gap-2">
-                        <Calendar size={14} className="text-gray-400" />
+                        <Calendar sx={{ fontSize: 14 }} className="text-gray-400" />
                         <span className="text-gray-600">Due: {new Date(call.due_date).toLocaleDateString()}</span>
                       </div>
                       <div className="flex items-center gap-2">

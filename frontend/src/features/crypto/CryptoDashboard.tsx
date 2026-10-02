@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp as TrendingUpIcon, TrendingDown as TrendingDownIcon, AttachMoney as DollarSignIcon, Warning as AlertCircleIcon, Security as ShieldIcon, Bolt as ZapIcon, Timeline as ActivityIcon } from '@mui/icons-material';
+import { TrendingUp as TrendingUpIcon, TrendingUp as TrendingUp, TrendingDown as TrendingDownIcon, TrendingDown as TrendingDown, AttachMoney as DollarSignIcon, AttachMoney as DollarSign, Warning as AlertCircleIcon, Warning as AlertCircle, Security as ShieldIcon, Security as Shield, Bolt as ZapIcon, Bolt as Zap, Timeline as ActivityIcon, Timeline as Activity } from '@mui/icons-material';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 interface CryptoHolding {

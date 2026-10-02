@@ -3,6 +3,7 @@ import {
   Box, Typography, TextField,
   Chip, IconButton, Button, Tooltip, Collapse,
   Autocomplete,
+  Paper,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import AddIcon from '@mui/icons-material/Add';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AttachMoney as DollarSignIcon, TrendingUp as TrendingUpIcon, Group as UsersIcon, CalendarToday as CalendarIcon, CheckCircle as CheckCircleIcon, Warning as AlertCircleIcon, Settings as SettingsIcon } from '@mui/icons-material';
+import { AttachMoney as DollarSignIcon, AttachMoney as DollarSign, TrendingUp as TrendingUpIcon, TrendingUp as TrendingUp, Group as UsersIcon, Group as Users, CalendarToday as CalendarIcon, CheckCircle as CheckCircleIcon, Warning as AlertCircleIcon, Warning as AlertCircle, Settings as SettingsIcon, Settings as Settings } from '@mui/icons-material';
 
 interface FeeSchedule {
   scheduleId: string;
