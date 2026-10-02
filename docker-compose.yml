@@ -178,8 +178,10 @@ services:
 
   auth-service:
     build:
-      context: ./auth-service
-      dockerfile: Dockerfile
+      # auth-service/Dockerfile copies auth-service/package.json and server.js, so it
+      # must be built from the repo root (as docker-compose.local.yml does).
+      context: .
+      dockerfile: auth-service/Dockerfile
     networks:
       - semlayer-net
     ports:
