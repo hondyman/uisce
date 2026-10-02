@@ -132,13 +132,16 @@ func TestWithGoldCopySync_NoConnectionLeak(t *testing.T) {
 		}
 	})
 
-	t.Run("scoped_to_five_tables_only", func(t *testing.T) {
+	// 20261020_004 (a reconstruction of alpha's live grants) gives the role SELECT
+	// on every table in public, so reads are not scoped; its write privileges
+	// still are. Writes outside the sync tables must be denied.
+	t.Run("writes_scoped_to_sync_tables_only", func(t *testing.T) {
 		err := WithGoldCopySync(ctx, dbConn, func(tx *sql.Tx) error {
-			_, err := tx.ExecContext(ctx, "SELECT 1 FROM public.report_templates LIMIT 1")
+			_, err := tx.ExecContext(ctx, "UPDATE public.report_templates SET is_active = is_active WHERE false")
 			return err
 		})
 		if err == nil {
-			t.Fatal("expected permission denied reading report_templates under uisce_gold_copy_sync; got nil error")
+			t.Fatal("expected permission denied writing report_templates under uisce_gold_copy_sync; got nil error")
 		}
 	})
 }
