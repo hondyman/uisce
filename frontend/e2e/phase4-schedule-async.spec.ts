@@ -155,7 +155,12 @@ test.describe('Phase 4: Report Schedule — Async 202 Contract', () => {
     await mockPollingSequence(page, EXECUTION_SEQUENCE);
 
     await page.goto(`${BASE_URL}/reports/library`);
-    await page.click('button:has-text("Schedule")');
+
+    // The Schedule option lives in a row's context menu (More options → Schedule).
+    // Must open the menu first before Schedule is reachable.
+    const moreOptionsBtn = page.getByRole('button', { name: 'More options' }).first();
+    await moreOptionsBtn.click();
+    await page.getByRole('menuitem', { name: 'Schedule' }).click();
 
     const runButton = page.getByRole('button', { name: /run now/i });
     await expect(runButton).toBeVisible();
@@ -181,7 +186,10 @@ test.describe('Phase 4: Report Schedule — Async 202 Contract', () => {
     await mockPollingFailedSequence(page, EXECUTION_FAILED_SEQUENCE);
 
     await page.goto(`${BASE_URL}/reports/library`);
-    await page.click('button:has-text("Schedule")');
+
+    const moreOptionsBtn = page.getByRole('button', { name: 'More options' }).first();
+    await moreOptionsBtn.click();
+    await page.getByRole('menuitem', { name: 'Schedule' }).click();
 
     const runButton = page.getByRole('button', { name: /run now/i });
     await runButton.click();
@@ -195,7 +203,10 @@ test.describe('Phase 4: Report Schedule — Async 202 Contract', () => {
     await mockTrigger503(page);
 
     await page.goto(`${BASE_URL}/reports/library`);
-    await page.click('button:has-text("Schedule")');
+
+    const moreOptionsBtn = page.getByRole('button', { name: 'More options' }).first();
+    await moreOptionsBtn.click();
+    await page.getByRole('menuitem', { name: 'Schedule' }).click();
 
     const runButton = page.getByRole('button', { name: /run now/i });
     await runButton.click();
