@@ -1,5 +1,10 @@
 # Architectural Decision Records (ADR)
 
+> **Superseded as living record by [`docs/ARCHITECTURAL_DECISIONS.md`](../ARCHITECTURAL_DECISIONS.md) — historical entries imported.**
+>
+> This file is retained as immutable history. New and corrected architectural
+> decisions are recorded in the living registry at `docs/ARCHITECTURAL_DECISIONS.md`.
+
 ## ADR-001: Event-Driven Architecture with RabbitMQ
 
 **Date:** 2025-10-18  

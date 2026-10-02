@@ -54,8 +54,8 @@ func getProposal(db *sqlx.DB, id string) (*proposalRow, error) {
 
 // GuardrailConfig holds runtime-configured guardrail rules.
 type GuardrailConfig struct {
-	SoDPairs  [][2]string `json:"sod_pairs" yaml:"sod_pairs"`
-	Certified []string    `json:"certified" yaml:"certified"`
+	SoDPairs  [][2]string `json:"sod_pairs"`
+	Certified []string    `json:"certified"`
 }
 
 // GuardrailCache holds the cached config plus metadata.
@@ -70,7 +70,7 @@ var guardrailsCache *GuardrailCache
 var guardrailsMutex sync.RWMutex
 var initDBFunc = InitDBFromConfig
 
-// ReloadGuardrails loads guardrails from the DB (or YAML fallback) into the in-memory cache.
+// ReloadGuardrails loads guardrails from the DB into the in-memory cache.
 func ReloadGuardrails(db *sqlx.DB) error {
 	cfg, src, err := loadGuardrails(db)
 	if err != nil {
@@ -84,19 +84,13 @@ func ReloadGuardrails(db *sqlx.DB) error {
 }
 
 // getGuardrails returns cached guardrails if present, otherwise loads and caches them.
+//
+// A nil DB yields an empty configuration rather than probing the filesystem:
+// guardrails are DB-only, and an unconfigured environment must fail closed to
+// "no guardrails" instead of silently picking up an ambient file.
 func getGuardrails(db *sqlx.DB) (*GuardrailConfig, error) {
-	// If no DB provided, always attempt to (re)load from YAML paths to ensure
-	// tests and local workflows that write guardrails.yaml are honored.
 	if db == nil {
-		cfg, src, err := loadGuardrails(nil)
-		if err != nil {
-			return nil, err
-		}
-		guardrailsMutex.Lock()
-		guardrailsCache = &GuardrailCache{Config: cfg, LastLoaded: time.Now(), Source: src}
-		guardrailsMutex.Unlock()
-		logging.GetLogger().Info("guardrails_load", zap.Int("sod_pairs", len(cfg.SoDPairs)), zap.Int("certified", len(cfg.Certified)), zap.String("source", src), zap.Time("last_loaded", guardrailsCache.LastLoaded))
-		return cfg, nil
+		return &GuardrailConfig{}, nil
 	}
 
 	guardrailsMutex.RLock()
@@ -117,81 +111,60 @@ func getGuardrails(db *sqlx.DB) (*GuardrailConfig, error) {
 	return cfg, nil
 }
 
-// loadGuardrails tries DB first; if db==nil or no rules, falls back to YAML (env GUARDRAILS_PATH or common files)
+// loadGuardrails loads guardrails from the DB table guardrail_rules.
+//
+// DB is the only source. There is deliberately no YAML file fallback and no
+// GUARDRAILS_PATH probing: a filesystem fallback made configuration depend on
+// ambient working-directory state, let a stray guardrails.yaml silently
+// override the database, and made tests order-dependent (a test that wrote the
+// file could poison a sibling that asserted its absence).
 func loadGuardrails(db *sqlx.DB) (*GuardrailConfig, string, error) {
 	cfg := &GuardrailConfig{}
-	sourced := "none"
-	if db != nil {
-		// table schema: guardrail_rules(type TEXT, data JSONB)
-		rows, err := db.Queryx(`SELECT type, data FROM guardrail_rules`)
-		if err == nil {
-			defer rows.Close()
-			found := false
-			for rows.Next() {
-				var typ string
-				var data []byte
-				if err := rows.Scan(&typ, &data); err != nil {
-					continue
-				}
-				switch typ {
-				case "sod":
-					var payload struct {
-						Pairs [][2]string `json:"pairs"`
-					}
-					_ = json.Unmarshal(data, &payload)
-					if len(payload.Pairs) > 0 {
-						cfg.SoDPairs = append(cfg.SoDPairs, payload.Pairs...)
-						found = true
-					}
-				case "certified":
-					var payload struct {
-						Claims []string `json:"claims"`
-					}
-					_ = json.Unmarshal(data, &payload)
-					if len(payload.Claims) > 0 {
-						cfg.Certified = append(cfg.Certified, payload.Claims...)
-						found = true
-					}
-				}
+	if db == nil {
+		return cfg, "none", nil
+	}
+	// table schema: guardrail_rules(type TEXT, data JSONB)
+	rows, err := db.Queryx(`SELECT type, data FROM guardrail_rules`)
+	if err != nil {
+		return cfg, "db", err
+	}
+	defer rows.Close()
+	found := false
+	for rows.Next() {
+		var typ string
+		var data []byte
+		if err := rows.Scan(&typ, &data); err != nil {
+			continue
+		}
+		switch typ {
+		case "sod":
+			var payload struct {
+				Pairs [][2]string `json:"pairs"`
 			}
-			if found {
-				sourced = "db"
-				return cfg, sourced, nil
+			_ = json.Unmarshal(data, &payload)
+			if len(payload.Pairs) > 0 {
+				cfg.SoDPairs = append(cfg.SoDPairs, payload.Pairs...)
+				found = true
+			}
+		case "certified":
+			var payload struct {
+				Claims []string `json:"claims"`
+			}
+			_ = json.Unmarshal(data, &payload)
+			if len(payload.Claims) > 0 {
+				cfg.Certified = append(cfg.Certified, payload.Claims...)
+				found = true
 			}
 		}
 	}
-
-	// If none found in DB, load from YAML config paths
-	tryPaths := []string{}
-	if p := os.Getenv("GUARDRAILS_PATH"); p != "" {
-		tryPaths = append(tryPaths, p)
+	if found {
+		return cfg, "db", nil
 	}
-	tryPaths = append(tryPaths, "guardrails.yaml", "../guardrails.yaml", "../../guardrails.yaml")
-	for _, p := range tryPaths {
-		b, err := os.ReadFile(p)
-		if err != nil {
-			continue
-		}
-		var y GuardrailConfig
-		if err := yaml.Unmarshal(b, &y); err != nil {
-			continue
-		}
-		if len(y.SoDPairs) > 0 {
-			cfg.SoDPairs = y.SoDPairs
-		}
-		if len(y.Certified) > 0 {
-			cfg.Certified = y.Certified
-		}
-		if len(cfg.SoDPairs) > 0 || len(cfg.Certified) > 0 {
-			sourced = "yaml"
-		}
-		break
-	}
-	return cfg, sourced, nil
+	return cfg, "none", nil
 }
 
 // loadGuardrailsFromSource attempts to load guardrails from a specific source.
-// source can be "db" or "yaml". If source is empty, falls back to default behavior.
+// source can be "db". If source is empty, the default DB load is used.
 func loadGuardrailsFromSource(db *sqlx.DB, source string) (*GuardrailConfig, string, error) {
 	switch strings.ToLower(source) {
 	case "db":
@@ -238,31 +211,10 @@ func loadGuardrailsFromSource(db *sqlx.DB, source string) (*GuardrailConfig, str
 		}
 		return cfg, "db", nil
 	case "yaml":
-		// load from YAML only
-		cfg := &GuardrailConfig{}
-		tryPaths := []string{}
-		if p := os.Getenv("GUARDRAILS_PATH"); p != "" {
-			tryPaths = append(tryPaths, p)
-		}
-		tryPaths = append(tryPaths, "guardrails.yaml", "../guardrails.yaml", "../../guardrails.yaml")
-		for _, p := range tryPaths {
-			b, err := os.ReadFile(p)
-			if err != nil {
-				continue
-			}
-			var y GuardrailConfig
-			if err := yaml.Unmarshal(b, &y); err != nil {
-				continue
-			}
-			if len(y.SoDPairs) > 0 {
-				cfg.SoDPairs = y.SoDPairs
-			}
-			if len(y.Certified) > 0 {
-				cfg.Certified = y.Certified
-			}
-			return cfg, "yaml", nil
-		}
-		return cfg, "yaml", fmt.Errorf("no yaml guardrails found")
+		// Removed: the database is the only guardrail source. Accepting a
+		// source name that can no longer be served would be a silent no-op
+		// returning an empty config, so it is an explicit error instead.
+		return &GuardrailConfig{}, "yaml", fmt.Errorf("yaml guardrails are no longer supported; guardrails are DB-only")
 	default:
 		return loadGuardrails(db)
 	}
