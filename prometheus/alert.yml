@@ -104,30 +104,3 @@ groups:
     annotations:
       summary: "High CPU usage on {{ $labels.container_name }}"
       description: "{{ $labels.container_name }} CPU usage > 80% (current: {{ $value | humanizePercentage }})"
-
-- name: rabbitmq_metrics
-  interval: 30s
-  rules:
-  # RabbitMQ queue length high
-  - alert: RabbitMQQueueBacklog
-    expr: |
-      rabbitmq_queue_messages_ready > 5000
-    for: 5m
-    labels:
-      severity: warning
-      component: messaging
-    annotations:
-      summary: "RabbitMQ queue backlog high"
-      description: "Queue {{ $labels.queue }} has {{ $value }} messages ready"
-
-  # RabbitMQ connection issues
-  - alert: RabbitMQConnectionErrors
-    expr: |
-      increase(rabbitmq_connection_errors_total[5m]) > 10
-    for: 2m
-    labels:
-      severity: critical
-      component: messaging
-    annotations:
-      summary: "RabbitMQ connection errors detected"
-      description: "{{ $value }} connection errors in last 5 minutes"

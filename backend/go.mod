@@ -74,7 +74,6 @@ require (
 	github.com/quickfixgo/quickfix v0.9.0
 	github.com/quickfixgo/tag v0.1.0
 	github.com/segmentio/kafka-go v0.4.49
-	github.com/streadway/amqp v1.1.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.32.0
 )
 

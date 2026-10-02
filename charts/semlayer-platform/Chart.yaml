@@ -64,11 +64,6 @@ dependencies:
   condition: redis-cluster.enabled
   alias: redis
 
-- name: rabbitmq
-  version: "12.5.6"
-  repository: "https://charts.bitnami.com/bitnami"
-  condition: rabbitmq.enabled
-
 # Observability (optional)
 - name: kube-prometheus-stack
   version: "55.5.0"

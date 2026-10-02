@@ -183,8 +183,8 @@ if ! docker info >/dev/null 2>&1; then
 fi
 print_success "Docker daemon running"
 
-print_info "Starting required Docker services: rabbitmq, api-gateway (event-router optional)"
-docker compose up -d rabbitmq api-gateway || true
+print_info "Starting required Docker services: api-gateway (event-router optional)"
+docker compose up -d api-gateway || true
 # event-router is optional; it may fail if port 8081 is already in use (e.g., by temporal-ui)
 docker compose up -d event-router 2>&1 | grep -i "failed\|error" || print_info "event-router started or skipped (port conflict)"
 

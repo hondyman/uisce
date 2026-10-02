@@ -15,7 +15,6 @@ api-gateway/server
 backend/app./cmd/server
 backend/bin/
 backend/cmd/*/main
-backend/e2e_amqp
 backend/migrate
 backend/server
 backend/worker

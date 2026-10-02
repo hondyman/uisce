@@ -68,7 +68,6 @@ echo -e "${BLUE}1. CONTAINER STATUS${NC}"
 echo "─────────────────────────────────────────────────────────────"
 test_container "API Gateway" "api-gateway"
 test_container "Backend" "backend"
-test_container "RabbitMQ" "rabbitmq"
 test_container "Temporal" "temporal"
 test_container "Frontend" "frontend"
 echo ""
@@ -79,23 +78,6 @@ test_service "API Gateway Health" "8001" "/health"
 test_service "API Gateway Debug" "8001" "/api/_debug/headers"
 test_service "Backend Health" "8080" "/health"
 test_service "Fabric Builder" "8081" "/health"
-echo ""
-
-echo -e "${BLUE}3. MESSAGE QUEUE (RabbitMQ)${NC}"
-echo "─────────────────────────────────────────────────────────────"
-echo -n "RabbitMQ Management UI... "
-if curl -s -u guest:guest http://localhost:15672/api/aliveness-test/%2F 2>/dev/null | grep -q "ok"; then
-    echo -e "${GREEN}✓ Healthy${NC}"
-else
-    echo -e "${RED}✗ Not responding${NC}"
-fi
-
-echo -n "RabbitMQ TCP (5672)... "
-if nc -z localhost 5672 2>/dev/null; then
-    echo -e "${GREEN}✓ Listening${NC}"
-else
-    echo -e "${RED}✗ Not accessible${NC}"
-fi
 echo ""
 
 echo -e "${BLUE}4. WORKFLOW ENGINE (Temporal)${NC}"
@@ -138,5 +120,4 @@ echo ""
 echo -e "${YELLOW}Note:${NC}"
 echo "  • Temporal may need time to initialize"
 echo "  • If they're restarting, check their logs for errors"
-echo "  • RabbitMQ is critical for message queuing"
 echo ""
