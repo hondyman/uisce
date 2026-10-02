@@ -485,6 +485,67 @@ is the single loader, reached by `getGuardrails` and `ReloadGuardrailsHandler`
 same file is a database-connection helper, not a guardrail source, and still
 uses the `yaml` package.
 
+### ADR-024: The Migration Set Is the Schema Authority, Not Application Code
+
+**Decision.** A table's definition is owned by a migration and by nothing else.
+`CREATE TABLE IF NOT EXISTS` in application code is not a schema authority and
+must not be relied on to bring a table into existence.
+
+**Context.** ADR-023 made guardrails DB-only, removing the `guardrails.yaml`
+fallback. CI then failed `TestReloadGuardrailsHandler_Integration` with
+`500 pq: relation "guardrail_rules" does not exist (42P01)`, after a 135-second
+TCP timeout. No migration in the repository created that table. It was created
+by `EnsureOptimizationSchema` (`internal/bundles/optimizer.go`), which has one
+non-test caller — `AnalyzeAndPropose` — and is not called at boot. The table
+therefore existed only in databases where the optimizer flow had happened to
+run.
+
+**This was not caused by ADR-023, and it is not a flake.** The YAML fallback was
+*masking* the gap: with a file present, reload succeeded and never touched the
+database. Removing the second source removed the mask. In any database
+provisioned from this repository's migrations, `POST /bundles/guardrails/reload`
+returned 500 — and always had.
+
+The local suite was green throughout. The developer's database had the table.
+A green local run therefore proved only that one machine's database was
+populated, which is precisely the claim the evidence rule refuses to accept.
+
+**Consequences.** Migration `20261205_001_guardrail_rules` creates
+`public.guardrail_rules` with exactly the schema the application code used, so
+the two agree and cannot drift into producing two different tables. The table
+stays in `public` because the unqualified `CREATE TABLE` in `optimizer.go` has
+always landed there; relocating it would orphan the existing table.
+
+The integration test now resolves its own database explicitly: it reads
+`DATABASE_URL`, skips with a stated reason when absent, pins `POLICY_DB_URL` so
+the DSN resolver does not wander into a config file first, and resets the
+package-level connection singleton either side of the run. The CI integration
+job now names `POLICY_DB_URL` as well, which is the same database
+`DATABASE_URL` already pointed at — not a new dependency, only a faster and
+explicit route to the one already in use.
+
+No RLS is added. Guardrail rules are global policy configuration read wholesale
+by the rule engine, not tenant-owned rows; tenant scoping here would be a
+behaviour change wearing the costume of a schema fix.
+
+**Follow-up, deliberately not taken here.** The tracked
+`backend/config.yaml` carries a private-host DSN, and the resolver consults
+`config.yaml` before `DATABASE_URL`. That is why the failing test spent 135
+seconds on a TCP timeout before finding the right database. ADR-023 left the
+`config.yaml` probe alone as connection plumbing, and this change does not
+overturn that; it only stops the integration job from depending on the order in
+which candidates are tried. Reordering the candidates, or removing a private
+address from a tracked file, is a separate decision.
+
+**Evidence (production call sites).** `loadGuardrails`
+(`internal/bundles/handler.go:127`) is the single reader, reached by
+`getGuardrails` and `ReloadGuardrailsHandler`. The writers are
+`internal/bundles/handler.go:789` (insert), `:804` (list), `:855` (delete),
+`:881` (update) — all against `(id, type, data)`, which is the contract the
+migration encodes. The legacy creator is
+`internal/bundles/optimizer.go:70`; its only caller is
+`internal/bundles/optimizer.go:86`.
+
 ## Open items
 
 - **Call-site verification for ADR-001 … ADR-010.** The imported entries assert

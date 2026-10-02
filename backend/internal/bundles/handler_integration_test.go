@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -15,7 +16,29 @@ import (
 func TestReloadGuardrailsHandler_Integration(t *testing.T) {
 	// Guardrails are DB-only; there is no YAML file to stage. This test used
 	// to write a temp guardrails.yaml and point GUARDRAILS_PATH at it, which
-	// asserted a fallback path that no longer exists.
+	// asserted a fallback path that no longer exists. Removing that fallback
+	// turned this into a genuinely DB-backed test, so it now needs a real
+	// database -- the table it reads is created by migration
+	// 20261205_001, not by application code (ADR-024).
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL is not set; this test needs a real database")
+	}
+
+	// resolvePolicyDBDSNs consults config.yaml *before* DATABASE_URL, and the
+	// tracked backend/config.yaml points at a private host. Left alone, this
+	// test burns a TCP timeout on that host before falling through to the
+	// database CI actually bootstrapped. POLICY_DB_URL is first in the
+	// candidate list, so setting it makes the target explicit and immediate.
+	t.Setenv("POLICY_DB_URL", dsn)
+
+	// InitDBFromConfig memoises into a package-level singleton and returns it
+	// without re-resolving, so a connection left over from an earlier test
+	// would silently win over the DSN we just set. Reset it either side.
+	previous := db
+	db = nil
+	t.Cleanup(func() { db = previous })
+
 	r := chi.NewRouter()
 	RegisterRoutes(r)
 
