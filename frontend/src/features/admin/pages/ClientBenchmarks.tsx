@@ -16,7 +16,7 @@ import {
 } from '@mui/material';
 import {
   AutoAwesome as AutoAwesomeIcon,
-  ShieldCheck as ShieldCheckIcon,
+  VerifiedUser as ShieldCheckIcon,
   TrendingUp as TrendingUpIcon,
   Business as BusinessIcon,
   Refresh as RefreshIcon,

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { usePendingApprovals, useApproveRequest, useRejectRequest, ApprovalRequest } from '../api/approvals';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CircularProgress as Loader2Icon, CircularProgress as Loader2, CheckCircle as CheckCircleIcon, CheckCircle as CheckCircle, Cancel as XCircleIcon, Cancel as XCircle, Schedule as ClockIcon } from '@mui/icons-material';
+import { Autorenew as Loader2Icon, Autorenew as Loader2, CheckCircle as CheckCircleIcon, CheckCircle as CheckCircle, Cancel as XCircleIcon, Cancel as XCircle, Schedule as ClockIcon, Schedule as Clock } from '@mui/icons-material';
 import { useNotification } from '../../../hooks/useNotification';
 
 export const ApprovalInboxPage: React.FC = () => {
