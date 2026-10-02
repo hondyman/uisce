@@ -193,20 +193,13 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 			}
 
 			// For regular tenants: region is required
+			// The region must be stated by the caller; it is never inferred from the
+			// tenant's home region.
 			if region == "" {
-				// Try to infer region from tenant (optional, if using TenantRegionResolver)
-				if resolver, ok := provider.(*TenantRegionResolver); ok {
-					if inferred, ok := resolver.InferRegionForTenant(tenantID); ok {
-						region = inferred
-					}
-				}
-
-				if region == "" {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusBadRequest)
-					_ = json.NewEncoder(w).Encode(map[string]string{"error": "region is required for all semantic operations."})
-					return
-				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "region is required for all semantic operations."})
+				return
 			}
 
 			// Validate region is allowed for tenant

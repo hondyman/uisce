@@ -39,6 +39,7 @@ func setupExecuteTestEnv(t *testing.T, tenantID, userID string) (*SavedQueryHand
 		req := httptest.NewRequest(method, path, bodyReader)
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Datasource-Id", "ds-1")
+		req.Header.Set("X-Region", "us-east-1") // a real client states its region; there is no default
 		auth := security.AuthInfo{
 			TenantIDs: []string{tenantID},
 			UserID:    userID,
@@ -322,6 +323,7 @@ func TestHandleGetSavedQuerySchema(t *testing.T) {
 		))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/explorer/saved-queries/"+queryID+"/schema", nil)
+	req.Header.Set("X-Region", "us-east-1") // a real client states its region; there is no default
 	auth := security.AuthInfo{TenantIDs: []string{tenantID}, UserID: userID}
 	req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
 	rec := httptest.NewRecorder()
@@ -503,6 +505,7 @@ func TestHandleExecuteSavedQuery_TokenAuth(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/explorer/saved-queries/"+queryID+"/execute", nil)
 	req.Header.Set("Authorization", "Bearer "+rawToken)
 	req.Header.Set("X-Datasource-Id", "ds-1")
+	req.Header.Set("X-Region", "us-east-1") // a real client states its region; there is no default
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
