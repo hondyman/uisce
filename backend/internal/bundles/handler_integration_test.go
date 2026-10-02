@@ -7,37 +7,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 )
 
 func TestReloadGuardrailsHandler_Integration(t *testing.T) {
-	// create temp YAML file
-	yaml := `sod_pairs:
-  - ["a","b"]
-certified:
-  - "c"
-`
-	tmp, err := os.CreateTemp("", "guardrails-*.yaml")
-	if err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write([]byte(yaml)); err != nil {
-		t.Fatalf("write tmp: %v", err)
-	}
-	if err := tmp.Close(); err != nil {
-		t.Fatalf("close tmp: %v", err)
-	}
-
-	// set env to point to tmp file so loadGuardrails will pick it up (when DB nil)
-	op := os.Getenv("GUARDRAILS_PATH")
-	defer os.Setenv("GUARDRAILS_PATH", op)
-	os.Setenv("GUARDRAILS_PATH", tmp.Name())
-
-	// Create router and mount handlers
+	// Guardrails are DB-only; there is no YAML file to stage. This test used
+	// to write a temp guardrails.yaml and point GUARDRAILS_PATH at it, which
+	// asserted a fallback path that no longer exists.
 	r := chi.NewRouter()
 	RegisterRoutes(r)
 
@@ -68,11 +46,9 @@ certified:
 	if resp.Cache.Config == nil {
 		t.Fatalf("cache config nil")
 	}
-	if len(resp.Cache.Config.SoDPairs) != 1 || len(resp.Cache.Config.Certified) != 1 {
-		t.Fatalf("unexpected cache contents: %+v", resp.Cache.Config)
-	}
-	if resp.Cache.Source != "yaml" {
-		t.Fatalf("expected source yaml, got %s", resp.Cache.Source)
+	// Source is never "yaml" now: the DB is the only supported source.
+	if resp.Cache.Source == "yaml" {
+		t.Fatalf("yaml must no longer be a possible source, got %q", resp.Cache.Source)
 	}
 	if resp.Cache.LastLoaded.IsZero() {
 		t.Fatalf("expected last_loaded to be set")
