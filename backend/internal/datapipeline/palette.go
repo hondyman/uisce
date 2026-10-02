@@ -29,9 +29,11 @@ func Palette(d Deps) []NodeType {
 	rules, rulesWhy := avail(d.Rules != nil, "the rule engine is not configured")
 	staging, stagingWhy := avail(d.StagingDB != nil, "the staging database is not configured")
 	master, masterWhy := avail(d.Master != nil, "mastering is not configured")
+	queues, queuesWhy := avail(d.Queues != nil, "queue brokers are not configured")
 	return []NodeType{
 		{NodeFileSource, "Read a file", "source", "Read a CSV, JSON or Parquet file you uploaded. Define its columns once; every row is checked against them.", files, filesWhy},
 		{NodeBOSource, "Read business object", "source", "Read records of a business object, optionally filtered.", bo, boWhy},
+		{NodeQueueSource, "Read a queue", "source", "Pull a bounded batch from Kafka/Redpanda, AWS SQS, or Azure Service Bus. Credentials come from environment variables — never from the pipeline Spec.", queues, queuesWhy},
 		{NodeValidate, "Check required and unique", "step", "Reject rows missing required values, or repeating a key.", true, ""},
 		{NodeRuleCheck, "Apply validation rules", "step", "Run rules from the rules catalog. Blocking rules reject the row; warnings are recorded.", rules, rulesWhy},
 		{NodeMap, "Map fields", "step", "Rename fields and apply simple transforms (trim, dates, numbers, lookups).", true, ""},
@@ -40,6 +42,7 @@ func Palette(d Deps) []NodeType {
 		{NodeMaster, "Master the load", "destination", "After the staging load commits, master it: match to golden records, survive, publish. Follows a staging load.", master, masterWhy},
 		{NodeIcebergSink, "Export to Iceberg Lakehouse", "destination", "Write rows to an Apache Iceberg table as Parquet in object storage (MinIO/S3).", files, filesWhy},
 		{NodeVendorScoring, "Vendor quality scoring", "destination", "Score vendor quality, sufficiency rate, format compliance, and displacement readiness against the golden master.", true, ""},
+		{NodeQueueSink, "Publish to a queue", "destination", "Publish each row as JSON to Kafka/Redpanda, AWS SQS, or Azure Service Bus.", queues, queuesWhy},
 		{NodeFileSink, "Export a file", "destination", "Write the rows to a CSV, JSON or Parquet file.", files, filesWhy},
 	}
 }
