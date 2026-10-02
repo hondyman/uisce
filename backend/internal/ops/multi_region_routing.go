@@ -423,10 +423,14 @@ func (e *MultiRegionRoutingEngine) ForceRegionFailover(
 		return err
 	}
 
-	// Update preference to prioritize alternate region
+	// Update preference to prioritize alternate region. The stored preference is
+	// shared with concurrent readers, so replace it with an updated copy instead
+	// of mutating it in place.
 	if preference.PreferredRegion == fromRegion {
-		preference.PreferredRegion = toRegion
-		preference.FallbackOrder = append([]string{fromRegion}, preference.FallbackOrder...)
+		updated := *preference
+		updated.PreferredRegion = toRegion
+		updated.FallbackOrder = append([]string{fromRegion}, preference.FallbackOrder...)
+		preference = &updated
 	}
 
 	return e.SetTenantRegionPreference(ctx, tenantID, preference)

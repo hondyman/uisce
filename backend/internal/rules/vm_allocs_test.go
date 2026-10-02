@@ -37,6 +37,12 @@ func TestBenchmarkAcceptance(t *testing.T) {
 				t.Fatalf("expected 0 allocs/op, got %v", allocs)
 			}
 
+			// The ceilings are absolute timings; the race detector slows every
+			// operation several-fold, so they only apply to uninstrumented builds.
+			if raceEnabled {
+				return
+			}
+
 			// ns/op ceiling
 			const N = 1_000_000
 			start := time.Now()

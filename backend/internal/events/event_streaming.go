@@ -33,6 +33,42 @@ type EventSubscriber struct {
 	Regions   []string // Subscribe to specific regions or all
 	EventChan chan *StreamedEvent
 	Done      chan struct{}
+
+	// sendMu orders sends against close: senders hold it shared, closing takes it
+	// exclusively, so EventChan is never closed while a send is in flight.
+	sendMu    sync.RWMutex
+	closed    bool
+	closeOnce sync.Once
+}
+
+// close shuts the subscriber down exactly once. Done is closed first so a sender
+// blocked on a slow subscriber is released before the channel is closed.
+func (s *EventSubscriber) close() {
+	s.closeOnce.Do(func() {
+		close(s.Done)
+		s.sendMu.Lock()
+		s.closed = true
+		close(s.EventChan)
+		s.sendMu.Unlock()
+	})
+}
+
+// send delivers an event unless the subscriber is closed or the timeout elapses.
+// It reports whether the event was delivered or the subscriber was merely slow.
+func (s *EventSubscriber) send(event *StreamedEvent, timeout time.Duration) (delivered bool, slow bool) {
+	s.sendMu.RLock()
+	defer s.sendMu.RUnlock()
+	if s.closed {
+		return false, false
+	}
+	select {
+	case s.EventChan <- event:
+		return true, false
+	case <-s.Done:
+		return false, false
+	case <-time.After(timeout):
+		return false, true
+	}
 }
 
 // EventStreamBroker manages real-time event streaming to multiple subscribers
@@ -101,8 +137,7 @@ func (b *EventStreamBroker) Unsubscribe(subscriberID string) error {
 		return fmt.Errorf("subscriber not found: %s", subscriberID)
 	}
 
-	close(subscriber.Done)
-	close(subscriber.EventChan)
+	subscriber.close()
 
 	return nil
 }
@@ -163,13 +198,8 @@ func (b *EventStreamBroker) eventLoop() {
 			}
 
 			// Send with timeout to avoid blocking on slow subscribers
-			select {
-			case subscriber.EventChan <- event:
-			case <-time.After(5 * time.Second):
-				// Subscriber is slow, log and skip
+			if _, slow := subscriber.send(event, 5*time.Second); slow {
 				fmt.Printf("Slow subscriber %s, skipping event\n", subscriber.ID)
-			case <-subscriber.Done:
-				// Subscriber disconnected
 			}
 		}
 	}
@@ -219,8 +249,7 @@ func (b *EventStreamBroker) Stop() error {
 		b.subMutex.Unlock()
 
 		for _, sub := range subscribers {
-			close(sub.Done)
-			close(sub.EventChan)
+			sub.close()
 		}
 
 		close(b.done)

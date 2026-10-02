@@ -3,6 +3,7 @@ package shadow_test
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -40,9 +41,9 @@ func TestShadowReplayEngine_StartShadowJob_CompilesRule(t *testing.T) {
 	draftNode := &rules.RuleNode{
 		Type: rules.NodeTypeCondition,
 		Condition: &rules.RuleCondition{
-			Field:    "order.quantity",
-			Operator: ">",
-			Value:    1000.0,
+			Field:     "order.quantity",
+			Operator:  ">",
+			Value:     1000.0,
 			ValueType: "number",
 		},
 	}
@@ -86,9 +87,9 @@ func TestShadowReplayEngine_ProcessShadowOrder_DiscrepancyDetected(t *testing.T)
 	draftNode := &rules.RuleNode{
 		Type: rules.NodeTypeCondition,
 		Condition: &rules.RuleCondition{
-			Field:    "order.quantity",
-			Operator: ">",
-			Value:    1000.0,
+			Field:     "order.quantity",
+			Operator:  ">",
+			Value:     1000.0,
 			ValueType: "number",
 		},
 	}
@@ -117,16 +118,16 @@ func TestShadowReplayEngine_ProcessShadowOrder_DiscrepancyDetected(t *testing.T)
 
 	time.Sleep(100 * time.Millisecond)
 
-	if job.TotalEvaluated != 1 {
-		t.Errorf("expected 1 evaluated trade, got %d", job.TotalEvaluated)
+	if atomic.LoadInt64(&job.TotalEvaluated) != 1 {
+		t.Errorf("expected 1 evaluated trade, got %d", atomic.LoadInt64(&job.TotalEvaluated))
 	}
 
-	if job.DiscrepancyCount != 1 {
-		t.Errorf("expected 1 discrepancy (prod passed but shadow blocked on qty=500<1000), got %d", job.DiscrepancyCount)
+	if atomic.LoadInt64(&job.DiscrepancyCount) != 1 {
+		t.Errorf("expected 1 discrepancy (prod passed but shadow blocked on qty=500<1000), got %d", atomic.LoadInt64(&job.DiscrepancyCount))
 	}
 
-	if job.ProdPassedCount != 1 {
-		t.Errorf("expected 1 prod pass, got %d", job.ProdPassedCount)
+	if atomic.LoadInt64(&job.ProdPassedCount) != 1 {
+		t.Errorf("expected 1 prod pass, got %d", atomic.LoadInt64(&job.ProdPassedCount))
 	}
 }
 
@@ -141,9 +142,9 @@ func TestShadowReplayEngine_ProcessShadowOrder_NoDiscrepancy(t *testing.T) {
 	draftNode := &rules.RuleNode{
 		Type: rules.NodeTypeCondition,
 		Condition: &rules.RuleCondition{
-			Field:    "order.quantity",
-			Operator: ">",
-			Value:    1000.0,
+			Field:     "order.quantity",
+			Operator:  ">",
+			Value:     1000.0,
 			ValueType: "number",
 		},
 	}
@@ -172,8 +173,8 @@ func TestShadowReplayEngine_ProcessShadowOrder_NoDiscrepancy(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	if job.DiscrepancyCount != 0 {
-		t.Errorf("expected 0 discrepancies (trade 5000 > 1000, both pass), got %d", job.DiscrepancyCount)
+	if atomic.LoadInt64(&job.DiscrepancyCount) != 0 {
+		t.Errorf("expected 0 discrepancies (trade 5000 > 1000, both pass), got %d", atomic.LoadInt64(&job.DiscrepancyCount))
 	}
 }
 
@@ -201,9 +202,9 @@ func TestShadowReplayEngine_MultipleJobsPerTenant(t *testing.T) {
 	rule1 := &rules.RuleNode{
 		Type: rules.NodeTypeCondition,
 		Condition: &rules.RuleCondition{
-			Field:    "order.quantity",
-			Operator: ">",
-			Value:    1000.0,
+			Field:     "order.quantity",
+			Operator:  ">",
+			Value:     1000.0,
 			ValueType: "number",
 		},
 	}
@@ -211,9 +212,9 @@ func TestShadowReplayEngine_MultipleJobsPerTenant(t *testing.T) {
 	rule2 := &rules.RuleNode{
 		Type: rules.NodeTypeCondition,
 		Condition: &rules.RuleCondition{
-			Field:    "order.price",
-			Operator: "<",
-			Value:    200.0,
+			Field:     "order.price",
+			Operator:  "<",
+			Value:     200.0,
 			ValueType: "number",
 		},
 	}
@@ -237,18 +238,18 @@ func TestShadowReplayEngine_MultipleJobsPerTenant(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	if job1.TotalEvaluated != 1 {
-		t.Errorf("job1: expected 1 evaluation, got %d", job1.TotalEvaluated)
+	if atomic.LoadInt64(&job1.TotalEvaluated) != 1 {
+		t.Errorf("job1: expected 1 evaluation, got %d", atomic.LoadInt64(&job1.TotalEvaluated))
 	}
-	if job2.TotalEvaluated != 1 {
-		t.Errorf("job2: expected 1 evaluation, got %d", job2.TotalEvaluated)
+	if atomic.LoadInt64(&job2.TotalEvaluated) != 1 {
+		t.Errorf("job2: expected 1 evaluation, got %d", atomic.LoadInt64(&job2.TotalEvaluated))
 	}
 
-	if job1.DiscrepancyCount != 1 {
-		t.Errorf("job1: expected 1 discrepancy (qty=500 < 1000: shadow blocked, prod passed), got %d", job1.DiscrepancyCount)
+	if atomic.LoadInt64(&job1.DiscrepancyCount) != 1 {
+		t.Errorf("job1: expected 1 discrepancy (qty=500 < 1000: shadow blocked, prod passed), got %d", atomic.LoadInt64(&job1.DiscrepancyCount))
 	}
-	if job2.DiscrepancyCount != 0 {
-		t.Errorf("job2: expected 0 discrepancies (price 185 < 200: both pass), got %d", job2.DiscrepancyCount)
+	if atomic.LoadInt64(&job2.DiscrepancyCount) != 0 {
+		t.Errorf("job2: expected 0 discrepancies (price 185 < 200: both pass), got %d", atomic.LoadInt64(&job2.DiscrepancyCount))
 	}
 }
 
@@ -260,9 +261,9 @@ func TestShadowReplayEngine_CancelJob(t *testing.T) {
 	draftNode := &rules.RuleNode{
 		Type: rules.NodeTypeCondition,
 		Condition: &rules.RuleCondition{
-			Field:    "order.quantity",
-			Operator: ">",
-			Value:    1000.0,
+			Field:     "order.quantity",
+			Operator:  ">",
+			Value:     1000.0,
 			ValueType: "number",
 		},
 	}
@@ -291,9 +292,9 @@ func TestShadowReplayEngine_CompleteJob(t *testing.T) {
 	draftNode := &rules.RuleNode{
 		Type: rules.NodeTypeCondition,
 		Condition: &rules.RuleCondition{
-			Field:    "order.quantity",
-			Operator: ">",
-			Value:    1000.0,
+			Field:     "order.quantity",
+			Operator:  ">",
+			Value:     1000.0,
 			ValueType: "number",
 		},
 	}
@@ -325,9 +326,9 @@ func TestShadowReplayEngine_ConcurrentEvaluations(t *testing.T) {
 	draftNode := &rules.RuleNode{
 		Type: rules.NodeTypeCondition,
 		Condition: &rules.RuleCondition{
-			Field:    "order.quantity",
-			Operator: ">",
-			Value:    1000.0,
+			Field:     "order.quantity",
+			Operator:  ">",
+			Value:     1000.0,
 			ValueType: "number",
 		},
 	}
@@ -355,7 +356,7 @@ func TestShadowReplayEngine_ConcurrentEvaluations(t *testing.T) {
 	wg.Wait()
 	time.Sleep(200 * time.Millisecond)
 
-	if job.TotalEvaluated != 100 {
-		t.Errorf("expected 100 evaluations, got %d", job.TotalEvaluated)
+	if atomic.LoadInt64(&job.TotalEvaluated) != 100 {
+		t.Errorf("expected 100 evaluations, got %d", atomic.LoadInt64(&job.TotalEvaluated))
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hondyman/uisce/backend/pkg/cache"
@@ -97,17 +98,17 @@ func (mc *MetadataCache) GetBusinessObject(tenantID, key string) (*BusinessObjec
 
 	tenantBOs, ok := mc.boByKey[tenantID]
 	if !ok {
-		mc.misses++
+		atomic.AddInt64(&mc.misses, 1)
 		return nil, fmt.Errorf("tenant %s not found in cache", tenantID)
 	}
 
 	bo, ok := tenantBOs[key]
 	if !ok {
-		mc.misses++
+		atomic.AddInt64(&mc.misses, 1)
 		return nil, fmt.Errorf("business object %s not found for tenant %s", key, tenantID)
 	}
 
-	mc.hits++
+	atomic.AddInt64(&mc.hits, 1)
 
 	// Return a copy to prevent external modifications
 	boCopy := *bo
@@ -124,17 +125,17 @@ func (mc *MetadataCache) GetBusinessObjectByID(tenantID, id string) (*BusinessOb
 
 	tenantBOs, ok := mc.boByID[tenantID]
 	if !ok {
-		mc.misses++
+		atomic.AddInt64(&mc.misses, 1)
 		return nil, fmt.Errorf("tenant %s not found in cache", tenantID)
 	}
 
 	bo, ok := tenantBOs[id]
 	if !ok {
-		mc.misses++
+		atomic.AddInt64(&mc.misses, 1)
 		return nil, fmt.Errorf("business object with ID %s not found for tenant %s", id, tenantID)
 	}
 
-	mc.hits++
+	atomic.AddInt64(&mc.hits, 1)
 
 	// Return a copy
 	boCopy := *bo
@@ -162,7 +163,7 @@ func (mc *MetadataCache) ListBusinessObjects(tenantID string) ([]*BusinessObject
 		result = append(result, &boCopy)
 	}
 
-	mc.hits++
+	atomic.AddInt64(&mc.hits, 1)
 	return result, nil
 }
 
@@ -173,17 +174,17 @@ func (mc *MetadataCache) GetEnum(tenantID, enumID string) (*EnumDefinition, erro
 
 	tenantEnums, ok := mc.enumsByTenant[tenantID]
 	if !ok {
-		mc.misses++
+		atomic.AddInt64(&mc.misses, 1)
 		return nil, fmt.Errorf("tenant %s not found in cache", tenantID)
 	}
 
 	enum, ok := tenantEnums[enumID]
 	if !ok {
-		mc.misses++
+		atomic.AddInt64(&mc.misses, 1)
 		return nil, fmt.Errorf("enum %s not found for tenant %s", enumID, tenantID)
 	}
 
-	mc.hits++
+	atomic.AddInt64(&mc.hits, 1)
 	return enum, nil
 }
 
@@ -233,14 +234,14 @@ func (mc *MetadataCache) GetMetrics() CacheMetrics {
 	}
 
 	var hitRate float64
-	total := mc.hits + mc.misses
+	total := atomic.LoadInt64(&mc.hits) + atomic.LoadInt64(&mc.misses)
 	if total > 0 {
-		hitRate = float64(mc.hits) / float64(total)
+		hitRate = float64(atomic.LoadInt64(&mc.hits)) / float64(total)
 	}
 
 	return CacheMetrics{
-		Hits:        mc.hits,
-		Misses:      mc.misses,
+		Hits:        atomic.LoadInt64(&mc.hits),
+		Misses:      atomic.LoadInt64(&mc.misses),
 		Evictions:   mc.evictions,
 		HitRate:     hitRate,
 		LoadTime:    mc.loadTime,
