@@ -41,8 +41,8 @@ export const GSIFIEventRegistry: React.FC = () => {
 
   const fetchEvents = async () => {
     try {
-      const res = await apiClient.get('/api/compliance/gsifi/events');
-      const data = await res.json();
+      // apiClient already parses JSON responses.
+      const data = await apiClient<unknown>('/api/compliance/gsifi/events');
       setEvents(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch G-SIFI events:', error);
@@ -56,8 +56,10 @@ export const GSIFIEventRegistry: React.FC = () => {
 
   const handleSave = async () => {
     try {
-      await apiClient.post('/api/compliance/gsifi/events', {
-        body: JSON.stringify(form)
+      await apiClient('/api/compliance/gsifi/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
       });
       setOpenModal(false);
       setForm({ event_key: '', category: '', description: '', schema_json: '{}' });
