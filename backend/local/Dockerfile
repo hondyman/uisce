@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for the local proxy binary
 
-FROM golang:1.25.3-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Build inside the `backend` module directory so go module paths resolve correctly
 WORKDIR /app
