@@ -3,6 +3,7 @@ package metadata
 import (
 	"context"
 	"fmt"
+	"github.com/testcontainers/testcontainers-go"
 	"testing"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 )
 
 func TestGetBusinessObjectIncludesChildIntegration_Container(t *testing.T) {
+	// Skip (not fail) when there is no Docker daemon; a real container failure still fails.
+	testcontainers.SkipIfProviderIsNotHealthy(t)
 	// Skip in short mode
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")

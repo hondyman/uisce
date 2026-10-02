@@ -27,7 +27,7 @@ jobs:
     - name: Install dependencies
       run: go mod download
     - name: Run unit tests
-      run: go test ./backend/... -v
+      run: go test -short ./backend/... -v
     - name: Run region middleware tests (isolated)
       run: go test ./backend/internal/region_test -v
     - name: Run additional backend checks

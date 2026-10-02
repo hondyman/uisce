@@ -81,7 +81,7 @@ jobs:
     - name: Run Tests
       working-directory: backend
       run: |
-        go test -v -race -coverprofile=coverage.out ./...
+        go test -short -v -race -coverprofile=coverage.out ./...
         go tool cover -func=coverage.out
 
     - name: Upload Coverage

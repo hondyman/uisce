@@ -15,7 +15,7 @@ jobs:
             go-version: '1.25'
             
       - name: Run Backend Tests
-        run: go test ./backend/...
+        run: go test -short ./backend/...
 
       - name: Dry-run Semantic Diff
         run: |

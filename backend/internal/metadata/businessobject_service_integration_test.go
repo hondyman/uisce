@@ -17,8 +17,7 @@ func TestGetBusinessObjectIncludesChildIntegration(t *testing.T) {
 	}
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
-		// fallback to local dev DB used by integration
-		dsn = "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
+		t.Skip("skipping: set TEST_DATABASE_URL to a test database (there is no default; this never falls back to a shared host)")
 	}
 
 	db, err := sqlx.Open("postgres", dsn)
@@ -98,7 +97,7 @@ func TestGetBusinessObjectFallbackToGoldCopy(t *testing.T) {
 	}
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
+		t.Skip("skipping: set TEST_DATABASE_URL to a test database (there is no default; this never falls back to a shared host)")
 	}
 
 	db, err := sqlx.Open("postgres", dsn)
