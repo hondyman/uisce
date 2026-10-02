@@ -273,7 +273,7 @@ func (tm *TimeoutMonitor) logTimeoutEvent(ctx context.Context, instance Workflow
 
 // publishTimeoutEvent publishes an event to your message queue
 func (tm *TimeoutMonitor) publishTimeoutEvent(eventType string, data map[string]interface{}) {
-	// TODO: Integrate with your event bus / RabbitMQ publisher
+	// TODO: Integrate with your event bus publisher
 	logData, _ := json.Marshal(data)
 	log.Printf("[TimeoutEvent] %s: %s", eventType, string(logData))
 }

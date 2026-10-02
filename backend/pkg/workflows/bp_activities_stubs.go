@@ -30,12 +30,6 @@ func ActivityCreateHumanTask(ctx context.Context, input map[string]interface{}) 
 }
 
 // Stub activities for publish event broker types
-// DEPRECATED: legacy RabbitMQ (AMQP) publish stub. Prefer Kafka/Redpanda publishing activity.
-func stubActivityPublishRabbitMQ(ctx context.Context, input interface{}) error {
-	log.Printf("DEPRECATED STUB: Publish RabbitMQ (legacy): %v", input)
-	return nil
-}
-
 func stubActivityPublishKafka(ctx context.Context, input interface{}) error {
 	log.Printf("STUB: Publish Kafka: %v", input)
 	return nil

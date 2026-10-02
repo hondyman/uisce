@@ -17,7 +17,6 @@ import (
 
 // Supported message broker types
 const (
-	BrokerRabbitMQ        = "rabbitmq"
 	BrokerKafka           = "kafka"
 	BrokerAWSSQS          = "aws_sqs"
 	BrokerAWSSNS          = "aws_sns"
@@ -30,13 +29,9 @@ const (
 type PublishEventConfig struct {
 	// Common fields
 	EventName   string            `json:"event_name"`   // Event type name
-	BrokerType  string            `json:"broker_type"`  // rabbitmq, kafka, aws_sqs, aws_sns, azure_servicebus, etc.
+	BrokerType  string            `json:"broker_type"`  // kafka, aws_sqs, aws_sns, azure_servicebus, etc.
 	Payload     map[string]string `json:"payload"`      // Key-value payload mapping from state
 	ContentType string            `json:"content_type"` // application/json, etc.
-
-	// RabbitMQ-specific (legacy AMQP fields; prefer Kafka topics)
-	Exchange   string `json:"exchange"`    // RabbitMQ exchange (legacy)
-	RoutingKey string `json:"routing_key"` // RabbitMQ routing key (legacy)
 
 	// Kafka specific
 	Topic     string `json:"topic"`     // Kafka topic
@@ -103,13 +98,6 @@ func ExecutePublishEventNode(
 	}
 
 	switch config.BrokerType {
-	case BrokerRabbitMQ:
-		// Legacy: explicit RabbitMQ (AMQP) publishing
-		destination = config.Exchange + "/" + config.RoutingKey
-		activityParams["exchange"] = config.Exchange
-		activityParams["routing_key"] = config.RoutingKey
-		activityName = "ActivityPublishRabbitMQ"
-
 	case BrokerKafka:
 		// Kafka / Redpanda publishing
 		destination = config.Topic
@@ -202,10 +190,6 @@ func ParsePublishEventConfig(config map[string]interface{}) (*PublishEventConfig
 
 	// Set defaults based on broker type
 	switch cfg.BrokerType {
-	case BrokerRabbitMQ:
-		if cfg.Exchange == "" {
-			cfg.Exchange = "titan.events"
-		}
 	case BrokerKafka:
 		if cfg.Partition == 0 {
 			cfg.Partition = -1 // Auto-partition

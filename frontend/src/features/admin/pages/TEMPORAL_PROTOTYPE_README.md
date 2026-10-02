@@ -7,14 +7,13 @@ Location
 Components
 - `frontend/src/components/temporal/WorkflowDesigner.tsx` — ReactFlow-based designer (prototype)
 - `frontend/src/components/temporal/ExecutionMonitor.tsx` — lists recent executions via `temporalService.listExecutions()`
-- `frontend/src/components/temporal/DebugPanel.tsx` — debug controls (AMQP metrics, publish test event)
+- `frontend/src/components/temporal/DebugPanel.tsx` — debug controls (live trigger events, publish test event)
 - `frontend/src/components/temporal/LiveEventsWidget.tsx` — live trigger events list
 
 How it wires to the backend
 - All HTTP calls use tenant-scoped headers via `frontend/src/services/temporalService.ts`.
 - Key backend endpoints used by the UI:
   - `GET /api/temporal/executions` — lists recent executions (admin-only)
-  - `GET /api/_debug/amqp-metrics` — AMQP metrics (dev/debug)
   - `POST /api/_debug/publish-event` — publish a test event (dev/debug)
   - `GET /api/v1/triggers/events` — list trigger events
 

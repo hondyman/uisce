@@ -195,7 +195,7 @@ const ConfigPanel = () => {
                     >
                         <MenuItem value="api">REST API Webhook</MenuItem>
                         <MenuItem value="schedule">Scheduled (Cron)</MenuItem>
-                        <MenuItem value="event">Event Bus (Kafka/RabbitMQ)</MenuItem>
+                        <MenuItem value="event">Event Bus (Kafka)</MenuItem>
                     </TextField>
 
                     {(!formData.triggerType || formData.triggerType === 'api') && (
@@ -1333,7 +1333,7 @@ const ConfigPanel = () => {
                 {filterType === 'publishEvent' && (
                     <>
                         <Alert severity="info" sx={{ mb: 2 }}>
-                            Publish events to RabbitMQ, Kafka, AWS SQS/SNS, Azure Service Bus, or GCP Pub/Sub.
+                            Publish events to Kafka, AWS SQS/SNS, Azure Service Bus, or GCP Pub/Sub.
                         </Alert>
                         
                         <TextField 
@@ -1352,11 +1352,10 @@ const ConfigPanel = () => {
                             label="Message Broker"
                             fullWidth
                             size="small"
-                            value={formData.broker_type || 'rabbitmq'}
+                            value={formData.broker_type || 'kafka'}
                             onChange={(e) => handleChange('broker_type', e.target.value)}
                             sx={{ mb: 2 }}
                         >
-                            <MenuItem value="rabbitmq">RabbitMQ</MenuItem>
                             <MenuItem value="kafka">Apache Kafka</MenuItem>
                             <MenuItem value="aws_sqs">AWS SQS</MenuItem>
                             <MenuItem value="aws_sns">AWS SNS</MenuItem>
@@ -1365,33 +1364,8 @@ const ConfigPanel = () => {
                             <MenuItem value="gcp_pubsub">Google Cloud Pub/Sub</MenuItem>
                         </TextField>
                         
-                        {/* RabbitMQ Fields */}
-                        {(formData.broker_type === 'rabbitmq' || !formData.broker_type) && (
-                            <>
-                                <TextField 
-                                    label="Exchange"
-                                    fullWidth
-                                    size="small"
-                                    value={formData.exchange || 'titan.events'}
-                                    onChange={(e) => handleChange('exchange', e.target.value)}
-                                    helperText="RabbitMQ exchange"
-                                    sx={{ mb: 2 }}
-                                />
-                                <TextField 
-                                    label="Routing Key"
-                                    fullWidth
-                                    size="small"
-                                    value={formData.routing_key || ''}
-                                    onChange={(e) => handleChange('routing_key', e.target.value)}
-                                    placeholder="e.g. orders.us-east.created"
-                                    helperText="Message routing key"
-                                    sx={{ mb: 2 }}
-                                />
-                            </>
-                        )}
-                        
                         {/* Kafka Fields */}
-                        {formData.broker_type === 'kafka' && (
+                        {(formData.broker_type === 'kafka' || !formData.broker_type) && (
                             <>
                                 <TextField 
                                     label="Topic"

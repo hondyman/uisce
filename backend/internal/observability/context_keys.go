@@ -12,10 +12,3 @@ func WithTraceContext(ctx context.Context, traceID, spanID string) context.Conte
 	}
 	return ctx
 }
-
-// AMQP related typed keys
-const (
-	ctxAmqpRoutingKey    ctxKey = "amqp.routing_key"
-	ctxAmqpExchange      ctxKey = "amqp.exchange"
-	ctxAmqpCorrelationID ctxKey = "amqp.correlation_id"
-)

@@ -365,7 +365,7 @@ func DeleteDatasourceMappingEdgeActivity(ctx workflow.Context, event *events.Dat
 
 // PublishCatalogNodeCreatedActivity publishes a catalog node created event
 func PublishCatalogNodeCreatedActivity(ctx workflow.Context, node models.CatalogNode, tenantID string) error {
-	// In real implementation, this would publish to RabbitMQ
+	// In real implementation, this would publish to Kafka
 	return nil
 }
 

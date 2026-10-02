@@ -10,8 +10,8 @@ import (
 )
 
 // KafkaTracePropagator handles trace context for Kafka messages (Redpanda)
-// This replaces older AMQP-specific propagators and exposes similar helper methods
-// for propagating trace IDs and instrumenting publish/consume operations.
+// It exposes helper methods for propagating trace IDs and instrumenting
+// publish/consume operations.
 type KafkaTracePropagator struct {
 	tp *TracerProvider
 }
@@ -187,5 +187,3 @@ func (ktp *KafkaTracePropagator) UnmarshalMessageWithContext(ctx context.Context
 
 	return err
 }
-
-// Deprecated: RabbitMQ-specific propagator removed. Use KafkaTracePropagator for Kafka/Redpanda message tracing and propagation.

@@ -64,9 +64,7 @@ func NewBPWorker(c client.Client) *BPWorker {
 	// For now, we use placeholder stub functions.
 
 	// Stub activities for publish event broker types
-	// Prefer Kafka/Redpanda by default; keep RabbitMQ stub for legacy compatibility
 	w.RegisterActivity(stubActivityPublishKafka)
-	w.RegisterActivity(stubActivityPublishRabbitMQ) // DEPRECATED: legacy AMQP stub
 	w.RegisterActivity(stubActivitySendAlert)
 	w.RegisterActivity(stubActivityExecuteSteps)
 

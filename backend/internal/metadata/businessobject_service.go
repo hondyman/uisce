@@ -2094,7 +2094,7 @@ func (s *BusinessObjectService) logAudit(
 	changes map[string]interface{},
 	userID string,
 ) {
-	// Prefer publishing to RabbitMQ audit exchange; fallback is no-op if publisher nil
+	// Publish the audit event when a publisher is configured; no-op if publisher nil
 	if s.auditPublisher != nil {
 		evt := events.AuditEvent{
 			ID:         uuid.New().String(),

@@ -3825,7 +3825,7 @@ func (s *Server) registerTriggerEngineRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 	// Wire full TriggerEngine dependencies and register chi-based trigger routes.
 	abacEngine := &ABACEngine{db: sqlxDB}
 
-	// Try to wire a real AMQP-backed EventBus for production/dev if configured.
+	// Default to a no-op EventBus when none has been configured.
 	if s.EventBus == nil {
 		s.EventBus = &noopEventBus{}
 	}

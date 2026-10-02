@@ -14,7 +14,7 @@ import (
 )
 
 // ============================================================================
-// COMMAND TYPES (For RabbitMQ Command Bus)
+// COMMAND TYPES (For the Kafka command bus)
 // ============================================================================
 
 type CommandType string
@@ -103,16 +103,10 @@ type EventPublisher struct {
 }
 
 // NewEventPublisher creates a new Kafka-backed event publisher.
-// Accepts either a Kafka brokers list (comma-separated) or, for legacy callers, an AMQP URL (deprecated).
+// brokersOrURL is a comma-separated Kafka brokers list.
 func NewEventPublisher(brokersOrURL string) (*EventPublisher, error) {
 	if brokersOrURL == "" {
 		log.Println("⚠️  Event publisher not configured - events disabled")
-		return &EventPublisher{enabled: false}, nil
-	}
-
-	// Detect legacy AMQP URL and disable (encourage migration)
-	if strings.HasPrefix(brokersOrURL, "amqp://") {
-		log.Printf("⚠️  Detected legacy AMQP URL %s - event publishing disabled. Set KAFKA_BROKERS instead.", brokersOrURL)
 		return &EventPublisher{enabled: false}, nil
 	}
 
@@ -369,15 +363,9 @@ type EventConsumer struct {
 }
 
 // NewEventConsumer creates a new event consumer
-// Accepts either a Kafka brokers list or legacy AMQP URL (deprecated). If AMQP URL is provided, consumer is disabled.
+// brokersOrURL is a comma-separated Kafka brokers list.
 func NewEventConsumer(brokersOrURL, groupID string) (*EventConsumer, error) {
 	if brokersOrURL == "" {
-		return &EventConsumer{enabled: false}, nil
-	}
-
-	// Detect legacy AMQP URL and disable (encourage migration)
-	if strings.HasPrefix(brokersOrURL, "amqp://") {
-		log.Printf("⚠️  Detected legacy AMQP URL %s - event consumer disabled. Set KAFKA_BROKERS instead.", brokersOrURL)
 		return &EventConsumer{enabled: false}, nil
 	}
 

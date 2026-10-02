@@ -92,7 +92,7 @@ func ComputeAndMergeAnomalies(ctx context.Context, req ComputeRequest) error {
 	return nil // Implementation in activities.go
 }
 
-// PublishCompletionEvent emits RabbitMQ event for downstream systems
+// PublishCompletionEvent emits a Kafka event for downstream systems
 func PublishCompletionEvent(ctx context.Context, req ComputeRequest) error {
 	return nil // Implementation in activities.go
 }

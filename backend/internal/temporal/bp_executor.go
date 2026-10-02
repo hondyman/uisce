@@ -456,17 +456,16 @@ func LogBPStepExecutionActivity(ctx context.Context, instanceID string, stepNumb
 // ============================================================================
 // ACTIVITY: PublishBPEventActivity
 // ============================================================================
-// Publishes a BP event to RabbitMQ/message broker
+// Publishes a BP event to the message broker (Kafka)
 func PublishBPEventActivity(ctx context.Context, instanceID string, eventType string, data map[string]interface{}) error {
 	log.Printf("[PublishBPEvent] Publishing event %s for instance %s", eventType, instanceID)
-	// TODO: Integrate with RabbitMQ
+	// TODO: Publish to Kafka
 	// event := map[string]interface{}{
 	//     "event_type": eventType,
 	//     "instance_id": instanceID,
 	//     "data": data,
 	//     "timestamp": time.Now(),
 	// }
-	// amqpChan.Publish(...)
 	return nil
 }
 
