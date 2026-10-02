@@ -8911,7 +8911,7 @@
       "type": "object"
     },
     "InstanceCommandHandler": {
-      "description": "InstanceCommandHandler handles all CRUD commands for Business Object Instances\nThis follows the same pattern as BOCommandHandler for consistency and scalability\n\nArchitecture:\n- Receives CRUD commands from the command bus (RabbitMQ)\n- Extracts business logic from HTTP handlers\n- Executes service layer operations (CreateInstance, UpdateInstance, DeleteInstance)\n- Publishes events to the event store for audit trail and event sourcing\n- Returns CommandResponse with status and result data\n\nThis handler is registered with the CommandConsumer and routes:\n- command.instance.create -\u003e HandleCreateInstance\n- command.instance.update -\u003e HandleUpdateInstance\n- command.instance.delete -\u003e HandleDeleteInstance",
+      "description": "InstanceCommandHandler handles all CRUD commands for Business Object Instances\nThis follows the same pattern as BOCommandHandler for consistency and scalability\n\nArchitecture:\n- Receives CRUD commands from the command bus (Kafka)\n- Extracts business logic from HTTP handlers\n- Executes service layer operations (CreateInstance, UpdateInstance, DeleteInstance)\n- Publishes events to the event store for audit trail and event sourcing\n- Returns CommandResponse with status and result data\n\nThis handler is registered with the CommandConsumer and routes:\n- command.instance.create -\u003e HandleCreateInstance\n- command.instance.update -\u003e HandleUpdateInstance\n- command.instance.delete -\u003e HandleDeleteInstance",
       "properties": {
         "audit": {},
         "boService": {},

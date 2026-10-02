@@ -335,7 +335,7 @@ func NotificationActivity(ctx context.Context, tenantID string, message string, 
 	logger := activity.GetLogger(ctx)
 	logger.Info("📧 Sending notification", "message", message)
 
-	// In production: send via RabbitMQ, email, Slack, etc
+	// In production: send via Kafka, email, Slack, etc
 	return map[string]interface{}{
 		"sent":      true,
 		"channel":   "email",

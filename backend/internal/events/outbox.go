@@ -73,8 +73,7 @@ func ProcessOutbox(ctx context.Context, db *sqlx.DB, publisher *KafkaPublisher) 
 		}
 
 		// The publisher should implement a generic publish method (e.g., `PublishToTopic(ctx, topic, key, payload)`)
-		// Prefer `KafkaPublisher` which exposes `PublishToTopic` for generic payloads. If using legacy `RabbitMQPublisher`,
-		// provide an adapter or wrapper to maintain parity with Kafka publishing semantics.
+		// Use `KafkaPublisher`, which exposes `PublishToTopic` for generic payloads.
 		// Publish via configured publisher implementation
 		err = publisher.publishEvent(ctx, EventType(evt.EventType), payloadMap)
 

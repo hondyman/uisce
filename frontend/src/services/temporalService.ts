@@ -23,15 +23,6 @@ export async function listExecutions(limit?: number) {
   return res.json()
 }
 
-export async function fetchAMQPMetrics() {
-  const res = await apiClient(`_debug/amqp-metrics`)
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`AMQP metrics failed: ${res.status} ${text}`)
-  }
-  return res.json()
-}
-
 export async function fetchTriggerEvents() {
   const res = await apiClient(`v1/triggers/events`)
   if (!res.ok) return []
@@ -86,7 +77,6 @@ export async function terminateWorkflow(workflowId: string, reason?: string) {
 
 export default {
   listExecutions,
-  fetchAMQPMetrics,
   fetchTriggerEvents,
   publishTestEvent,
   signalWorkflow,

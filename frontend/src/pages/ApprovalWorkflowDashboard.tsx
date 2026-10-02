@@ -435,7 +435,7 @@ export const ApprovalWorkflowDashboard: React.FC = () => {
                 <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg font-mono text-sm">
                   <p className="text-gray-600 dark:text-gray-400">Required environment variables:</p>
                   <pre className="text-gray-900 dark:text-gray-100 mt-2 whitespace-pre-wrap break-words">{`TEMPORAL_SERVER_HOST=localhost:7233
-RABBITMQ_URL=amqp://guest:guest@localhost:5672
+KAFKA_BROKERS=localhost:9092
 DATABASE_URL=postgresql://user:pass@localhost:5432/wealth_db`}</pre>
                 </div>
 

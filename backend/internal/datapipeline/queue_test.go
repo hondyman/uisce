@@ -15,7 +15,7 @@ func TestQueueSourceConfigValidate(t *testing.T) {
 		t.Fatalf("expected valid: %v", errs)
 	}
 
-	bad, _ := json.Marshal(QueueSourceConfig{Broker: "rabbitmq", TopicOrQueue: "x"})
+	bad, _ := json.Marshal(QueueSourceConfig{Broker: "unknown-broker", TopicOrQueue: "x"})
 	n.Config = bad
 	if errs := validateNodeConfig(&n); len(errs) == 0 {
 		t.Fatal("expected invalid broker")

@@ -247,7 +247,7 @@ func (wabe *WorkflowABACEngine) checkApprovalStatus(req WorkflowABACEvaluationRe
 	return false, nil
 }
 
-// logABACDecision logs ABAC evaluation decisions to RabbitMQ for compliance
+// logABACDecision logs ABAC evaluation decisions to Kafka for compliance
 func (wabe *WorkflowABACEngine) logABACDecision(req WorkflowABACEvaluationRequest, decision, reason, policyID string) {
 	event := map[string]interface{}{
 		"event_type":    "workflow_abac_decision",
