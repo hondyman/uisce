@@ -33,6 +33,11 @@ const (
 	allCopyConcurrency = 5
 )
 
+// AuditCopyWorkflowID is the one workflow id a tenant's audit copy runs under, for the scheduled run's
+// children AND for a run started by hand through the API. Sharing it is what keeps it to ONE writer per
+// tenant at a time: an Iceberg append is not idempotent.
+func AuditCopyWorkflowID(tenantID string) string { return "lakehouse-audit-copy-" + tenantID }
+
 // AuditCopyRunResult is what one tenant's copy run did.
 type AuditCopyRunResult struct {
 	TenantID  string
@@ -119,7 +124,7 @@ func TenantLakehouseAuditCopyAllWorkflow(ctx workflow.Context) (*AuditCopyAllRes
 		futures := make([]workflow.ChildWorkflowFuture, len(chunk))
 		for i, id := range chunk {
 			cctx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-				WorkflowID:            "lakehouse-audit-copy-" + id,
+				WorkflowID:            AuditCopyWorkflowID(id),
 				WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 				ParentClosePolicy:     enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL,
 			})

@@ -29,6 +29,7 @@ import (
 //	GET  /api/system/tenants/{tenantID}/lakehouse/audit      audit trail + chain check
 //	POST /api/system/tenants/{tenantID}/lakehouse/provision  start provisioning
 //	POST /api/system/tenants/{tenantID}/lakehouse/retention/sync  raise the bucket to the retention
+//	POST /api/system/tenants/{tenantID}/lakehouse/audit/copy      copy the audit into the Iceberg warehouse now
 type SystemLakehouseHandler struct {
 	reg  lakehouseRegistry
 	prov LakehouseProvisioner
@@ -56,11 +57,18 @@ type LakehouseProvisioner interface {
 	// registry wants. Unlike provisioning it recurs, so a finished run does not block a new one;
 	// it returns ErrRetentionSyncInProgress while one is running.
 	StartRetentionSync(ctx context.Context, tenantID uuid.UUID, actor registry.Actor) (workflowID string, err error)
+
+	// StartAuditCopy starts copying the tenant's audit into its Iceberg warehouse now, without waiting for
+	// the schedule (ADR-036). It returns ErrAuditCopyInProgress while one is running.
+	StartAuditCopy(ctx context.Context, tenantID uuid.UUID, actor registry.Actor) (workflowID string, err error)
 }
 
 // ErrProvisionInProgress is returned by a LakehouseProvisioner when provisioning
 // for the tenant is already running.
 var ErrProvisionInProgress = errors.New("lakehouse provisioning already in progress")
+
+// ErrAuditCopyInProgress is returned when an audit copy for the tenant is already running.
+var ErrAuditCopyInProgress = errors.New("lakehouse audit copy already in progress")
 
 // ErrRetentionSyncInProgress is returned when a retention sync for the tenant is already running.
 var ErrRetentionSyncInProgress = errors.New("lakehouse retention sync already in progress")
@@ -76,6 +84,7 @@ func (h *SystemLakehouseHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/system/tenants/{tenantID}/lakehouse/audit", h.audit)
 	r.Post("/system/tenants/{tenantID}/lakehouse/provision", h.provision)
 	r.Post("/system/tenants/{tenantID}/lakehouse/retention/sync", h.retentionSync)
+	r.Post("/system/tenants/{tenantID}/lakehouse/audit/copy", h.auditCopy)
 }
 
 // admin returns the caller if they are a global admin, and has already written the
@@ -293,6 +302,41 @@ func (h *SystemLakehouseHandler) retentionSync(w http.ResponseWriter, r *http.Re
 	wfID, err := h.prov.StartRetentionSync(r.Context(), id, actor)
 	if errors.Is(err, ErrRetentionSyncInProgress) {
 		writeLakehouseError(w, http.StatusConflict, "sync_in_progress", "a retention sync is already running for this tenant")
+		return
+	}
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeLakehouseJSON(w, http.StatusAccepted, map[string]any{"workflow_id": wfID, "tenant_id": id.String()})
+}
+
+func (h *SystemLakehouseHandler) auditCopy(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.admin(w, r)
+	if !ok {
+		return
+	}
+	id, ok := tenantParam(w, r)
+	if !ok {
+		return
+	}
+	cfg, err := h.reg.Get(r.Context(), id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if !cfg.Provisioned {
+		writeLakehouseError(w, http.StatusConflict, "not_provisioned", "this tenant has no provisioned warehouse to copy the audit into")
+		return
+	}
+	if h.prov == nil {
+		writeLakehouseError(w, http.StatusServiceUnavailable, "provisioner_unavailable",
+			"lakehouse provisioning is not configured on this server")
+		return
+	}
+	wfID, err := h.prov.StartAuditCopy(r.Context(), id, actor)
+	if errors.Is(err, ErrAuditCopyInProgress) {
+		writeLakehouseError(w, http.StatusConflict, "copy_in_progress", "an audit copy is already running for this tenant")
 		return
 	}
 	if err != nil {
