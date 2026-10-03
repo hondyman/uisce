@@ -1207,6 +1207,100 @@ It must never auto-remediate a resource under compliance Object Lock.
   because the contract no longer changes — but a future change to the Monaco
   surface will desync it silently unless the copy is updated in the same commit.
 
+- **C2 (9.2) gates the metric path for PII before a term becomes a column.**
+  The BO path has always cleared a term for reading before handing back a
+  physical column — `boresolver`'s `resolveCol` closure refuses a calc term
+  whose column carries a sensitivity tag above the caller's masking tier
+  (`DetermineMaskingTier` with the request's role and clearance). The metric
+  compiler had no equivalent. Its aggregation case took the authored term
+  straight to a column name:
+
+      colRef := fmt.Sprintf("t0.%s", sanitizeIdentifier(termID))
+
+  so `MetricExpression{TermNodeID: "customer_ssn"}` compiled to
+  `SUM(t0.customer_ssn)` with no error. Measured and pinned by
+  `TestUngatedMetricCompilerIsUnsafe`. `MetricCompiler` held only a `dialect`,
+  so it could not have run the check: it had neither the `BODefinition` carrying
+  `SensitivityTag` nor the request's role and clearance.
+
+  Three decisions, each with a reason:
+
+  - **The gate sits in the compiler, but the requirement sits in the DDL
+    generator.** `MetricTermGate` is consulted for every term a metric reads, and
+    `NewSensitivityTermGate` is the standard implementation — it reuses
+    `resolveTermToField` and the same `boresolver.DetermineMaskingTier` the BO
+    path uses, so a metric and a calc term over the same column are permitted or
+    refused identically. `GenerateCubeMaterializationDDL` **refuses to run
+    ungated**. That asymmetry is deliberate: compilation is also used by the 8.3
+    golden corpus and the equivalence suite, which have no BO and no request
+    context, and making the gate mandatory there would mean changing the corpus
+    — the artifact that has caught a real regression on each of its last three
+    uses — to accommodate a control those tests are not about. The DDL path is
+    where a cleared term becomes a *stored* artifact, and only there is the
+    asymmetry worth paying.
+  - **A refused term must not reach the emitted SQL at all.** The gate runs
+    before `sanitizeIdentifier`, not after, so a refusal cannot leave a partial
+    artifact behind.
+  - **`ErrMetricTermNotPermitted` is distinct from `ErrInvalidMetricFormula`.**
+    The formula is well-formed; it is the data it reaches that is not permitted.
+    The two have different remediation, so they are not the same error.
+
+  **The gate must recurse into calc terms — and the first version did not.**
+  The BO predicate fires *inside* a calc term's expression, on the sensitivity tag
+  of the column that expression references. A metric-path gate that inspected
+  only the term the metric names would therefore miss the exact case the BO rule
+  exists for: a calc term carries no `PhysicalColumn` and usually no
+  `SensitivityTag` of its own, so it passes, and the PII is read one level down.
+
+  That was a real hole in the first implementation of this gate, found before
+  merge rather than after: a metric over calc term `net_per_order`, whose
+  expression reads `customers.ssn`, compiled to `SUM(t0.net_per_order)` with no
+  error. `NewSensitivityTermGate` now takes the calc-term expressions (the same
+  shape as `boresolver.GenerationContext.CalcTermConfigs`) and walks them, with
+  the same two structural guards the BO resolver's `resolveCol` closure carries:
+  a cycle guard and `maxMetricCalcTermDepth`, matched to the BO path's value of
+  `1` so both refuse the same chains. A calc term with **no** preloaded
+  expression is refused rather than permitted — an uninspectable chain is not a
+  clean chain, and permitting it would make "clear the term" mean "clear the term
+  if someone remembered to hand us its expression". The walk
+  (`collectFieldRefs`) panics on an unhandled AST node type rather than skipping
+  it, so a new node cannot become a silently unchecked branch.
+
+  **Equivalence is measured against the reference, not restated.** The BO path's
+  behaviour is already pinned by `boresolver`'s own
+  `TestCalcTerm_MaskingBlocked`, which drives the real generator and asserts the
+  refusal names `REDACT_FULL`. This gate does not re-implement that test: a copy
+  would only assert a reading of the predicate back to itself, and would pass
+  equally happily if the reading were wrong. The metric-side equivalence cases
+  are what pin the two paths together — and they must be built from a **tagged**
+  term at passthrough tier, not an untagged one. An untagged field returns before
+  the tier check is ever consulted, so an equivalence case built from one passes
+  even against a gate that treats "tagged" as "forbidden". Both mutations were
+  run to confirm the tests bite: disabling the calc-term recursion fails four
+  tests, and ignoring the tier fails the passthrough equivalence case.
+
+  **Reachability, stated plainly:** the vulnerable path has **no production
+  caller today**. `CompileMetric` is called only from
+  `CubeDDLGenerator.GenerateCubeMaterializationDDL` (`cube_ddl.go:138`), and
+  `CubeDDLGenerator` is referenced only by its own test. So this is not an
+  active exposure — and that is the argument for landing the gate *now*, before
+  the cube stream wires DDL generation into a deploy path. The gate should be in
+  place before the first materialized view can be built, not after.
+
+  **C0 freeze lifted deliberately, still enforced.** Adding the three funcs
+  broke `TestMetricCompilerDeclaredSurfaceIsFrozen`, whose own message says "C2
+  adds the vm resolver, and that is expected to break this pin — lift the freeze
+  deliberately when it does". The pin was **widened by three named entries** with
+  the rationale recorded in the guard, not deleted: deleting it would have turned
+  the guard off, whereas widening it keeps the next added func failing the test.
+  None of the three adds expression capability — the freeze protects against a
+  second expression system, and these decide only whether a term may be read.
+
+  Still outstanding for C2: routing metric term resolution through the `vm`
+  resolver proper (cycle detection and the calc-term depth cap, which the
+  metric compiler's own cycle detection does not cover), and calc-term lineage
+  edges plus reconciler backfill.
+
 - **Call-site verification for ADR-001 … ADR-010.** The imported entries assert
   no call sites because the original recorded none. Verifying each is
   outstanding; ADR-012 and ADR-013 exist because that verification already

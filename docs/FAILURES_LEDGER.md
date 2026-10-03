@@ -198,3 +198,50 @@ This ledger differs from `AGENTS.md` rules: rules are policy (what not to do); t
 
 ---
 
+## Entry 2026-10-03 — CI base-rate adjudication (PR #347, C1 / 9.1)
+
+**Arc context**: the C1 metric-primitives port was blocked on CI. Two jobs were
+red, and both were diagnosed as defects in the port before either was shown to be
+a pre-existing condition on `main`. Merged as #347 (`353c0b0bf`).
+
+### Incidents
+
+| # | Severity | Description | Root cause |
+|---|---|---|---|
+| 1 | High | **Branch failure attributed to the branch without a base rate.** `Build Frontend` failed 3/3 on the branch while `main` was sampled once — and green. Called a flake, and "8/8 pass locally" was reported as settling it. `main` was in fact red **4 of its last 8** runs with a byte-identical signature, including main's current tip. | Comparing a branch against a single reference run instead of the reference's own history over the same window |
+| 2 | High | **The reproduction run did not match CI's conditions.** CI runs `pnpm test -- --coverage` on the full suite; the local attempt ran one test file with no coverage, and was reported as evidence about CI. | Reproduction conditions chosen for convenience rather than read off the workflow step |
+| 3 | Medium | **A failure-detection helper silently reported success.** The CI poll loop counted failures with `grep -cE '^\S+\s+fail'`, which cannot match a check name containing a space. It returned `fail=0` while `Build Frontend` and `Build Backend` were both red — and that loop was the thing being trusted to decide whether it was safe to merge. | A tool that returns zero because it found nothing is indistinguishable from one that returns zero because it cannot see |
+| 4 | Medium | **A green run was accepted without reading its counts.** The totals are what distinguish a real pass from a suite that dropped tests: `114 passed (114)` versus `113 passed (114)`. | Test totals treated as boilerplate; only the exit code read |
+
+### Positive counter-entry
+
+| # | What the countermeasures caught |
+|---|---|
+| A | **The real defect — which no branch could have caused.** `structuredEditors.test.tsx` rendered 206 widgets in one uninterrupted block. Measured with a 25ms `setInterval` sampler: **zero** timer callbacks across 20,706ms, so the vitest worker could not answer the main thread's `onTaskUpdate` RPC. Under CI's `--coverage` that tipped into `[vitest-worker]: Timeout calling "onTaskUpdate"`, failing the suite with every assertion green — `Test Files 113 passed (114)`, `Tests 662 passed (668)` — and six tests silently unreported. CI blames whichever file ran last, which is how it first read as an assertion failure in an unrelated test. One `await setTimeout(0)` per widget fixed the mechanism: 150 callbacks served, worst block 802ms, +164ms total. |
+| B | **Main's own history supplied the verdict.** Tabulating `Build Frontend` across main's last 8 runs, then reading the log of main's *current tip* failing with the same signature, turned "probably my branch" into "pre-existing, 4 of 8" — the single fact that ended the misattribution. |
+| C | **A metric that measured nothing, caught by reading it.** The first drift sampler reported `0ms` for the fully-blocked case, because a `setInterval` that never fires records zero drift. Counting *ticks* rather than measuring gaps is what made the starvation visible at all. |
+| D | **Golden-artifact mutation check caught a no-op mutation.** Removing an `asl:ignore` marker initially changed nothing, because the replacement comment still contained the literal string `asl:ignore`. Reading the diff instead of trusting "I made the edit" forced a correct second mutation, which reintroduced the type and failed both golden tests. |
+| E | **The 8.3 corpus, for the third consecutive use**, caught a real regression (dropped ADR-026 `NumeratorID`/`DenominatorID`) rather than confirming the port. |
+
+### Verification log
+
+| Date | Check | Result | Tree |
+|---|---|---|---|
+| 2026-10-03 | `go run ./cmd/check-drift` | PASS — schema/types/monaco up to date | PR #347 @ `e77962977` |
+| 2026-10-03 | `go test ./rule-engine/... ./internal/rules/vm/... ./internal/querybuilder/...` | PASS (generate-types, generate-schema, generate-monaco, generate-version, vm, querybuilder incl. 8.3 corpus) | PR #347 @ `e77962977` |
+| 2026-10-03 | `asl:ignore` mutation (marker removed from one type) | Type reappears in all three artifacts; both golden tests FAIL | PR #347 @ `e77962977` |
+| 2026-10-03 | Frontend full suite, pre-fix | 114/114 files, 668/668 tests, exit 0 | PR #347 @ `e77962977` |
+| 2026-10-03 | CI `Build Frontend` on the fix | `114 passed (114)`, `668 passed (668)`, **no Errors line** | PR #347 @ `e77962977` |
+| 2026-10-03 | CI, all checks | 22 pass, 4 skipping, 0 red; `mergeStateStatus: CLEAN` | PR #347 @ `e77962977` |
+
+### Structural notes
+
+| Note | File | Status |
+|---|---|---|
+| **Base-rate rule** — before attributing an intermittent CI failure to a change, tabulate that job's conclusion across the default branch's recent runs. One green reference run is not a base rate. | this ledger | Live |
+| **Poll-loop self-check** — any helper that counts failures must be shown to count a failure. Split on TAB and compare a field; never regex a whole line whose job names may contain spaces. | this ledger | Live |
+| **All-tests-passed means infrastructure** — a red check whose summary shows every test passing is a worker/RPC/timeout/OOM fault. Read the `Errors`/`Unhandled` section, not the totals. | this ledger | Live |
+| **archguard: CI-status helper self-test** | `backend/internal/archguard` | Queued, with a caveat found while filing it: the helper that returned the false zero was a **throwaway polling loop, not committed code** — `scripts/*.sh` contain no CI-status parser. A guard that scans the repo for the bad pattern would therefore have no target and would be decorative. The constructive form is a single committed, tested status parser that future work calls instead of re-typing a regex into an ad-hoc loop. Decide which before implementing. |
+
+---
+

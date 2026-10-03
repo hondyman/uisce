@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hondyman/uisce/backend/internal/boresolver"
 )
 
 func revenueMetric() MetricDefinition {
@@ -53,6 +55,32 @@ func costMetric() MetricDefinition {
 	}
 }
 
+// ddlGen returns a cube DDL generator with the C2 PII gate installed.
+//
+// The generator refuses to run ungated (see
+// TestCubeDDLRequiresTermGate), so every DDL test has to state its position on
+// classification. This installs the REAL gate over a BO holding the untagged
+// terms these tests use, rather than a permit-all stub: a stub would let a
+// regression in term resolution pass unnoticed here, and the point of routing
+// every call site through an explicit gate is that the gate actually runs.
+//
+// Classification behaviour itself is covered in metric_pii_gate_test.go.
+func ddlGen() *CubeDDLGenerator {
+	terms := []string{"notional", "revenue", "cost", "units_sold", "country", "product", "order_date"}
+	bo := &boresolver.BODefinition{ID: "bo_sales", DrivingTable: "sales"}
+	for _, t := range terms {
+		bo.Fields = append(bo.Fields, boresolver.BOField{
+			ID:             "f_" + t,
+			Name:           t,
+			PhysicalColumn: "sales." + t,
+			// SensitivityTag deliberately empty: these are ordinary measures.
+		})
+	}
+	gen := NewCubeDDLGenerator("starrocks")
+	gen.SetTermGate(NewSensitivityTermGate(bo, "admin", "", nil))
+	return gen
+}
+
 func ddlFixture() (CubeDefinition, map[string]MetricDefinition) {
 	cube := sampleCube()
 	cube.Grains = [][]string{{"country", "product", "order_date"}}
@@ -75,7 +103,7 @@ func ddlFixture() (CubeDefinition, map[string]MetricDefinition) {
 // defaults to SUM(notional) and an "oms." schema is assumed, so a cube built
 // from it would compile, parse, and quietly aggregate the wrong column.
 func TestGenerateCubeMaterializationDDL_MatchesMetricDefinitions(t *testing.T) {
-	gen := NewCubeDDLGenerator("starrocks")
+	gen := ddlGen()
 	cube, lookup := ddlFixture()
 
 	got, err := gen.GenerateCubeMaterializationDDL(
@@ -111,7 +139,7 @@ func TestGenerateCubeMaterializationDDL_MatchesMetricDefinitions(t *testing.T) {
 // generator refuses to emit a hardcoded default measure even if a compiled
 // expression somehow produced one.
 func TestGenerateCubeMaterializationDDL_RejectsHardcodedDefault(t *testing.T) {
-	gen := NewCubeDDLGenerator("starrocks")
+	gen := ddlGen()
 	cube, lookup := ddlFixture()
 
 	// A metric whose expression compiles to SUM(notional) but which does not
@@ -135,7 +163,7 @@ func TestGenerateCubeMaterializationDDL_RejectsHardcodedDefault(t *testing.T) {
 // TestGenerateCubeMaterializationDDL_AllowsGenuineNotional confirms the check
 // does not fire on a metric that legitimately aggregates notional.
 func TestGenerateCubeMaterializationDDL_AllowsGenuineNotional(t *testing.T) {
-	gen := NewCubeDDLGenerator("starrocks")
+	gen := ddlGen()
 	cube, lookup := ddlFixture()
 	lookup["m_revenue"] = MetricDefinition{
 		ID:             "m_revenue",
@@ -156,7 +184,7 @@ func TestGenerateCubeMaterializationDDL_AllowsGenuineNotional(t *testing.T) {
 // TestGenerateCubeMaterializationDDL_MissingMetricIsAnError verifies a missing
 // metric is an error rather than a silently omitted column.
 func TestGenerateCubeMaterializationDDL_MissingMetricIsAnError(t *testing.T) {
-	gen := NewCubeDDLGenerator("starrocks")
+	gen := ddlGen()
 	cube, lookup := ddlFixture()
 	delete(lookup, "m_units")
 
@@ -170,7 +198,7 @@ func TestGenerateCubeMaterializationDDL_MissingMetricIsAnError(t *testing.T) {
 // TestGenerateCubeMaterializationDDL_Deterministic verifies content-hash
 // stability, which is what makes deploy idempotent.
 func TestGenerateCubeMaterializationDDL_Deterministic(t *testing.T) {
-	gen := NewCubeDDLGenerator("starrocks")
+	gen := ddlGen()
 	cube, lookup := ddlFixture()
 
 	a, err := gen.GenerateCubeMaterializationDDL("tenant_a", false, cube,
@@ -206,7 +234,7 @@ func TestCubeMaterializationName_GoldIsShared(t *testing.T) {
 
 // TestGenerateCubeMaterializationDDL_ValidatesInput covers the input guards.
 func TestGenerateCubeMaterializationDDL_ValidatesInput(t *testing.T) {
-	gen := NewCubeDDLGenerator("starrocks")
+	gen := ddlGen()
 	cube, lookup := ddlFixture()
 	grain := []string{"country", "product", "order_date"}
 
@@ -240,7 +268,7 @@ func TestGenerateCubeMaterializationDDL_ValidatesInput(t *testing.T) {
 // compiler sorted the operands and the numerator was whichever ID sorted
 // first. See ADR-025.
 func TestGenerateCubeMaterializationDDL_DerivedMetricKeepsOperandOrder(t *testing.T) {
-	gen := NewCubeDDLGenerator("starrocks")
+	gen := ddlGen()
 	cube, lookup := ddlFixture()
 	lookup["m_cost"] = costMetric()
 

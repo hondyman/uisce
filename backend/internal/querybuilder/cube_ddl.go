@@ -42,6 +42,13 @@ type CubeDDLGenerator struct {
 	defaultSchema string
 }
 
+// SetTermGate installs the C2 PII gate used to clear every term a metric reads
+// before it becomes a column in the generated MV. It must be called before
+// GenerateCubeMaterializationDDL; see that method for why it is not optional.
+func (g *CubeDDLGenerator) SetTermGate(gate MetricTermGate) {
+	g.compiler = g.compiler.WithTermGate(gate)
+}
+
 // NewCubeDDLGenerator creates a generator bound to a metric compiler.
 func NewCubeDDLGenerator(dialect string) *CubeDDLGenerator {
 	if strings.TrimSpace(dialect) == "" {
@@ -100,6 +107,20 @@ func (g *CubeDDLGenerator) GenerateCubeMaterializationDDL(
 	}
 	if len(cube.MetricIDs) == 0 {
 		return nil, ErrCubeNoMetrics
+	}
+
+	// Fail closed. This method's output is not a query - it is a CREATE TABLE
+	// MATERIALIZED VIEW, so a term that slips through here does not get masked
+	// at read time, it gets aggregated into a stored artifact that every
+	// downstream consumer of the MV inherits, masked or not. Query-time masking
+	// tiers are not a defence here because the MV is read by things that never
+	// pass through them.
+	//
+	// Generating DDL without a gate would make the C2 PII gate opt-in, and an
+	// opt-in security control on a deploy path is the shape of defect this
+	// gate exists to prevent.
+	if g.compiler.termGate == nil {
+		return nil, fmt.Errorf("cube materialization DDL requires a term gate: call SetTermGate before generating, so every metric term is cleared for reading before it becomes an MV column")
 	}
 
 	// Dimension columns, deduplicated and ordered deterministically so the DDL

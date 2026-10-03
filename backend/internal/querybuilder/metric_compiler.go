@@ -8,11 +8,131 @@ import (
 	"strings"
 
 	"github.com/hondyman/uisce/backend/internal/boresolver"
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 )
+
+// MetricTermGate decides whether a metric may read a term, given the field that
+// term resolves to. It is the metric-path equivalent of the BO path's masking
+// check (boresolver's resolveCol closure), which has always run for calc terms
+// and did not exist here.
+//
+// field is nil when the term does not resolve to a field in the supplied BO,
+// which is itself a refusal: a metric may not name a column the semantic layer
+// does not know about.
+type MetricTermGate func(termNodeID string, field *boresolver.BOField) error
+
+// NewSensitivityTermGate returns the standard gate: a term is permitted only if
+// every column it can reach is passthrough for this caller's role and clearance.
+//
+// It recurses into calc terms, which is the substance of the BO path's rule
+// rather than an addition to it. The BO predicate at
+// boresolver/bo_sql_generator.go:781-787 fires INSIDE a calc term's expression,
+// on the sensitivity tag of the field that expression references. A gate that
+// only inspected the term a metric names would therefore miss precisely the case
+// the BO rule exists for: a calc term carries no PhysicalColumn and usually no
+// SensitivityTag of its own, so it would pass, and the PII would be read one
+// level down. Verified before it was fixed - see the ADR-024 C2 entry.
+//
+// The recursion carries the same two protections the BO resolver's resolveCol
+// closure carries: a cycle guard (a calc term reachable from itself) and a depth
+// cap, so a long or cyclic chain of calc terms cannot walk unboundedly.
+//
+// calcTerms maps a calc term's SemanticTermID to its compiled expression, the
+// same shape as boresolver.GenerationContext.CalcTermConfigs. A nil map means no
+// calc term can be inspected, and a metric naming one is then REFUSED rather than
+// permitted: an uninspectable chain is not a clean chain.
+func NewSensitivityTermGate(boDef *boresolver.BODefinition, userRole, clearanceLevel string, calcTerms map[string]*vm.Expression) MetricTermGate {
+	var walk func(termNodeID string, seen map[string]bool, depth int) error
+	walk = func(termNodeID string, seen map[string]bool, depth int) error {
+		if boDef == nil {
+			return fmt.Errorf("%w: no business object supplied to resolve term %q against", ErrMetricTermNotPermitted, termNodeID)
+		}
+		field, err := resolveTermToField(boDef, termNodeID)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrMetricTermNotPermitted, err)
+		}
+
+		if field.TermType == "calculated" {
+			if seen[field.Name] {
+				return fmt.Errorf("%w: cycle detected: calc term %q is reachable from itself", ErrMetricTermNotPermitted, field.Name)
+			}
+			if depth >= maxMetricCalcTermDepth {
+				return fmt.Errorf("%w: calc term %q exceeds max chaining depth (%d)", ErrMetricTermNotPermitted, field.Name, maxMetricCalcTermDepth)
+			}
+			expr, ok := calcTerms[field.SemanticTermID]
+			if !ok || expr == nil {
+				return fmt.Errorf("%w: calc term %q has no preloaded expression to inspect", ErrMetricTermNotPermitted, field.Name)
+			}
+			seen[field.Name] = true
+			defer delete(seen, field.Name)
+			for _, ref := range collectFieldRefs(expr.Root) {
+				if err := walk(ref, seen, depth+1); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+
+		if field.SensitivityTag == "" {
+			return nil
+		}
+		tier := boresolver.DetermineMaskingTier(field.SensitivityTag, userRole, clearanceLevel)
+		if tier != boresolver.MaskingTierPassthrough {
+			return fmt.Errorf("%w: term %q resolves to %q tagged %q, tier %s at role %q/clearance %q",
+				ErrMetricTermNotPermitted, termNodeID, field.PhysicalColumn, field.SensitivityTag, tier, userRole, clearanceLevel)
+		}
+		return nil
+	}
+	return func(termNodeID string, _ *boresolver.BOField) error {
+		return walk(termNodeID, map[string]bool{}, 0)
+	}
+}
+
+// maxMetricCalcTermDepth caps how many levels of calc-term chaining the gate
+// will walk. It matches the BO resolver's maxCalcTermDepth so the two paths
+// refuse the same chains: a metric may not reach further into calc terms than a
+// calc term may.
+const maxMetricCalcTermDepth = 1
+
+// collectFieldRefs returns every field path an expression references, in
+// walk order. The AST is a closed set of four node types (BinaryExpr, FieldRef,
+// Literal, FuncCall), so this is exhaustive by construction rather than by
+// default - a fifth node type would fail to compile here rather than be
+// silently skipped, which is the failure direction that matters for a security
+// walk: an unvisited branch is an unchecked branch.
+func collectFieldRefs(node vm.ExprNode) []string {
+	switch n := node.(type) {
+	case nil:
+		return nil
+	case *vm.FieldRef:
+		return []string{n.Path}
+	case *vm.BinaryExpr:
+		return append(collectFieldRefs(n.Left), collectFieldRefs(n.Right)...)
+	case *vm.FuncCall:
+		var out []string
+		for _, a := range n.Args {
+			out = append(out, collectFieldRefs(a)...)
+		}
+		return out
+	case *vm.Literal:
+		return nil
+	default:
+		// Unreachable while the AST is the four types above; a new node type
+		// must be handled here or this walk would silently under-report.
+		panic(fmt.Sprintf("collectFieldRefs: unhandled vm node type %T - a security walk must not skip it", node))
+	}
+}
 
 // MetricCompiler compiles metric definitions and AST expressions into safe SQL expressions and arguments.
 type MetricCompiler struct {
 	dialect boresolver.Dialect
+	// termGate is the C2 PII gate. It is consulted for every term a metric
+	// reads. A nil gate means "no classification is available for this
+	// compilation", which is why CubeDDLGenerator refuses to run without one:
+	// emitting physical SQL from an ungated metric is how a PII column gets
+	// materialized. Compile-only callers (the golden corpus, the equivalence
+	// suite) legitimately have no BO and are not affected.
+	termGate MetricTermGate
 }
 
 // NewMetricCompiler creates a new metric compiler instance.
@@ -21,6 +141,23 @@ func NewMetricCompiler(dialect boresolver.Dialect) *MetricCompiler {
 		dialect = boresolver.PostgresDialect{}
 	}
 	return &MetricCompiler{dialect: dialect}
+}
+
+// WithTermGate installs the PII gate and returns the compiler, so a gate cannot
+// be forgotten at a call site that then looks configured.
+func (mc *MetricCompiler) WithTermGate(gate MetricTermGate) *MetricCompiler {
+	mc.termGate = gate
+	return mc
+}
+
+// checkTerm applies the gate if one is installed. A nil gate is a no-op here by
+// design; the fail-closed decision belongs to the DDL generator, which is the
+// only caller that turns compiled output into a physical artifact.
+func (mc *MetricCompiler) checkTerm(termNodeID string) error {
+	if mc.termGate == nil {
+		return nil
+	}
+	return mc.termGate(termNodeID, nil)
 }
 
 // CompiledMetricResult contains the SQL expression and parameterized arguments.
@@ -61,6 +198,14 @@ func (mc *MetricCompiler) compileMetricWithCycleDetection(
 		termID := m.Expression.TermNodeID
 		if termID == "" {
 			return nil, fmt.Errorf("%w: aggregation metric requires termNodeId", ErrInvalidMetricFormula)
+		}
+		// C2 PII gate. This is the only point in the metric compiler where an
+		// authored term becomes a physical column name, so it is the only point
+		// at which the term has to be cleared for reading. It runs before the
+		// identifier is sanitized into SQL rather than after, so a refused term
+		// never reaches the emitted string at all.
+		if err := mc.checkTerm(termID); err != nil {
+			return nil, fmt.Errorf("metric %s (%s): %w", m.ID, m.Name, err)
 		}
 		// Render aggregation column: e.g. SUM(t0.price)
 		colRef := fmt.Sprintf("t0.%s", sanitizeIdentifier(termID))
