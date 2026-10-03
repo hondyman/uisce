@@ -11,6 +11,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/iceberg"
 	"github.com/hondyman/uisce/backend/internal/provisioning"
+	"github.com/jackc/pgx/v5"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
@@ -108,6 +109,9 @@ func (a *TenantProvisioningActivities) RollbackRegisterInstance(ctx context.Cont
 }
 
 func (a *TenantProvisioningActivities) CreateTenantDatabase(ctx context.Context, databaseName string) error {
+	if err := provisioning.ValidateDatabaseName(databaseName); err != nil {
+		return err
+	}
 	a.Logger.Infof("Creating database: %s", databaseName)
 
 	dbURL := os.Getenv("DATABASE_URL")
@@ -141,7 +145,7 @@ func (a *TenantProvisioningActivities) CreateTenantDatabase(ctx context.Context,
 	}
 	defer db.Close()
 
-	_, err = db.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE %s", databaseName))
+	_, err = db.ExecContext(ctx, "CREATE DATABASE "+pgx.Identifier{databaseName}.Sanitize())
 	if err != nil {
 		if err.Error() == "pq: database \""+databaseName+"\" already exists" {
 			a.Logger.Infof("Database %s already exists, continuing", databaseName)
@@ -155,6 +159,9 @@ func (a *TenantProvisioningActivities) CreateTenantDatabase(ctx context.Context,
 }
 
 func (a *TenantProvisioningActivities) RollbackCreateTenantDatabase(ctx context.Context, databaseName string) error {
+	if err := provisioning.ValidateDatabaseName(databaseName); err != nil {
+		return err
+	}
 	a.Logger.Infof("Rolling back database: %s", databaseName)
 
 	dbURL := os.Getenv("DATABASE_URL")
@@ -188,7 +195,7 @@ func (a *TenantProvisioningActivities) RollbackCreateTenantDatabase(ctx context.
 	}
 	defer dbConn.Close()
 
-	_, err = dbConn.ExecContext(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", databaseName))
+	_, err = dbConn.ExecContext(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{databaseName}.Sanitize())
 	if err != nil {
 		a.Logger.Errorf("Failed to rollback database %s: %v", databaseName, err)
 		return err
@@ -197,6 +204,12 @@ func (a *TenantProvisioningActivities) RollbackCreateTenantDatabase(ctx context.
 }
 
 func (a *TenantProvisioningActivities) CloneSchemaFromGoldCopy(ctx context.Context, input provisioning.CloneSchemaInput) error {
+	if err := provisioning.ValidateDatabaseName(input.SourceDatabase); err != nil {
+		return fmt.Errorf("source database: %w", err)
+	}
+	if err := provisioning.ValidateDatabaseName(input.TargetDatabase); err != nil {
+		return fmt.Errorf("target database: %w", err)
+	}
 	a.Logger.Infof("Cloning schema from %s to %s", input.SourceDatabase, input.TargetDatabase)
 
 	dbHost := os.Getenv("DB_HOST")
