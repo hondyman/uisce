@@ -63,7 +63,7 @@ up:
 	@docker compose -f $(COMPOSE_FILE) up -d
 
 up-minimal:
-	@echo "Starting minimal backend services (rabbitmq, backend)"
+	@echo "Starting minimal backend services (backend)"
 	@./scripts/docker-start.sh up-minimal
 
 .PHONY: dev server down logs

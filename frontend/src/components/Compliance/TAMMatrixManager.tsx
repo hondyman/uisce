@@ -37,8 +37,8 @@ export const TAMMatrixManager: React.FC = () => {
 
   const fetchRules = async () => {
     try {
-      const res = await apiClient.get('/api/compliance/gsifi/tam');
-      const data = await res.json();
+      // apiClient already parses JSON responses.
+      const data = await apiClient<unknown>('/api/compliance/gsifi/tam');
       setRules(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch TAM rules:', error);
@@ -52,8 +52,10 @@ export const TAMMatrixManager: React.FC = () => {
 
   const handleSave = async () => {
     try {
-      await apiClient.post('/api/compliance/gsifi/tam', {
-        body: JSON.stringify(form)
+      await apiClient('/api/compliance/gsifi/tam', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
       });
       setOpenModal(false);
       fetchRules();
@@ -65,7 +67,7 @@ export const TAMMatrixManager: React.FC = () => {
   const handleDelete = async (ruleId: string) => {
     if (!confirm('Are you sure you want to delete this TAM rule?')) return;
     try {
-      await apiClient.delete(`/api/compliance/gsifi/tam/${ruleId}`);
+      await apiClient(`/api/compliance/gsifi/tam/${ruleId}`, { method: 'DELETE' });
       fetchRules();
     } catch (error) {
       console.error('Failed to delete TAM rule:', error);

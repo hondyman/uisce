@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect, KeyboardEvent } from 'react';
 import './ExtendsForm.css';
 import { devLog, devError } from '../../utils/devLogger';
-import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import CoreLeafIcon from '../common/CoreLeafIcon';
 import BuildIcon from '@mui/icons-material/Build';
 
 export interface BaseModelOption {
@@ -134,7 +134,7 @@ const ExtendsForm: React.FC<ExtendsFormProps> = ({ currentBase, options, disable
           <span className={`model-badge ${selectedOption.kind}`} aria-label={selectedOption.kind === 'core' ? 'Core model' : 'Custom model'}>
             {selectedOption.kind === 'core' ? (
               <>
-                <WaterDropIcon sx={{ fontSize: 14, verticalAlign: 'middle', mr: 0.5 }} />
+                <CoreLeafIcon sx={{ fontSize: 14, verticalAlign: 'middle', mr: 0.5 }} />
                 Core
               </>
             ) : (
@@ -166,7 +166,7 @@ const ExtendsForm: React.FC<ExtendsFormProps> = ({ currentBase, options, disable
                 <span className={`item-badge ${opt.kind}`}>
                   {opt.kind === 'core' ? (
                     <>
-                      <WaterDropIcon sx={{ fontSize: 12, verticalAlign: 'middle', mr: 0.25 }} />
+                      <CoreLeafIcon sx={{ fontSize: 12, verticalAlign: 'middle', mr: 0.25 }} />
                       Core
                     </>
                   ) : (

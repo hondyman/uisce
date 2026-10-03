@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -66,16 +67,16 @@ func (qc *QueryCache) Get(query string) (interface{}, bool) {
 	entry, exists := qc.cache[key]
 
 	if !exists {
-		qc.misses++
+		atomic.AddInt64(&qc.misses, 1)
 		return nil, false
 	}
 
 	if time.Now().After(entry.ExpiresAt) {
-		qc.misses++
+		atomic.AddInt64(&qc.misses, 1)
 		return nil, false
 	}
 
-	qc.hits++
+	atomic.AddInt64(&qc.hits, 1)
 	return entry.Value, true
 }
 
@@ -108,8 +109,8 @@ func (qc *QueryCache) Clear() {
 	defer qc.mu.Unlock()
 
 	qc.cache = make(map[string]*CacheEntry)
-	qc.hits = 0
-	qc.misses = 0
+	atomic.StoreInt64(&qc.hits, 0)
+	atomic.StoreInt64(&qc.misses, 0)
 }
 
 // Stats returns cache statistics
@@ -117,17 +118,17 @@ func (qc *QueryCache) Stats() map[string]interface{} {
 	qc.mu.RLock()
 	defer qc.mu.RUnlock()
 
-	total := qc.hits + qc.misses
+	total := atomic.LoadInt64(&qc.hits) + atomic.LoadInt64(&qc.misses)
 	hitRate := float64(0)
 	if total > 0 {
-		hitRate = float64(qc.hits) / float64(total) * 100
+		hitRate = float64(atomic.LoadInt64(&qc.hits)) / float64(total) * 100
 	}
 
 	return map[string]interface{}{
 		"size":     len(qc.cache),
 		"max_size": qc.maxSize,
-		"hits":     qc.hits,
-		"misses":   qc.misses,
+		"hits":     atomic.LoadInt64(&qc.hits),
+		"misses":   atomic.LoadInt64(&qc.misses),
 		"total":    total,
 		"hit_rate": fmt.Sprintf("%.1f%%", hitRate),
 	}

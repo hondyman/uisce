@@ -46,9 +46,10 @@ func (h *BOGraphHandler) GetBOGraph(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var tenantID string
+	activeTenant, hasActive := auth.ActiveTenant()
 	switch {
-	case len(auth.TenantIDs) > 0:
-		tenantID = auth.TenantIDs[0]
+	case hasActive:
+		tenantID = activeTenant
 	case auth.IsGlobalAdmin:
 		// Global admins have no fixed tenant — the specific tenant to view
 		// must be explicit, never inferred, so a mistaken/blank value can't

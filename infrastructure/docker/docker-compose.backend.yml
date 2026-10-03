@@ -1,5 +1,4 @@
 services:
-  # Redpanda - Kafka-compatible message broker (replaces RabbitMQ)
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest
     platform: linux/amd64

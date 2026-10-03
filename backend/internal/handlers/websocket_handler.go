@@ -11,6 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/hondyman/uisce/backend/internal/events"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 // ============================================================================
@@ -43,17 +44,27 @@ func NewWebSocketEventHandler(broker *events.EventStreamBroker, securityDeps Sec
 
 // ServeHTTP handles WebSocket upgrade and streaming
 func (h *WebSocketEventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	tenantID := strings.TrimSpace(r.URL.Query().Get("tenant_id"))
-	if tenantID == "" {
-		tenantID = strings.TrimSpace(r.URL.Query().Get("tenantId"))
+	// The tenant comes from the verified identity only. A tenant_id query parameter
+	// is a request (browsers cannot set headers on a WebSocket), honored only if the
+	// caller is authorized for it; it is never used directly. This stream is scoped
+	// by tenant, so no region-scoped security context is needed (or possible).
+	auth, ok := security.AuthInfoFromContext(r.Context())
+	if !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
 	}
-	if tenantID == "" {
-		secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
-		if err != nil {
-			http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
-			return
+	requested := strings.TrimSpace(r.URL.Query().Get("tenant_id"))
+	if requested == "" {
+		requested = strings.TrimSpace(r.URL.Query().Get("tenantId"))
+	}
+	tenantID, resolved := security.ResolveTenantID(auth, requested)
+	if !resolved {
+		if requested != "" {
+			http.Error(w, "forbidden: not authorized for this tenant", http.StatusForbidden)
+		} else {
+			http.Error(w, "unauthorized: no tenant established for this request", http.StatusUnauthorized)
 		}
-		tenantID = secCtx.TenantID
+		return
 	}
 
 	// Parse regions parameter (comma-separated)

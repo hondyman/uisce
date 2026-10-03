@@ -40,6 +40,7 @@ func setupBundleTestEnv(t *testing.T, tenantID, userID string) (*SavedQueryHandl
 		req := httptest.NewRequest(method, path, bodyReader)
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Datasource-Id", "ds-1")
+		req.Header.Set("X-Region", "us-east-1") // a real client states its region; there is no default
 		auth := security.AuthInfo{
 			TenantIDs: []string{tenantID},
 			UserID:    userID,

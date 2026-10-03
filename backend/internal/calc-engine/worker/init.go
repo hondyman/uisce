@@ -22,7 +22,6 @@ type TemporalWorkerConfig struct {
 	TaskQueue        string
 	DB               *sql.DB
 	KafkaBrokers     string // e.g. "redpanda:9092"
-	RabbitURL        string // Deprecated: Kept for compatibility if caller hasn't updated
 }
 
 // InitializeTemporalWorker sets up Temporal client, registers workflows/activities, and starts worker
@@ -41,9 +40,6 @@ func InitializeTemporalWorker(cfg TemporalWorkerConfig) (client.Client, worker.W
 	// Initialize Kafka writer if brokers provided
 	var kafkaWriter *kafka.Writer
 	brokers := cfg.KafkaBrokers
-	// Fallback to RabbitURL value if set and KafkaBrokers not (assuming migration hasn't updated config source yet, though it should)
-	// Actually, RabbitURL is amqp://... so we can't use it.
-	// We'll rely on cfg.KafkaBrokers.
 	if brokers == "" {
 		brokers = "redpanda:9092" // Default
 	}

@@ -42,17 +42,6 @@ func NewKafkaListener(brokers string, queueName string, handler MessageHandler) 
 	}, nil
 }
 
-// Deprecated: Compat wrapper for RabbitMQListener style
-func NewRabbitMQListener(url string, queueName string, handler MessageHandler) (*KafkaListener, error) {
-	// Extract brokers from url? No, can't easily.
-	// We'll rely on default env var or assume url IS brokers if it doesn't look like amqp://
-	// But usually this is called with config.
-	// We'll hardcode default Redpanda for now or panic.
-	// Better: assume global default or pass explicit brokers.
-	brokers := "redpanda:9092"
-	return NewKafkaListener(brokers, queueName, handler)
-}
-
 func (l *KafkaListener) Start(ctx context.Context) error {
 	log.Printf(" [*] Waiting for messages in %s (Kafka).", l.topic)
 

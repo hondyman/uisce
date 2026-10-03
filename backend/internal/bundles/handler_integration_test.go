@@ -14,30 +14,31 @@ import (
 )
 
 func TestReloadGuardrailsHandler_Integration(t *testing.T) {
-	// create temp YAML file
-	yaml := `sod_pairs:
-  - ["a","b"]
-certified:
-  - "c"
-`
-	tmp, err := os.CreateTemp("", "guardrails-*.yaml")
-	if err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write([]byte(yaml)); err != nil {
-		t.Fatalf("write tmp: %v", err)
-	}
-	if err := tmp.Close(); err != nil {
-		t.Fatalf("close tmp: %v", err)
+	// Guardrails are DB-only; there is no YAML file to stage. This test used
+	// to write a temp guardrails.yaml and point GUARDRAILS_PATH at it, which
+	// asserted a fallback path that no longer exists. Removing that fallback
+	// turned this into a genuinely DB-backed test, so it now needs a real
+	// database -- the table it reads is created by migration
+	// 20261205_001, not by application code (ADR-024).
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL is not set; this test needs a real database")
 	}
 
-	// set env to point to tmp file so loadGuardrails will pick it up (when DB nil)
-	op := os.Getenv("GUARDRAILS_PATH")
-	defer os.Setenv("GUARDRAILS_PATH", op)
-	os.Setenv("GUARDRAILS_PATH", tmp.Name())
+	// resolvePolicyDBDSNs consults config.yaml *before* DATABASE_URL, and the
+	// tracked backend/config.yaml points at a private host. Left alone, this
+	// test burns a TCP timeout on that host before falling through to the
+	// database CI actually bootstrapped. POLICY_DB_URL is first in the
+	// candidate list, so setting it makes the target explicit and immediate.
+	t.Setenv("POLICY_DB_URL", dsn)
 
-	// Create router and mount handlers
+	// InitDBFromConfig memoises into a package-level singleton and returns it
+	// without re-resolving, so a connection left over from an earlier test
+	// would silently win over the DSN we just set. Reset it either side.
+	previous := db
+	db = nil
+	t.Cleanup(func() { db = previous })
+
 	r := chi.NewRouter()
 	RegisterRoutes(r)
 
@@ -68,11 +69,9 @@ certified:
 	if resp.Cache.Config == nil {
 		t.Fatalf("cache config nil")
 	}
-	if len(resp.Cache.Config.SoDPairs) != 1 || len(resp.Cache.Config.Certified) != 1 {
-		t.Fatalf("unexpected cache contents: %+v", resp.Cache.Config)
-	}
-	if resp.Cache.Source != "yaml" {
-		t.Fatalf("expected source yaml, got %s", resp.Cache.Source)
+	// Source is never "yaml" now: the DB is the only supported source.
+	if resp.Cache.Source == "yaml" {
+		t.Fatalf("yaml must no longer be a possible source, got %q", resp.Cache.Source)
 	}
 	if resp.Cache.LastLoaded.IsZero() {
 		t.Fatalf("expected last_loaded to be set")

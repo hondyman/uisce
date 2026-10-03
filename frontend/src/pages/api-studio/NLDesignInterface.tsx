@@ -42,7 +42,7 @@ const NLDesignInterface: React.FC<NLDesignInterfaceProps> = ({ tenantId, onPropo
         setPrompt('');
 
         try {
-            const proposal = await ApiStudioApi.generateEndpointWithAI(currentPrompt, tenantId);
+            const proposal = await ApiStudioApi.generateEndpointWithAI(currentPrompt);
             setMessages(prev => [...prev, { 
                 role: 'assistant', 
                 content: `Architected the "${proposal.name}" endpoint. I've optimized the filters and fields based on the semantic layer mapping. You can review the full spec in the editor.` 

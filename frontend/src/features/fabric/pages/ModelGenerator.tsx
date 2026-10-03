@@ -32,7 +32,7 @@ const ModelGenerator: React.FC = () => {
   const tenantId = (tenant as any)?.id || '';
   const datasourceId = (datasource as any)?.id || '';
   const shouldInitCatalog = Boolean(tenantId && datasourceId);
-  const { models: catalogModels, selectedModel: catalogSelectedModel, setSelectedModel: setCatalogSelectedModel, createCustomModel } = useModelCatalog(shouldInitCatalog ? tenantId : 'skip', shouldInitCatalog ? datasourceId : 'skip');
+  const { models: catalogModels, selectedModel: catalogSelectedModel, setSelectedModel: setCatalogSelectedModel, createCustomModel } = useModelCatalog();
   const [nodes, setNodes] = useState<FlowNode[]>([]);
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [generatedJson, setGeneratedJson] = useState<string>('');

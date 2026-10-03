@@ -62,7 +62,7 @@ func main() {
 
 	// Fail-closed startup assertion: unsafe dev-only flags must not be active
 	// in production. ENVIRONMENT must be explicitly "development", "local", or "test"
-	// to permit ALLOW_CLIENT_TENANT_HEADER_FALLBACK or API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK.
+	// to permit API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK or TEMPORAL_DISABLED.
 	// An unset or unknown ENVIRONMENT is treated as production (fail-closed).
 	if err := api.AssertProductionConfig(); err != nil {
 		log.Fatalf("FATAL: production config assertion failed: %v", err)

@@ -3,7 +3,9 @@ package analytics
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"log"
+	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -216,20 +218,112 @@ func (s *PreAggInvalidationService) getRecursiveDependents(ctx context.Context, 
 
 // --- Scheduler ---
 
+// SchedulerMode controls how PreAggScheduler.Tick treats a due node.
+type SchedulerMode string
+
+const (
+	// SchedulerModeShadow evaluates due-ness and logs what it would do, but
+	// performs no refresh and no lifecycle transition. This is the default so
+	// that activating the scheduler cannot change behavior for tenants that
+	// never opted into the feature.
+	SchedulerModeShadow SchedulerMode = "shadow"
+
+	// SchedulerModeEnabled performs the refresh. Opt-in via
+	// PREAGG_SCHEDULER_ENABLED=true.
+	SchedulerModeEnabled SchedulerMode = "enabled"
+)
+
+// TickReport summarizes one scheduling cycle. It exists so callers (and tests)
+// can observe what a tick decided without inferring it from logs.
+type TickReport struct {
+	Mode         SchedulerMode
+	Scanned      int
+	SkippedManual int
+	NotDue       int
+	// Refreshed holds node IDs that were actually refreshed (enabled mode only).
+	Refreshed []uuid.UUID
+	// WouldRefresh holds node IDs that are due and eligible. In shadow mode
+	// this is the entire set of actions taken; in enabled mode it is the same
+	// set as Refreshed.
+	WouldRefresh []uuid.UUID
+	// Failed holds node IDs whose refresh failed.
+	Failed []uuid.UUID
+	// ParseErrors counts nodes whose properties could not be parsed.
+	ParseErrors int
+}
+
 // PreAggScheduler handles scheduled refresh of pre-aggregations.
 type PreAggScheduler struct {
 	db        *sqlx.DB
 	lifecycle *PreAggLifecycleService
 	preAggSvc *PreAggregationService
+	mode      SchedulerMode
+	// onFailure, when set, is invoked whenever a refresh transitions a node to
+	// failed. A scheduler that fails silently turns staleness from an edge case
+	// into the steady state, so failures must be surfaced.
+	onFailure func(nodeID uuid.UUID, err error)
+	// now is injectable for deterministic tests; defaults to time.Now.
+	now func() time.Time
 }
 
 func NewPreAggScheduler(db *sqlx.DB, lifecycle *PreAggLifecycleService, preAggSvc *PreAggregationService) *PreAggScheduler {
-	return &PreAggScheduler{db: db, lifecycle: lifecycle, preAggSvc: preAggSvc}
+	return &PreAggScheduler{
+		db:        db,
+		lifecycle: lifecycle,
+		preAggSvc: preAggSvc,
+		mode:      SchedulerModeShadow,
+		now:       func() time.Time { return time.Now().UTC() },
+	}
+}
+
+// SetMode selects shadow or enabled behavior. Unknown values are coerced to
+// shadow: an unparseable configuration must never silently start refreshing.
+func (s *PreAggScheduler) SetMode(m SchedulerMode) {
+	if m != SchedulerModeEnabled {
+		s.mode = SchedulerModeShadow
+		return
+	}
+	s.mode = SchedulerModeEnabled
+}
+
+// Mode reports the current scheduling mode.
+func (s *PreAggScheduler) Mode() SchedulerMode { return s.mode }
+
+// SchedulerModeFromEnv maps the PREAGG_SCHEDULER_ENABLED environment value to
+// a mode. Only the exact string "true" enables, matching the existing
+// CBO_ENABLED feature-flag precedent. Anything else — including a typo such as
+// "TRUE" or "1" — resolves to shadow, because a misconfigured flag must never
+// silently start refreshing production materializations.
+func SchedulerModeFromEnv(value string) SchedulerMode {
+	if strings.TrimSpace(value) == "true" {
+		return SchedulerModeEnabled
+	}
+	return SchedulerModeShadow
+}
+
+// Enabled reports whether refreshes will actually be performed.
+func (s *PreAggScheduler) Enabled() bool { return s.mode == SchedulerModeEnabled }
+
+// SetFailureHook installs the callback invoked on refresh failure.
+func (s *PreAggScheduler) SetFailureHook(fn func(nodeID uuid.UUID, err error)) {
+	s.onFailure = fn
+}
+
+// SetClock overrides the time source (tests).
+func (s *PreAggScheduler) SetClock(now func() time.Time) {
+	if now != nil {
+		s.now = now
+	}
 }
 
 // Tick runs one scheduling cycle, refreshing due pre-aggregations.
-func (s *PreAggScheduler) Tick(ctx context.Context) error {
-	now := time.Now().UTC()
+//
+// In shadow mode it is strictly read-only: it reports what it would do and
+// returns without mutating any node. That property is what makes this safe to
+// turn on globally (test #14).
+func (s *PreAggScheduler) Tick(ctx context.Context) (*TickReport, error) {
+	now := s.now()
+	report := &TickReport{Mode: s.mode}
 
 	// Load all pre_aggregation nodes
 	var nodes []struct {
@@ -243,45 +337,78 @@ func (s *PreAggScheduler) Tick(ctx context.Context) error {
 		WHERE nt.catalog_type_name = 'pre_aggregation'
 	`)
 	if err != nil {
-		return err
+		return report, err
 	}
+	report.Scanned = len(nodes)
 
 	for _, n := range nodes {
 		props, err := models.ParsePreAggProperties(n.Properties)
 		if err != nil {
+			report.ParseErrors++
 			continue
 		}
 
-		// Skip manual refresh
+		// Skip manual refresh. This is the per-node kill switch: an operator
+		// can freeze an individual pre-agg (or cube) regardless of the global
+		// mode.
 		if props.RefreshStrategy == "manual" {
+			report.SkippedManual++
 			continue
 		}
 
 		// Skip if not due
 		if !s.isDueForRefresh(props, now) {
+			report.NotDue++
+			continue
+		}
+
+		// Shadow mode: report the intended action and change nothing. This is
+		// the operational evidence that the catalog scan and due-logic work
+		// against real data before any refresh is permitted.
+		if s.mode != SchedulerModeEnabled {
+			report.WouldRefresh = append(report.WouldRefresh, n.ID)
+			log.Printf("[PreAggScheduler] shadow: would refresh pre-agg %s (strategy=%q interval_min=%d lifecycle=%q)",
+				n.ID, props.RefreshStrategy, props.RefreshIntervalMinutes, props.LifecycleStatus)
 			continue
 		}
 
 		// Refresh
-		_ = s.lifecycle.MarkRefreshing(ctx, n.ID)
+		report.WouldRefresh = append(report.WouldRefresh, n.ID)
+		if err := s.lifecycle.MarkRefreshing(ctx, n.ID); err != nil {
+			log.Printf("[PreAggScheduler] mark refreshing %s: %v", n.ID, err)
+		}
 		err = s.preAggSvc.Refresh(ctx, n.ID)
 		if err != nil {
-			_ = s.lifecycle.MarkFailed(ctx, n.ID, err)
+			report.Failed = append(report.Failed, n.ID)
+			if markErr := s.lifecycle.MarkFailed(ctx, n.ID, err); markErr != nil {
+				log.Printf("[PreAggScheduler] mark failed %s: %v", n.ID, markErr)
+			}
+			// Surface the failure. Recording it in catalog properties alone
+			// lets a broken materialization degrade silently.
+			log.Printf("[PreAggScheduler] refresh FAILED for pre-agg %s: %v", n.ID, err)
+			if s.onFailure != nil {
+				s.onFailure(n.ID, err)
+			}
 			continue
 		}
+		report.Refreshed = append(report.Refreshed, n.ID)
 
 		// Mark active (stats would come from StarRocks in production)
 		var stats *models.PreAggStats = nil // TODO: Fetch from StarRocks
-		_ = s.lifecycle.MarkActive(ctx, n.ID, stats)
+		if err := s.lifecycle.MarkActive(ctx, n.ID, stats); err != nil {
+			log.Printf("[PreAggScheduler] mark active %s: %v", n.ID, err)
+		}
 
 		// Schedule next refresh
 		if props.RefreshIntervalMinutes > 0 {
 			next := now.Add(time.Duration(props.RefreshIntervalMinutes) * time.Minute)
-			_ = s.lifecycle.UpdateNextScheduledRefresh(ctx, n.ID, next)
+			if err := s.lifecycle.UpdateNextScheduledRefresh(ctx, n.ID, next); err != nil {
+				log.Printf("[PreAggScheduler] schedule next %s: %v", n.ID, err)
+			}
 		}
 	}
 
-	return nil
+	return report, nil
 }
 
 func (s *PreAggScheduler) isDueForRefresh(p *models.PreAggProperties, now time.Time) bool {
@@ -297,19 +424,60 @@ func (s *PreAggScheduler) isDueForRefresh(p *models.PreAggProperties, now time.T
 	return !now.Before(*p.NextScheduledRefresh)
 }
 
-// Start begins the scheduler loop (blocking).
+// jitteredInterval applies ±jitterPercent to base. A flat ticker makes every
+// cell scan and refresh on the same instant, which turns a long history into a
+// thundering herd against StarRocks. Returns base unchanged for non-positive
+// input or zero jitter.
+func jitteredInterval(base time.Duration, jitterPercent float64, randSrc func() float64) time.Duration {
+	if base <= 0 || jitterPercent <= 0 {
+		return base
+	}
+	if randSrc == nil {
+		randSrc = rand.Float64
+	}
+	// rand.Float64 ∈ [0,1) → factor ∈ [1-jitter, 1+jitter)
+	factor := 1 + jitterPercent*(2*randSrc()-1)
+	jittered := time.Duration(float64(base) * factor)
+	if jittered < time.Millisecond {
+		return time.Millisecond
+	}
+	return jittered
+}
+
+// DefaultPreAggTickInterval is the configured cadence at which the scheduler
+// scans for due materializations. Intervals below this are not expressible:
+// anything faster belongs in the router/staleness layer, the same reasoning as
+// the tile refreshInterval floor.
+const DefaultPreAggTickInterval = 60 * time.Second
+
+// DefaultPreAggTickJitterPercent is ±20% applied to the tick interval.
+const DefaultPreAggTickJitterPercent = 0.20
+
+// Start begins the scheduler loop (blocking). Each cycle is jittered to avoid
+// cross-cell alignment. Respects SchedulerMode: in shadow mode it only logs.
 func (s *PreAggScheduler) Start(ctx context.Context, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	if interval <= 0 {
+		interval = DefaultPreAggTickInterval
+	}
 
 	for {
+		wait := jitteredInterval(interval, DefaultPreAggTickJitterPercent, nil)
+		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return
-		case <-ticker.C:
-			if err := s.Tick(ctx); err != nil {
-				fmt.Printf("PreAggScheduler tick error: %v\n", err)
+		case <-timer.C:
+			report, err := s.Tick(ctx)
+			if err != nil {
+				log.Printf("[PreAggScheduler] tick error: %v", err)
+				continue
+			}
+			if s.mode == SchedulerModeEnabled {
+				log.Printf("[PreAggScheduler] tick: scanned=%d refreshed=%d failed=%d skipped_manual=%d not_due=%d",
+					report.Scanned, len(report.Refreshed), len(report.Failed), report.SkippedManual, report.NotDue)
 			}
 		}
 	}
 }
+

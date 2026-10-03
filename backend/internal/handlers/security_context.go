@@ -37,7 +37,10 @@ func SecurityContextFromRequest(r *http.Request, bodyDatasourceID string, bodyRe
 		region = strings.TrimSpace(r.Header.Get("X-Tenant-Region"))
 	}
 	if region == "" {
-		region = "us-east-1"
+		// No default region: the caller must state it.
+		err := fmt.Errorf("region is required: send X-Region or X-Tenant-Region")
+		logging.GetLogger().Sugar().Warnf("[SecurityContextFromRequest] %v", err)
+		return nil, r.Context(), err
 	}
 	if deps.Resolver == nil {
 		err := fmt.Errorf("datasource resolver not configured (internal error)")
@@ -79,6 +82,7 @@ func SecurityContextFromRequest(r *http.Request, bodyDatasourceID string, bodyRe
 	resolvedTenantID, resolveOK := security.ResolveTenantID(auth, targetTenantID)
 	switch {
 	case resolveOK:
+		auth.ActiveTenantID = resolvedTenantID
 		if len(auth.TenantIDs) == 0 || auth.TenantIDs[0] != resolvedTenantID {
 			auth.TenantIDs = append([]string{resolvedTenantID}, auth.TenantIDs...)
 		}

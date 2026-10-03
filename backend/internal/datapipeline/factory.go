@@ -18,6 +18,8 @@ type Deps struct {
 	Bindings BindingSource
 	// Master masters committed staging loads (master steps; nil: they can't run).
 	Master Masterer
+	// Queues powers queue_source / queue_sink (Kafka/Redpanda/SQS/Service Bus).
+	Queues QueueBroker
 }
 
 // Masterer returns the master step's dependency.
@@ -36,6 +38,8 @@ func (d Deps) Source(n Node) (Source, error) {
 		return newFileSource(n, d.Files)
 	case NodeBOSource:
 		return newBOSource(n, d.BO)
+	case NodeQueueSource:
+		return newQueueSource(n, d.Queues)
 	}
 	return nil, fmt.Errorf("%q is not a source", n.Type)
 }
@@ -58,6 +62,8 @@ func (d Deps) Processor(n Node) (Processor, error) {
 		return newIcebergSink(n, d.Files)
 	case NodeVendorScoring:
 		return newVendorScoringProc(n, d.StagingDB)
+	case NodeQueueSink:
+		return newQueueSink(n, d.Queues)
 	}
 	return nil, fmt.Errorf("%q is not a processing step", n.Type)
 }

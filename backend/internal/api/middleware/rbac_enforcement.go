@@ -342,8 +342,10 @@ func getTenantIDFromRequest(r *http.Request) string {
 	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
 		return claims.TenantID
 	}
-	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
-		return auth.TenantIDs[0]
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok {
+		if active, hasActive := auth.ActiveTenant(); hasActive {
+			return active
+		}
 	}
 	return ""
 }

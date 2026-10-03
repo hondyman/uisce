@@ -10,7 +10,6 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/hondyman/uisce/backend/internal/events"
-	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // TestE2EIncidentLifecycle tests complete incident flow from detection to resolution
@@ -18,7 +17,7 @@ func TestE2EIncidentLifecycle(t *testing.T) {
 	broker := events.NewEventStreamBroker(1000)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
+	wsHandler := newTestWSHandler(broker)
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 
@@ -132,7 +131,7 @@ func TestE2EMultiRegionPropagation(t *testing.T) {
 	broker := events.NewEventStreamBroker(1000)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
+	wsHandler := newTestWSHandler(broker)
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 
@@ -194,7 +193,7 @@ func TestE2ERegionIsolation(t *testing.T) {
 	broker := events.NewEventStreamBroker(1000)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
+	wsHandler := newTestWSHandler(broker)
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 
@@ -251,7 +250,7 @@ func TestE2ETenantIsolation(t *testing.T) {
 	broker := events.NewEventStreamBroker(1000)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
+	wsHandler := newTestWSHandler(broker)
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 
@@ -308,7 +307,7 @@ func TestE2EFailoverFlow(t *testing.T) {
 	broker := events.NewEventStreamBroker(1000)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
+	wsHandler := newTestWSHandler(broker)
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 
@@ -368,7 +367,7 @@ func TestE2EHighVolume(t *testing.T) {
 	broker := events.NewEventStreamBroker(5000)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
+	wsHandler := newTestWSHandler(broker)
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 
@@ -424,7 +423,7 @@ func BenchmarkE2EPipelineThroughput(b *testing.B) {
 	broker := events.NewEventStreamBroker(10000)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
+	wsHandler := newTestWSHandler(broker)
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 

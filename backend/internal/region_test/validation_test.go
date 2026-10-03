@@ -31,7 +31,7 @@ func TestRegionValidation_AllowsRequest_WhenAllowed(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set(region.RegionHeader, "eu-west")
-	req.Header.Set("X-Tenant-ID", "tenant-123")
+	req = asTenant(req, "tenant-123")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -52,7 +52,7 @@ func TestRegionValidation_Blocks_WhenNotAllowed(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set(region.RegionHeader, "eu-west")
-	req.Header.Set("X-Tenant-ID", "tenant-123")
+	req = asTenant(req, "tenant-123")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

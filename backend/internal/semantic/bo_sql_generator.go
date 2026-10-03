@@ -294,7 +294,11 @@ func sanitizeAlias(s string) string {
 }
 
 func (g *GeneratorContext) extractRequiredEntities(req SemanticRequest) ([]*Entity, error) {
-	entityMap := make(map[string]*Entity)
+	// Entities are returned in first-seen order (dimensions, then measures, then
+	// filters). The first one is the FROM base table and the root of the
+	// join-path search, so ranging over a map here made both random per run.
+	seen := make(map[string]bool)
+	result := make([]*Entity, 0, len(req.Dimensions)+len(req.Measures)+len(req.Filters))
 	allRef := append([]string{}, req.Dimensions...)
 	allRef = append(allRef, req.Measures...)
 	for _, f := range req.Filters {
@@ -306,14 +310,10 @@ func (g *GeneratorContext) extractRequiredEntities(req SemanticRequest) ([]*Enti
 		if err != nil {
 			return nil, err
 		}
-		if entity, exists := g.Graph.Entities[attr.EntityID]; exists {
-			entityMap[entity.ID] = entity
+		if entity, exists := g.Graph.Entities[attr.EntityID]; exists && !seen[entity.ID] {
+			seen[entity.ID] = true
+			result = append(result, entity)
 		}
-	}
-
-	result := make([]*Entity, 0, len(entityMap))
-	for _, e := range entityMap {
-		result = append(result, e)
 	}
 	return result, nil
 }

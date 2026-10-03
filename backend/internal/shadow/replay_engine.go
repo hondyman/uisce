@@ -15,27 +15,27 @@ import (
 )
 
 type ShadowJob struct {
-	JobID             uuid.UUID          `json:"job_id"`
-	TenantID          uuid.UUID          `json:"tenant_id"`
-	DraftRuleID       uuid.UUID          `json:"draft_rule_id"`
-	RuleName          string             `json:"rule_name"`
-	Status            string             `json:"status"`
-	TotalEvaluated    int64              `json:"total_evaluated"`
-	ProdPassedCount   int64              `json:"prod_passed_count"`
-	ShadowPassedCount int64              `json:"shadow_passed_count"`
-	HardBlockCount    int64              `json:"hard_block_count"`
-	SoftWarnCount     int64              `json:"soft_warn_count"`
-	DiscrepancyCount  int64              `json:"discrepancy_count"`
+	JobID             uuid.UUID           `json:"job_id"`
+	TenantID          uuid.UUID           `json:"tenant_id"`
+	DraftRuleID       uuid.UUID           `json:"draft_rule_id"`
+	RuleName          string              `json:"rule_name"`
+	Status            string              `json:"status"`
+	TotalEvaluated    int64               `json:"total_evaluated"`
+	ProdPassedCount   int64               `json:"prod_passed_count"`
+	ShadowPassedCount int64               `json:"shadow_passed_count"`
+	HardBlockCount    int64               `json:"hard_block_count"`
+	SoftWarnCount     int64               `json:"soft_warn_count"`
+	DiscrepancyCount  int64               `json:"discrepancy_count"`
 	CompiledProgram   *vm.CompiledProgram `json:"-"`
-	Node              *rules.RuleNode    `json:"-"`
+	Node              *rules.RuleNode     `json:"-"`
 }
 
 type ReplayEngine struct {
-	db          *sql.DB
-	syms        *vm.SymbolDict
-	enums       *vm.EnumDict
-	vm          *vm.VM
-	activeJobs  sync.Map
+	db         *sql.DB
+	syms       *vm.SymbolDict
+	enums      *vm.EnumDict
+	vm         *vm.VM
+	activeJobs sync.Map
 }
 
 func NewReplayEngine(db *sql.DB, syms *vm.SymbolDict, enums *vm.EnumDict) *ReplayEngine {
@@ -102,14 +102,25 @@ func (e *ReplayEngine) ProcessShadowOrder(ctx context.Context, tenantID uuid.UUI
 	}
 
 	record := vm.Project(rawTrade, e.syms, e.enums)
-	defer vm.PutFastRecord(record)
+
+	// The evaluations below run after this call returns, so the pooled record can
+	// only go back once every one of them is done with it.
+	var evals sync.WaitGroup
+	defer func() {
+		go func() {
+			evals.Wait()
+			vm.PutFastRecord(record)
+		}()
+	}()
 
 	for _, job := range jobs {
 		if job.Status != "RUNNING" {
 			continue
 		}
 
+		evals.Add(1)
 		go func(j *ShadowJob) {
+			defer evals.Done()
 			atomic.AddInt64(&j.TotalEvaluated, 1)
 			if prodPassed {
 				atomic.AddInt64(&j.ProdPassedCount, 1)

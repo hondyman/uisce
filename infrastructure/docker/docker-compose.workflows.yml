@@ -36,24 +36,6 @@ services:
   # MESSAGE QUEUE & EVENT PROCESSING
   # ============================================================================
 
-  rabbitmq:
-    image: rabbitmq:3.12-management-alpine
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-    ports:
-      - "5672:5672"     # AMQP port
-      - "15672:15672"   # Management UI
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    networks:
-      - backend
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # ============================================================================
   # TEMPORAL WORKFLOW ENGINE (Optional - for advanced orchestration)
   # ============================================================================
@@ -154,7 +136,6 @@ services:
 
 volumes:
   postgres_data:
-  rabbitmq_data:
   temporal_db:
   prometheus_data:
   grafana_data:
@@ -176,6 +157,5 @@ networks:
 #    - Frontend: http://localhost:3000
 #    - Workflow Service: http://localhost:8082/health
 #    - Screen Builder: http://localhost:8083/health
-#    - RabbitMQ: http://localhost:15672 (guest:guest)
 #    - Temporal UI: http://localhost:8081
 # ============================================================================

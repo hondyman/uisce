@@ -114,13 +114,11 @@ export const UserAccessDetailPage: React.FC = () => {
       const [userRes, accessRes] = await Promise.all([
         apiClient<User>(
           `/rbac/users/${userId}`,
-          {},
-          { tenantId: tenant?.id || '' }
+          {}
         ),
         apiClient<AccessMapping[]>(
           `/rbac/users/${userId}/access`,
-          {},
-          { tenantId: tenant?.id || '' }
+          {}
         ),
       ]);
 
@@ -143,8 +141,7 @@ export const UserAccessDetailPage: React.FC = () => {
     try {
       const data = await apiClient<RoleOption[]>(
         '/rbac/roles',
-        {},
-        { tenantId: tenant?.id || '' }
+        {}
       );
       setRoles(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -173,8 +170,7 @@ export const UserAccessDetailPage: React.FC = () => {
             tenant_instance_id: datasource?.id || null,
             role_key: selectedRole.role_key,
           }),
-        },
-        { tenantId: tenant.id }
+        }
       );
       setIsAddDialogOpen(false);
       fetchData();
@@ -193,8 +189,7 @@ export const UserAccessDetailPage: React.FC = () => {
     try {
       await apiClient(
         `/rbac/users/${userId}/access/${mappingId}`,
-        { method: 'DELETE' },
-        { tenantId: tenant?.id || '' }
+        { method: 'DELETE' }
       );
       fetchData();
     } catch (err) {
@@ -213,8 +208,7 @@ export const UserAccessDetailPage: React.FC = () => {
         {
           method: 'PUT',
           body: JSON.stringify(editForm),
-        },
-        { tenantId: tenant?.id || '' }
+        }
       );
       setIsEditDialogOpen(false);
       fetchData();

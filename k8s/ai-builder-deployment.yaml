@@ -42,20 +42,6 @@ spec:
               key: password
         - name: DB_NAME
           value: "alpha"
-        - name: RABBITMQ_HOST
-          value: "rabbitmq-service"
-        - name: RABBITMQ_PORT
-          value: "5672"
-        - name: RABBITMQ_USER
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-secrets
-              key: username
-        - name: RABBITMQ_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-secrets
-              key: password
         - name: TEMPORAL_HOST
           value: "temporal-frontend:7233"
         - name: PORT

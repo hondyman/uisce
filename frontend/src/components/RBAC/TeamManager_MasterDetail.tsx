@@ -137,7 +137,7 @@ export const TeamManagerMasterDetail: React.FC<TeamManagerProps> = ({ tenant, da
   const fetchTeams = async () => {
     try {
       setLoading(true);
-      const data = await apiClient<Team[]>('/rbac/teams', {}, { tenantId: tenant.id });
+      const data = await apiClient<Team[]>('/rbac/teams', {});
       const teamsArray = Array.isArray(data)
         ? data
         : Array.isArray((data as any)?.teams)
@@ -171,7 +171,7 @@ export const TeamManagerMasterDetail: React.FC<TeamManagerProps> = ({ tenant, da
   // Fetch team members
   const fetchTeamMembers = async (teamId: string) => {
     try {
-      const data = await apiClient<TeamMember[]>(`/rbac/teams/${teamId}/members`, {}, { tenantId: tenant.id });
+      const data = await apiClient<TeamMember[]>(`/rbac/teams/${teamId}/members`, {});
       const membersArray = Array.isArray(data)
         ? data
         : Array.isArray((data as any)?.members)
@@ -189,7 +189,7 @@ export const TeamManagerMasterDetail: React.FC<TeamManagerProps> = ({ tenant, da
   // Fetch users for add member modal
   const fetchUsers = async () => {
     try {
-      const data = await apiClient<User[]>('/rbac/users', {}, { tenantId: tenant.id });
+      const data = await apiClient<User[]>('/rbac/users', {});
       const usersArray = Array.isArray(data)
         ? data
         : Array.isArray((data as any)?.users)
@@ -218,8 +218,7 @@ export const TeamManagerMasterDetail: React.FC<TeamManagerProps> = ({ tenant, da
             description: teamForm.description,
             team_type: teamForm.team_type,
           }),
-        },
-        { tenantId: tenant.id, datasourceId: datasource?.id }
+        }
       );
       await fetchTeams();
       setOpenCreateModal(false);
@@ -256,8 +255,7 @@ export const TeamManagerMasterDetail: React.FC<TeamManagerProps> = ({ tenant, da
         {
           method: 'PUT',
           body: JSON.stringify(editTeamForm),
-        },
-        { tenantId: tenant.id }
+        }
       );
       await fetchTeams();
       setOpenEditModal(false);
@@ -276,8 +274,7 @@ export const TeamManagerMasterDetail: React.FC<TeamManagerProps> = ({ tenant, da
       setSaving(true);
       await apiClient(
         `/rbac/teams/${teamId}`,
-        { method: 'DELETE' },
-        { tenantId: tenant.id }
+        { method: 'DELETE' }
       );
       await fetchTeams();
       if (selectedTeam?.id === teamId) {
@@ -305,8 +302,7 @@ export const TeamManagerMasterDetail: React.FC<TeamManagerProps> = ({ tenant, da
             user_id: memberForm.user_id,
             role_in_team: memberForm.role_in_team,
           }),
-        },
-        { tenantId: tenant.id, datasourceId: datasource?.id }
+        }
       );
       await fetchTeamMembers(selectedTeam.id);
       await fetchTeams();
@@ -327,8 +323,7 @@ export const TeamManagerMasterDetail: React.FC<TeamManagerProps> = ({ tenant, da
       setSaving(true);
       await apiClient(
         `/rbac/teams/${selectedTeam.id}/members/${memberId}`,
-        { method: 'DELETE' },
-        { tenantId: tenant.id }
+        { method: 'DELETE' }
       );
       await fetchTeamMembers(selectedTeam.id);
       await fetchTeams();
@@ -352,8 +347,7 @@ export const TeamManagerMasterDetail: React.FC<TeamManagerProps> = ({ tenant, da
           body: JSON.stringify({
             role_in_team: 'admin',
           }),
-        },
-        { tenantId: tenant.id, datasourceId: datasource?.id }
+        }
       );
       await fetchTeamMembers(selectedTeam.id);
       await fetchTeams();

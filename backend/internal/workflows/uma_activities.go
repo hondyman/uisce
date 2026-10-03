@@ -457,7 +457,7 @@ func (a *UMAActivities) RecordRebalancePlanActivity(ctx context.Context, tenantI
 func (a *UMAActivities) EmitRebalanceCompletedEventActivity(ctx context.Context, input models.UMARebalanceWorkflowInput, plan *models.UMARebalancePlan, executionResult map[string]interface{}) error {
 	log.Printf("📢 Emitting rebalance completed event for plan: %s", plan.ID)
 
-	// TODO: Integrate with your existing event bus (RabbitMQ)
+	// TODO: Integrate with your existing event bus (Kafka)
 	// Example:
 	// event := &events.UMARebalanceCompletedEvent{
 	//   EventID: uuid.New().String(),

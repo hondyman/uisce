@@ -35,6 +35,10 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 	deps := datapipeline.Deps{
 		Rules: &datapipeline.CatalogRuleChecker{Rules: analytics.NewValidationRuleService(sqlxDB)}, // execution path
 		BO:    NewPipelineBOClient(bo),
+		Queues: datapipeline.EnvQueueBroker{
+			SQS:   datapipeline.SQSQueueBroker{},
+			Azure: datapipeline.AzureServiceBusBroker{},
+		},
 	}
 	if u := os.Getenv("DATAPIPELINE_ENGINE_URL"); u != "" {
 		deps.Files = &datapipeline.HTTPFileEngine{BaseURL: u, Token: os.Getenv("DATAPIPELINE_ENGINE_TOKEN")}

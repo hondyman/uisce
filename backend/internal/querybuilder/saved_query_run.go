@@ -59,7 +59,7 @@ func (h *SavedQueryHandler) RunSaved(ctx context.Context, tenantID, userID, data
 		return nil, nil, err
 	}
 	if region == "" {
-		region = "us-east-1"
+		return nil, sq, fmt.Errorf("region is required to run saved query %s", queryID)
 	}
 	secCtx, err := security.BuildContext(ctx, security.AuthInfo{UserID: userID, TenantIDs: []string{tenantID}},
 		security.BuildContextRequest{DatasourceID: datasourceID, Region: region}, h.deps.Resolver)

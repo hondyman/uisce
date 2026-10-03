@@ -87,7 +87,10 @@ services:
       - minio
 
   minio:
-    image: minio/minio:RELEASE.2025-10-15T17-29-55Z
+    build:
+      context: ./docker/minio
+      target: minio
+    image: uisce/minio:RELEASE.2025-10-15T17-29-55Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -175,8 +178,10 @@ services:
 
   auth-service:
     build:
-      context: ./auth-service
-      dockerfile: Dockerfile
+      # auth-service/Dockerfile copies auth-service/package.json and server.js, so it
+      # must be built from the repo root (as docker-compose.local.yml does).
+      context: .
+      dockerfile: auth-service/Dockerfile
     networks:
       - semlayer-net
     ports:

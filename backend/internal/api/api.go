@@ -1144,6 +1144,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		}
 		qbRelationships := analytics.NewRelationshipInferenceService(sqlxDB)
 		qbService := querybuilder.NewQueryService(boGenerator, boResolver, qbRelationships)
+		// Cube routing: uisce decides explicitly which materialization serves a
+		// query, at the Preview seam (ADR-012). StarRocks native rewrite is
+		// diagnostics only. The router degrades to the base BO path on any
+		// failure, so installing it cannot break existing queries.
+		qbService.SetCubeRouter(querybuilder.NewCubeRouter(sqlxDB))
 		// srv.SQLXDB isn't assigned until later in NewServer (line ~1464) -
 		// using it here captured a permanent nil, so QueryBuilderHandler.Execute
 		// always failed its "no database connection" check regardless of which
@@ -1358,6 +1363,36 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	preAggSvc := analytics.NewPreAggregationService(sqlxDB, boContextResolver, mdmGraph)
 	mdmGraph.RegisterChangeListener(analytics.PreAggInvalidationListener(sqlxDB, preAggInvalidationSvc))
 	preAggHandler := handlers.NewPreAggregationHandler(preAggSvc)
+
+	// Pre-aggregation scheduler: the periodic driver for materialization
+	// refresh. PreAggLifecycleService above holds the state machine, but
+	// nothing ticked it - NewPreAggScheduler had no call site, so scheduled
+	// refresh never ran despite Refresh being reachable over HTTP. This is the
+	// wiring-debt payment for the materialization layer (ADR-013); the cube
+	// work is the first consumer that needs it live.
+	//
+	// Three-stage activation, because the blast radius includes tenants who
+	// never opted into cubes:
+	//   1. shadow      - default; reports what it would do, mutates nothing
+	//   2. enabled     - PREAGG_SCHEDULER_ENABLED=true
+	//   3. per-node    - refresh_strategy='manual' freezes one node regardless
+	preAggScheduler := analytics.NewPreAggScheduler(sqlxDB, preAggLifecycleSvc, preAggSvc)
+	preAggScheduler.SetMode(analytics.SchedulerModeFromEnv(os.Getenv("PREAGG_SCHEDULER_ENABLED")))
+	// A refresh that fails silently turns staleness from an edge case into the
+	// steady state, so surface it rather than only recording it in the catalog.
+	preAggScheduler.SetFailureHook(func(nodeID uuid.UUID, err error) {
+		log.Printf("[PreAggScheduler] ALERT: materialization %s refresh failed: %v", nodeID, err)
+	})
+	if preAggScheduler.Enabled() {
+		// Background lifetime follows the surrounding SetupRouter convention
+		// (see the other background workers in this function). The scheduler
+		// exits on context cancellation; Enable-mode callers that need a
+		// bounded lifetime can call SetMode(SchedulerModeShadow) instead.
+		go preAggScheduler.Start(context.Background(), analytics.DefaultPreAggTickInterval)
+		log.Println("[NewServer] PreAggScheduler ENABLED")
+	} else {
+		log.Println("[NewServer] PreAggScheduler in shadow mode (set PREAGG_SCHEDULER_ENABLED=true to enable)")
+	}
 
 	// Validation rules as catalog nodes - the unified-engine replacement
 	// for the retired catalog_validation_rules table (see
@@ -2647,6 +2682,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		// Optionally enforce tenant/datasource scoping if present in claims
 		if t, ok := claims["tenant_id"].(string); ok && t != "" {
 			r.Header.Set("X-Tenant-ID", t)
+		} else {
+			// No tenant in the token: the client's own X-Tenant-ID is not a substitute.
+			r.Header.Del("X-Tenant-ID")
 		}
 		if ds, ok := claims["datasource_id"].(string); ok && ds != "" {
 			r.Header.Set("X-Tenant-Datasource-ID", ds)
@@ -3825,7 +3863,7 @@ func (s *Server) registerTriggerEngineRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 	// Wire full TriggerEngine dependencies and register chi-based trigger routes.
 	abacEngine := &ABACEngine{db: sqlxDB}
 
-	// Try to wire a real AMQP-backed EventBus for production/dev if configured.
+	// Default to a no-op EventBus when none has been configured.
 	if s.EventBus == nil {
 		s.EventBus = &noopEventBus{}
 	}

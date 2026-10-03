@@ -80,7 +80,6 @@ services:
       retries: 3
 
   # Update service envs to use Kafka brokers and depend on redpanda
-  # (replacing direct references to RabbitMQ URL)
 
   redis:
     image: redis:7-alpine

@@ -281,9 +281,6 @@ postgresql:
 redis-cluster:
   enabled: false # Using Azure Cache for Redis
 
-rabbitmq:
-  enabled: false # Using Azure Service Bus
-
 # =============================================================================
 # Observability - Azure Monitor Integration
 # =============================================================================

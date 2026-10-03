@@ -61,7 +61,8 @@ func (h *PortfolioAnalyticsHandler) GetSourceComparison(w http.ResponseWriter, r
 	accountType := q.Get("account_type")
 	region := q.Get("region")
 	if region == "" {
-		region = "NAM"
+		http.Error(w, "region is required", http.StatusBadRequest)
+		return
 	}
 	asOfStr := q.Get("as_of_date")
 	asOf := time.Now()

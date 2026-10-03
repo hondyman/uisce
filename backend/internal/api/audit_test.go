@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hondyman/uisce/backend/internal/security"
 	_ "github.com/lib/pq"
 )
 
@@ -175,7 +176,15 @@ func TestListDispatchAudit_ReturnsRows(t *testing.T) {
 	// Stand up a minimal chi router serving only /api/api-dispatcher/audit.
 	h := &ApiDispatcherHandler{db: db}
 	router := newTestAuditRouter(h)
-	srv := httptest.NewServer(router)
+	// The handler takes its tenant from the verified identity; stand in for
+	// AuthContextMiddleware by authenticating as the row's tenant.
+	authed := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := security.WithAuthInfo(r.Context(), security.AuthInfo{
+			UserID: "test-user", TenantIDs: []string{tenantID}, ActiveTenantID: tenantID,
+		})
+		router.ServeHTTP(w, r.WithContext(ctx))
+	})
+	srv := httptest.NewServer(authed)
 	defer srv.Close()
 
 	url := fmt.Sprintf("%s/api/api-dispatcher/audit?tenant_id=%s&endpoint_id=%s&limit=10", srv.URL, tenantID, endpointID)

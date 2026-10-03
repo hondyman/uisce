@@ -82,7 +82,7 @@ func (h *ProjectionEventHandlerImpl) Start(ctx context.Context) error {
 	// Start Instance event processor
 	go h.processInstanceEvents(ctx)
 
-	// Start event listener (subscribes to RabbitMQ)
+	// Start event listener (subscribes to Kafka)
 	go h.listenToEvents(ctx)
 
 	return nil
@@ -126,7 +126,7 @@ func (h *ProjectionEventHandlerImpl) listenToEvents(ctx context.Context) {
 			return
 		default:
 			// Events would come from EventConsumer subscription here
-			// This is where we'd poll or receive events from RabbitMQ
+			// This is where we'd poll or receive events from Kafka
 			time.Sleep(100 * time.Millisecond)
 		}
 	}

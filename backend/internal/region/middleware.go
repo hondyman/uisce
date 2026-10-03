@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/tenant/goldcopy"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
@@ -160,31 +161,27 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 				return
 			}
 
-			// Get tenant and region from headers / query
-			claims := jwtmiddleware.GetClaimsFromContext(r)
+			// The tenant comes from verified authentication only (token claims, or the
+			// active tenant AuthContextMiddleware established). A tenant named in the
+			// URL path, query string or a header is a client claim and is never used
+			// here: it would let a caller assert the gold-copy tenant to skip the
+			// region requirement. No verified tenant means the request is refused.
 			tenantID := ""
-			if claims != nil {
+			if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
 				tenantID = strings.TrimSpace(claims.TenantID)
 			}
 			if tenantID == "" {
-				tenantID = strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
-			}
-			if tenantID == "" {
-				parts := strings.Split(r.URL.Path, "/")
-				for i, p := range parts {
-					if (p == "tenants" || p == "tenant") && i+1 < len(parts) {
-						if _, err := uuid.Parse(parts[i+1]); err == nil {
-							tenantID = parts[i+1]
-							break
-						}
+				if auth, ok := security.AuthInfoFromContext(r.Context()); ok {
+					if active, hasActive := auth.ActiveTenant(); hasActive {
+						tenantID = active
 					}
 				}
 			}
 			if tenantID == "" {
-				tenantID = r.URL.Query().Get("tenant_id")
-			}
-			if tenantID == "" {
-				tenantID = r.URL.Query().Get("tenantId")
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "no tenant established for this request"})
+				return
 			}
 			region := strings.TrimSpace(r.Header.Get("X-Tenant-Region"))
 
@@ -196,27 +193,18 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 			}
 
 			// For regular tenants: region is required
+			// The region must be stated by the caller; it is never inferred from the
+			// tenant's home region.
 			if region == "" {
-				// Try to infer region from tenant (optional, if using TenantRegionResolver)
-				if resolver, ok := provider.(*TenantRegionResolver); ok {
-					if inferred, ok := resolver.InferRegionForTenant(tenantID); ok {
-						region = inferred
-					}
-				}
-
-				if region == "" {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusBadRequest)
-					_ = json.NewEncoder(w).Encode(map[string]string{"error": "region is required for all semantic operations."})
-					return
-				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "region is required for all semantic operations."})
+				return
 			}
 
 			// Validate region is allowed for tenant
 			var isAllowed bool
-			if tenantID == "" {
-				isAllowed = true
-			} else if resolver, ok := provider.(*TenantRegionResolver); ok {
+			if resolver, ok := provider.(*TenantRegionResolver); ok {
 				isAllowed = resolver.IsRegionAllowedForTenant(tenantID, region)
 			} else if legacyProvider, ok := provider.(AllowedRegionsProvider); ok {
 				// Fallback to legacy AllowedRegionsProvider

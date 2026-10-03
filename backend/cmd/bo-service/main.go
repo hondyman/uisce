@@ -20,12 +20,11 @@ import (
 
 // BO Command Microservice
 // This service consumes CRUD commands from the command bus and executes them against the database.
-// The system uses Redpanda/Kafka for command/event transport. Legacy RabbitMQ (AMQP) is still supported
-// for backwards compatibility but is deprecated.
+// The system uses Redpanda/Kafka for command/event transport.
 //
 // Architecture:
-// - Subscribes to semlayer.commands topic (Kafka) or semlayer.commands exchange (RabbitMQ legacy)
-// - Binds to bo-service-commands consumer group / queue
+// - Subscribes to the semlayer.commands topic
+// - Binds to the bo-service-commands consumer group
 // - Receives commands matching pattern: command.bo.* and command.instance.*
 // - Executes business logic
 // - Publishes events to semlayer.events
@@ -37,8 +36,7 @@ import (
 //   go run ./cmd/bo-service/main.go
 //
 // Environment variables:
-//   KAFKA_BROKERS: redpanda:9092 (preferred)
-//   RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/ (legacy fallback)
+//   KAFKA_BROKERS: redpanda:9092 (default)
 //   DATABASE_URL: postgres://user:pass@db:5432/alpha (required)
 //   LOG_LEVEL: debug|info|warn|error (default: info)
 //   SERVICE_NAME: bo-service (for logs)
@@ -56,8 +54,7 @@ func main() {
 	if databaseURL == "" {
 		sugar.Fatal("DATABASE_URL environment variable is required")
 	}
-	// Prefer KAFKA_BROKERS for bootstrap servers; fallback to RABBITMQ_URL for legacy setups
-	brokers := getEnv("KAFKA_BROKERS", getEnv("RABBITMQ_URL", "redpanda:9092"))
+	brokers := getEnv("KAFKA_BROKERS", "redpanda:9092")
 
 	sugar.Infof("📦 Database: %s", maskURL(databaseURL))
 	sugar.Infof("📨 Event/Command Brokers: %s", maskURL(brokers))

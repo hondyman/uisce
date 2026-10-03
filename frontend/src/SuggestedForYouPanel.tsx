@@ -21,7 +21,7 @@ export default function SuggestedForYouPanel({ datasourceId, onOpenQuery }: Sugg
     if (!datasourceId) return;
     setLoading(true);
     // In a real app, you'd also pass the user ID.
-    getSuggestions("user-123", datasourceId)
+    getSuggestions("user-123")
     .then(setSuggestions)
   .catch((e) => { devError(e); })
       .finally(() => setLoading(false));

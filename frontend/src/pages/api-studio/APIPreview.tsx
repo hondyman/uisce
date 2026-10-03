@@ -29,7 +29,7 @@ const APIPreview: React.FC<APIPreviewProps> = ({ endpoint }) => {
         try {
             const [sampleData, openApi, perfMetrics] = await Promise.all([
                 ApiStudioApi.previewEndpoint(endpoint.path, endpoint.method, env, tenantId, {}),
-                ApiStudioApi.getOpenApiSpec(env, tenantId),
+                ApiStudioApi.getOpenApiSpec(env),
                 ApiStudioApi.getEndpointMetrics(endpoint.id)
             ]);
             setData(sampleData);
@@ -43,7 +43,7 @@ const APIPreview: React.FC<APIPreviewProps> = ({ endpoint }) => {
     };
 
     const handleDownloadSDK = () => {
-        const url = ApiStudioApi.getSdkURL('typescript', env, tenantId);
+        const url = ApiStudioApi.getSdkURL('typescript', env);
         window.open(url, '_blank');
     };
 

@@ -15,7 +15,7 @@ import (
 // This follows the same pattern as BOCommandHandler for consistency and scalability
 //
 // Architecture:
-// - Receives CRUD commands from the command bus (RabbitMQ)
+// - Receives CRUD commands from the command bus (Kafka)
 // - Extracts business logic from HTTP handlers
 // - Executes service layer operations (CreateInstance, UpdateInstance, DeleteInstance)
 // - Publishes events to the event store for audit trail and event sourcing

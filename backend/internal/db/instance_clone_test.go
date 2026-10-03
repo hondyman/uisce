@@ -39,6 +39,20 @@ func TestCloneGoldCopyInstance_WorksUnderStrictRLS(t *testing.T) {
 		t.Skip("uisce_gold_copy_sync role does not exist on test database; skipping")
 	}
 
+	// The gold-copy designation is unique (idx_tenants_gold_copy_true) and
+	// CloneGoldCopyInstance clones from whichever gold-copy tenant exists, so this
+	// test can only seed its own fixture on a database with none. Cloning from a
+	// real gold copy would also write connections and datasources that this test
+	// does not clean up, so a database that already has one (CI snapshot, alpha)
+	// is skipped rather than touched.
+	var goldTenants int
+	if err := sqlDB.QueryRow("SELECT count(*) FROM public.tenants WHERE gold_copy = true").Scan(&goldTenants); err != nil {
+		t.Fatalf("counting gold-copy tenants: %v", err)
+	}
+	if goldTenants > 0 {
+		t.Skipf("database already has %d gold-copy tenant(s); this test needs to seed its own", goldTenants)
+	}
+
 	db := sqlx.NewDb(sqlDB, "pgx")
 	ctx := context.Background()
 
@@ -54,8 +68,8 @@ func TestCloneGoldCopyInstance_WorksUnderStrictRLS(t *testing.T) {
 	// go, so it needs the same elevated role the function under test
 	// uses — this is a fixture-setup detail, not something the test is
 	// meant to exercise.
-	mustExec(t, sqlDB, "INSERT INTO public.tenants (id, name, gold_copy) VALUES ($1, $2, true)", goldTenantID, "gold-copy-test-"+goldTenantID.String()[:8])
-	mustExec(t, sqlDB, "INSERT INTO public.tenants (id, name, gold_copy) VALUES ($1, $2, false)", targetTenantID, "target-test-"+targetTenantID.String()[:8])
+	mustExec(t, sqlDB, "INSERT INTO public.tenants (id, name, display_name, gold_copy) VALUES ($1, $2, $2, true)", goldTenantID, "gold-copy-test-"+goldTenantID.String()[:8])
+	mustExec(t, sqlDB, "INSERT INTO public.tenants (id, name, display_name, gold_copy) VALUES ($1, $2, $2, false)", targetTenantID, "target-test-"+targetTenantID.String()[:8])
 	if err := WithGoldCopySync(ctx, sqlDB, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, "INSERT INTO public.tenant_instance (id, tenant_id) VALUES ($1, $2)", goldInstanceID, goldTenantID); err != nil {
 			return err

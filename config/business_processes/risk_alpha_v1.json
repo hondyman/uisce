@@ -398,7 +398,7 @@
       "durationHours": 0.1,
       "config": {
         "activityName": "PublishToKafka",
-        "service": "rabbitmq",
+        "service": "kafka",
         "parameters": {
           "exchange": "portfolio.events",
           "routingKey": "risk.mitigated",

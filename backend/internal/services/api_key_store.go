@@ -116,7 +116,8 @@ func (s *DBAPIKeyStore) CreateKey(ctx context.Context, req APIKeyCreateRequest) 
 
 	tenantID := strings.TrimSpace(req.TenantID)
 	tenantIDs := normalizeStringList(req.TenantIDs)
-	if tenantID == "" && len(tenantIDs) > 0 {
+	// A key for several tenants must name its primary tenant; do not pick one.
+	if tenantID == "" && len(tenantIDs) == 1 {
 		tenantID = tenantIDs[0]
 	}
 	if tenantID == "" {

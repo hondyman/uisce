@@ -16,7 +16,21 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
+
+// asTenantFromQuery stands in for AuthContextMiddleware: the handler requires a
+// verified identity, so each test connection is authenticated as the tenant it
+// asks for and the handler's own tenant authorization still runs.
+func asTenantFromQuery(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tenant := strings.TrimSpace(r.URL.Query().Get("tenant_id"))
+		ctx := security.WithAuthInfo(r.Context(), security.AuthInfo{
+			UserID: "test-user", TenantIDs: []string{tenant}, ActiveTenantID: tenant,
+		})
+		h.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
 
 /**
  * Phase 3.4: WebSocket Integration Tests
@@ -33,7 +47,7 @@ func TestWebSocketEventStreaming(t *testing.T) {
 	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
 
 	// Create test server
-	server := httptest.NewServer(wsHandler)
+	server := httptest.NewServer(asTenantFromQuery(wsHandler))
 	defer server.Close()
 
 	// Convert HTTP URL to WebSocket URL
@@ -83,7 +97,7 @@ func TestWebSocketRegionFiltering(t *testing.T) {
 	defer broker.Stop()
 
 	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
-	server := httptest.NewServer(wsHandler)
+	server := httptest.NewServer(asTenantFromQuery(wsHandler))
 	defer server.Close()
 
 	// Connect subscriber to specific regions
@@ -141,7 +155,7 @@ func TestWebSocketMultipleTenants(t *testing.T) {
 	defer broker.Stop()
 
 	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
-	server := httptest.NewServer(wsHandler)
+	server := httptest.NewServer(asTenantFromQuery(wsHandler))
 	defer server.Close()
 
 	// Connect two subscribers from different tenants
@@ -243,7 +257,7 @@ func TestWebSocketDisconnectHandling(t *testing.T) {
 	defer broker.Stop()
 
 	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
-	server := httptest.NewServer(wsHandler)
+	server := httptest.NewServer(asTenantFromQuery(wsHandler))
 	defer server.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")

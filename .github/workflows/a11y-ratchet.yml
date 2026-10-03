@@ -1,21 +1,29 @@
 name: A11y Ratchet
 
+# DISABLED for now (manual runs only). The crawl's pre-flight needs a backend at
+# 127.0.0.1:8080 and this job starts only the dev server, so it aborted with
+# ECONNREFUSED on every frontend PR before scanning a single route. Restore the
+# triggers below once the job boots a backend (or the pre-flight is relaxed).
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'frontend/**'
-      - 'scripts/a11y-ratchet.mjs'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'frontend/**'
-      - 'scripts/a11y-ratchet.mjs'
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'frontend/**'
+  #     - 'scripts/a11y-ratchet.mjs'
+  # pull_request:
+  #   branches: [main]
+  #   paths:
+  #     - 'frontend/**'
+  #     - 'scripts/a11y-ratchet.mjs'
 
 jobs:
   a11y-ratchet:
     name: A11y Ratchet Gate
     runs-on: ubuntu-latest
+    # Job-level so the baseline crawl gets it too; it refuses to run without a real JWT.
+    env:
+      E2E_JWT: ${{ secrets.E2E_JWT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -49,11 +57,16 @@ jobs:
       - name: Run locale-matrix smoke tests
         working-directory: frontend
         run: npx playwright test --config=playwright.a11y.config.ts locale-matrix.spec.ts
-        env:
-          E2E_JWT: ${{ secrets.E2E_JWT }}
 
       - name: Run a11y baseline crawl
         working-directory: frontend
+        # FIRST REAL CRAWL EXPECTED TO FIND VIOLATIONS. This gate has never
+        # scanned the app before - E2E_JWT only started reaching the baseline
+        # crawl in #331. So a wall of findings on the first run means the
+        # ratchet is STARTING, not that something regressed. Do not "fix" it by
+        # baselining the findings wholesale, and do not disable the gate on the
+        # strength of a first-run failure. Record the real numbers, then let
+        # the ratchet hold them.
         run: npx playwright test --config=playwright.a11y.config.ts baseline.spec.ts
 
       - name: Aggregate baseline

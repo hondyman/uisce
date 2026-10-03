@@ -11,6 +11,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/backend/internal/rules/vm"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 // stubEvalService returns hand-built snapshots; the handler exercises the
@@ -66,7 +67,13 @@ func postJSON(t *testing.T, path string, body any) *http.Request {
 	b, _ := json.Marshal(body)
 	r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(string(b)))
 	r.Header.Set("Content-Type", "application/json")
-	return r
+	// Authenticated as a user with one active tenant, as AuthContextMiddleware
+	// would have established; the handlers no longer accept an unauthenticated
+	// request or a client-supplied tenant.
+	const testTenant = "11111111-1111-1111-1111-111111111111"
+	return r.WithContext(security.WithAuthInfo(r.Context(), security.AuthInfo{
+		UserID: "user-1", TenantIDs: []string{testTenant}, ActiveTenantID: testTenant,
+	}))
 }
 
 func TestEvaluateRecordViolationAndPass(t *testing.T) {
@@ -175,4 +182,3 @@ func TestEvaluatePushdownHandler_MissingParams(t *testing.T) {
 		t.Fatalf("expected 400 for empty bo_name, got %d", rec.Code)
 	}
 }
-

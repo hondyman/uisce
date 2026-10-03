@@ -34,6 +34,7 @@ func TestListTerms_NoDatasourceSelected(t *testing.T) {
 
 	h := &GlossaryHandler{db: db, securityDeps: handlers.SecurityContextDeps{Resolver: noDatasourceResolver{}}}
 	req := httptest.NewRequest(http.MethodGet, "/api/glossary/semantic-terms", nil)
+	req.Header.Set("X-Region", "us-east-1") // a real client states its region; there is no default
 	req = req.WithContext(security.WithAuthInfo(req.Context(), security.AuthInfo{UserID: "u1", TenantIDs: []string{tenant}}))
 	rec := httptest.NewRecorder()
 	h.listTerms(rec, req, "semantic_term")

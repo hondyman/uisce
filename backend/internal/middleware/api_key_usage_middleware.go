@@ -61,8 +61,8 @@ func APIKeyUsageMiddleware(usageStore store.APIKeyUsageStore) func(http.Handler)
 			}
 
 			var tenantID *uuid.UUID
-			if len(authInfo.TenantIDs) > 0 {
-				if parsed, err := uuid.Parse(authInfo.TenantIDs[0]); err == nil {
+			if active, hasActive := authInfo.ActiveTenant(); hasActive {
+				if parsed, err := uuid.Parse(active); err == nil {
 					tenantID = &parsed
 				}
 			}

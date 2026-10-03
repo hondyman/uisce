@@ -12,7 +12,7 @@ import (
 
 func TestRegionMiddleware_Presence(t *testing.T) {
 	r := chi.NewRouter()
-	r.Use(region.RegionValidationMiddleware(nil))
+	r.Use(region.RegionValidationMiddleware(&mockProv{allowed: []string{"eu-west"}}))
 	r.Get("/test", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reg, ok := region.GetRegionFromContext(r.Context())
 		if !ok {
@@ -26,6 +26,7 @@ func TestRegionMiddleware_Presence(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set(region.RegionHeader, "eu-west")
+	req = asTenant(req, "tenant-123")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

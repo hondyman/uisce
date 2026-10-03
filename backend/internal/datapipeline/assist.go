@@ -233,6 +233,28 @@ func Check(ctx context.Context, cat PlatformCatalog, spec *Spec) []Issue {
 					add(n.ID, "%s: %s has no column %q", field, c.Table, col)
 				}
 			}
+			case NodeQueueSource:
+			var c QueueSourceConfig
+			if json.Unmarshal(n.Config, &c) != nil {
+				continue
+			}
+			if !validQueueBroker(c.Broker) {
+				add(n.ID, "broker must be kafka, redpanda, aws_sqs, or azure_servicebus")
+			}
+			if strings.TrimSpace(c.TopicOrQueue) == "" && c.QueueURLEnv == "" {
+				add(n.ID, "topic_or_queue is required")
+			}
+		case NodeQueueSink:
+			var c QueueSinkConfig
+			if json.Unmarshal(n.Config, &c) != nil {
+				continue
+			}
+			if !validQueueBroker(c.Broker) {
+				add(n.ID, "broker must be kafka, redpanda, aws_sqs, or azure_servicebus")
+			}
+			if strings.TrimSpace(c.TopicOrQueue) == "" && c.QueueURLEnv == "" {
+				add(n.ID, "topic_or_queue is required")
+			}
 		}
 	}
 

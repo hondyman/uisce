@@ -100,7 +100,7 @@ const UnifiedSemanticBuilder: React.FC<UnifiedSemanticBuilderProps> = ({
     updateModel,
   refreshModels,
     deleteModel,
-  } = useModelCatalog(tenantId, datasourceId);
+  } = useModelCatalog();
   
   const coreOptions: CoreOption[] = useMemo(() => {
     const coreBusinessTerms = (businessTerms || [])

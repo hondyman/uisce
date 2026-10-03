@@ -61,7 +61,7 @@ const AddEdgeDialog: React.FC<AddEdgeDialogProps> = ({
   const [propertyValues, setPropertyValues] = useState<Record<string, any>>({});
 
   // APIs
-  const { data: edgeTypes, isLoading: loadingEdgeTypes } = useEdgeTypes(tenant?.id || '');
+  const { data: edgeTypes, isLoading: loadingEdgeTypes } = useEdgeTypes();
   const { data: nodeTypes } = useNodeTypes(tenant?.id || '');
   const createEdgeMutation = useCreateTermEdge();
   const lineageService = useMemo(() => new LineageService(), []);

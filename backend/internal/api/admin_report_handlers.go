@@ -123,8 +123,10 @@ func (h *AdminReportHandler) ListExecutions(w http.ResponseWriter, r *http.Reque
 	}
 
 	auditTenantID := ""
-	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
-		auditTenantID = auth.TenantIDs[0]
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok {
+		if active, hasActive := auth.ActiveTenant(); hasActive {
+			auditTenantID = active
+		}
 	}
 
 	if err := h.auditLog.Log(r.Context(), auditTenantID, userID, "monitoring.read.cross_tenant", "report_execution", "", map[string]interface{}{
@@ -272,8 +274,10 @@ func (h *AdminReportHandler) GetExecution(w http.ResponseWriter, r *http.Request
 	}
 
 	auditTenantID := ""
-	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
-		auditTenantID = auth.TenantIDs[0]
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok {
+		if active, hasActive := auth.ActiveTenant(); hasActive {
+			auditTenantID = active
+		}
 	}
 
 	if err := h.auditLog.Log(r.Context(), auditTenantID, userID, "monitoring.read.cross_tenant", "report_execution", execID.String(), nil); err != nil {
@@ -340,8 +344,10 @@ func (h *AdminReportHandler) ListEvents(w http.ResponseWriter, r *http.Request) 
 	}
 
 	auditTenantID := ""
-	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
-		auditTenantID = auth.TenantIDs[0]
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok {
+		if active, hasActive := auth.ActiveTenant(); hasActive {
+			auditTenantID = active
+		}
 	}
 
 	if err := h.auditLog.Log(r.Context(), auditTenantID, userID, "monitoring.read.cross_tenant", "report_execution_event", "", map[string]interface{}{

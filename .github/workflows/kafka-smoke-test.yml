@@ -34,8 +34,8 @@ jobs:
           # Create topic and produce/consume
           docker exec semlayer-redpanda-ci rpk topic create semlayer-smoke
           docker exec -i semlayer-redpanda-ci rpk topic produce semlayer-smoke -k smoke -f '%v{json}\n' <<'EOF'
-{"msg":"hello from GH Actions smoke test"}
-EOF
+          {"msg":"hello from GH Actions smoke test"}
+          EOF
 
           # Try to consume (with timeout)
           timeout 20 docker exec semlayer-redpanda-ci rpk topic consume semlayer-smoke -o start -n 1 -f '%k %v\n'

@@ -58,7 +58,7 @@ type RuleCondition struct {
 
 // ActionConfig represents post-commit actions
 type ActionConfig struct {
-	Type           string                 `json:"type"` // temporal, rabbitmq, notification, webhook
+	Type           string                 `json:"type"` // temporal, notification, webhook
 	WorkflowID     string                 `json:"workflow_id,omitempty"`
 	NotificationID string                 `json:"notification_id,omitempty"`
 	WebhookURL     string                 `json:"webhook_url,omitempty"`
@@ -325,15 +325,6 @@ func (e *TriggerEngine) executeActions(ctx context.Context, actionConfig json.Ra
 			actionResult["status"] = "success"
 			actionResult["workflow_id"] = workflowID
 
-		case "rabbitmq":
-			err := e.emitRabbitMQEvent(ctx, tc, action.Metadata)
-			if err != nil {
-				actionResult["status"] = "failed"
-				actionResult["error"] = err.Error()
-			} else {
-				actionResult["status"] = "success"
-			}
-
 		case "webhook":
 			err := e.callWebhook(ctx, action.WebhookURL, tc)
 			if err != nil {
@@ -407,11 +398,6 @@ func (e *TriggerEngine) startTemporalWorkflow(_ context.Context, workflowID stri
 	// TODO: Integrate with Temporal SDK
 	log.Printf("[TEMPORAL] Start workflow %s with context %+v", workflowID, tc)
 	return fmt.Sprintf("workflow_%d", time.Now().Unix())
-}
-
-func (e *TriggerEngine) emitRabbitMQEvent(_ context.Context, _ *TriggerContext, _ map[string]interface{}) error {
-	// TODO: Emit to RabbitMQ event bus
-	return nil
 }
 
 func (e *TriggerEngine) callWebhook(_ context.Context, webhookURL string, _ *TriggerContext) error {

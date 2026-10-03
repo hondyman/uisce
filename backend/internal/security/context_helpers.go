@@ -12,10 +12,11 @@ func GetRequiredTenantID(ctx context.Context) (string, error) {
 	if !ok {
 		return "", errors.New("authentication required")
 	}
-	if len(auth.TenantIDs) == 0 {
-		return "", errors.New("no tenant in context")
+	tenant, ok := auth.ActiveTenant()
+	if !ok {
+		return "", errors.New("no active tenant: token has no tenant, or several tenants and none selected")
 	}
-	return auth.TenantIDs[0], nil
+	return tenant, nil
 }
 
 // GetRequiredUserID extracts user ID from JWT context, returns error if missing

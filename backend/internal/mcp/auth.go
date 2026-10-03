@@ -12,10 +12,11 @@ const authRequiredMsg = "auth required: JWT missing tenant_id claim (account may
 
 func tenantFromAuth(ctx context.Context) (uuid.UUID, error) {
 	auth, ok := security.AuthInfoFromContext(ctx)
-	if !ok || len(auth.TenantIDs) == 0 {
+	active, hasActive := auth.ActiveTenant()
+	if !ok || !hasActive {
 		return uuid.Nil, fmt.Errorf("%s", authRequiredMsg)
 	}
-	id, err := uuid.Parse(auth.TenantIDs[0])
+	id, err := uuid.Parse(active)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("invalid tenant_id format")
 	}

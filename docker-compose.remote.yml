@@ -346,7 +346,10 @@ services:
   # MinIO Object Storage (Iceberg Warehouse)
   # ---------------------------------------------------------
   uisce-minio:
-    image: minio/minio:latest
+    build:
+      context: ./docker/minio
+      target: minio
+    image: uisce/minio:RELEASE.2025-10-15T17-29-55Z
     container_name: uisce-minio
     command: server /data --console-address ":9001"
     ports:
@@ -368,7 +371,10 @@ services:
     restart: unless-stopped
 
   lakekeeper-minio-init:
-    image: minio/mc:latest
+    build:
+      context: ./docker/minio
+      target: mc
+    image: uisce/mc:RELEASE.2025-08-13T08-35-41Z
     container_name: lakekeeper-minio-init
     depends_on:
       uisce-minio:

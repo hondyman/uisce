@@ -280,7 +280,7 @@ func (s *Service) RenderReportAsync(ctx context.Context, tenantID, datasourceID 
 		return nil, fmt.Errorf("failed to create instance: %w", err)
 	}
 
-	// TODO: Queue for async processing via Temporal/RabbitMQ
+	// TODO: Queue for async processing via Temporal
 
 	return inst, nil
 }

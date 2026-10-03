@@ -17,7 +17,7 @@ import (
 // COMMAND BUS - Microservices Command Bus Pattern
 // ============================================================================
 // This service implements the command bus pattern where all CRUD operations
-// for Business Objects are performed through RabbitMQ message queues instead
+// for Business Objects are performed through Kafka/Redpanda topics instead
 // of direct HTTP endpoints. This enables:
 //
 // 1. Loose coupling between API gateway and microservices
@@ -140,11 +140,6 @@ type CommandConsumer struct {
 // NewCommandConsumer creates a new command consumer
 func NewCommandConsumer(brokersOrURL, serviceName string) (*CommandConsumer, error) {
 	if brokersOrURL == "" {
-		return &CommandConsumer{enabled: false}, nil
-	}
-
-	if strings.HasPrefix(brokersOrURL, "amqp://") {
-		log.Printf("⚠️  Detected legacy AMQP URL %s - command consumer disabled. Set KAFKA_BROKERS instead.", brokersOrURL)
 		return &CommandConsumer{enabled: false}, nil
 	}
 

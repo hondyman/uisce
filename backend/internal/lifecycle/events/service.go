@@ -62,6 +62,6 @@ func (s *Service) GetEventsByClient(ctx context.Context, clientID uuid.UUID) ([]
 }
 
 func (s *Service) emitRecalculationSignal(clientID uuid.UUID) {
-	// In a real system, this would publish to RabbitMQ or Temporal
+	// In a real system, this would publish to the event bus or Temporal
 	fmt.Printf("🚀 SIGNAL: Triggering Plan Recalculation for Client %s\n", clientID)
 }

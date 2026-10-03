@@ -2,7 +2,10 @@
   "dashboard": {
     "id": null,
     "title": "Semlayer Microservices Overview",
-    "tags": ["semlayer", "microservices"],
+    "tags": [
+      "semlayer",
+      "microservices"
+    ],
     "timezone": "browser",
     "panels": [
       {
@@ -53,23 +56,6 @@
           "h": 8,
           "w": 12,
           "x": 0,
-          "y": 8
-        }
-      },
-      {
-        "id": 4,
-        "title": "RabbitMQ Queue Length",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rabbitmq_queue_messages{queue=~\"compliance.*|workflow.*|abac.*|temporal.*\"}",
-            "legendFormat": "{{queue}}"
-          }
-        ],
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 12,
           "y": 8
         }
       }

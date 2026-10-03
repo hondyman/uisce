@@ -160,3 +160,41 @@ func TestResolveCalculatedMeasures(t *testing.T) {
 
 	t.Logf("Compiled ProfitMargin Expression:\n%s", marginExpr)
 }
+
+// The base table and join root come from the first required entity, so the
+// order must follow the request (dimensions first), not map iteration order.
+func TestExtractRequiredEntitiesIsDeterministic(t *testing.T) {
+	domain := &Domain{
+		ID: "d", Name: "Financials",
+		Entities: map[string]*Entity{
+			"ent-1": {ID: "ent-1", Name: "Customer", Attributes: map[string]*Attribute{
+				"Region": {ID: "a1", EntityID: "ent-1", Name: "Region", Type: Dimension, PhysicalColumn: "region"}}},
+			"ent-2": {ID: "ent-2", Name: "Order", Attributes: map[string]*Attribute{
+				"TotalRevenue": {ID: "a2", EntityID: "ent-2", Name: "TotalRevenue", Type: Measure, PhysicalColumn: "amt", AggFunction: "SUM"},
+				"Status":       {ID: "a3", EntityID: "ent-2", Name: "Status", Type: Dimension, PhysicalColumn: "status"}}},
+		},
+	}
+	ctx := GeneratorContext{Graph: domain}
+	req := SemanticRequest{
+		Dimensions: []string{"Customer.Region"},
+		Measures:   []string{"Order.TotalRevenue"},
+		Filters:    []SemanticFilter{{Attribute: "Order.Status", Operator: "=", Value: "X"}},
+	}
+	for i := 0; i < 200; i++ {
+		got, err := ctx.extractRequiredEntities(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 2 || got[0].ID != "ent-1" || got[1].ID != "ent-2" {
+			t.Fatalf("iteration %d: want [ent-1 ent-2] (deduped, request order), got %v", i, ids(got))
+		}
+	}
+}
+
+func ids(es []*Entity) []string {
+	out := make([]string, len(es))
+	for i, e := range es {
+		out[i] = e.ID
+	}
+	return out
+}

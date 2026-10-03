@@ -18,8 +18,8 @@ case "$CMD" in
     docker compose -f "$COMPOSE_FILE" up -d
     ;;
   up-minimal)
-    # Start only the minimal set required for local backend dev (RabbitMQ, Backend)
-    docker compose -f "$COMPOSE_FILE" up -d rabbitmq backend
+    # Start only the minimal set required for local backend dev (Backend)
+    docker compose -f "$COMPOSE_FILE" up -d backend
     ;;
   down)
     docker compose -f "$COMPOSE_FILE" down

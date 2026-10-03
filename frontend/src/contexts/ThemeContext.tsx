@@ -1,3 +1,5 @@
+import { alpha } from '@mui/material/styles';
+import { createThemeForStyle, DEFAULT_THEME_STYLE, isThemeStyle, type ThemeStyle } from '../theme/themeStyles';
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
 export type Theme = 'light' | 'dark' | 'system';
@@ -6,6 +8,9 @@ interface ThemeContextType {
   theme: Theme;
   systemTheme: 'light' | 'dark';
   effectiveTheme: 'light' | 'dark';
+  /** Visual style (palette family), independent of light/dark. */
+  style: ThemeStyle;
+  setStyle: (style: ThemeStyle) => void;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
 }
@@ -13,6 +18,7 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_STORAGE_KEY = 'app-theme-preference';
+const STYLE_STORAGE_KEY = 'app-theme-style';
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Detect system preference
@@ -30,6 +36,25 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
     return 'system';
   });
+
+  const [style, setStyleState] = useState<ThemeStyle>(() => {
+    try {
+      const stored = localStorage.getItem(STYLE_STORAGE_KEY);
+      if (isThemeStyle(stored)) return stored;
+    } catch (e) {
+      // Silently fail if localStorage is not available
+    }
+    return DEFAULT_THEME_STYLE;
+  });
+
+  const setStyle = (next: ThemeStyle) => {
+    setStyleState(next);
+    try {
+      localStorage.setItem(STYLE_STORAGE_KEY, next);
+    } catch (e) {
+      // Silently fail if localStorage is not available
+    }
+  };
 
   // Detect system preference on mount and when it changes
   useEffect(() => {
@@ -64,7 +89,33 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     // Uisce brand CSS variables for nav
     const r = document.documentElement.style;
-    if (effectiveTheme === 'dark') {
+    if (style !== 'uisce') {
+      // Every non-Uisce style derives its nav variables from its own theme palette.
+      const p = createThemeForStyle(style, effectiveTheme).palette;
+      const accent = p.primary.main;
+      const surface = p.background.paper;
+      const line = p.divider;
+      const dark = effectiveTheme === 'dark';
+      r.setProperty('--nav-accent', accent);
+      r.setProperty('--nav-bg', p.background.default);
+      r.setProperty('--nav-text', p.text.primary);
+      r.setProperty('--nav-appbar-bg', surface);
+      r.setProperty('--nav-appbar-border', line);
+      r.setProperty('--nav-border-accent', alpha(accent, 0.5));
+      r.setProperty('--nav-accent-muted', alpha(accent, 0.1));
+      r.setProperty('--nav-hover-fill', alpha(accent, 0.06));
+      r.setProperty('--nav-glass-bg', surface);
+      r.setProperty('--nav-glass-border', line);
+      r.setProperty('--nav-menu-shadow', dark ? '0 8px 32px rgba(0, 0, 0, 0.5)' : '0 4px 16px rgba(0, 0, 0, 0.08)');
+      r.setProperty('--nav-item-active', alpha(accent, 0.12));
+      r.setProperty('--nav-item-text', p.text.primary);
+      r.setProperty('--nav-item-hover', alpha(accent, 0.06));
+      r.setProperty('--nav-sidebar-bg', surface);
+      r.setProperty('--nav-sidebar-border', line);
+      r.setProperty('--nav-rail-accent', accent);
+      r.setProperty('--nav-text-dim', p.text.secondary);
+      r.setProperty('--nav-glow-color', alpha(accent, 0.35));
+    } else if (effectiveTheme === 'dark') {
       r.setProperty('--nav-accent', '#F5C518');
       r.setProperty('--nav-bg', '#0A0C12');
       r.setProperty('--nav-text', '#E2E8F0');
@@ -105,7 +156,8 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       r.setProperty('--nav-text-dim', '#8B7D6B');
       r.setProperty('--nav-glow-color', 'rgba(212, 160, 23, 0.3)');
     }
-  }, [effectiveTheme]);
+    html.dataset.themeStyle = style;
+  }, [effectiveTheme, style]);
 
   // Save theme preference to localStorage
   const setTheme = (newTheme: Theme) => {
@@ -132,6 +184,8 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     theme,
     systemTheme,
     effectiveTheme,
+    style,
+    setStyle,
     setTheme,
     toggleTheme,
   };

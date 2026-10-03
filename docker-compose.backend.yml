@@ -4,7 +4,6 @@
 # This Compose file provides a minimal, reliable backend stack for development.
 # Supported: Backend API (8080)
 # Optional: Temporal, Workflow Service, Screen Builder, Rule Engine
-# Note: RabbitMQ has been removed from this compose file; run it separately if needed
 #
 # Usage:
 #   docker compose -f docker-compose.backend.yml up
@@ -19,7 +18,6 @@
 # ============================================================================
 
 services:
-  # Redpanda - Kafka-compatible messaging broker (replaces RabbitMQ)
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest
     command:
@@ -99,10 +97,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-
   screen-builder-service:
     build:
       context: .

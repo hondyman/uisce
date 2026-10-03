@@ -40,7 +40,7 @@ export const EdgeTypeDetailPage: React.FC = () => {
   const [editIsActive, setEditIsActive] = useState(false);
   const [editIsSaving, setEditIsSaving] = useState(false);
   
-  const { data: edgeType, isLoading: typeLoading, refetch: refetchEdgeType } = useEdgeType(id || '', tenant?.id || '');
+  const { data: edgeType, isLoading: typeLoading, refetch: refetchEdgeType } = useEdgeType(id || '');
   
   // Fetch subject and object node types for the relationship diagram
   const { data: subjectNodeType, isLoading: subjectLoading } = useNodeType(edgeType?.subject_node_type_id || '');

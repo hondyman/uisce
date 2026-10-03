@@ -76,9 +76,6 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     tty: true
 
-volumes:
-  rabbitmq_data:
-
 networks:
   default:
     name: backend_default

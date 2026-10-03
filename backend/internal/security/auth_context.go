@@ -19,10 +19,10 @@ func AuthInfoFromContext(ctx context.Context) (AuthInfo, bool) {
 
 func TenantIDFromContext(ctx context.Context) (string, bool) {
 	auth, ok := AuthInfoFromContext(ctx)
-	if !ok || len(auth.TenantIDs) == 0 {
+	if !ok {
 		return "", false
 	}
-	return auth.TenantIDs[0], true
+	return auth.ActiveTenant()
 }
 
 // ResolveTenantID is the canonical tenant-resolution rule for this codebase,
@@ -44,17 +44,15 @@ func TenantIDFromContext(ctx context.Context) (string, bool) {
 //     phantom tenant is a data-integrity failure, not just an access-
 //     control one, and it fails silently instead of loudly.
 //
-// requested == "" is treated as "no override requested": the caller's own
-// first tenant (auth.TenantIDs[0]) is returned if present, matching
-// TenantIDFromContext's existing behavior for the common case where no
-// cross-tenant header is sent at all.
+// requested == "" means no explicit selection: the caller's active tenant is
+// returned only if it is unambiguous (see AuthInfo.ActiveTenant); a caller with
+// several tenants and no selection gets ok=false rather than a guess.
 func ResolveTenantID(auth AuthInfo, requested string) (string, bool) {
 	requested = strings.TrimSpace(requested)
 	if requested == "" {
-		if len(auth.TenantIDs) == 0 {
-			return "", false
-		}
-		return auth.TenantIDs[0], true
+		// No explicit selection: only an unambiguous tenant is acceptable. A
+		// caller authorized for several tenants must say which one.
+		return auth.ActiveTenant()
 	}
 	if auth.IsGlobalAdmin {
 		return requested, true

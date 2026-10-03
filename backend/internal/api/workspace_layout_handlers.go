@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -95,10 +94,10 @@ func (h *WorkspaceLayoutHandler) resolveUserAndTenant(r *http.Request) (string, 
 	}
 
 	// 3. Try Security AuthInfo
-	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok {
 		uid := auth.UserID
-		if uid != "" {
-			if tid, err := uuid.Parse(auth.TenantIDs[0]); err == nil && tid != uuid.Nil {
+		if active, ok := auth.ActiveTenant(); ok && uid != "" {
+			if tid, err := uuid.Parse(active); err == nil && tid != uuid.Nil {
 				return uid, tid, nil
 			}
 		}
@@ -109,19 +108,6 @@ func (h *WorkspaceLayoutHandler) resolveUserAndTenant(r *http.Request) (string, 
 		if tidStr, ok := identity.TenantIDFromContext(r.Context()); ok {
 			if tid, err := uuid.Parse(tidStr); err == nil && tid != uuid.Nil {
 				return uid, tid, nil
-			}
-		}
-	}
-
-	// 5. Dev/test fallback headers if permitted
-	env := strings.ToLower(os.Getenv("ENVIRONMENT"))
-	allowHeaderFallback := env == "development" || env == "local" || env == "test" || os.Getenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK") == "true"
-	if allowHeaderFallback {
-		uidHeader := r.Header.Get("X-User-ID")
-		tidHeader := r.Header.Get("X-Tenant-ID")
-		if uidHeader != "" && tidHeader != "" {
-			if tid, err := uuid.Parse(tidHeader); err == nil && tid != uuid.Nil {
-				return uidHeader, tid, nil
 			}
 		}
 	}

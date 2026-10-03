@@ -50,6 +50,7 @@ func withSecurityContext(req *http.Request, tenantID, datasourceID string) *http
 	ctx := identity.WithActorTenant(req.Context(), "test-user-001", tenantID)
 	ctx = security.WithAuthInfo(ctx, auth)
 	ctx = security.WithContext(ctx, secCtx)
+	req.Header.Set("X-Region", "us-east-1") // a real client states its region; there is no default
 	return req.WithContext(ctx)
 }
 

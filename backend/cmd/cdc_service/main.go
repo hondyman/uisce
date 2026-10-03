@@ -23,7 +23,7 @@ type Config struct {
 	SlotName     string
 }
 
-// CDCEvent represents the event payload we send to RabbitMQ
+// CDCEvent represents the event payload we send to Kafka
 type CDCEvent struct {
 	ID        string          `json:"id"`
 	Operation string          `json:"op"` // INSERT, UPDATE, DELETE

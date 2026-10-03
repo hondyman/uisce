@@ -12,26 +12,6 @@ services:
   # ==========================================
 
   # Message Queue
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: semlayer-rabbitmq
-    restart: unless-stopped
-    environment:
-      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER:-guest}
-      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS:-guest}
-    ports:
-      - "${PORT_RABBITMQ_AMQP}:5672"
-      - "${PORT_RABBITMQ_MANAGEMENT}:15672"
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    networks:
-      - semlayer
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # Temporal Workflow Engine
   temporal:
     image: temporalio/auto-setup:1.22.0
@@ -80,15 +60,12 @@ services:
       - POSTGRES_DB=alpha
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - RABBIT_URL=amqp://guest:guest@rabbitmq:5672/
       - JWT_SECRET=${JWT_SECRET}
     ports:
       - "${PORT_BACKEND_API}:8080"
     depends_on:
       temporal:
         condition: service_started
-      rabbitmq:
-        condition: service_healthy
     volumes:
       - ./backend/config.yaml:/app/config.yaml:ro
     networks:
@@ -113,7 +90,6 @@ services:
       - POSTGRES_DB=alpha
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - RABBIT_URL=amqp://guest:guest@rabbitmq:5672/
       - JWT_SECRET=${JWT_SECRET}
       - HTTP_PORT=${PORT_FABRIC_BUILDER}
     ports:
@@ -132,6 +108,3 @@ services:
 networks:
   semlayer:
     driver: bridge
-
-volumes:
-  rabbitmq_data:
