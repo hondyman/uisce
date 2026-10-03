@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/dscreds"
 	"github.com/hondyman/uisce/backend/internal/secrets"
+	"github.com/hondyman/uisce/backend/internal/sourceconn"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -104,22 +105,26 @@ func TestTestConnectionByID_RefusesAnotherTenantsSecret(t *testing.T) {
 	}
 }
 
+// The credential is resolved by the datasource ROW's own tenant and id, never the caller's. The
+// gold-copy exception lets a tenant open the gold copy's backend, so the row's tenant differs from the
+// caller's: a secret_path that is not canonical for the ROW's tenant must still be refused.
 func TestRecordsDBStrict_ResolvesCredentialsByRowTenant(t *testing.T) {
-	owner, other, ds := uuid.New(), uuid.New(), uuid.New()
+	owner, rowTenant, ds := uuid.New(), uuid.New(), uuid.New()
 	path, _ := dscreds.CanonicalPath(dscreds.KindDatasource, owner.String(), ds.String())
 	withCredsStore(t, map[string]map[string]string{path: {dscreds.KeyPassword: "owner-only"}})
 
 	sqlDB, mock, _ := sqlmock.New()
 	defer sqlDB.Close()
 	s := &BusinessObjectService{db: sqlx.NewDb(sqlDB, "sqlmock")}
+	s.SetSourceConnector(connectorFor(t, &fakeSources{src: sourceconn.Source{
+		ID: ds.String(), TenantID: rowTenant.String(), GoldCopy: true,
+		Config: []byte(`{"host":"h","port":5432,"database":"d","secret_path":"` + path + `"}`),
+	}}))
 
 	mock.ExpectQuery("FROM public.business_object_binding").
 		WillReturnRows(sqlmock.NewRows([]string{"backend_id"}).AddRow(ds.String()))
-	mock.ExpectQuery("FROM public.tenant_product_datasource").
-		WillReturnRows(sqlmock.NewRows([]string{"config", "tenant_id"}).
-			AddRow(`{"host":"h","port":5432,"database":"d","secret_path":"`+path+`"}`, other.String()))
 
-	got, err := s.recordsDBStrict(context.Background(), "bo-1")
+	got, err := s.recordsDBStrict(context.Background(), uuid.NewString(), "bo-1")
 	if got != nil || !errors.Is(err, dscreds.ErrRefMismatch) {
 		t.Fatalf("want ErrRefMismatch and no DB, got %v, %v", got, err)
 	}

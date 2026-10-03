@@ -100,7 +100,7 @@ type ruleViolation struct {
 func (s *BusinessObjectService) writeAndEnforce(ctx context.Context, tenantID string, bo *models.BusinessObjectDefinition, doWrite func(tx *sqlx.Tx) (map[string]interface{}, error)) (map[string]interface{}, error) {
 	// The write and the rule context reads run where the BO's records live;
 	// rules and violations stay in the metadata DB.
-	recordsDB, err := s.recordsDBStrict(ctx, bo.ID)
+	recordsDB, err := s.recordsDBStrict(ctx, tenantID, bo.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func (s *BusinessObjectService) EnforceWriteBatch(ctx context.Context, tenantID,
 	recordsDB := s.db
 	var required []requiredField
 	if bo != nil {
-		if recordsDB, err = s.recordsDBStrict(ctx, bo.ID); err != nil {
+		if recordsDB, err = s.recordsDBStrict(ctx, tenantID, bo.ID); err != nil {
 			return nil, err
 		}
 		if required, err = s.requiredFields(ctx, bo); err != nil {

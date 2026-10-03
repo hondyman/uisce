@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	dbpkg "github.com/hondyman/uisce/backend/internal/db"
-	"github.com/hondyman/uisce/backend/internal/dscreds"
+	"github.com/hondyman/uisce/backend/internal/sourceconn"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
@@ -101,28 +101,40 @@ type BusinessObjectService struct {
 	// tenant_product_datasource.id), so record reads/writes hit the database
 	// the binding's driving table actually lives in instead of always using
 	// the alpha metadata DB. Populated lazily by resolveRecordsDB.
-	backendDBCache sync.Map // string (backend id) -> *sqlx.DB
+	// sources is the one audited opener of tenant source databases (ADR-030). A BO bound to a backend
+	// datasource reaches it only through here; nil means no bound backend can be opened (fail closed).
+	sources *sourceconn.Connector
 }
 
-// resolveRecordsDB returns the *sqlx.DB that live record reads should run
-// against: the database behind the BO's default (or first) binding's backend,
-// or the alpha metadata DB (s.db) when the BO has no bound backend. Reads
-// degrade to s.db when the bound backend cannot be resolved; writes use
-// recordsDBStrict, which never does.
-func (s *BusinessObjectService) resolveRecordsDB(ctx context.Context, boID string) *sqlx.DB {
-	db, err := s.recordsDBStrict(ctx, boID)
+// SetSourceConnector wires the connector that opens a bound BO's backend database.
+func (s *BusinessObjectService) SetSourceConnector(c *sourceconn.Connector) { s.sources = c }
+
+// resolveRecordsDB returns the *sqlx.DB that live record reads should run against: the database behind
+// the BO's default (or first) binding's backend, or the alpha metadata DB (s.db) when the BO has no
+// bound backend. A bound backend that cannot be reached or configured still degrades a READ to s.db
+// (unchanged behaviour; writes use recordsDBStrict, which never does), but an AUTHORIZATION failure
+// never degrades: a tenant that may not open the backend gets an error, not the metadata database.
+func (s *BusinessObjectService) resolveRecordsDB(ctx context.Context, tenantID, boID string) (*sqlx.DB, error) {
+	db, err := s.recordsDBStrict(ctx, tenantID, boID)
 	if err != nil {
+		if errors.Is(err, sourceconn.ErrNotAllowed) || errors.Is(err, sourceconn.ErrNoTenant) {
+			return nil, err
+		}
 		logging.GetLogger().Sugar().Warnf("resolveRecordsDB: %v - falling back to alpha DB for a read", err)
-		return s.db
+		return s.db, nil
 	}
-	return db
+	return db, nil
 }
 
-// recordsDBStrict resolves the database a BO's records live in. No bound
-// backend means the records live in the metadata DB (s.db). A bound backend
-// that cannot be resolved or reached is an error: writing a tenant's records
-// to any other database is never acceptable.
-func (s *BusinessObjectService) recordsDBStrict(ctx context.Context, boID string) (*sqlx.DB, error) {
+// recordsDBStrict resolves the database a BO's records live in. No bound backend means the records
+// live in the metadata DB (s.db). A bound backend that cannot be resolved or reached is an error:
+// writing a tenant's records to any other database is never acceptable.
+//
+// The backend is opened through the source connector for the CALLING tenant, with the gold-copy
+// exception (OwnerOrGoldCopy): a tenant's own BO reaches its own backend, and a gold-copy BO reaches
+// the gold copy's backend, which every tenant inherits read-only. A backend belonging to any other
+// tenant is refused. Credentials are resolved by the datasource row's own tenant.
+func (s *BusinessObjectService) recordsDBStrict(ctx context.Context, tenantID, boID string) (*sqlx.DB, error) {
 	var backendID string
 	err := s.db.GetContext(ctx, &backendID, `
 		SELECT backend_id::text FROM public.business_object_binding
@@ -136,40 +148,21 @@ func (s *BusinessObjectService) recordsDBStrict(ctx context.Context, boID string
 	if err != nil {
 		return nil, fmt.Errorf("resolving the datasource of business object %s: %w", boID, err)
 	}
-
-	if cached, ok := s.backendDBCache.Load(backendID); ok {
-		return cached.(*sqlx.DB), nil
+	if s.sources == nil {
+		return nil, fmt.Errorf("business object %s is bound to datasource %s, but source access is not configured", boID, backendID)
 	}
 
-	var backend struct {
-		Config   string `db:"config"`
-		TenantID string `db:"tenant_id"`
-	}
-	if err := s.db.GetContext(ctx, &backend, `
-		SELECT COALESCE(config::text, '') AS config, COALESCE(tenant_id::text, '') AS tenant_id
-		FROM public.tenant_product_datasource WHERE id = $1::uuid
-	`, backendID); err != nil || backend.Config == "" {
-		return nil, fmt.Errorf("business object %s is bound to datasource %s, which has no connection configuration", boID, backendID)
-	}
-
-	connectionDetails, err := datasourceCreds().Hydrate(ctx, dscreds.KindDatasource, backend.TenantID, backendID, []byte(backend.Config))
+	sqlDB, err := s.sources.SQLDB(dbpkg.WithTenantContextToCtx(ctx, tenantID), backendID, sourceconn.OwnerOrGoldCopy)
 	if err != nil {
-		return nil, fmt.Errorf("business object %s: cannot resolve credentials for its datasource %s: %w", boID, backendID, err)
+		switch {
+		case errors.Is(err, sourceconn.ErrNotFound), errors.Is(err, sourceconn.ErrBadConfig):
+			return nil, fmt.Errorf("business object %s is bound to datasource %s, which has no connection configuration: %w", boID, backendID, err)
+		case errors.Is(err, sourceconn.ErrNotAllowed), errors.Is(err, sourceconn.ErrNoTenant):
+			return nil, fmt.Errorf("business object %s: its datasource %s is not available to this tenant: %w", boID, backendID, err)
+		}
+		return nil, fmt.Errorf("business object %s: cannot open its datasource %s: %w", boID, backendID, err)
 	}
-
-	targetDB, err := connectToDatabaseFromDetails(ctx, string(connectionDetails))
-	if err != nil {
-		return nil, fmt.Errorf("business object %s: cannot connect to its datasource %s: %w", boID, backendID, err)
-	}
-
-	sqlxDB := sqlx.NewDb(targetDB, "pgx")
-	// Another goroutine may have raced us to populate the cache; keep
-	// whichever won and close the loser to avoid leaking a connection pool.
-	actual, loaded := s.backendDBCache.LoadOrStore(backendID, sqlxDB)
-	if loaded {
-		_ = sqlxDB.Close()
-	}
-	return actual.(*sqlx.DB), nil
+	return sqlx.NewDb(sqlDB, "pgx"), nil
 }
 
 // RecordsDB is the database a BO's records live in, for the BO records API
@@ -183,7 +176,7 @@ func (s *BusinessObjectService) RecordsDB(ctx context.Context, tenantID, boKeyOr
 	if bo == nil {
 		return s.db, nil
 	}
-	return s.recordsDBStrict(ctx, bo.ID)
+	return s.recordsDBStrict(ctx, tenantID, bo.ID)
 }
 
 var boFieldsColumnCache sync.Map
@@ -3534,7 +3527,10 @@ func (s *BusinessObjectService) QueryBORecords(
 	// which is not necessarily the alpha metadata DB (e.g. CRIMS ORM/MDM
 	// tables live in the crims database). Metadata lookups below (catalog
 	// nodes, semantic term graph) still use s.db.
-	recordsDB := s.resolveRecordsDB(ctx, bo.ID)
+	recordsDB, err := s.resolveRecordsDB(ctx, secCtx.TenantID, bo.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	// 2. Resolve Driver Table
 	drivingTable := bo.DriverTableName
@@ -4021,7 +4017,11 @@ func (s *BusinessObjectService) DeleteBORecord(
 	quotedTable := quotedQualifiedTable(table)
 
 	deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE id = $1", quotedTable)
-	_, err = s.resolveRecordsDB(ctx, bo.ID).ExecContext(ctx, deleteSQL, recordID)
+	recordsDB, rerr := s.resolveRecordsDB(ctx, secCtx.TenantID, bo.ID)
+	if rerr != nil {
+		return rerr
+	}
+	_, err = recordsDB.ExecContext(ctx, deleteSQL, recordID)
 	if err != nil {
 		return fmt.Errorf("failed to delete record from %s: %w", table, err)
 	}

@@ -2,12 +2,9 @@ package metadata
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -19,9 +16,8 @@ import (
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/scanner"
+	"github.com/hondyman/uisce/backend/internal/sourceconn"
 	"github.com/hondyman/uisce/backend/models"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -773,168 +769,16 @@ func (s *CatalogScanService) connectToTargetDatabase(ctx context.Context, connec
 	return connectToDatabaseFromDetails(ctx, connectionDetails)
 }
 
-// connectToDatabaseFromDetails opens (and pings) a *sql.DB for the given
-// connection-details JSON, supporting the same shapes as the scan pipeline:
-// flat host/port/database/username/password, a DSN string, or key_pair
-// (mTLS) auth. Extracted from CatalogScanService.connectToTargetDatabase so
-// other callers in this package (e.g. BusinessObjectService, to run live
-// record queries against a binding's actual physical backend instead of
-// always using the alpha DB) can reuse the exact same, already-proven
-// connection logic rather than re-deriving DSN/TLS handling.
+// connectToDatabaseFromDetails opens (and pings) a *sql.DB for already-hydrated connection details.
+//
+// The details are interpreted in exactly one place, internal/sourceconn (ADR-030); this used to carry
+// its own copy of that parser and its own sql.Open. It is used by the catalog scan, which reads its
+// datasource rows from alpha itself and has no request caller, and by "test this connection".
+// Request-scoped access to a stored datasource goes through sourceconn.Connector, not here.
 func connectToDatabaseFromDetails(ctx context.Context, connectionDetails string) (*sql.DB, error) {
-	// This struct is updated to match the nested JSON structure from the database
-	// AND the flat structure from the frontend ConnectionForm.
-	type ConnectionConfig struct {
-		Auth struct {
-			Basic struct {
-				Password string `json:"password"`
-				Username string `json:"username,omitempty"`
-			} `json:"basic"`
-		} `json:"auth"`
-		Database string `json:"database"`
-		Host     string `json:"host"`
-		Password string `json:"password,omitempty"`
-		Port     int    `json:"port"`
-		Schema   string `json:"schema,omitempty"`
-		SSL      bool   `json:"ssl,omitempty"`
-		SSLMode  string `json:"sslMode,omitempty"`
-		Username string `json:"username,omitempty"`
-		Type     string `json:"type"`
-		DSN      string `json:"dsn,omitempty"` // Support direct DSN
-
-		// mTLS client-certificate auth ("Key Pair (SSH/TLS)" in the connection
-		// form). ClientCert/ClientKey are PEM content, not file paths — they
-		// are parsed and handed to pgx as an in-memory tls.Config so the
-		// private key never touches disk. CACert (also PEM) verifies the
-		// server cert; without it a self-signed server cert is rejected.
-		AuthType   string `json:"auth_type,omitempty"`
-		ClientCert string `json:"client_cert,omitempty"`
-		PrivateKey string `json:"private_key,omitempty"`
-		CACert     string `json:"ca_cert,omitempty"`
-	}
-
-	var config ConnectionConfig
-	if err := json.Unmarshal([]byte(connectionDetails), &config); err != nil {
-		logging.GetLogger().Sugar().Errorf("Failed to unmarshal connection details: %v", err)
-		return nil, fmt.Errorf("failed to parse connection details: %w", err)
-	}
-
-	// Determine effective sslmode
-	// If DSN is provided, we use it directly (later logic).
-	// If constructed from parts, we check SSL flags.
-
-	// Normalize Username/Password (prefer flat if Auth struct is empty, or valid vice versa)
-	if config.Auth.Basic.Username != "" {
-		config.Username = config.Auth.Basic.Username
-	}
-	if config.Auth.Basic.Password != "" {
-		config.Password = config.Auth.Basic.Password
-	}
-
-	// Default sslmode logic
-	if config.SSLMode == "" {
-		if config.SSL {
-			config.SSLMode = "require"
-		} else {
-			config.SSLMode = "disable"
-		}
-	}
-
-	// Construct the DSN (Data Source Name) for the postgres driver.
-	dsn := config.DSN
-	if dsn == "" {
-		// Validate required fields to avoid constructing invalid DSNs (e.g., port==0)
-		if config.Host == "" {
-			return nil, fmt.Errorf("invalid connection details: host is empty")
-		}
-		if config.Port <= 0 || config.Port > 65535 {
-			return nil, fmt.Errorf("invalid connection details: port must be between 1 and 65535 (got %d)", config.Port)
-		}
-		if config.Username == "" {
-			return nil, fmt.Errorf("invalid connection details: missing username")
-		}
-		if config.Database == "" {
-			return nil, fmt.Errorf("invalid connection details: missing database name")
-		}
-
-		u := url.URL{
-			Scheme: "postgres",
-			Host:   fmt.Sprintf("%s:%d", config.Host, config.Port),
-			Path:   config.Database,
-			User:   url.UserPassword(config.Username, config.Password),
-		}
-
-		q := u.Query()
-		q.Set("sslmode", config.SSLMode)
-		if config.Schema != "" {
-			q.Set("search_path", config.Schema)
-		}
-		u.RawQuery = q.Encode()
-
-		dsn = u.String()
-	}
-
-	// mTLS client-certificate auth: build the TLS config in memory (the
-	// private key is never written to disk) and register it with pgx's
-	// stdlib driver rather than passing sslcert/sslkey file paths in the DSN.
-	if config.AuthType == "key_pair" && config.ClientCert != "" && config.PrivateKey != "" {
-		cert, certErr := tls.X509KeyPair([]byte(config.ClientCert), []byte(config.PrivateKey))
-		if certErr != nil {
-			return nil, fmt.Errorf("invalid client certificate/key for key_pair auth: %w", certErr)
-		}
-
-		tlsConfig := &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			ServerName:   config.Host,
-			MinVersion:   tls.VersionTLS12,
-		}
-		if config.CACert != "" {
-			pool := x509.NewCertPool()
-			if !pool.AppendCertsFromPEM([]byte(config.CACert)) {
-				return nil, fmt.Errorf("invalid ca_cert for key_pair auth: no certificates parsed")
-			}
-			tlsConfig.RootCAs = pool
-		} else {
-			// No CA supplied to verify the server's (likely self-signed)
-			// certificate against. Still requires the client cert/key above,
-			// so this is client-authenticated but does not verify the server
-			// identity — acceptable for local/dev, not for production.
-			logging.GetLogger().Sugar().Warnf("key_pair auth for %s has no ca_cert; server certificate will not be verified", config.Host)
-			tlsConfig.InsecureSkipVerify = true
-		}
-
-		connConfig, parseErr := pgx.ParseConfig(dsn)
-		if parseErr != nil {
-			return nil, fmt.Errorf("failed to parse connection string for key_pair auth: %w", parseErr)
-		}
-		connConfig.TLSConfig = tlsConfig
-
-		// RegisterConnConfig hands back an opaque name that resolves to this
-		// exact *pgx.ConnConfig (including the in-memory TLS material) for
-		// the lifetime of the process; use that in place of the string DSN.
-		dsn = stdlib.RegisterConnConfig(connConfig)
-	}
-
-	targetDB, err := sql.Open("pgx", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open target database connection: %w", err)
-	}
-
-	// Use PingContext with timeout for fast failure if host unreachable
-	fields := strings.Split(config.Host, ":")
-	hostForLog := fields[0]
-	logging.GetLogger().Sugar().Infof("Connecting to %s on %s (sslmode=%s)...", config.Database, hostForLog, config.SSLMode)
-
-	pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	if err := targetDB.PingContext(pingCtx); err != nil {
-		targetDB.Close() // Close the connection if ping fails
-		return nil, fmt.Errorf("failed to ping target database (timeout 10s): %w", err)
-	}
-
-	logging.GetLogger().Sugar().Infof("Successfully connected to target database: %s on host %s", config.Database, config.Host)
-	return targetDB, nil
+	return sourceconn.OpenDetails(ctx, []byte(connectionDetails), 10*time.Second, func(msg string) {
+		logging.GetLogger().Sugar().Warn(msg)
+	})
 }
 
 // storeCatalogData stores extracted metadata in the alpha database

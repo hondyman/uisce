@@ -173,19 +173,30 @@ func (c *Connector) SQLDB(ctx context.Context, datasourceID string, p Policy) (*
 // caller must already have decided the requester may probe an arbitrary host. The returned *sql.DB
 // is the caller's to Close.
 func (c *Connector) OpenAdHoc(ctx context.Context, rawDetails []byte) (*sql.DB, error) {
+	return OpenDetails(ctx, rawDetails, c.cfg.DialTimeout, c.cfg.Warn)
+}
+
+// OpenDetails opens (and pings) a connection from complete connection details, with no lookup and
+// no pooling: the returned *sql.DB is the caller's to Close. It is for callers that already hold
+// resolved details and have already decided the connection is theirs to make: a platform job that
+// scans datasources from rows it read itself, or a "test this connection" form. Request-scoped access
+// to a stored datasource goes through Connector.Pool/SQLDB, which authorize the caller.
+func OpenDetails(ctx context.Context, rawDetails []byte, dialTimeout time.Duration, warn func(string)) (*sql.DB, error) {
 	cc, _, _, _, warns, err := connConfig(rawDetails)
 	if err != nil {
 		return nil, err
 	}
-	for _, w := range warns {
-		c.warn(w)
+	if warn != nil {
+		for _, w := range warns {
+			warn(w)
+		}
 	}
 	db := stdlib.OpenDB(*cc)
-	pctx, cancel := context.WithTimeout(ctx, c.cfg.DialTimeout)
+	pctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 	if err := db.PingContext(pctx); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("sourceconn: ping: %w", err)
+		db.Close() // never leave a half-open pool behind a failed ping
+		return nil, fmt.Errorf("sourceconn: ping (timeout %v): %w", dialTimeout, err)
 	}
 	return db, nil
 }
