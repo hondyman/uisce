@@ -59,7 +59,7 @@ const WIDEN_TARGET = 164; // 164 from the damage run, 0 documented excludes (wav
  *                   AND tenantContextStub.identity.test.ts, 6 tests, the
  *                   identity + shape guard for the fixture extensions)
  */
-const RUNNING_FILE_BASELINE = 109; // 105 after #277, +1 tenantScopeGate.test.ts, +1 useCanEditCoreItem.test.tsx, -1 dataExplorerApi.test.ts (data-explorer dropped), +1 gsifiManagers.test.tsx, +2 region.test.ts, RegionPicker.test.tsx
+const RUNNING_FILE_BASELINE = 110; // 105 after #277, +1 tenantScopeGate.test.ts, +1 useCanEditCoreItem.test.tsx, -1 dataExplorerApi.test.ts (data-explorer dropped), +1 gsifiManagers.test.tsx, +2 region.test.ts, RegionPicker.test.tsx, +1 themeStyles.test.ts
 const EXECUTED_TEST_BASELINE = 618; // measured with `vitest --reporter=json`: 594 after #277, +6 tenantScopeGate.test.ts, +5 useCanEditCoreItem.test.tsx, -5 dataExplorerApi.test.ts, +9 gsifiManagers.test.tsx, +9 region tests
 
 function globFiles(roots: string[], patterns: string[]): string[] {
