@@ -3,12 +3,15 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/token"
 	"go/types"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 
 	"golang.org/x/tools/go/packages"
 
@@ -107,6 +110,51 @@ func main() {
 	}
 }
 
+// aslIgnoreMarker excludes a type from the generated Monaco surface even when
+// it lives in a package this generator enumerates. See the full rationale on
+// the copy in cmd/generate-types - the three generators are kept in step by
+// hand, because two of them read the marker from the AST and this one has to
+// recover it from go/packages.
+const aslIgnoreMarker = "asl:ignore"
+
+// aslIgnoredNames returns the set of type names in pkg whose declaration
+// carries the marker. This generator resolves types through go/types rather
+// than parsing the AST, and go/types deliberately discards comments - so the
+// doc comment is read back off the syntax trees that packages.Load was
+// already asked for (NeedSyntax is set in buildMetadata's config). Nothing
+// extra is parsed; this just walks pkg.Syntax.
+func aslIgnoredNames(pkg *packages.Package) map[string]bool {
+	ignored := map[string]bool{}
+	for _, file := range pkg.Syntax {
+		for _, decl := range file.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range genDecl.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				doc := typeSpec.Doc
+				if doc == nil {
+					doc = typeSpec.Comment
+				}
+				if doc == nil {
+					doc = genDecl.Doc
+				}
+				if doc == nil {
+					continue
+				}
+				if strings.Contains(doc.Text(), aslIgnoreMarker) {
+					ignored[typeSpec.Name.Name] = true
+				}
+			}
+		}
+	}
+	return ignored
+}
+
 // buildMetadata loads goPkgPaths and derives Monaco completion metadata
 // from their real types (go/types, not go/ast text parsing - so it
 // resolves cross-package references, unlike generate-schema/generate-types).
@@ -144,7 +192,13 @@ func buildMetadata() MonacoMetadata {
 		names := scope.Names()
 		sort.Strings(names)
 
+		ignored := aslIgnoredNames(pkg)
+
 		for _, name := range names {
+			if ignored[name] {
+				continue
+			}
+
 			obj := scope.Lookup(name)
 			typeName, ok := obj.(*types.TypeName)
 			if !ok {

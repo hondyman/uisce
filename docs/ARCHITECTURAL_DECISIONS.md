@@ -1093,7 +1093,119 @@ the documented StarRocks 3.3 and Lakekeeper interfaces and the properties this r
 already uses; they have not been run against the deployed instances and need a smoke run
 before anything depends on them.
 
+### ADR-037: Inside One Tenant Bucket, Object Lock Is Compliance For Everything; History Cannot Be Governance-Mode
+
+**Decision.** A tenant has one bucket (ADR-032), and `EnsureTenantBucket` sets its default
+Object Lock retention to COMPLIANCE for `audit_retention_days`, refusing any other mode
+(`ErrBucketConflict`). Every object the tenant's warehouse writes inherits that default. We do
+**not** plan on a second, governance-mode bucket or on per-object retention for "history": the
+writers of tenant Iceberg data are StarRocks and Lakekeeper, which cannot set a per-object
+retention header, so an `audit` namespace and an `<app>` namespace in the same bucket are locked
+identically. The audit/history distinction is therefore a *table* distinction (namespace and
+maintenance rules), not a storage-lock one.
+
+**Consequences.**
+- Tenant history written to the lake is retained for at least the tenant's audit retention and
+  cannot be dropped earlier, even by an operator. That is acceptable only because the lake holds
+  copies; `alpha` and the tenant's Postgres remain where data is created and, for metadata,
+  kept (ADR-029, ADR-035).
+- Retention-driven drops of tenant history (ADR-035) therefore act on Postgres and StarRocks
+  partitions, not on lake objects, until the lock lapses. Snapshot expiry and orphan cleanup
+  skip every table in a tenant warehouse until then (same limit as ADR-036).
+- Raising retention applies to new objects only (already recorded in `tenant_lakehouse`).
+- If a tenant needs history that can be deleted before the audit term, that needs a second
+  bucket and warehouse for that tenant, which contradicts one-warehouse-per-tenant. It is a
+  decision to take per tenant, with this ADR revisited, not a default.
+
+**Evidence.** `internal/iceberg/tenant_bucket.go` (`ensureObjectLock`, `ExtendTenantRetention`).
+
+### ADR-038: The Binding Carries Lifecycle Windows and Legal Hold, As Additive Columns
+
+**Decision.** `tenant_datasource_binding` gains `pg_cluster`, `hot_window_days` (default 90),
+`warm_window_months` (default 13), `legal_hold` and a uniqueness guard on `redis_key_prefix`, by
+a forward migration of `ADD COLUMN IF NOT EXISTS` and a new index only (ADR-024). Nothing in
+`20261206_001` is edited, dropped or retyped. Cold retention is not repeated here: it is
+`tenant_lakehouse.audit_retention_days`, per tenant (ADR-032). Maker-checker approval on
+binding changes is not added by this decision; it needs its own, using the staging-binding
+approach rather than invented columns.
+
+**Consequence.** The tiering job (ADR-035) reads the windows and `legal_hold` from the binding;
+`legal_hold` suspends partition drops and never touches Object Lock.
+
+### ADR-039: Drift Is Reported, Not Remediated, By a Reporter Over Existing Sources
+
+**Decision.** Any reconciler of registry versus tier state is a reporter. Its expected state
+comes from the existing sources (`InspectProvisioningState`, the retention reconcile and the
+registry), it reports `missing`, `orphan`, `drift` and `unknown` (a failed probe is `unknown`,
+never healthy-by-absence), and it never executes. Remediation stays with the workflow that owns
+the lifecycle change, so each change has one execution path and no second provisioner exists.
+It must never auto-remediate a resource under compliance Object Lock.
+
 ## Open items
+
+- **C1 (9.1) ported metric primitives into the rule VM.**
+  `MetricVariable`, `MetricFormatConfig`, `MetricExpression`,
+  `DeriveDecomposable`, `NormalizeFormulaForHash` and
+  `ComputeMetricContentHash` now live in `internal/rules/vm`
+  (`metric_expression.go`), and the `querybuilder` implementations
+  **delegate** rather than reimplement. One implementation, so the compiler's
+  canonicalization and the content hash cannot drift. Recorded because the port
+  is a *move*, and the next person will otherwise look for the originals.
+
+  Two properties are pinned by this decision and must survive it:
+
+  - **Operand order is semantic.** `BaseMetricIDs` is deliberately unsorted, and
+    `NumeratorID`/`DenominatorID` (ADR-026) are hashed as distinct fields.
+    Sorting, or dropping the named operands, makes `revenue/cost` and
+    `cost/revenue` share a content hash — and that hash is the cube deploy
+    identity and part of the query cache key, so the two opposite metrics would
+    share a cache entry. This is not hypothetical: the first port attempt
+    dropped the two named-operand fields, and the 8.3 golden corpus caught it.
+  - **The hash input surface is explicit.** `MetricContentInput` is a flat
+    struct, not the full `MetricDefinition`, so adding a definition field does
+    not silently change deploy identity or cache keys.
+
+  The port is behavioural, and the golden corpus
+  (`internal/querybuilder/testdata/metric_corpus`) is the evidence: it was
+  regenerated *not at all*, and the failures it reported were real defects in
+  the new mapper. `NormalizeFormulaForHash` is byte-identical to the function it
+  replaced, including its paren-stripping quirk (`SUM(a)` → `suma`) — fixing
+  that would have changed already-deployed hashes, so it is preserved and
+  documented instead.
+
+  Go will not convert between distinct named struct types, so the
+  querybuilder→VM mappers are written field by field. That is intentional: a
+  field added to one side without the other becomes a compile error rather than
+  a silently dropped field, which is exactly how the named-operand regression
+  would otherwise have shipped.
+
+  The port also had a side effect that had nothing to do with metric semantics.
+  `generate-types`, `generate-schema` and `generate-monaco` enumerate
+  `internal/rules/vm`, so any exported struct there lands in the published ASL
+  schema — and, carrying a discriminator-shaped field, as an insertable Monaco
+  node. The four metric types were in `internal/querybuilder`, never enumerated,
+  so `main` has no `Metric*` entry in any generated artifact; the port alone
+  added four, including `MetricExpression`, whose `kind` field looks exactly
+  like the discriminator that earns a struct a node kind. The WASM evaluator has
+  no node kind for any of them, so the port would have let an author insert a
+  node the browser could not evaluate — the precise failure
+  `cmd/check-drift`'s own header says that pipeline exists to prevent.
+
+  Resolution: an `// asl:ignore` doc-comment marker, honored by all three
+  generators (`generate-schema` and `generate-types` read it from the AST,
+  `generate-monaco` recovers it from the syntax trees it already loads, since
+  `go/types` discards comments). The four types carry it, and the generated
+  artifacts and their goldens are byte-identical to `main` again. The marker
+  keeps a type's new home from silently changing the published browser
+  contract; it is the escape hatch C2/C3 lineage and calc-term types will need.
+  Removing one marker reintroduces the type into all three artifacts and fails
+  both golden tests, so the guard is enforced rather than decorative.
+
+  Note for the next person: `frontend/public/asl.monaco.json` is a
+  **manually-synced** copy of the backend artifact, and no CI step guards it
+  (only `rule_engine.wasm` has a verify step). Nothing in C1 needed to sync it,
+  because the contract no longer changes — but a future change to the Monaco
+  surface will desync it silently unless the copy is updated in the same commit.
 
 - **Call-site verification for ADR-001 … ADR-010.** The imported entries assert
   no call sites because the original recorded none. Verifying each is
@@ -1108,3 +1220,9 @@ before anything depends on them.
   materialization transitions to `failed`, since a scheduler that silently fails
   turns staleness from an edge case into the steady state. The reconciler
   health-check surface is a candidate host but is not yet chosen.
+- **Seal-chain amendments (not adopted).** Two ideas were considered for the audit chain and
+  parked: (1) a per-partition boundary seal in `ivy-control`, and (2) a key version in each seal.
+  (1) exists to prove continuity after a Postgres partition is detached, but `alpha` audit is
+  never detached (ADR-029), so it is only needed once a *tenant database* event table carries a
+  seal chain and ADR-035's detach-verification job is built. (2) does not apply: the shipped
+  chain is an unkeyed hash, so there is no key to version. Decide (1) before that job is written.

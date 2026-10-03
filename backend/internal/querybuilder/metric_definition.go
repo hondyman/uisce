@@ -2,17 +2,15 @@ package querybuilder
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -63,8 +61,8 @@ type MaterializationConfig struct {
 
 // MetricExpression defines the computation rules for a metric.
 type MetricExpression struct {
-	Kind       string `json:"kind"`             // "aggregation" | "formula" | "derived"
-	Fn         string `json:"fn,omitempty"`     // "sum" | "avg" | "count" | "min" | "max"
+	Kind       string `json:"kind"`                 // "aggregation" | "formula" | "derived"
+	Fn         string `json:"fn,omitempty"`         // "sum" | "avg" | "count" | "min" | "max"
 	TermNodeID string `json:"termNodeId,omitempty"` // For aggregation / column reference
 	// Formula is authored SQL text with @variable references, e.g.
 	// "SUM(price * qty) * @fx_rate". The compiler substitutes the variables
@@ -134,98 +132,87 @@ type metricDefRow struct {
 // DeriveDecomposable determines whether a metric aggregation/expression is distributive.
 // Distributive aggregations (SUM, COUNT, MIN, MAX) can be split and pre-aggregated across partitions.
 // Non-distributive expressions (AVG, formulas with division) cannot be trivially summed.
+// DeriveDecomposable reports whether a metric may be summed across a finer
+// grain and still be correct. Delegates to the VM (C1/9.1), which owns the
+// rule; this wrapper keeps the querybuilder call sites unchanged.
 func DeriveDecomposable(expr MetricExpression) bool {
-	switch strings.ToLower(strings.TrimSpace(expr.Kind)) {
-	case "aggregation":
-		fn := strings.ToLower(strings.TrimSpace(expr.Fn))
-		return fn == "sum" || fn == "count" || fn == "min" || fn == "max"
-	case "formula":
-		// Conservative derivation: any division or non-distributive function marks as non-decomposable
-		f := strings.ToLower(expr.Formula)
-		if strings.Contains(f, "/") || strings.Contains(f, "avg(") {
-			return false
-		}
-		return true
-	case "derived":
-		// Derived metrics (ratio of metrics) are generally non-decomposable across tiers
-		return false
-	default:
-		return false
-	}
+	return vm.DeriveDecomposable(toVMExpression(expr))
 }
 
 // ComputeMetricContentHash deterministically computes the SHA-256 hash of a metric definition's
 // semantic content (normalized formula, grains, format, variables, boid).
+//
+// Delegates to the VM (C1/9.1). The hash is the cube deploy identity and part of
+// the query cache key, so it must have exactly one implementation; the 8.3
+// golden corpus is what proves the delegated path is unchanged.
 func ComputeMetricContentHash(m MetricDefinition) string {
-	// 1. Normalize Expression
-	normExpr := m.Expression
-	normExpr.Kind = strings.ToLower(strings.TrimSpace(normExpr.Kind))
-	normExpr.Fn = strings.ToLower(strings.TrimSpace(normExpr.Fn))
-	// Tokenize / normalize formula to make whitespace/parentheses invariant for canonical comparison
-	normExpr.Formula = normalizeFormulaForHash(normExpr.Formula)
-	// BaseMetricIDs are deliberately NOT sorted. Operand order is semantic: the
-	// first entry of a 2-operand derived metric is the numerator (ADR-025).
-	// Sorting here would give revenue/cost and cost/revenue the same content
-	// hash, and that hash is the cube deploy identity and part of the query
-	// cache key - so the two opposite metrics would share a cache entry.
-
-	// 2. Normalize Grain Allowlist
-	normGrains := make([]string, len(m.GrainAllowlist))
-	for i, g := range m.GrainAllowlist {
-		normGrains[i] = strings.ToLower(strings.TrimSpace(g))
-	}
-	sort.Strings(normGrains)
-
-	// 3. Normalize Variables
-	normVars := make([]MetricVariable, len(m.Variables))
-	copy(normVars, m.Variables)
-	sort.Slice(normVars, func(i, j int) bool {
-		return normVars[i].Name < normVars[j].Name
+	return vm.ComputeMetricContentHash(vm.MetricContentInput{
+		Name:           m.Name,
+		BOID:           m.BOID,
+		Expression:     toVMExpression(m.Expression),
+		GrainAllowlist: m.GrainAllowlist,
+		FormatConfig:   toVMFormatConfig(m.FormatConfig),
+		Variables:      toVMVariables(m.Variables),
 	})
-
-	canonicalDoc := struct {
-		Name         string             `json:"name"`
-		BOID         string             `json:"boId"`
-		Expression   MetricExpression   `json:"expression"`
-		Grains       []string           `json:"grains"`
-		FormatConfig MetricFormatConfig `json:"formatConfig"`
-		Variables    []MetricVariable   `json:"variables"`
-	}{
-		Name:         strings.TrimSpace(m.Name),
-		BOID:         strings.TrimSpace(m.BOID),
-		Expression:   normExpr,
-		Grains:       normGrains,
-		FormatConfig: m.FormatConfig,
-		Variables:    normVars,
-	}
-
-	b, _ := json.Marshal(canonicalDoc)
-	hash := sha256.Sum256(b)
-	return hex.EncodeToString(hash[:])
 }
 
-func normalizeFormulaForHash(f string) string {
-	// Strips redundant whitespace, cosmetic redundant outer parentheses, and normalizes case
-	f = strings.TrimSpace(strings.ToLower(f))
-	var sb strings.Builder
-	inWhitespace := false
-	for _, r := range f {
-		if r == '(' || r == ')' {
-			// Ignore purely cosmetic grouping parentheses in commutative additions/multiplications
-			// while keeping structure tokenized
-			continue
-		}
-		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
-			if !inWhitespace {
-				sb.WriteRune(' ')
-				inWhitespace = true
-			}
-		} else {
-			sb.WriteRune(r)
-			inWhitespace = false
+// toVMFormatConfig maps querybuilder format config onto its VM counterpart.
+// The pointer fields are copied by reference deliberately: they are read-only
+// in practice, and sharing them avoids the mapper silently deep-copying a *int
+// into a different value.
+func toVMFormatConfig(in MetricFormatConfig) vm.MetricFormatConfig {
+	return vm.MetricFormatConfig{
+		Type:           in.Type,
+		Precision:      in.Precision,
+		CurrencySymbol: in.CurrencySymbol,
+		Prefix:         in.Prefix,
+		Suffix:         in.Suffix,
+	}
+}
+
+// toVMExpression maps a querybuilder expression onto its VM counterpart.
+// Written as an explicit field mapping rather than a type conversion: Go will
+// not convert between distinct named struct types, and doing it by hand keeps
+// the two definitions honestly coupled -- adding a field to one without the
+// other becomes a compile error at the call site rather than a silent omission.
+func toVMExpression(in MetricExpression) vm.MetricExpression {
+	return vm.MetricExpression{
+		Kind:          in.Kind,
+		Fn:            in.Fn,
+		TermNodeID:    in.TermNodeID,
+		Formula:       in.Formula,
+		BaseMetricIDs: in.BaseMetricIDs,
+		NumeratorID:   in.NumeratorID,
+		DenominatorID: in.DenominatorID,
+	}
+}
+
+// toVMVariables maps querybuilder variables onto their VM counterparts. The
+// struct fields are identical, so this is a field-wise copy rather than a type
+// conversion — that keeps the mapping explicit and greppable if either type
+// gains a field.
+func toVMVariables(in []MetricVariable) []vm.MetricVariable {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]vm.MetricVariable, len(in))
+	for i, v := range in {
+		out[i] = vm.MetricVariable{
+			Name:         v.Name,
+			Type:         v.Type,
+			DefaultValue: v.DefaultValue,
+			Required:     v.Required,
+			Description:  v.Description,
 		}
 	}
-	return strings.TrimSpace(sb.String())
+	return out
+}
+
+// normalizeFormulaForHash delegates to the VM (C1/9.1), which owns metric
+// canonicalization. One implementation, so the compiler's normalization and
+// the content hash cannot drift apart.
+func normalizeFormulaForHash(f string) string {
+	return vm.NormalizeFormulaForHash(f)
 }
 
 func (r metricDefRow) toMetricDefinition() MetricDefinition {
