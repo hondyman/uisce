@@ -2,6 +2,7 @@ package querybuilder
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -13,6 +14,15 @@ import (
 
 // TestMetricCatalogSync_TransactionalEmission verifies that SyncMetricToCatalogGraph
 // emits SEMANTIC_TERM node, METRIC_OF edge, and USES_TERM edges within a single transaction.
+//
+// NOTE ON THE FIXTURE: this test used to set TermNodeID to a UUID. That was not
+// arbitrary - it was the only shape the implementation accepted, because the
+// USES_TERM insert was guarded by uuid.Parse(TermNodeID). Real metrics name
+// terms by semantic key (the 8.3 corpus carries "revenue", "cost",
+// "calc_term_net_interest_income"), so the test exercised a shape production
+// data never takes, and passed while the edge was never written for any real
+// metric. The fixture now uses a name, so it exercises the path that actually
+// runs.
 func TestMetricCatalogSync_TransactionalEmission(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -24,7 +34,8 @@ func TestMetricCatalogSync_TransactionalEmission(t *testing.T) {
 	require.NoError(t, err)
 
 	tenantID := uuid.New().String()
-	termUUID := uuid.New().String()
+	// A semantic term NAME, as real metrics use - not a UUID.
+	termKey := "notional"
 	metricID := "m_notional_sync"
 
 	metric := MetricDefinition{
@@ -34,7 +45,7 @@ func TestMetricCatalogSync_TransactionalEmission(t *testing.T) {
 		Expression: MetricExpression{
 			Kind:       "aggregation",
 			Fn:         "sum",
-			TermNodeID: termUUID,
+			TermNodeID: termKey,
 		},
 		GrainAllowlist: []string{"desk"},
 		Decomposable:   true,
@@ -64,9 +75,17 @@ func TestMetricCatalogSync_TransactionalEmission(t *testing.T) {
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), boNodeUUID).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	// 4. Expect USES_TERM edge insertion
+	// 4. Expect the TERM to be resolved by node_key. This lookup is the fix:
+	// it is what makes the USES_TERM edge reachable for a name-based term.
+	// Two args only - node_type is a SQL literal, not a placeholder.
+	termNodeUUID := uuid.New()
+	mock.ExpectQuery("SELECT node_id FROM catalog_node WHERE").
+		WithArgs(sqlmock.AnyArg(), termKey).
+		WillReturnRows(sqlmock.NewRows([]string{"node_id"}).AddRow(termNodeUUID))
+
+	// 5. Expect USES_TERM edge insertion, targeting the RESOLVED term node
 	mock.ExpectExec("INSERT INTO catalog_edge").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), termNodeUUID).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	nodeID, err := SyncMetricToCatalogGraph(context.Background(), tx, tenantID, metric)
@@ -76,6 +95,54 @@ func TestMetricCatalogSync_TransactionalEmission(t *testing.T) {
 	mock.ExpectCommit()
 	err = tx.Commit()
 	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestMetricCatalogSync_TermMissingFromCatalogIsNotFatal pins the distinction
+// the fix introduced: a term that is not a catalog node is a legitimate state
+// (a metric can be imported before its term), so the sync succeeds - but the
+// absent edge is reported, never silently indistinguishable from a failed
+// insert. A database error, by contrast, is returned and rolls the transaction
+// back, because a metric node in the graph with no lineage is exactly the
+// "looks successful, isn't" failure this function had.
+func TestMetricCatalogSync_TermMissingFromCatalogIsNotFatal(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+
+	mock.ExpectBegin()
+	tx, err := sqlxDB.Beginx()
+	require.NoError(t, err)
+
+	tenantID := uuid.New().String()
+	boNodeUUID := uuid.New()
+
+	mock.ExpectExec("INSERT INTO catalog_node").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery("SELECT node_id FROM catalog_node WHERE").
+		WithArgs(sqlmock.AnyArg(), "bo/bo_trade", "bo_trade").
+		WillReturnRows(sqlmock.NewRows([]string{"node_id"}).AddRow(boNodeUUID))
+	mock.ExpectExec("INSERT INTO catalog_edge").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	// Term is absent. Two args - node_type is a SQL literal.
+	mock.ExpectQuery("SELECT node_id FROM catalog_node WHERE").
+		WithArgs(sqlmock.AnyArg(), "no_such_term").
+		WillReturnError(sql.ErrNoRows)
+	// And crucially, NO USES_TERM insert is expected after the miss.
+
+	_, err = SyncMetricToCatalogGraph(context.Background(), tx, tenantID, MetricDefinition{
+		ID:   "m_orphan",
+		Name: "Orphan",
+		BOID: "bo_trade",
+		Expression: MetricExpression{
+			Kind: "aggregation", Fn: "sum", TermNodeID: "no_such_term",
+		},
+	})
+	require.NoError(t, err, "a term absent from the catalog is not a database failure")
+
+	mock.ExpectCommit()
+	require.NoError(t, tx.Commit())
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 

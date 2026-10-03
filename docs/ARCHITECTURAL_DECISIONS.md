@@ -1301,6 +1301,36 @@ It must never auto-remediate a resource under compliance Object Lock.
   metric compiler's own cycle detection does not cover), and calc-term lineage
   edges plus reconciler backfill.
 
+- **The metric-to-term `USES_TERM` lineage edge was never written. C2 fixes it, and
+  the unit test was part of the bug.** `SyncMetricToCatalogGraph` guarded the
+  insert with `uuid.Parse(m.Expression.TermNodeID)`, so the edge ran only when a
+  metric named its term by UUID. Real metrics name terms by semantic key — the
+  8.3 corpus carries `revenue`, `cost`, `units_sold`, `returns`,
+  `calc_term_net_interest_income` — and 0 of 5 parse. Every metric's lineage to
+  its underlying term was absent, and the reconciler (`metric_reconciler.go:51`)
+  called the function and appeared to succeed.
+
+  Two pieces of evidence, not one. The corpus gave the data shape. The unit test
+  gave the confirmation: `TestMetricCatalogSync_TransactionalEmission` set
+  `TermNodeID` to a **UUID**, because that was the only shape the implementation
+  accepted. A test written around the implementation's constraint rather than
+  production's data passes while production takes the other branch — the same
+  family as a vacuous fixture, one level up.
+
+  Resolution now matches `DERIVED_FROM`, twelve lines below, which has always
+  resolved its target by `node_key`. Both steps resolve a name the same way, so
+  a metric whose base metrics are linked is no longer one whose term is not.
+
+  The three `_, _ = tx.ExecContext(...)` in that function are gone, and the two
+  failure classes are distinguished rather than merged: a **database error is
+  returned** and rolls the transaction back, because a metric node in the graph
+  with no lineage reads as "it never had any"; a **missing target is not fatal**
+  (a metric can legitimately be imported before its term exists) but is
+  **recorded and logged**, so an absent edge is always explicable. An absent edge
+  with no log line is a bug, not a state. This is the `G104` argument from the
+  security-scan discussion made concrete in the product rather than in the
+  tooling.
+
 - **Call-site verification for ADR-001 … ADR-010.** The imported entries assert
   no call sites because the original recorded none. Verifying each is
   outstanding; ADR-012 and ADR-013 exist because that verification already
