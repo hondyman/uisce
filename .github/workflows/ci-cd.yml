@@ -243,7 +243,26 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: [ build-backend, build-frontend ]
+    # NO `needs:`. This job checks the repository out fresh and scans the source
+    # tree itself - Trivy fs, Snyk, Gosec on ./backend/... - so it consumes no
+    # artifact, output or build product from build-backend or build-frontend.
+    # It used to declare `needs: [build-backend, build-frontend]`, which
+    # serialized a 8-11 minute full scan behind 10-13 minutes of builds and made
+    # it additive to every pull request's wall-clock.
+    #
+    # Measured (main, CI/CD Pipeline, wall-clock vs longest single job):
+    #   37143104980  actual 22.6m   longest job 12.8m   builds+scan 21.8m
+    #   37131153050  actual 24.4m   longest job 10.1m   builds+scan 18.4m
+    #   37129484109  actual 36.1m   longest job 13.4m   builds+scan 23.9m
+    #   37129470823  actual 24.6m   longest job 11.1m   builds+scan 21.0m
+    # The longest-single-job figure was off by 9.8-22.7m; the dependency-chain
+    # figure tracked reality to 0.8-12.2m. The scan is on the critical path in
+    # EVERY run, not the one in three that a max-job reading suggested.
+    #
+    # On push to main, docker-build still declares
+    # `needs: [..., security-scan]`, so image scanning still runs after the source
+    # scan completes. Nothing about what is scanned changes; only when it starts.
+    #
     # Repo default token is read-only; uploading SARIF to code scanning needs this.
     permissions:
       contents: read
