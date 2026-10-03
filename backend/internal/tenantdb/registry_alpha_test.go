@@ -73,8 +73,10 @@ $$ LANGUAGE plpgsql STABLE;
 CREATE TABLE tenants (id uuid PRIMARY KEY, name text, code text, allowed_regions jsonb);
 CREATE TABLE tenant_instance (id uuid PRIMARY KEY, tenant_id uuid NOT NULL REFERENCES tenants(id), is_active bool NOT NULL DEFAULT true);
 CREATE TABLE tenant_product (id uuid PRIMARY KEY, datasource_id uuid NOT NULL REFERENCES tenant_instance(id), is_active bool NOT NULL DEFAULT true);
+CREATE TABLE alpha_datasource (id uuid PRIMARY KEY, datasource_code text NOT NULL);
 CREATE TABLE tenant_product_datasource (
     id uuid PRIMARY KEY, tenant_product_id uuid NOT NULL REFERENCES tenant_product(id),
+    alpha_datasource_id uuid REFERENCES alpha_datasource(id),
     is_active bool NOT NULL DEFAULT true, config jsonb NOT NULL DEFAULT '{}');
 `
 
@@ -96,7 +98,7 @@ GRANT USAGE ON SCHEMA public TO PUBLIC;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO PUBLIC;
 `
 
-type seeded struct{ t1, t2, ds1, ds2 string }
+type seeded struct{ t1, t2, ds1, ds2, prod1, prod2 string }
 
 func seed(t *testing.T, db *sql.DB) seeded {
 	t.Helper()
@@ -106,6 +108,12 @@ func seed(t *testing.T, db *sql.DB) seeded {
 	s := seeded{t1: uuid.NewString(), t2: uuid.NewString(), ds1: uuid.NewString(), ds2: uuid.NewString()}
 	for i, tenant := range []string{s.t1, s.t2} {
 		inst, prod, ds := uuid.NewString(), uuid.NewString(), []string{s.ds1, s.ds2}[i]
+		if i == 0 {
+			s.prod1 = prod
+		} else {
+			s.prod2 = prod
+		}
+		codeID := uuid.NewString()
 		tx, err := db.Begin()
 		require.NoError(t, err)
 		_, err = tx.Exec(`SELECT set_config('uisce.current_tenant', $1, true)`, tenant)
@@ -117,8 +125,9 @@ func seed(t *testing.T, db *sql.DB) seeded {
 			{`INSERT INTO tenants (id, name, code) VALUES ($1, 'n', $2)`, []any{tenant, "c" + tenant[:8]}},
 			{`INSERT INTO tenant_instance (id, tenant_id) VALUES ($1, $2)`, []any{inst, tenant}},
 			{`INSERT INTO tenant_product (id, datasource_id) VALUES ($1, $2)`, []any{prod, inst}},
-			{`INSERT INTO tenant_product_datasource (id, tenant_product_id, config) VALUES ($1, $2, $3)`,
-				[]any{ds, prod, fmt.Sprintf(`{"host":"db%d","port":5432,"database":"orm_t%d","username":"app%d","password":"pw%d"}`, i+1, i+1, i+1, i+1)}},
+			{`INSERT INTO alpha_datasource (id, datasource_code) VALUES ($1, 'core')`, []any{codeID}},
+			{`INSERT INTO tenant_product_datasource (id, tenant_product_id, alpha_datasource_id, config) VALUES ($1, $2, $4, $3)`,
+				[]any{ds, prod, fmt.Sprintf(`{"host":"db%d","port":5432,"database":"orm_t%d","username":"app%d","password":"pw%d"}`, i+1, i+1, i+1, i+1), codeID}},
 		} {
 			_, err := tx.Exec(q.sql, q.args...)
 			require.NoError(t, err, q.sql)
@@ -222,4 +231,61 @@ func TestAlphaRegistry_RefusalsFailClosed(t *testing.T) {
 		require.Error(t, err, id)
 	}
 
+}
+
+// addDatasource gives a tenant another datasource for an app code (own catalog row), optionally inactive.
+func addDatasource(t *testing.T, db *sql.DB, tenant, product, code string, active bool) string {
+	t.Helper()
+	id, cat := uuid.NewString(), uuid.NewString()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	_, err = tx.Exec(`SELECT set_config('uisce.current_tenant', $1, true)`, tenant)
+	require.NoError(t, err)
+	_, err = tx.Exec(`INSERT INTO alpha_datasource (id, datasource_code) VALUES ($1, $2)`, cat, code)
+	require.NoError(t, err)
+	_, err = tx.Exec(`INSERT INTO tenant_product_datasource (id, tenant_product_id, alpha_datasource_id, is_active, config) VALUES ($1, $2, $3, $4, '{}')`,
+		id, product, cat, active)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
+	return id
+}
+
+func TestAlphaRegistry_AppDatasource(t *testing.T) {
+	db := alphaDBs(t)
+	s := seed(t, db)
+	r := registry(db)
+	ctx := context.Background()
+
+	t.Run("the tenant's one datasource for the app", func(t *testing.T) {
+		id, err := r.AppDatasource(ctx, s.t1, "core")
+		require.NoError(t, err)
+		require.Equal(t, s.ds1, id)
+		id, err = r.AppDatasource(ctx, s.t2, "core")
+		require.NoError(t, err)
+		require.Equal(t, s.ds2, id, "each tenant gets its own, never the other's")
+	})
+
+	t.Run("no datasource for the app is unbound", func(t *testing.T) {
+		_, err := r.AppDatasource(ctx, s.t1, "wealth")
+		require.ErrorIs(t, err, ErrUnbound)
+	})
+
+	t.Run("an inactive datasource does not count", func(t *testing.T) {
+		addDatasource(t, db, s.t1, s.prod1, "ledger", false)
+		_, err := r.AppDatasource(ctx, s.t1, "ledger")
+		require.ErrorIs(t, err, ErrUnbound)
+	})
+
+	t.Run("two active datasources for one app is ambiguous, never the first", func(t *testing.T) {
+		addDatasource(t, db, s.t1, s.prod1, "dup", true)
+		addDatasource(t, db, s.t1, s.prod1, "dup", true)
+		_, err := r.AppDatasource(ctx, s.t1, "dup")
+		require.ErrorIs(t, err, ErrAmbiguousApp)
+	})
+
+	t.Run("another tenant's datasource is invisible", func(t *testing.T) {
+		addDatasource(t, db, s.t2, s.prod2, "only_t2", true)
+		_, err := r.AppDatasource(ctx, s.t1, "only_t2")
+		require.ErrorIs(t, err, ErrUnbound, "row-level security must hide it from t1")
+	})
 }
