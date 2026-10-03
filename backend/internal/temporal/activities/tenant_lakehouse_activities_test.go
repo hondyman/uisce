@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/iceberg"
+	"github.com/hondyman/uisce/backend/internal/lakehouse/infra"
 	"github.com/hondyman/uisce/backend/internal/lakehouse/registry"
 	"github.com/hondyman/uisce/backend/internal/temporal/activities"
 	"github.com/stretchr/testify/require"
@@ -14,11 +15,13 @@ import (
 )
 
 type fakeReg struct {
-	cfg      *registry.Config
-	getErr   error
-	markErr  error
-	marked   []markCall
-	failures []failCall
+	cfg         *registry.Config
+	getErr      error
+	markErr     error
+	marked      []markCall
+	failures    []failCall
+	credMarks   int
+	credMarkErr error
 }
 type markCall struct {
 	tenant, warehouse uuid.UUID
@@ -35,6 +38,10 @@ func (f *fakeReg) Get(context.Context, uuid.UUID) (*registry.Config, error) { re
 func (f *fakeReg) MarkProvisioned(_ context.Context, t, w uuid.UUID, k string, a registry.Actor) error {
 	f.marked = append(f.marked, markCall{t, w, k, a})
 	return f.markErr
+}
+func (f *fakeReg) MarkCredentialIssued(context.Context, uuid.UUID) error {
+	f.credMarks++
+	return f.credMarkErr
 }
 func (f *fakeReg) RecordProvisionFailure(_ context.Context, t uuid.UUID, a registry.Actor, step, reason string) error {
 	f.failures = append(f.failures, failCall{t, step, reason, a})
@@ -63,12 +70,14 @@ func (f *fakeBuckets) EnsureTenantBucket(_ context.Context, s iceberg.TenantBuck
 
 type fakeCreds struct {
 	ensured            []string
+	mayMint            []bool
 	ensureErr, readErr error
 	key, secret        string
 }
 
-func (f *fakeCreds) EnsureBucketCredential(_ context.Context, _ uuid.UUID, bucket string) error {
+func (f *fakeCreds) EnsureBucketCredential(_ context.Context, _ uuid.UUID, bucket string, mayMint bool) error {
 	f.ensured = append(f.ensured, bucket)
+	f.mayMint = append(f.mayMint, mayMint)
 	return f.ensureErr
 }
 func (f *fakeCreds) Read(context.Context, uuid.UUID) (string, string, error) {
@@ -306,4 +315,98 @@ func TestRecordLakehouseFailure(t *testing.T) {
 	r := newRig()
 	require.NoError(t, r.acts.RecordLakehouseFailure(context.Background(), r.in, "EnsureLakehouseBucket", "boom"))
 	require.Equal(t, []failCall{{r.id, "EnsureLakehouseBucket", "boom", registry.Actor{ID: "alice", Role: "global_admin"}}}, r.reg.failures)
+}
+
+// Missing infrastructure configuration cannot be fixed by retrying, so every step that
+// reaches infrastructure must fail fast on it, and must still retry a real outage.
+func TestInfrastructureNotConfiguredIsNeverRetried(t *testing.T) {
+	ctx := context.Background()
+	notConfigured := errors.Join(errors.New("KES needs [KES_ENDPOINT KES_API_KEY]"), infra.ErrNotConfigured)
+
+	steps := map[string]func(r *rig) error{
+		"key": func(r *rig) error { r.keys.err = notConfigured; _, e := r.acts.EnsureLakehouseKey(ctx, r.in); return e },
+		"bucket": func(r *rig) error {
+			r.bkt.err = notConfigured
+			return r.acts.EnsureLakehouseBucket(ctx, r.in, "k", 365)
+		},
+		"credential": func(r *rig) error { r.cr.ensureErr = notConfigured; return r.acts.EnsureLakehouseCredential(ctx, r.in) },
+		"credential read": func(r *rig) error {
+			r.cr.readErr = notConfigured
+			_, e := r.acts.EnsureLakehouseWarehouse(ctx, r.in)
+			return e
+		},
+	}
+	for name, run := range steps {
+		t.Run(name, func(t *testing.T) {
+			err := run(newRig())
+			require.Error(t, err)
+			require.True(t, isNonRetryable(err), "missing configuration must fail fast: %v", err)
+			require.ErrorContains(t, err, "KES_ENDPOINT", "and say what is missing")
+		})
+	}
+}
+
+func TestEnsureLakehouseWarehouse_NoEndpointFailsFastWithoutTouchingCredentials(t *testing.T) {
+	r := newRig()
+	r.acts.S3Endpoint = ""
+	_, err := r.acts.EnsureLakehouseWarehouse(context.Background(), r.in)
+	require.Error(t, err)
+	require.True(t, isNonRetryable(err))
+	require.ErrorContains(t, err, "S3_ENDPOINT")
+	require.Empty(t, r.wh.specs)
+}
+
+// A credential may be minted only while the registry says none was ever issued. After
+// that, "not found" is a loss that needs a person, never a prompt to issue a new one.
+func TestEnsureLakehouseCredential_MintingFollowsTheRegistryNotTheSecretsStore(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("first issue may mint, and is then recorded", func(t *testing.T) {
+		r := newRig()
+		require.NoError(t, r.acts.EnsureLakehouseCredential(ctx, r.in))
+		require.Equal(t, []bool{true}, r.cr.mayMint)
+		require.Equal(t, 1, r.reg.credMarks)
+	})
+
+	t.Run("once issued, minting is not allowed and nothing is re-recorded", func(t *testing.T) {
+		r := newRig()
+		r.reg.cfg.CredentialIssued = true
+		require.NoError(t, r.acts.EnsureLakehouseCredential(ctx, r.in))
+		require.Equal(t, []bool{false}, r.cr.mayMint)
+		require.Zero(t, r.reg.credMarks)
+	})
+
+	t.Run("a lost credential is not retried and is not recorded as issued", func(t *testing.T) {
+		r := newRig()
+		r.reg.cfg.CredentialIssued = true
+		r.cr.ensureErr = infra.ErrCredentialLost
+		err := r.acts.EnsureLakehouseCredential(ctx, r.in)
+		require.Error(t, err)
+		require.True(t, isNonRetryable(err), "a person must restore or rotate it: %v", err)
+		require.Zero(t, r.reg.credMarks)
+	})
+
+	t.Run("a failed issue does not mark the credential issued", func(t *testing.T) {
+		r := newRig()
+		r.cr.ensureErr = errors.New("minio down")
+		require.Error(t, r.acts.EnsureLakehouseCredential(ctx, r.in))
+		require.Zero(t, r.reg.credMarks, "marking before the credential exists would block the retry from minting it")
+	})
+
+	t.Run("failing to record the issue is retried, and the retry is safe", func(t *testing.T) {
+		r := newRig()
+		r.reg.credMarkErr = errors.New("db blip")
+		err := r.acts.EnsureLakehouseCredential(ctx, r.in)
+		require.Error(t, err)
+		require.False(t, isNonRetryable(err))
+	})
+
+	t.Run("a registry outage is retried before anything is created", func(t *testing.T) {
+		r := newRig()
+		r.reg.getErr = errors.New("db down")
+		err := r.acts.EnsureLakehouseCredential(ctx, r.in)
+		require.Error(t, err)
+		require.False(t, isNonRetryable(err))
+		require.Empty(t, r.cr.ensured)
+	})
 }

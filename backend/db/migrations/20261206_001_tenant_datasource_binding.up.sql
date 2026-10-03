@@ -39,6 +39,13 @@ CREATE TABLE IF NOT EXISTS public.tenant_lakehouse (
     lakekeeper_warehouse_id UUID,
     kms_key_id            TEXT,
 
+    -- Set once, when the tenant's storage credential is first issued. It is the
+    -- transactional record that lets provisioning tell "never issued" (safe to mint)
+    -- from "issued but the secrets store cannot find it" (an outage or a loss, which
+    -- must never silently mint a new credential and strand the warehouse on stale
+    -- keys). The secrets store alone cannot make that distinction.
+    credential_issued_at  TIMESTAMPTZ,
+
     -- Default Object Lock retention for this tenant's audit bucket, in days. Set
     -- per tenant and required before the bucket is provisioned; there is no
     -- platform default. Compliance-mode retention cannot be shortened once objects

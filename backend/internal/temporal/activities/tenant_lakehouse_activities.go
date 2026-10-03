@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/iceberg"
+	"github.com/hondyman/uisce/backend/internal/lakehouse/infra"
 	"github.com/hondyman/uisce/backend/internal/lakehouse/registry"
 	"go.temporal.io/sdk/temporal"
 )
@@ -32,6 +33,8 @@ type LakehouseRegistry interface {
 	Get(ctx context.Context, tenantID uuid.UUID) (*registry.Config, error)
 	MarkProvisioned(ctx context.Context, tenantID, warehouseID uuid.UUID, kmsKeyID string, actor registry.Actor) error
 	RecordProvisionFailure(ctx context.Context, tenantID uuid.UUID, actor registry.Actor, step, reason string) error
+	// MarkCredentialIssued records, transactionally, that the storage credential now exists.
+	MarkCredentialIssued(ctx context.Context, tenantID uuid.UUID) error
 }
 
 // LakehouseKeys manages the tenant's KMS key (KES).
@@ -48,8 +51,10 @@ type LakehouseBuckets interface {
 // LakehouseCredentials issues and reads the tenant's bucket-scoped storage credential.
 type LakehouseCredentials interface {
 	// EnsureBucketCredential makes sure a credential limited to this tenant's bucket
-	// exists in the secrets store. It is idempotent and returns nothing secret.
-	EnsureBucketCredential(ctx context.Context, tenantID uuid.UUID, bucket string) error
+	// exists in the secrets store. It is idempotent and returns nothing secret. mayMint is
+	// false once the registry records that one was issued: then a credential that cannot be
+	// read is infra.ErrCredentialLost, never a reason to issue a new one.
+	EnsureBucketCredential(ctx context.Context, tenantID uuid.UUID, bucket string, mayMint bool) error
 	// Read returns the stored credential. Only an activity that must hand it to a
 	// storage client may call it; it must never be returned from an activity.
 	Read(ctx context.Context, tenantID uuid.UUID) (accessKeyID, secretAccessKey string, err error)
@@ -94,6 +99,16 @@ const (
 
 func nonRetryable(kind string, err error) error {
 	return temporal.NewNonRetryableApplicationError(err.Error(), kind, err)
+}
+
+// infraErr wraps an error from an infrastructure adapter. Missing configuration cannot be
+// fixed by retrying, so it fails fast with a readable reason; anything else is an outage
+// worth retrying.
+func infraErr(what string, err error) error {
+	if errors.Is(err, infra.ErrNotConfigured) {
+		return nonRetryable(errTypeNotReady, fmt.Errorf("%s: %w", what, err))
+	}
+	return fmt.Errorf("%s: %w", what, err)
 }
 
 func (in LakehouseProvisionInput) tenant() (uuid.UUID, error) {
@@ -147,7 +162,7 @@ func (a *TenantLakehouseActivities) EnsureLakehouseKey(ctx context.Context, in L
 		return "", nonRetryable(errTypeInvalidInput, err)
 	}
 	if err := a.Keys.EnsureKey(ctx, name); err != nil {
-		return "", fmt.Errorf("ensure KMS key: %w", err)
+		return "", infraErr("ensure KMS key", err)
 	}
 	return name, nil
 }
@@ -172,13 +187,19 @@ func (a *TenantLakehouseActivities) EnsureLakehouseBucket(ctx context.Context, i
 		return nonRetryable(errTypeConflict, err)
 	}
 	if err != nil {
-		return fmt.Errorf("ensure bucket: %w", err)
+		return infraErr("ensure bucket", err)
 	}
 	return nil
 }
 
-// EnsureLakehouseCredential makes sure the tenant's bucket-scoped credential exists in
-// the secrets store. Nothing secret is returned.
+// EnsureLakehouseCredential makes sure the tenant's bucket-scoped credential exists in the
+// secrets store. Nothing secret is returned.
+//
+// Whether a credential may be MINTED is decided by the registry, not by the secrets store:
+// the store reports every failure, including an outage, as "not found", so it cannot prove a
+// credential is absent. Once the registry says one was issued, "not found" is a non-retryable
+// ErrCredentialLost that needs a person, because minting a new credential would strand the
+// tenant's warehouse on the old, now-stale keys.
 func (a *TenantLakehouseActivities) EnsureLakehouseCredential(ctx context.Context, in LakehouseProvisionInput) error {
 	id, err := in.tenant()
 	if err != nil {
@@ -188,8 +209,22 @@ func (a *TenantLakehouseActivities) EnsureLakehouseCredential(ctx context.Contex
 	if err != nil {
 		return nonRetryable(errTypeInvalidInput, err)
 	}
-	if err := a.Credentials.EnsureBucketCredential(ctx, id, bucket); err != nil {
-		return fmt.Errorf("ensure storage credential: %w", err)
+	cfg, err := a.Registry.Get(ctx, id)
+	if err != nil {
+		return fmt.Errorf("read lakehouse registry: %w", err)
+	}
+
+	err = a.Credentials.EnsureBucketCredential(ctx, id, bucket, !cfg.CredentialIssued)
+	if errors.Is(err, infra.ErrCredentialLost) {
+		return nonRetryable(errTypeConflict, err)
+	}
+	if err != nil {
+		return infraErr("ensure storage credential", err)
+	}
+	if !cfg.CredentialIssued {
+		if err := a.Registry.MarkCredentialIssued(ctx, id); err != nil {
+			return fmt.Errorf("record credential issued: %w", err)
+		}
 	}
 	return nil
 }
@@ -201,9 +236,12 @@ func (a *TenantLakehouseActivities) EnsureLakehouseWarehouse(ctx context.Context
 	if err != nil {
 		return "", err
 	}
+	if a.S3Endpoint == "" {
+		return "", nonRetryable(errTypeNotReady, fmt.Errorf("%w: the object store endpoint (S3_ENDPOINT) is not set", infra.ErrNotConfigured))
+	}
 	key, secret, err := a.Credentials.Read(ctx, id)
 	if err != nil {
-		return "", fmt.Errorf("read storage credential: %w", err)
+		return "", infraErr("read storage credential", err)
 	}
 	wh, err := a.Warehouses.EnsureTenantWarehouse(ctx, iceberg.TenantWarehouseSpec{
 		TenantID:        id,
@@ -213,7 +251,7 @@ func (a *TenantLakehouseActivities) EnsureLakehouseWarehouse(ctx context.Context
 		SecretAccessKey: secret,
 	})
 	if err != nil {
-		return "", fmt.Errorf("ensure warehouse: %w", err)
+		return "", infraErr("ensure warehouse", err)
 	}
 	return wh.ID, nil
 }

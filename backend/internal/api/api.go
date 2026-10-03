@@ -1863,10 +1863,14 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		ipWhitelistHandler.RegisterRoutes(r)
 		onboardingHandler.RegisterRoutes(r)
 		// System > Lakehouse: per-tenant audit retention and warehouse provisioning
-		// (ADR-032). Global admins only. The provisioner is nil until the
-		// provisioning workflow is wired, so POST .../provision answers 503; the
-		// configuration endpoints work now.
-		handlers.NewSystemLakehouseHandler(db, nil).RegisterRoutes(r)
+		// (ADR-032). Global admins only. Provisioning starts the workflow registered on
+		// cmd/worker; without a Temporal client POST .../provision answers 503, and the
+		// configuration endpoints still work.
+		var lakehouseProvisioner handlers.LakehouseProvisioner // stays a true nil interface without Temporal
+		if temporalClient != nil {
+			lakehouseProvisioner = handlers.NewTemporalLakehouseProvisioner(temporalClient)
+		}
+		handlers.NewSystemLakehouseHandler(db, lakehouseProvisioner).RegisterRoutes(r)
 		abbreviationHandler.RegisterRoutes(r)
 		bundleHandler.RegisterRoutes(r)
 		domainHandler.RegisterRoutes(r)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/iceberg"
+	"github.com/hondyman/uisce/backend/internal/lakehouse/infra"
 	"github.com/hondyman/uisce/backend/internal/lakehouse/registry"
 	"github.com/hondyman/uisce/backend/internal/temporal/activities"
 	"github.com/hondyman/uisce/backend/internal/temporal/workflows"
@@ -103,8 +104,11 @@ func (f *lhFakes) EnsureKey(context.Context, string) error { return f.hit("Ensur
 func (f *lhFakes) EnsureTenantBucket(context.Context, iceberg.TenantBucketSpec) (*iceberg.TenantBucket, error) {
 	return &iceberg.TenantBucket{}, f.hit("EnsureTenantBucket")
 }
-func (f *lhFakes) EnsureBucketCredential(context.Context, uuid.UUID, string) error {
+func (f *lhFakes) EnsureBucketCredential(context.Context, uuid.UUID, string, bool) error {
 	return f.hit("EnsureBucketCredential")
+}
+func (f *lhFakes) MarkCredentialIssued(context.Context, uuid.UUID) error {
+	return f.hit("MarkCredentialIssued")
 }
 func (f *lhFakes) Read(context.Context, uuid.UUID) (string, string, error) {
 	return "AKIA-TEST", secretValue, f.hit("ReadCredential")
@@ -158,7 +162,7 @@ func TestLakehouse_HappyPath(t *testing.T) {
 	r := runLakehouse(t, f, id)
 	require.NoError(t, r.err)
 
-	require.Equal(t, []string{"Get", "EnsureKey", "EnsureTenantBucket", "EnsureBucketCredential", "ReadCredential", "EnsureTenantWarehouse", "MarkProvisioned"}, f.order,
+	require.Equal(t, []string{"Get", "EnsureKey", "EnsureTenantBucket", "Get", "EnsureBucketCredential", "MarkCredentialIssued", "ReadCredential", "EnsureTenantWarehouse", "MarkProvisioned"}, f.order,
 		"key, then bucket, then credential, then warehouse, then the registry")
 	require.Equal(t, []uuid.UUID{id}, f.marked)
 	require.Equal(t, warehouseID, r.result.WarehouseID)
@@ -200,7 +204,7 @@ func TestLakehouse_FailureStopsThereAndIsRecorded(t *testing.T) {
 		{"EnsureTenantWarehouse", "EnsureLakehouseWarehouse"},
 		{"MarkProvisioned", "MarkLakehouseProvisioned"},
 	}
-	full := []string{"Get", "EnsureKey", "EnsureTenantBucket", "EnsureBucketCredential", "ReadCredential", "EnsureTenantWarehouse", "MarkProvisioned"}
+	full := []string{"Get", "EnsureKey", "EnsureTenantBucket", "EnsureBucketCredential", "MarkCredentialIssued", "ReadCredential", "EnsureTenantWarehouse", "MarkProvisioned"}
 	for _, s := range steps {
 		t.Run(s.step, func(t *testing.T) {
 			f, id := newLH()
@@ -271,4 +275,22 @@ func TestLakehouse_RecorderWouldCatchALeak(t *testing.T) {
 		leaked = leaked || strings.Contains(p, secretValue)
 	}
 	require.True(t, leaked, "the recorder failed to capture a payload that carries a secret")
+}
+
+// The case the registry marker exists for: the credential was issued, the secrets store
+// cannot produce it. The run must stop at once, not retry, not mint, and never reach the
+// warehouse step with a different credential.
+func TestLakehouse_LostCredentialStopsTheRunAndNeverReachesTheWarehouse(t *testing.T) {
+	f, id := newLH()
+	f.cfg.CredentialIssued = true
+	f.errFor["EnsureBucketCredential"], f.failAt["EnsureBucketCredential"] = infra.ErrCredentialLost, -1
+	r := runLakehouse(t, f, id)
+
+	require.Error(t, r.err)
+	require.Equal(t, 1, f.calls["EnsureBucketCredential"], "a lost credential needs a person; retrying cannot help")
+	require.Zero(t, f.calls["MarkCredentialIssued"], "and it is not re-recorded")
+	require.Zero(t, f.calls["EnsureTenantWarehouse"], "the warehouse must not be touched")
+	require.Empty(t, f.marked)
+	require.Len(t, f.fails, 1)
+	require.True(t, strings.HasPrefix(f.fails[0], "EnsureLakehouseCredential: "), f.fails[0])
 }

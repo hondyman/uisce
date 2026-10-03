@@ -52,17 +52,21 @@ var (
 // with Configured=false and LifecycleState "unconfigured", not as an error, so a
 // form can be shown for a tenant that has never been configured.
 type Config struct {
-	TenantID           string     `json:"tenant_id"`
-	TenantName         string     `json:"tenant_name,omitempty"`
-	TenantCode         string     `json:"tenant_code,omitempty"`
-	Configured         bool       `json:"configured"`
-	WarehouseName      string     `json:"warehouse_name,omitempty"`
-	Bucket             string     `json:"bucket,omitempty"`
-	AuditRetentionDays *int       `json:"audit_retention_days"`
-	LifecycleState     string     `json:"lifecycle_state"`
-	Provisioned        bool       `json:"provisioned"`
-	Version            int        `json:"version,omitempty"`
-	UpdatedAt          *time.Time `json:"updated_at,omitempty"`
+	TenantID           string `json:"tenant_id"`
+	TenantName         string `json:"tenant_name,omitempty"`
+	TenantCode         string `json:"tenant_code,omitempty"`
+	Configured         bool   `json:"configured"`
+	WarehouseName      string `json:"warehouse_name,omitempty"`
+	Bucket             string `json:"bucket,omitempty"`
+	AuditRetentionDays *int   `json:"audit_retention_days"`
+	LifecycleState     string `json:"lifecycle_state"`
+	Provisioned        bool   `json:"provisioned"`
+	// CredentialIssued is true once the tenant's storage credential has been issued. After
+	// that, a credential the secrets store cannot find is an error, never a reason to mint a
+	// new one.
+	CredentialIssued bool       `json:"credential_issued"`
+	Version          int        `json:"version,omitempty"`
+	UpdatedAt        *time.Time `json:"updated_at,omitempty"`
 }
 
 // Actor is who made a change; recorded in the audit trail.
@@ -108,14 +112,14 @@ func (s *Store) tenantRow(ctx context.Context, tenantID uuid.UUID) (name, code s
 
 const selectConfig = `
 	SELECT warehouse_name, bucket, audit_retention_days, lifecycle_state,
-	       lakekeeper_warehouse_id IS NOT NULL, version, updated_at
+	       lakekeeper_warehouse_id IS NOT NULL, credential_issued_at IS NOT NULL, version, updated_at
 	  FROM public.tenant_lakehouse
 	 WHERE tenant_id = $1`
 
 func scanConfig(row *sql.Row, c *Config) error {
 	var days sql.NullInt32
 	var updated time.Time
-	if err := row.Scan(&c.WarehouseName, &c.Bucket, &days, &c.LifecycleState, &c.Provisioned, &c.Version, &updated); err != nil {
+	if err := row.Scan(&c.WarehouseName, &c.Bucket, &days, &c.LifecycleState, &c.Provisioned, &c.CredentialIssued, &c.Version, &updated); err != nil {
 		return err
 	}
 	if days.Valid {
@@ -256,6 +260,38 @@ func (s *Store) MarkProvisioned(ctx context.Context, tenantID, warehouseID uuid.
 			return err
 		}
 		return fmt.Errorf("mark provisioned: %w", err)
+	}
+	return nil
+}
+
+// MarkCredentialIssued records that the tenant's storage credential now exists. It is
+// idempotent: the first call sets the time and later calls change nothing. It is the one
+// write that must follow a successful issue, because it is what stops a later "credential
+// not found" from being mistaken for "never issued".
+func (s *Store) MarkCredentialIssued(ctx context.Context, tenantID uuid.UUID) error {
+	var rows int64
+	err := dbpkg.WithTenantTransaction(ctx, s.db, tenantID.String(), func(tx *sql.Tx) error {
+		res, e := tx.ExecContext(ctx, `
+			UPDATE public.tenant_lakehouse SET credential_issued_at = now()
+			 WHERE tenant_id = $1 AND credential_issued_at IS NULL`, tenantID)
+		if e != nil {
+			return e
+		}
+		rows, e = res.RowsAffected()
+		return e
+	})
+	if err != nil {
+		return fmt.Errorf("mark credential issued: %w", err)
+	}
+	if rows == 0 {
+		// Either already marked (fine) or there is no row at all (not fine).
+		cfg, e := s.Get(ctx, tenantID)
+		if e != nil {
+			return e
+		}
+		if !cfg.Configured {
+			return ErrNotConfigured
+		}
 	}
 	return nil
 }

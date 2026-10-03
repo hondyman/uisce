@@ -12,6 +12,9 @@ import (
 
 	"github.com/hondyman/uisce/backend/internal/bp"
 	"github.com/hondyman/uisce/backend/internal/cbo"
+	"github.com/hondyman/uisce/backend/internal/iceberg"
+	lakehouseinfra "github.com/hondyman/uisce/backend/internal/lakehouse/infra"
+	lakehouseregistry "github.com/hondyman/uisce/backend/internal/lakehouse/registry"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/nba"
 	obsActivities "github.com/hondyman/uisce/backend/internal/observability/activities"
@@ -40,6 +43,7 @@ import (
 	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/sdk/worker"
+	temporalworkflow "go.temporal.io/sdk/workflow"
 	"go.uber.org/zap"
 )
 
@@ -370,6 +374,33 @@ func main() {
 	pkgworkflows.RegisterSafeActivity("UpdateTenantStatus", provisioningActivities.UpdateTenantStatus)
 	pkgworkflows.RegisterSafeActivity("UpdateInstanceStatus", provisioningActivities.UpdateInstanceStatus)
 	pkgworkflows.RegisterSafeActivity("GetGoldCopyInfo", provisioningActivities.GetGoldCopyInfo)
+
+	// 14. Tenant lakehouse provisioning (ADR-032): KMS key, WORM bucket, bucket-scoped
+	// credential, Lakekeeper warehouse, registry row. Infrastructure comes from the
+	// environment and is never defaulted: anything missing makes the step fail fast and
+	// non-retryably with a readable reason (see lakehouse/infra). These activities are
+	// deliberately NOT registered as BP-Designer client-safe, so a designed business
+	// process can never call them. The API starts this workflow on this queue
+	// (handlers.LakehouseTaskQueue); handlers' TestLakehouseWorkflowIsWiredIntoTheDeployedWorker
+	// fails if the two drift apart.
+	lakehouseRegion := os.Getenv("S3_REGION")
+	if lakehouseRegion == "" {
+		lakehouseRegion = "us-east-1"
+	}
+	lakehouseActivities := &temporalactivities.TenantLakehouseActivities{
+		Registry:    lakehouseregistry.NewStore(db),
+		Keys:        lakehouseinfra.KeysFromEnv(),
+		Buckets:     lakehouseinfra.BucketsFromEnv(),
+		Credentials: lakehouseinfra.CredentialsFromEnv(),
+		Warehouses:  iceberg.NewLakekeeperProvisioner(os.Getenv("LAKEKEEPER_URL"), "", os.Getenv("S3_ENDPOINT")),
+		S3Endpoint:  os.Getenv("S3_ENDPOINT"),
+		S3Region:    lakehouseRegion,
+	}
+	w.RegisterWorkflowWithOptions(provisioningworkflows.TenantLakehouseProvisioningWorkflow, temporalworkflow.RegisterOptions{
+		Name: provisioningworkflows.TenantLakehouseProvisioningWorkflowName,
+	})
+	w.RegisterActivity(lakehouseActivities)
+	log.Println("✅ Registered Tenant Lakehouse Provisioning Workflow")
 	pkgworkflows.RegisterSafeActivity("HealthCheck", provisioningActivities.HealthCheck)
 	log.Println("✅ Registered Tenant Provisioning Activities for BP Designer")
 

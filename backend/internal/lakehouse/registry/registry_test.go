@@ -399,3 +399,47 @@ func TestRecordProvisionFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, broken)
 }
+
+func TestMarkCredentialIssued(t *testing.T) {
+	db := openDB(t)
+	s := registry.NewStore(db)
+	ctx := context.Background()
+
+	t.Run("is false until marked, and marking is idempotent", func(t *testing.T) {
+		id := newTenant(t, db, "Cred")
+		_, err := s.SetRetention(ctx, id, 365, actor)
+		require.NoError(t, err)
+		got, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		require.False(t, got.CredentialIssued)
+
+		require.NoError(t, s.MarkCredentialIssued(ctx, id))
+		got, err = s.Get(ctx, id)
+		require.NoError(t, err)
+		require.True(t, got.CredentialIssued)
+		firstVersion := got.Version
+
+		require.NoError(t, s.MarkCredentialIssued(ctx, id), "a second mark is a no-op, not an error")
+		again, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		require.True(t, again.CredentialIssued)
+		require.Equal(t, firstVersion, again.Version, "and it does not churn the version")
+	})
+
+	t.Run("refuses a tenant with no registry row", func(t *testing.T) {
+		id := newTenant(t, db, "NoRow")
+		require.ErrorIs(t, s.MarkCredentialIssued(ctx, id), registry.ErrNotConfigured)
+	})
+
+	t.Run("does not survive into another tenant", func(t *testing.T) {
+		a, b := newTenant(t, db, "CredA"), newTenant(t, db, "CredB")
+		for _, id := range []uuid.UUID{a, b} {
+			_, err := s.SetRetention(ctx, id, 365, actor)
+			require.NoError(t, err)
+		}
+		require.NoError(t, s.MarkCredentialIssued(ctx, a))
+		got, err := s.Get(ctx, b)
+		require.NoError(t, err)
+		require.False(t, got.CredentialIssued)
+	})
+}
