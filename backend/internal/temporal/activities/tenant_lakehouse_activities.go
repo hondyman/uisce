@@ -38,6 +38,14 @@ type LakehouseRegistry interface {
 	RecordProvisionFailure(ctx context.Context, tenantID uuid.UUID, actor registry.Actor, step, reason string) error
 	// MarkCredentialIssued records, transactionally, that the storage credential now exists.
 	MarkCredentialIssued(ctx context.Context, tenantID uuid.UUID) error
+
+	// For the Iceberg audit copy (ADR-036).
+	// AuditAfter returns entries after an id, oldest first (chain order).
+	AuditAfter(ctx context.Context, tenantID uuid.UUID, afterID int64, limit int) ([]registry.AuditEntry, error)
+	// MarkAuditCopied records, for operators only, how far the copy has got. It never decides what is shipped.
+	MarkAuditCopied(ctx context.Context, tenantID uuid.UUID, throughID int64) error
+	// ProvisionedTenants lists the tenants that have a warehouse to copy into.
+	ProvisionedTenants(ctx context.Context) ([]uuid.UUID, error)
 }
 
 // LakehouseKeys manages the tenant's KMS key (KES).
@@ -77,6 +85,8 @@ type TenantLakehouseActivities struct {
 	Buckets     LakehouseBuckets
 	Credentials LakehouseCredentials
 	Warehouses  LakehouseWarehouses
+	// Destination is where the tenant's audit copy lives (StarRocks over the tenant's warehouse).
+	Destination infra.AuditDestination
 	// S3Endpoint and S3Region locate the object store for the Lakekeeper warehouse.
 	S3Endpoint string
 	S3Region   string

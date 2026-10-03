@@ -410,3 +410,9 @@ func TestRetention_FailingToRecordTheRegistryIsRetriedAndSafe(t *testing.T) {
 	require.Equal(t, []uint{3650}, f.extendedTo, "the bucket was raised once; the retry only re-recorded it")
 	require.Equal(t, 3650, res.AppliedDays)
 }
+
+func (f *lhFakes) AuditAfter(context.Context, uuid.UUID, int64, int) ([]registry.AuditEntry, error) {
+	return nil, nil
+}
+func (f *lhFakes) MarkAuditCopied(context.Context, uuid.UUID, int64) error { return nil }
+func (f *lhFakes) ProvisionedTenants(context.Context) ([]uuid.UUID, error) { return nil, nil }

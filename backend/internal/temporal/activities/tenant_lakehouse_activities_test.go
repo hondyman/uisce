@@ -546,3 +546,9 @@ func TestMarkRetentionApplied(t *testing.T) {
 	require.NoError(t, r3.acts.RecordRetentionSyncFailure(ctx, r3.in, "ExtendBucketRetention", "boom"))
 	require.Equal(t, []failCall{{r3.id, "ExtendBucketRetention", "boom", registry.Actor{ID: "alice", Role: "global_admin"}}}, r3.reg.syncFails)
 }
+
+func (f *fakeReg) AuditAfter(context.Context, uuid.UUID, int64, int) ([]registry.AuditEntry, error) {
+	return nil, nil
+}
+func (f *fakeReg) MarkAuditCopied(context.Context, uuid.UUID, int64) error { return nil }
+func (f *fakeReg) ProvisionedTenants(context.Context) ([]uuid.UUID, error) { return nil, nil }
