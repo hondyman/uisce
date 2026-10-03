@@ -136,6 +136,8 @@ func registerActivities(w worker.Worker, db *sql.DB, controlDB *sql.DB, logger *
 		w.RegisterActivity(provisioningActs.EmitProvisioningEvent)
 		w.RegisterActivity(provisioningActs.UpdateTenantStatus)
 		w.RegisterActivity(provisioningActs.UpdateInstanceStatus)
+		provisioningActs.ConfigureTenantDatabaseFromEnv()
+		provisioningActs.RegisterTenantDatabaseActivities(w)
 		w.RegisterActivity(provisioningActs.GetGoldCopyInfo)
 		w.RegisterActivity(provisioningActs.HealthCheck)
 		log.Println("Tenant provisioning activities registered")

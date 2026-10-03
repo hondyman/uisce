@@ -50,6 +50,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/governance"
 	"github.com/hondyman/uisce/backend/internal/governance/contracts"
 	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/provisioning"
 	"github.com/hondyman/uisce/backend/internal/household"
 	"github.com/hondyman/uisce/backend/internal/infrastructure"
 	"github.com/hondyman/uisce/backend/internal/lineage"
@@ -1871,6 +1872,10 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			lakehouseProvisioner = handlers.NewTemporalLakehouseProvisioner(temporalClient)
 		}
 		handlers.NewSystemLakehouseHandler(db, lakehouseProvisioner).RegisterRoutes(r)
+		// System > tenant provisioning: create a tenant (optionally with its own app database,
+		// ADR-030) and read a run's status. Global admins only, enforced inside the handlers.
+		// The saga runs on cmd/worker (bp_queue); without Temporal the POST answers 503.
+		provisioning.NewProvisioningHandler(temporalClient, db, logging.GetLogger().Sugar()).RegisterAdminRoutes(r)
 		abbreviationHandler.RegisterRoutes(r)
 		bundleHandler.RegisterRoutes(r)
 		domainHandler.RegisterRoutes(r)

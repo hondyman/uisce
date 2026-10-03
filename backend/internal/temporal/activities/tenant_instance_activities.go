@@ -9,6 +9,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/db"
+	"github.com/hondyman/uisce/backend/internal/dscreds"
+	"github.com/hondyman/uisce/backend/internal/migrations"
+	"github.com/hondyman/uisce/backend/internal/secrets"
 	"github.com/hondyman/uisce/backend/internal/iceberg"
 	"github.com/hondyman/uisce/backend/internal/provisioning"
 	"github.com/jmoiron/sqlx"
@@ -21,6 +24,13 @@ type TenantProvisioningActivities struct {
 	LakekeeperProvisioner *iceberg.LakekeeperProvisioner
 	Logger               *zap.SugaredLogger
 	KafkaBrokers         []string
+
+	// The fields below serve the tenant-database steps (tenant_database_activities.go). They are
+	// optional: without them those steps fail closed with ErrTenantDatabaseNotConfigured.
+	Secrets    secrets.Provider
+	TenantDB   TenantDatabaseAdmin
+	Migrations *migrations.TenantRunner
+	Creds      *dscreds.Resolver
 }
 
 func NewTenantProvisioningActivities(db *sql.DB, controlDB *sql.DB, logger *zap.SugaredLogger) *TenantProvisioningActivities {
@@ -114,6 +124,9 @@ func (a *TenantProvisioningActivities) RollbackRegisterInstance(ctx context.Cont
 }
 
 func (a *TenantProvisioningActivities) CreateTenantDatabase(ctx context.Context, databaseName string) error {
+	if !pgIdent.MatchString(databaseName) {
+		return nonRetryable(errTypeTenantDBInput, fmt.Errorf("database name %q is not a safe identifier", databaseName))
+	}
 	a.Logger.Infof("Creating database: %s", databaseName)
 
 	dbURL := os.Getenv("DATABASE_URL")
@@ -161,6 +174,9 @@ func (a *TenantProvisioningActivities) CreateTenantDatabase(ctx context.Context,
 }
 
 func (a *TenantProvisioningActivities) RollbackCreateTenantDatabase(ctx context.Context, databaseName string) error {
+	if !pgIdent.MatchString(databaseName) {
+		return nonRetryable(errTypeTenantDBInput, fmt.Errorf("database name %q is not a safe identifier", databaseName))
+	}
 	a.Logger.Infof("Rolling back database: %s", databaseName)
 
 	dbURL := os.Getenv("DATABASE_URL")

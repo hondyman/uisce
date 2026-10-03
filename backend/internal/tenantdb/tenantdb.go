@@ -113,28 +113,57 @@ func New(cfg Config) (*Router, error) {
 
 // Resolve maps a datasource to a pool for the caller's tenant.
 func (r *Router) Resolve(ctx context.Context, datasourceID string) (*Pool, error) {
+	ds, b, err := r.authorize(ctx, datasourceID, false)
+	if err != nil {
+		return nil, err
+	}
+	return r.get(ctx, ds, b)
+}
+
+// Probe proves a datasource is reachable the way production will reach it (the registered
+// host, database, role and credential, with the identity assertions) WITHOUT it being active
+// yet. The same tenant, ownership and completeness checks apply; the only difference from
+// Resolve is that a binding still in 'provisioning' is accepted. Nothing is cached, and the
+// connection is closed before Probe returns. The provisioning saga uses it as the last gate
+// before activating a binding.
+func (r *Router) Probe(ctx context.Context, datasourceID string) error {
+	ds, _, err := r.authorize(ctx, datasourceID, true)
+	if err != nil {
+		return err
+	}
+	p, err := r.build(ctx, ds)
+	if err != nil {
+		return err
+	}
+	p.Close()
+	return nil
+}
+
+// authorize runs every check that precedes a connection. allowProvisioning admits a binding
+// whose lifecycle is 'provisioning' (Probe only).
+func (r *Router) authorize(ctx context.Context, datasourceID string, allowProvisioning bool) (Datasource, Binding, error) {
 	actor, err := r.cfg.CallerTenant(ctx)
 	if err != nil || actor == "" {
-		return nil, ErrNoTenant
+		return Datasource{}, Binding{}, ErrNoTenant
 	}
 	ds, err := r.cfg.Registry.ResolveDatasource(ctx, datasourceID)
 	if err != nil {
-		return nil, fmt.Errorf("tenantdb: resolve datasource: %w", err)
+		return Datasource{}, Binding{}, fmt.Errorf("tenantdb: resolve datasource: %w", err)
 	}
 	if ds.TenantID == "" || ds.TenantID != actor {
-		return nil, ErrTenantMismatch
+		return Datasource{}, Binding{}, ErrTenantMismatch
 	}
 	if ds.Host == "" || ds.Port <= 0 || ds.Database == "" {
-		return nil, ErrIncomplete
+		return Datasource{}, Binding{}, ErrIncomplete
 	}
 	b, err := r.cfg.Registry.LoadBinding(ctx, datasourceID)
 	if err != nil {
-		return nil, fmt.Errorf("tenantdb: load binding: %w", err)
+		return Datasource{}, Binding{}, fmt.Errorf("tenantdb: load binding: %w", err)
 	}
-	if b.Lifecycle != "active" {
-		return nil, fmt.Errorf("%w: lifecycle=%q", ErrUnbound, b.Lifecycle)
+	if b.Lifecycle != "active" && !(allowProvisioning && b.Lifecycle == "provisioning") {
+		return Datasource{}, Binding{}, fmt.Errorf("%w: lifecycle=%q", ErrUnbound, b.Lifecycle)
 	}
-	return r.get(ctx, ds, b)
+	return ds, b, nil
 }
 
 func (r *Router) get(ctx context.Context, ds Datasource, b Binding) (*Pool, error) {
@@ -149,6 +178,31 @@ func (r *Router) get(ctx context.Context, ds Datasource, b Binding) (*Pool, erro
 	}
 	r.mu.Unlock()
 
+	p, err := r.build(ctx, ds)
+	if err != nil {
+		return nil, err
+	}
+
+	r.mu.Lock()
+	if e, ok := r.pools[key]; ok { // lost a race; keep the existing pool
+		r.mu.Unlock()
+		p.Close()
+		return &Pool{ds: ds, p: e.pool}, nil
+	}
+	r.pools[key] = &entry{pool: p, lastUse: r.now()}
+	victims := r.evictLocked(key)
+	r.mu.Unlock()
+
+	// Close outside the lock: Close waits for in-flight connections to be released.
+	for _, v := range victims {
+		v.Close()
+	}
+	return &Pool{ds: ds, p: p}, nil
+}
+
+// build opens a pool for the datasource and proves it reaches the registered database as the
+// registered user. It does not cache.
+func (r *Router) build(ctx context.Context, ds Datasource) (*pgxpool.Pool, error) {
 	user, password, err := r.cfg.Registry.Credentials(ctx, ds)
 	if err != nil {
 		return nil, fmt.Errorf("tenantdb: credentials: %w", err)
@@ -196,21 +250,7 @@ func (r *Router) get(ctx context.Context, ds Datasource, b Binding) (*Pool, erro
 		return nil, fmt.Errorf("tenantdb: connect: %w", err)
 	}
 
-	r.mu.Lock()
-	if e, ok := r.pools[key]; ok { // lost a race; keep the existing pool
-		r.mu.Unlock()
-		p.Close()
-		return &Pool{ds: ds, p: e.pool}, nil
-	}
-	r.pools[key] = &entry{pool: p, lastUse: r.now()}
-	victims := r.evictLocked(key)
-	r.mu.Unlock()
-
-	// Close outside the lock: Close waits for in-flight connections to be released.
-	for _, v := range victims {
-		v.Close()
-	}
-	return &Pool{ds: ds, p: p}, nil
+	return p, nil
 }
 
 // evictLocked removes pools idle past IdleTTL and, if still over MaxPools, the least recently

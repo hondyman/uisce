@@ -10,7 +10,11 @@ type ProvisionTenantRequest struct {
 	TenantName   string `json:"tenant_name" validate:"required,min=2,max=100"`
 	InstanceName string `json:"instance_name" validate:"required,min=2,max=100"`
 	TenantCode   string `json:"tenant_code,omitempty"`
-	RequesterID  string `json:"requester_id,omitempty"`
+	// RequesterID is ignored: the requester is always the authenticated caller.
+	RequesterID string `json:"requester_id,omitempty"`
+	// App names the application whose datasource the new tenant database serves (e.g. "orm").
+	// When set, the tenant also gets its own role, binding, migrations and a probe (ADR-030).
+	App string `json:"app,omitempty"`
 }
 
 type ProvisionTenantResponse struct {
@@ -46,6 +50,15 @@ type ProvisioningWorkflowInput struct {
 	DatabaseName       string
 	LakekeeperNS      string
 	RequesterID        string
+
+	// App names the application whose datasource the tenant database serves (e.g. "orm"). When
+	// set, the saga also gives the database its own role and credential, repoints that app's
+	// cloned datasource at it, applies the app's tenant migrations and probes the connection
+	// before the binding goes active (ADR-030). Empty keeps the saga exactly as it was.
+	App string `json:"app,omitempty"`
+	// BaselineThrough, when set, is the last tenant-migration file already contained in the
+	// gold-copy schema this database was cloned from; it is recorded, not run.
+	BaselineThrough string `json:"baseline_through,omitempty"`
 }
 
 type ProvisioningWorkflowResult struct {
@@ -139,4 +152,23 @@ func GenerateTenantCode(name string) string {
 
 func NewUUID() string {
 	return uuid.New().String()
+}
+
+// TenantDatabaseInput is the input of the tenant-database saga steps (ADR-030).
+type TenantDatabaseInput struct {
+	TenantID         string
+	InstanceID       string
+	App              string
+	DatabaseName     string
+	GoldCopyDatabase string
+	// DatasourceID is set from BindTenantDatabase's result for every later step.
+	DatasourceID    string
+	BaselineThrough string
+}
+
+// TenantDatabaseBinding is what BindTenantDatabase decided; no secret is in it.
+type TenantDatabaseBinding struct {
+	DatasourceID string
+	Role         string
+	SecretPath   string
 }

@@ -353,6 +353,8 @@ func main() {
 	w.RegisterActivity(provisioningActivities.EmitProvisioningEvent)
 	w.RegisterActivity(provisioningActivities.UpdateTenantStatus)
 	w.RegisterActivity(provisioningActivities.UpdateInstanceStatus)
+	provisioningActivities.ConfigureTenantDatabaseFromEnv()
+	provisioningActivities.RegisterTenantDatabaseActivities(w)
 	// GetGoldCopyInfo returns (string, string, string, error); Temporal
 	// activities may only return (T, error). Skip registration so this
 	// worker can boot for FIXOrderEntryWorkflow.
