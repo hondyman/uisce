@@ -10261,6 +10261,105 @@
       ],
       "type": "object"
     },
+    "MetricContentInput": {
+      "description": "MetricContentInput is the semantic content a metric hash is computed over.\nIt is a flat struct rather than the full MetricDefinition so the hash has an\nexplicit, narrow input surface: adding a field to a definition must not\nsilently change deploy identity or cache keys.",
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "Expression": {
+          "$ref": "#/definitions/MetricExpression"
+        },
+        "FormatConfig": {
+          "$ref": "#/definitions/MetricFormatConfig"
+        },
+        "GrainAllowlist": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Variables": {
+          "$ref": "#/definitions/MetricVariable[]"
+        }
+      },
+      "required": [
+        "Name",
+        "BOID",
+        "Expression",
+        "GrainAllowlist",
+        "FormatConfig",
+        "Variables"
+      ],
+      "type": "object"
+    },
+    "MetricExpression": {
+      "description": "MetricExpression is the semantic definition of how a metric is computed.",
+      "properties": {
+        "BaseMetricIDs": {
+          "$ref": "#/definitions/string[]",
+          "description": "BaseMetricIDs are the operands of a derived metric, in the author's\ndeclared order. For a 2-operand ratio the first entry is the numerator."
+        },
+        "DenominatorID": {
+          "type": "string"
+        },
+        "Fn": {
+          "type": "string"
+        },
+        "Formula": {
+          "description": "Formula is authored SQL text with @variable references, e.g.\n\"SUM(price * qty) * @fx_rate\". The compiler substitutes the variables\nwith bound parameters; it does NOT parse, validate or allowlist the\noperators, which pass through as authored. See ADR-025.",
+          "type": "string"
+        },
+        "Kind": {
+          "type": "string"
+        },
+        "NumeratorID": {
+          "description": "NumeratorID / DenominatorID are the explicit, named operands for a ratio\n(ADR-026). They are separate from BaseMetricIDs because a ratio must name\nwhich side is which — the ordered BaseMetricIDs form alone was rejected as\nambiguous. Both forms are hashed, so two ratios that differ only in which\nside is numerator do NOT collide.",
+          "type": "string"
+        },
+        "TermNodeID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Kind",
+        "Fn",
+        "TermNodeID",
+        "Formula",
+        "BaseMetricIDs",
+        "NumeratorID",
+        "DenominatorID"
+      ],
+      "type": "object"
+    },
+    "MetricFormatConfig": {
+      "description": "MetricFormatConfig controls presentation of a computed metric value.",
+      "properties": {
+        "CurrencySymbol": {
+          "type": "string"
+        },
+        "Precision": {
+          "type": "number"
+        },
+        "Prefix": {
+          "type": "string"
+        },
+        "Suffix": {
+          "type": "string"
+        },
+        "Type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Type",
+        "Precision",
+        "CurrencySymbol",
+        "Prefix",
+        "Suffix"
+      ],
+      "type": "object"
+    },
     "MetricPayload": {
       "description": "MetricPayload represents the structure for Dynatrace metrics ingest",
       "properties": {
@@ -10402,6 +10501,32 @@
       },
       "required": [
         "db"
+      ],
+      "type": "object"
+    },
+    "MetricVariable": {
+      "description": "MetricVariable defines a parameter/variable bound into the metric calculation.",
+      "properties": {
+        "DefaultValue": {},
+        "Description": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Required": {
+          "type": "boolean"
+        },
+        "Type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Name",
+        "Type",
+        "DefaultValue",
+        "Required",
+        "Description"
       ],
       "type": "object"
     },

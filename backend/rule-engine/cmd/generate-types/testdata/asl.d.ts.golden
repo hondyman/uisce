@@ -3529,6 +3529,50 @@ export interface MeasureProfile {
   QueryCount: number;
 }
 
+/** MetricContentInput is the semantic content a metric hash is computed over.
+It is a flat struct rather than the full MetricDefinition so the hash has an
+explicit, narrow input surface: adding a field to a definition must not
+silently change deploy identity or cache keys. */
+export interface MetricContentInput {
+  BOID: string;
+  Expression: MetricExpression;
+  FormatConfig: MetricFormatConfig;
+  GrainAllowlist: string[];
+  Name: string;
+  Variables: MetricVariable[];
+}
+
+/** MetricExpression is the semantic definition of how a metric is computed. */
+export interface MetricExpression {
+  /** BaseMetricIDs are the operands of a derived metric, in the author's
+declared order. For a 2-operand ratio the first entry is the numerator. */
+  BaseMetricIDs: string[];
+  DenominatorID: string;
+  Fn: string;
+  /** Formula is authored SQL text with @variable references, e.g.
+"SUM(price * qty) * @fx_rate". The compiler substitutes the variables
+with bound parameters; it does NOT parse, validate or allowlist the
+operators, which pass through as authored. See ADR-025. */
+  Formula: string;
+  Kind: string;
+  /** NumeratorID / DenominatorID are the explicit, named operands for a ratio
+(ADR-026). They are separate from BaseMetricIDs because a ratio must name
+which side is which — the ordered BaseMetricIDs form alone was rejected as
+ambiguous. Both forms are hashed, so two ratios that differ only in which
+side is numerator do NOT collide. */
+  NumeratorID: string;
+  TermNodeID: string;
+}
+
+/** MetricFormatConfig controls presentation of a computed metric value. */
+export interface MetricFormatConfig {
+  CurrencySymbol: string;
+  Precision: number;
+  Prefix: string;
+  Suffix: string;
+  Type: string;
+}
+
 /** MetricPayload represents the structure for Dynatrace metrics ingest */
 export interface MetricPayload {
   Dimensions: Record<string, string>;
@@ -3572,6 +3616,15 @@ export interface MetricRegistryEntry {
 /** MetricRegistryService handles metric registry operations and orchestration */
 export interface MetricRegistryService {
   db: any;
+}
+
+/** MetricVariable defines a parameter/variable bound into the metric calculation. */
+export interface MetricVariable {
+  DefaultValue: any;
+  Description: string;
+  Name: string;
+  Required: boolean;
+  Type: string;
 }
 
 /** MockEventPublisher mocks the EventPublisher interface */
