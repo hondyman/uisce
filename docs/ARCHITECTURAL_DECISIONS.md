@@ -1320,3 +1320,51 @@ It must never auto-remediate a resource under compliance Object Lock.
   never detached (ADR-029), so it is only needed once a *tenant database* event table carries a
   seal chain and ADR-035's detach-verification job is built. (2) does not apply: the shipped
   chain is an unkeyed hash, so there is no key to version. Decide (1) before that job is written.
+- **The `Backend Datasource Rename CI` workflow is deleted — it was pure duplicate
+  compute, not a second opinion.** It ran `go test -short ./backend/... -v`, while
+  `Build Backend` in `ci-cd.yml` runs `go test -short -v -race
+  -coverprofile=coverage.out ./...` from `backend/`. Those are the same packages,
+  and the same `-short` mode; the only differences were that `Build Backend` adds
+  the race detector and coverage. Its two other steps were also duplicates:
+  `go vet ./backend/...` restates `go vet ./...`, and
+  `go test ./backend/internal/region_test -v` looks unique because it omits
+  `-short` — but `internal/region_test` is in `./...` and contains **zero**
+  `testing.Short()` guards, so `-short` excludes nothing there and all three of
+  its tests already run in `Build Backend`. Verified rather than inferred:
+  `go list ./...` contains the package, and `go test -short -list '.*'` on it
+  shows all three tests.
+
+  It was not even a faithful duplicate. That workflow pinned
+  `go-version: '1.25'`, a floating minor, while `Build Backend` pins
+  `go-version-file: backend/go.mod` (1.25.5) — so the second run could execute a
+  different toolchain patch than the one whose result it was supposedly
+  corroborating.
+
+  The workflow's *name* promised a datasource-rename tripwire it never
+  implemented: it ran the whole backend suite, not the rename paths. No test in it
+  protected a contract the main suite does not already run, so per the decision
+  rule (narrow to the unique paths if any exist, otherwise consume the existing
+  result) the correct action was to remove it rather than narrow it. Deleting it
+  cannot strand a required check: `main` has `enforce_admins: true` but no
+  required status checks.
+
+  **Race detection is deliberately retained.** `-race` is why `Run Tests` is the
+  dominant cost on the critical path (7.6m of a 13.4m job), and it is the only
+  thing that catches the shared-global-cache class of bug — the guardrails cache
+  race this engagement already fixed being a live example. The time is recovered
+  by removing the duplicate, not by weakening the suite.
+- **Security scanning is not yet tiered, and the measurement says it should not
+  be the first move.** Per-job wall-clock on `main`'s recent CI/CD Pipeline runs:
+  the critical path was `Build Backend` at 13.4m and 10.3m, and `Security Scan`
+  at 11.1m — Gosec leads exactly one run in three, so tiering it off the PR path
+  removes the blocker on a third of runs and leaves the other two unchanged. The
+  workflow jobs already run in parallel, so there is no serial chain to
+  parallelise either. If tiering proceeds, two defects in the original design
+  must be corrected first: a baseline keyed on `rule_id` alone would suppress
+  every *future* finding of that rule anywhere in the repo (it needs
+  file+line+rule, with re-baselining as a reviewed commit), and a PR gate that
+  applies no baseline fails on pre-existing debt in any touched file. Any
+  wholesale `G104` exclusion must also go — unhandled errors are the class behind
+  the three discarded `tx.ExecContext` results in `SyncMetricToCatalogGraph`, so
+  silencing the rule would blind the scanner to a defect class this codebase keeps
+  producing. Per-site `#nosec` with a reason is the reviewed-exclusion pattern.
