@@ -57,4 +57,25 @@ n=$(psql -At -c "SELECT count(*) FROM public.tenants WHERE gold_copy = true;")
 [ "$n" -ge 1 ] || { echo "PREREQUISITE FAILED: no gold-copy tenant"; exit 1; }
 psql -At -c "SELECT public.uisce_gold_copy_tenant_id();" >/dev/null \
   || { echo "PREREQUISITE FAILED: public.uisce_gold_copy_tenant_id() missing"; exit 1; }
+
+# `migrate up` exiting 0 is a claim, not evidence: it reports what it did, and a
+# migration it silently skipped (missing file, unparseable name, a runner that
+# matched nothing) still exits clean. This job then hands the database to
+# integration tests, so a migration that did not land shows up much later as an
+# unrelated 42P01 in whatever test happened to need that table first.
+#
+# oms.migration_log is the only record of what was actually applied, so assert
+# against it: every *.up.sql on disk must have a row. Naming any migration
+# explicitly would make this guard pass the moment that one name is applied, so
+# it is derived from the directory instead.
+pending=0
+while IFS= read -r mig; do
+  [ -z "$mig" ] && continue
+  if [ "$(psql -At -c "SELECT count(*) FROM oms.migration_log WHERE filename = '$mig';")" = "0" ]; then
+    echo "PENDING MIGRATION: $mig has no row in oms.migration_log"
+    pending=1
+  fi
+done < <(find backend/db/migrations -maxdepth 1 -name '*.up.sql' -exec basename {} \; | sort)
+[ "$pending" -eq 0 ] || { echo "PREREQUISITE FAILED: migrations pending after migrate up"; exit 1; }
+
 echo "OK: database bootstrapped"
