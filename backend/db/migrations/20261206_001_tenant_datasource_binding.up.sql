@@ -39,6 +39,13 @@ CREATE TABLE IF NOT EXISTS public.tenant_lakehouse (
     lakekeeper_warehouse_id UUID,
     kms_key_id            TEXT,
 
+    -- Default Object Lock retention for this tenant's audit bucket, in days. Set
+    -- per tenant and required before the bucket is provisioned; there is no
+    -- platform default. Compliance-mode retention cannot be shortened once objects
+    -- are locked, so the guard trigger below refuses to lower or clear it.
+    audit_retention_days  INTEGER
+        CHECK (audit_retention_days IS NULL OR audit_retention_days > 0),
+
     lifecycle_state       TEXT NOT NULL DEFAULT 'provisioning'
         CHECK (lifecycle_state IN
             ('provisioning', 'active', 'suspended', 'offboarding', 'offboarded')),
@@ -54,6 +61,39 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_lakehouse_lakekeeper_id
 CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_lakehouse_kms_key
     ON public.tenant_lakehouse (kms_key_id)
     WHERE kms_key_id IS NOT NULL;
+
+-- The registry must not be able to contradict the storage it describes. Once a
+-- tenant's retention is set it can only go up, the key columns are immutable,
+-- and a row that has a real warehouse behind it cannot be deleted out from under
+-- it (the warehouse holds WORM audit and is only retired by offboarding).
+CREATE OR REPLACE FUNCTION public.tenant_lakehouse_guard() RETURNS trigger AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW.tenant_id <> OLD.tenant_id
+           OR NEW.warehouse_name <> OLD.warehouse_name
+           OR NEW.bucket <> OLD.bucket THEN
+            RAISE EXCEPTION 'tenant_lakehouse: tenant_id, warehouse_name and bucket are immutable';
+        END IF;
+        IF OLD.audit_retention_days IS NOT NULL
+           AND (NEW.audit_retention_days IS NULL OR NEW.audit_retention_days < OLD.audit_retention_days) THEN
+            RAISE EXCEPTION 'tenant_lakehouse: audit retention can only be extended (% -> %)',
+                OLD.audit_retention_days, NEW.audit_retention_days;
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    -- DELETE: only a row that never got a warehouse, or one already offboarded.
+    IF OLD.lakekeeper_warehouse_id IS NOT NULL AND OLD.lifecycle_state <> 'offboarded' THEN
+        RAISE EXCEPTION 'tenant_lakehouse: cannot delete a provisioned warehouse record; offboard the tenant instead';
+    END IF;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_tenant_lakehouse_guard ON public.tenant_lakehouse;
+CREATE TRIGGER trg_tenant_lakehouse_guard
+BEFORE UPDATE OR DELETE ON public.tenant_lakehouse
+FOR EACH ROW EXECUTE FUNCTION public.tenant_lakehouse_guard();
 
 -- ---------------------------------------------------------------------------
 -- Per-datasource bindings.

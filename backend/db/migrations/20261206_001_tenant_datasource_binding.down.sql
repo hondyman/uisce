@@ -9,3 +9,4 @@
 -- tables.
 DROP TABLE IF EXISTS public.tenant_datasource_binding;
 DROP TABLE IF EXISTS public.tenant_lakehouse;
+DROP FUNCTION IF EXISTS public.tenant_lakehouse_guard();
