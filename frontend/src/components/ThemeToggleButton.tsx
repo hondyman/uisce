@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { FC, MouseEvent } from 'react';
 import { Moon, Sun, Monitor } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { IconButton, Tooltip, Menu, MenuItem } from '@mui/material';
+import { IconButton, Tooltip, Menu, MenuItem, ListSubheader, Divider, Box } from '@mui/material';
+import { THEME_STYLES } from '../theme/themeStyles';
 
 interface ThemeToggleButtonProps {
   /**
@@ -28,7 +29,7 @@ export const ThemeToggleButton: FC<ThemeToggleButtonProps> = ({
   className,
   showMenu = true 
 }) => {
-  const { theme, effectiveTheme, setTheme } = useTheme();
+  const { theme, effectiveTheme, setTheme, style, setStyle } = useTheme();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const handleMenuOpen = (event: MouseEvent<HTMLElement>) => {
@@ -93,6 +94,15 @@ export const ThemeToggleButton: FC<ThemeToggleButtonProps> = ({
             horizontal: 'right',
           }}
         >
+          <ListSubheader disableSticky>Style</ListSubheader>
+          {THEME_STYLES.map((s) => (
+            <MenuItem key={s.id} selected={style === s.id} onClick={() => { setStyle(s.id); handleMenuClose(); }}>
+              <Box component="span" sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: s.accent, mr: 1.5, flexShrink: 0 }} />
+              {s.label}
+            </MenuItem>
+          ))}
+          <Divider />
+          <ListSubheader disableSticky>Mode</ListSubheader>
           <MenuItem 
             selected={theme === 'light'}
             onClick={() => handleThemeSelect('light')}

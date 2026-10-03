@@ -28,6 +28,7 @@ import {
   TableRow,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Visibility as VisibilityIcon, Download as DownloadIcon, GridView as GridViewIcon, ViewAgenda as ViewAgendaIcon } from '@mui/icons-material';
+import AppearanceSettings from '../../../components/AppearanceSettings';
 import { useNotification } from '../../../hooks/useNotification';
 
 interface IPWhitelistSettings {
@@ -153,9 +154,15 @@ const SettingsPage: React.FC = () => {
             Settings
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Configure IP whitelist policies and validation rules
+            Appearance, IP whitelist policies and validation rules
           </Typography>
         </Box>
+
+        <Card>
+          <CardContent>
+            <AppearanceSettings />
+          </CardContent>
+        </Card>
 
         {/* Settings Cards Grid */}
         <Grid container spacing={2}>
