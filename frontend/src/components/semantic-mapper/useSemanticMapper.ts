@@ -77,7 +77,7 @@ export function useSemanticMapper() {
       };
 
       // Add cache-busting timestamp to force fresh data
-      const finalUrlObj = new URL(resolveApiUrl('/api/semantic-mappings'));
+      const finalUrlObj = new URL(resolveApiUrl('/api/semantic-mappings', true));
       finalUrlObj.searchParams.set('_t', String(Date.now()));
       try {
         if ((import.meta as any).env?.DEV) {
@@ -633,7 +633,7 @@ export function useSemanticMapper() {
 
   const deleteBusinessTermEdgeByTerms = async (semanticTermId: string, businessTermId: string): Promise<boolean> => {
     try {
-      const urlObj = new URL(resolveApiUrl('/api/business-term-edges'));
+      const urlObj = new URL(resolveApiUrl('/api/business-term-edges', true));
       urlObj.searchParams.set('semantic_term_id', semanticTermId);
       urlObj.searchParams.set('business_term_id', businessTermId);
       const res = await fetch(urlObj.toString(), {
