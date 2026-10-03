@@ -392,6 +392,7 @@ func main() {
 		Keys:        lakehouseinfra.KeysFromEnv(),
 		Buckets:     lakehouseinfra.BucketsFromEnv(),
 		Credentials: lakehouseinfra.CredentialsFromEnv(),
+		Destination: lakehouseinfra.AuditDestinationFromEnv(),
 		Warehouses:  iceberg.NewLakekeeperProvisioner(os.Getenv("LAKEKEEPER_URL"), "", os.Getenv("S3_ENDPOINT")),
 		S3Endpoint:  os.Getenv("S3_ENDPOINT"),
 		S3Region:    lakehouseRegion,
@@ -401,6 +402,13 @@ func main() {
 	})
 	w.RegisterWorkflowWithOptions(provisioningworkflows.TenantLakehouseRetentionWorkflow, temporalworkflow.RegisterOptions{
 		Name: provisioningworkflows.TenantLakehouseRetentionWorkflowName,
+	})
+	// ADR-036: copy each tenant's lakehouse audit into its own Iceberg warehouse, via StarRocks.
+	w.RegisterWorkflowWithOptions(provisioningworkflows.TenantLakehouseAuditCopyWorkflow, temporalworkflow.RegisterOptions{
+		Name: provisioningworkflows.TenantLakehouseAuditCopyWorkflowName,
+	})
+	w.RegisterWorkflowWithOptions(provisioningworkflows.TenantLakehouseAuditCopyAllWorkflow, temporalworkflow.RegisterOptions{
+		Name: provisioningworkflows.TenantLakehouseAuditCopyAllWorkflowName,
 	})
 	w.RegisterActivity(lakehouseActivities)
 	log.Println("✅ Registered Tenant Lakehouse Provisioning Workflow")
@@ -455,6 +463,16 @@ func main() {
 		log.Fatalf("❌ Worker start failed: %v", err)
 	}
 	log.Println("✅ Worker started and listening for workflows on bp_queue")
+
+	// Schedule the all-tenants lakehouse audit copy (ADR-036) now that a worker is polling. Best
+	// effort and idempotent: a fixed workflow id makes this a no-op while it is already scheduled,
+	// and a failure here must never stop the worker. It does nothing for a tenant with no
+	// provisioned warehouse, and fails fast (logged) for a deployment with no StarRocks configured.
+	if err := provisioningworkflows.StartTenantLakehouseAuditCopyCron(context.Background(), temporalClient, "bp_queue"); err != nil {
+		log.Printf("⚠️  Could not schedule the lakehouse audit copy: %v", err)
+	} else {
+		log.Println("✅ Lakehouse audit copy scheduled")
+	}
 
 	// Wait for shutdown signal
 	sigCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

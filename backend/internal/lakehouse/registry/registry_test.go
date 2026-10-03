@@ -544,3 +544,117 @@ func TestRetentionApplied(t *testing.T) {
 		require.Error(t, s.MarkProvisioned(ctx, id, uuid.New(), "key-"+id.String(), 366, actor))
 	})
 }
+
+func TestAuditAfter(t *testing.T) {
+	db := openDB(t)
+	s := registry.NewStore(db)
+	ctx := context.Background()
+
+	id := newTenant(t, db, "Ship")
+	_, err := s.SetRetention(ctx, id, 365, actor)
+	require.NoError(t, err)
+	_, err = s.SetRetention(ctx, id, 730, actor)
+	require.NoError(t, err)
+	require.NoError(t, s.Record(ctx, id, actor, "provision_requested", nil, map[string]int{"audit_retention_days": 730}))
+	require.NoError(t, s.RecordProvisionFailure(ctx, id, actor, "EnsureLakehouseBucket", "boom"))
+
+	all, err := s.AuditAfter(ctx, id, 0, 500)
+	require.NoError(t, err)
+	require.Len(t, all, 4)
+	for i := 1; i < len(all); i++ {
+		require.Greater(t, all[i].ID, all[i-1].ID, "oldest first")
+		require.Equal(t, all[i-1].Hash, all[i].PrevHash, "in chain order, each linking to the one before")
+	}
+	require.Equal(t, strings.Repeat("0", 64), all[0].PrevHash)
+
+	rest, err := s.AuditAfter(ctx, id, all[1].ID, 500)
+	require.NoError(t, err)
+	require.Equal(t, []int64{all[2].ID, all[3].ID}, []int64{rest[0].ID, rest[1].ID}, "strictly after the given id")
+
+	page, err := s.AuditAfter(ctx, id, 0, 2)
+	require.NoError(t, err)
+	require.Len(t, page, 2)
+	require.Equal(t, all[0].ID, page[0].ID, "a limit takes the OLDEST rows, so a resumed copy never skips")
+
+	none, err := s.AuditAfter(ctx, id, all[3].ID, 500)
+	require.NoError(t, err)
+	require.Empty(t, none)
+
+	other := newTenant(t, db, "ShipOther")
+	_, err = s.SetRetention(ctx, other, 365, actor)
+	require.NoError(t, err)
+	theirs, err := s.AuditAfter(ctx, other, 0, 500)
+	require.NoError(t, err)
+	require.Len(t, theirs, 1, "only the other tenant's own entry")
+	require.NotContains(t, []int64{all[0].ID, all[1].ID, all[2].ID, all[3].ID}, theirs[0].ID)
+}
+
+func TestMarkAuditCopied(t *testing.T) {
+	db := openDB(t)
+	s := registry.NewStore(db)
+	ctx := context.Background()
+
+	t.Run("refuses a tenant with no registry row", func(t *testing.T) {
+		require.ErrorIs(t, s.MarkAuditCopied(ctx, newTenant(t, db, "NoRowCopy"), 5), registry.ErrNotConfigured)
+	})
+
+	t.Run("only ever raises, and says so in the entry", func(t *testing.T) {
+		id := newTenant(t, db, "Copied")
+		_, err := s.SetRetention(ctx, id, 365, actor)
+		require.NoError(t, err)
+		got, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		require.Nil(t, got.AuditCopiedThroughID)
+
+		require.NoError(t, s.MarkAuditCopied(ctx, id, 10))
+		require.NoError(t, s.MarkAuditCopied(ctx, id, 4), "a lower value is a no-op, not an error")
+		got, err = s.Get(ctx, id)
+		require.NoError(t, err)
+		require.EqualValues(t, 10, *got.AuditCopiedThroughID)
+
+		require.NoError(t, s.MarkAuditCopied(ctx, id, 12))
+		got, err = s.Get(ctx, id)
+		require.NoError(t, err)
+		require.EqualValues(t, 12, *got.AuditCopiedThroughID)
+		require.Error(t, s.MarkAuditCopied(ctx, id, 0))
+	})
+
+	t.Run("the database itself refuses to lower or clear it", func(t *testing.T) {
+		id := newTenant(t, db, "CopiedGuard")
+		_, err := s.SetRetention(ctx, id, 365, actor)
+		require.NoError(t, err)
+		require.NoError(t, s.MarkAuditCopied(ctx, id, 9))
+		exec := func(q string) error {
+			return dbpkg.WithTenantTransaction(ctx, db, id.String(), func(tx *sql.Tx) error {
+				_, e := tx.Exec(q, id)
+				return e
+			})
+		}
+		require.Error(t, exec(`UPDATE public.tenant_lakehouse SET audit_copied_through_id = 3 WHERE tenant_id = $1`))
+		require.Error(t, exec(`UPDATE public.tenant_lakehouse SET audit_copied_through_id = NULL WHERE tenant_id = $1`))
+		got, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		require.EqualValues(t, 9, *got.AuditCopiedThroughID)
+	})
+}
+
+func TestProvisionedTenants(t *testing.T) {
+	db := openDB(t)
+	s := registry.NewStore(db)
+	ctx := context.Background()
+
+	done := newTenant(t, db, "ProvDone")
+	waiting := newTenant(t, db, "ProvWaiting")
+	never := newTenant(t, db, "ProvNever")
+	for _, id := range []uuid.UUID{done, waiting} {
+		_, err := s.SetRetention(ctx, id, 365, actor)
+		require.NoError(t, err)
+	}
+	require.NoError(t, s.MarkProvisioned(ctx, done, uuid.New(), "key-"+done.String(), 365, actor))
+
+	got, err := s.ProvisionedTenants(ctx)
+	require.NoError(t, err)
+	require.Contains(t, got, done)
+	require.NotContains(t, got, waiting, "configured but not provisioned has no warehouse to copy into")
+	require.NotContains(t, got, never)
+}

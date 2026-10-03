@@ -1060,6 +1060,39 @@ under Object Lock (ADR-032) for immutable retention and time-travel queries; tha
 copy adds a guarantee and removes nothing from `alpha`. An earlier draft of this
 ADR said Postgres would hold only a hot window of audit; that is withdrawn.
 
+### ADR-036: The Lakehouse Audit Copy Is Written By StarRocks, Resumes From The Destination, And Never Replaces `alpha`
+
+**Decision.** A tenant's lakehouse audit chain (`tenant_lakehouse_audit`) is copied into an
+Iceberg table `audit.lakehouse_events` in that tenant's own warehouse (ADR-032). `alpha`
+remains the system of record and nothing is removed from it (ADR-029); the copy adds an
+immutable, queryable second record under Object Lock.
+
+- **Engine:** StarRocks, through a per-tenant external catalog (`ivy_t_<tenant id>`) over
+  Lakekeeper and `INSERT INTO`. Go has no mature Iceberg writer, StarRocks is already
+  deployed (3.3), and it is the engine per-tenant isolation (ADR-033) already assumes. The
+  catalog carries the tenant's OWN storage credential, never a shared one.
+- **Resume point is the destination, not a counter.** Each run reads `max(id)` from the
+  Iceberg table and ships the rows after it. A separate watermark can drift from the data
+  (a crash between insert and update would duplicate rows on retry); the destination cannot.
+  `tenant_lakehouse.audit_copied_through_id` is a status marker for operators only and never
+  decides what is shipped.
+- **Continuity is checked.** The first row shipped must link (`prev_hash`) to the hash of the
+  last row already in the destination, so a gap or a reordered chain stops the run and is not
+  copied over.
+- **One writer per tenant** (a workflow id per tenant), because an Iceberg append is not
+  idempotent.
+- **Batched on a schedule, not per event.** Under compliance-mode Object Lock every commit's
+  data, manifest and metadata files are kept for the whole retention period, so many tiny
+  commits would be stored for years. Rows are shipped in batches, and nothing is committed
+  when there is nothing to ship.
+
+**Consequence.** Snapshot expiry and orphan cleanup cannot delete locked files; the
+maintenance workflow must not be expected to reclaim space in a tenant warehouse until
+retention lapses. The DDL, property names and Iceberg write behaviour are written against
+the documented StarRocks 3.3 and Lakekeeper interfaces and the properties this repository
+already uses; they have not been run against the deployed instances and need a smoke run
+before anything depends on them.
+
 ## Open items
 
 - **Call-site verification for ADR-001 … ADR-010.** The imported entries assert

@@ -65,6 +65,9 @@ type Config struct {
 	RetentionPending     bool   `json:"retention_pending"`
 	LifecycleState       string `json:"lifecycle_state"`
 	Provisioned          bool   `json:"provisioned"`
+	// AuditCopiedThroughID is the last audit entry known to be copied to the tenant's Iceberg
+	// audit table. A status marker only: the copy resumes from the destination's own max(id).
+	AuditCopiedThroughID *int64 `json:"audit_copied_through_id"`
 	// CredentialIssued is true once the tenant's storage credential has been issued. After
 	// that, a credential the secrets store cannot find is an error, never a reason to mint a
 	// new one.
@@ -116,15 +119,19 @@ func (s *Store) tenantRow(ctx context.Context, tenantID uuid.UUID) (name, code s
 
 const selectConfig = `
 	SELECT warehouse_name, bucket, audit_retention_days, retention_applied_days, lifecycle_state,
-	       lakekeeper_warehouse_id IS NOT NULL, credential_issued_at IS NOT NULL, version, updated_at
+	       lakekeeper_warehouse_id IS NOT NULL, credential_issued_at IS NOT NULL, audit_copied_through_id, version, updated_at
 	  FROM public.tenant_lakehouse
 	 WHERE tenant_id = $1`
 
 func scanConfig(row *sql.Row, c *Config) error {
 	var days, applied sql.NullInt32
+	var copied sql.NullInt64
 	var updated time.Time
-	if err := row.Scan(&c.WarehouseName, &c.Bucket, &days, &applied, &c.LifecycleState, &c.Provisioned, &c.CredentialIssued, &c.Version, &updated); err != nil {
+	if err := row.Scan(&c.WarehouseName, &c.Bucket, &days, &applied, &c.LifecycleState, &c.Provisioned, &c.CredentialIssued, &copied, &c.Version, &updated); err != nil {
 		return err
+	}
+	if copied.Valid {
+		c.AuditCopiedThroughID = &copied.Int64
 	}
 	if days.Valid {
 		d := int(days.Int32)
@@ -323,6 +330,90 @@ func (s *Store) MarkRetentionApplied(ctx context.Context, tenantID uuid.UUID, da
 		return fmt.Errorf("mark retention applied: %w", err)
 	}
 	return nil
+}
+
+// AuditAfter returns up to limit audit entries with an id greater than afterID, OLDEST FIRST,
+// for copying to the tenant's Iceberg audit table (ADR-036). The order is the chain order.
+func (s *Store) AuditAfter(ctx context.Context, tenantID uuid.UUID, afterID int64, limit int) ([]AuditEntry, error) {
+	if limit < 1 || limit > 5000 {
+		limit = 500
+	}
+	var out []AuditEntry
+	err := dbpkg.WithTenantTransaction(ctx, s.db, tenantID.String(), func(tx *sql.Tx) error {
+		rows, e := tx.QueryContext(ctx, `
+			SELECT id, at, actor_id, actor_role, action, before, after, prev_hash, hash
+			  FROM public.tenant_lakehouse_audit
+			 WHERE tenant_id = $1 AND id > $2 ORDER BY id ASC LIMIT $3`, tenantID, afterID, limit)
+		if e != nil {
+			return e
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var a AuditEntry
+			var before, after []byte
+			if e := rows.Scan(&a.ID, &a.At, &a.ActorID, &a.ActorRole, &a.Action, &before, &after, &a.PrevHash, &a.Hash); e != nil {
+				return e
+			}
+			a.Before, a.After = before, after
+			out = append(out, a)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read audit after %d: %w", afterID, err)
+	}
+	return out, nil
+}
+
+// MarkAuditCopied records that the audit entries up to throughID are in the Iceberg copy. It only
+// raises the marker and is a status for operators; it never decides what is shipped.
+func (s *Store) MarkAuditCopied(ctx context.Context, tenantID uuid.UUID, throughID int64) error {
+	if throughID < 1 {
+		return errors.New("a positive audit id is required")
+	}
+	var found bool
+	err := dbpkg.WithTenantTransaction(ctx, s.db, tenantID.String(), func(tx *sql.Tx) error {
+		if e := tx.QueryRowContext(ctx, `SELECT true FROM public.tenant_lakehouse WHERE tenant_id = $1 FOR UPDATE`, tenantID).Scan(&found); e != nil {
+			if errors.Is(e, sql.ErrNoRows) {
+				return ErrNotConfigured
+			}
+			return e
+		}
+		_, e := tx.ExecContext(ctx, `
+			UPDATE public.tenant_lakehouse SET audit_copied_through_id = $2
+			 WHERE tenant_id = $1 AND (audit_copied_through_id IS NULL OR audit_copied_through_id < $2)`, tenantID, throughID)
+		return e
+	})
+	if err != nil {
+		if errors.Is(err, ErrNotConfigured) {
+			return err
+		}
+		return fmt.Errorf("mark audit copied: %w", err)
+	}
+	return nil
+}
+
+// ProvisionedTenants returns the ids of every tenant that has a provisioned lakehouse, for the
+// scheduled audit copy. It pages through the tenants and reads each one's entry under its own RLS
+// context, like List, so no privileged cross-tenant role is involved.
+func (s *Store) ProvisionedTenants(ctx context.Context) ([]uuid.UUID, error) {
+	var out []uuid.UUID
+	for offset := 0; ; offset += 100 {
+		items, total, err := s.List(ctx, "", 100, offset)
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range items {
+			if c.Provisioned {
+				if id, e := uuid.Parse(c.TenantID); e == nil {
+					out = append(out, id)
+				}
+			}
+		}
+		if offset+100 >= total || len(items) == 0 {
+			return out, nil
+		}
+	}
 }
 
 // MarkCredentialIssued records that the tenant's storage credential now exists. It is

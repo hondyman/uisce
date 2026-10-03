@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/lakehouse/registry"
 	"github.com/hondyman/uisce/backend/internal/temporal/activities"
+	"github.com/hondyman/uisce/backend/internal/temporal/workflows"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
@@ -21,6 +22,10 @@ const (
 	// LakehouseRetentionWorkflowName is the registered name of the retention reconcile. It must
 	// equal workflows.TenantLakehouseRetentionWorkflowName (a test enforces it).
 	LakehouseRetentionWorkflowName = "TenantLakehouseRetentionWorkflow"
+
+	// LakehouseAuditCopyWorkflowName is the registered name of the per-tenant audit copy. It must equal
+	// workflows.TenantLakehouseAuditCopyWorkflowName (a test enforces it).
+	LakehouseAuditCopyWorkflowName = "TenantLakehouseAuditCopyWorkflow"
 
 	// LakehouseTaskQueue is the queue the DEPLOYED worker (cmd/worker) polls. It is not
 	// pkg/workflows.BPTaskQueue ("bp-framework-queue"), which that worker does not poll, and
@@ -86,6 +91,31 @@ func (p *TemporalLakehouseProvisioner) StartRetentionSync(ctx context.Context, t
 	var started *serviceerror.WorkflowExecutionAlreadyStarted
 	if errors.As(err, &started) {
 		return "", ErrRetentionSyncInProgress
+	}
+	if err != nil {
+		return "", err
+	}
+	return run.GetID(), nil
+}
+
+// StartAuditCopy starts the per-tenant audit copy now. It runs under workflows.AuditCopyWorkflowID, the
+// same id the scheduled run's children use, so a manual run and a scheduled one can never write the same
+// tenant's Iceberg table at once. Like the retention sync it recurs, so a finished run does not block the
+// next; only a running one does.
+func (p *TemporalLakehouseProvisioner) StartAuditCopy(ctx context.Context, tenantID uuid.UUID, actor registry.Actor) (string, error) {
+	run, err := p.c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                       workflows.AuditCopyWorkflowID(tenantID.String()),
+		TaskQueue:                p.queue,
+		WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowExecutionTimeout: 30 * time.Minute,
+	}, LakehouseAuditCopyWorkflowName, activities.LakehouseProvisionInput{
+		TenantID:  tenantID.String(),
+		ActorID:   actor.ID,
+		ActorRole: actor.Role,
+	})
+	var started *serviceerror.WorkflowExecutionAlreadyStarted
+	if errors.As(err, &started) {
+		return "", ErrAuditCopyInProgress
 	}
 	if err != nil {
 		return "", err

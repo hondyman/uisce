@@ -73,6 +73,7 @@ func TestTemporalLakehouseProvisioner_Errors(t *testing.T) {
 func TestLakehouseWorkflowIsWiredIntoTheDeployedWorker(t *testing.T) {
 	require.Equal(t, workflows.TenantLakehouseProvisioningWorkflowName, LakehouseWorkflowName)
 	require.Equal(t, workflows.TenantLakehouseRetentionWorkflowName, LakehouseRetentionWorkflowName)
+	require.Equal(t, workflows.TenantLakehouseAuditCopyWorkflowName, LakehouseAuditCopyWorkflowName)
 
 	src, err := os.ReadFile("../../cmd/worker/main.go")
 	require.NoError(t, err)
@@ -88,6 +89,10 @@ func TestLakehouseWorkflowIsWiredIntoTheDeployedWorker(t *testing.T) {
 	has("TenantLakehouseProvisioningWorkflow", "the workflow must be registered on that worker")
 	has("TenantLakehouseRetentionWorkflow", "and so must the retention reconcile")
 	has("TenantLakehouseActivities", "and so must its activities")
+	has("TenantLakehouseAuditCopyWorkflow,", "the per-tenant audit copy must be registered")
+	has("TenantLakehouseAuditCopyAllWorkflow,", "and so must the all-tenants run the schedule starts")
+	has("StartTenantLakehouseAuditCopyCron(", "the worker must start the audit copy schedule")
+	has("AuditDestinationFromEnv()", "the activities need their StarRocks destination")
 	for _, line := range strings.Split(main, "\n") {
 		if strings.Contains(line, "RegisterSafeActivity") && strings.Contains(line, "Lakehouse") {
 			t.Errorf("lakehouse activities must never be BP-Designer client-safe: %s", strings.TrimSpace(line))
@@ -118,4 +123,26 @@ func TestTemporalLakehouseProvisioner_RetentionSync(t *testing.T) {
 	_, err = p.StartRetentionSync(context.Background(), id, registry.Actor{})
 	require.ErrorContains(t, err, "temporal unavailable")
 	require.NotErrorIs(t, err, ErrRetentionSyncInProgress)
+}
+
+func TestTemporalLakehouseProvisioner_AuditCopy(t *testing.T) {
+	id := uuid.New()
+	f := &fakeStarter{}
+	p := &TemporalLakehouseProvisioner{c: f, queue: LakehouseTaskQueue}
+
+	wfID, err := p.StartAuditCopy(context.Background(), id, registry.Actor{ID: "alice", Role: "global_admin"})
+	require.NoError(t, err)
+	require.Equal(t, "run-id", wfID)
+	require.Equal(t, workflows.AuditCopyWorkflowID(id.String()), f.opts.ID,
+		"the same id the schedule's children use, so there is one writer per tenant")
+	require.Equal(t, "bp_queue", f.opts.TaskQueue)
+	require.Equal(t, LakehouseAuditCopyWorkflowName, f.wf)
+
+	f.err = serviceerror.NewWorkflowExecutionAlreadyStarted("running", "", "")
+	_, err = p.StartAuditCopy(context.Background(), id, registry.Actor{})
+	require.ErrorIs(t, err, ErrAuditCopyInProgress)
+
+	f.err = errors.New("temporal unavailable")
+	_, err = p.StartAuditCopy(context.Background(), id, registry.Actor{})
+	require.NotErrorIs(t, err, ErrAuditCopyInProgress)
 }

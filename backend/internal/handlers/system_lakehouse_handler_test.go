@@ -77,6 +77,16 @@ type fakeProvisioner struct {
 	err     error
 	syncs   int
 	syncErr error
+	copies  int
+	copyErr error
+}
+
+func (p *fakeProvisioner) StartAuditCopy(_ context.Context, id uuid.UUID, _ registry.Actor) (string, error) {
+	p.copies++
+	if p.copyErr != nil {
+		return "", p.copyErr
+	}
+	return "lakehouse-audit-copy-" + id.String(), nil
 }
 
 func (p *fakeProvisioner) StartProvision(_ context.Context, id uuid.UUID, _ registry.Actor) (string, error) {
@@ -420,5 +430,50 @@ func TestSystemLakehouse_RetentionSyncEndpoint(t *testing.T) {
 		w = call(newLakehouseRouter(&fakeLakehouseRegistry{cfg: pendingCfg()}, &fakeProvisioner{syncErr: errors.New("temporal down")}), "POST", path, "", globalAdmin)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 		require.NotContains(t, w.Body.String(), "temporal down")
+	})
+}
+
+func TestSystemLakehouse_AuditCopyEndpoint(t *testing.T) {
+	path := lakehousePath("/audit/copy")
+	provisioned := &registry.Config{Configured: true, Provisioned: true, LifecycleState: "active"}
+
+	t.Run("202 starts the copy through the provisioner", func(t *testing.T) {
+		prov := &fakeProvisioner{}
+		w := call(newLakehouseRouter(&fakeLakehouseRegistry{cfg: provisioned}, prov), "POST", path, "", globalAdmin)
+		require.Equal(t, http.StatusAccepted, w.Code)
+		require.Equal(t, 1, prov.copies)
+		var b map[string]string
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &b))
+		require.Equal(t, "lakehouse-audit-copy-"+testTenant.String(), b["workflow_id"])
+	})
+
+	t.Run("409 when the tenant has no warehouse, and nothing starts", func(t *testing.T) {
+		prov := &fakeProvisioner{}
+		notProv := &registry.Config{Configured: true, LifecycleState: "provisioning"}
+		w := call(newLakehouseRouter(&fakeLakehouseRegistry{cfg: notProv}, prov), "POST", path, "", globalAdmin)
+		require.Equal(t, http.StatusConflict, w.Code)
+		require.Equal(t, "not_provisioned", errCode(t, w))
+		require.Zero(t, prov.copies)
+	})
+
+	t.Run("409 while one is running; 500 on other failures; 503 without a provisioner", func(t *testing.T) {
+		w := call(newLakehouseRouter(&fakeLakehouseRegistry{cfg: provisioned}, &fakeProvisioner{copyErr: ErrAuditCopyInProgress}), "POST", path, "", globalAdmin)
+		require.Equal(t, http.StatusConflict, w.Code)
+		require.Equal(t, "copy_in_progress", errCode(t, w))
+
+		w = call(newLakehouseRouter(&fakeLakehouseRegistry{cfg: provisioned}, &fakeProvisioner{copyErr: errors.New("temporal down")}), "POST", path, "", globalAdmin)
+		require.GreaterOrEqual(t, w.Code, 500)
+
+		w = call(newLakehouseRouter(&fakeLakehouseRegistry{cfg: provisioned}, nil), "POST", path, "", globalAdmin)
+		require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	})
+
+	t.Run("only a global admin may start it", func(t *testing.T) {
+		prov := &fakeProvisioner{}
+		for _, who := range []*security.AuthInfo{ordinary, nil} {
+			w := call(newLakehouseRouter(&fakeLakehouseRegistry{cfg: provisioned}, prov), "POST", path, "", who)
+			require.Contains(t, []int{http.StatusForbidden, http.StatusUnauthorized}, w.Code)
+		}
+		require.Zero(t, prov.copies)
 	})
 }
