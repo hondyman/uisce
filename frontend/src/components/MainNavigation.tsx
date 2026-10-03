@@ -193,6 +193,7 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'LLM Config', path: '/admin/llm', icon: <AutoFixHighIcon />, description: 'AI model configuration' },
           { label: 'Seeding', path: '/admin/seeding', icon: <SystemUpdateAltIcon />, description: 'Rule seeding' },
           { label: 'Temporal Ops', path: '/admin/temporal-ops', icon: <PlayCircleOutlineIcon />, description: 'Workflow engine' },
+          { label: 'Tenant Lakehouse', path: '/system/lakehouse', icon: <StorageIcon />, description: "Each tenant's Iceberg warehouse and audit retention" },
           { label: 'Menu Designer', path: '/menu-designer', icon: <AccountTreeIcon />, description: 'Configure tenant navigation menus' },
         ]
       }

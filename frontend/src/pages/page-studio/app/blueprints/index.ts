@@ -7,6 +7,7 @@ import { schedulesBlueprint } from './schedules';
 import { sourceScoringBlueprint } from './sourceScoring';
 import { validationRulesBlueprint } from './validationRules';
 import { lakehouseStreamingBlueprint } from './lakehouseStreaming';
+import { systemLakehouseBlueprint } from './systemLakehouse';
 
 /**
  * Pages the studio can start from: complete, working pages built entirely
@@ -85,6 +86,12 @@ export const PAGE_BLUEPRINTS: PageBlueprint[] = [
     name: 'Lakehouse & CDC Stream Ingestion',
     description: 'Apache Iceberg REST catalog management, Debezium CDC ingestion pipelines, Layer 2 tenant assertion, and streaming gatekeeper inspection.',
     build: lakehouseStreamingBlueprint,
+  },
+  {
+    id: 'system-lakehouse',
+    name: 'Tenant lakehouse',
+    description: "System: each tenant's one Iceberg warehouse and its per-tenant audit retention, with provisioning and the audit trail.",
+    build: systemLakehouseBlueprint,
   },
 ];
 
