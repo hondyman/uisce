@@ -123,10 +123,33 @@ INSERT INTO public.page_definitions (
         {
           "id": "retention",
           "header": "Audit retention",
-          "cell": {
-            "kind": "text",
-            "value": "{{row.retention_text}}"
-          }
+          "stack": [
+            {
+              "kind": "text",
+              "value": "{{row.retention_text}}"
+            },
+            {
+              "kind": "text",
+              "value": "Bucket enforces {{row.applied_text}}",
+              "caption": true,
+              "visibleWhen": {
+                "type": "condition",
+                "field": "row.applied_text",
+                "operator": "is_not_empty"
+              }
+            },
+            {
+              "kind": "chip",
+              "label": "Bucket is behind",
+              "color": "warning",
+              "variant": "outlined",
+              "visibleWhen": {
+                "type": "condition",
+                "field": "row.retention_pending",
+                "operator": "is_true"
+              }
+            }
+          ]
         },
         {
           "id": "warehouse",
@@ -181,6 +204,31 @@ INSERT INTO public.page_definitions (
                       "confirmLabel": "Provision"
                     },
                     "successMessage": "Provisioning started"
+                  }
+                ]
+              },
+              {
+                "label": "Sync retention",
+                "icon": "refresh",
+                "visibleWhen": {
+                  "type": "condition",
+                  "field": "row.can_sync",
+                  "operator": "is_true"
+                },
+                "onClick": [
+                  {
+                    "kind": "runOperation",
+                    "operation": "systemLakehouse.syncRetention",
+                    "params": {
+                      "tenant_id": "{{row.tenant_id}}"
+                    },
+                    "onSuccess": [],
+                    "confirm": {
+                      "title": "Raise the bucket's retention",
+                      "text": "Raise {{row.name}}'s bucket to {{row.retention_text}}? This changes the default retention for objects written from now on. Objects already stored keep their current retention. It cannot be lowered.",
+                      "confirmLabel": "Raise retention"
+                    },
+                    "successMessage": "Retention sync started"
                   }
                 ]
               },

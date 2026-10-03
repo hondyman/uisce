@@ -60,7 +60,11 @@ function systemLakehousePage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'u
         kind: 'chip', value: '{{row.state}}', label: '{{row.state_label}}', variant: 'outlined',
         colorMap: { active: 'success', provisioning: 'warning', suspended: 'warning', offboarding: 'warning', unconfigured: 'default', offboarded: 'default', '*': 'default' },
       }),
-      col('retention', 'Audit retention', { kind: 'text', value: '{{row.retention_text}}' }),
+      col('retention', 'Audit retention', [
+        { kind: 'text', value: '{{row.retention_text}}' },
+        { kind: 'text', value: 'Bucket enforces {{row.applied_text}}', caption: true, visibleWhen: cond('row.applied_text', 'is_not_empty') },
+        { kind: 'chip', label: 'Bucket is behind', color: 'warning', variant: 'outlined', visibleWhen: cond('row.retention_pending', 'is_true') },
+      ]),
       col('warehouse', 'Warehouse', { kind: 'text', value: '{{row.warehouse_name}}', caption: true }),
       col('act', '', {
         kind: 'actions', buttons: [
@@ -74,6 +78,17 @@ function systemLakehousePage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'u
                 confirmLabel: 'Provision',
               },
               successMessage: 'Provisioning started',
+            })],
+          },
+          {
+            label: 'Sync retention', icon: 'refresh', visibleWhen: cond('row.can_sync', 'is_true'),
+            onClick: [op('systemLakehouse.syncRetention', { tenant_id: '{{row.tenant_id}}' }, [], {
+              confirm: {
+                title: 'Raise the bucket\'s retention',
+                text: 'Raise {{row.name}}\'s bucket to {{row.retention_text}}? This changes the default retention for objects written from now on. Objects already stored keep their current retention. It cannot be lowered.',
+                confirmLabel: 'Raise retention',
+              },
+              successMessage: 'Retention sync started',
             })],
           },
           { label: 'Audit trail', icon: 'review', onClick: [set('auditTenant', '{{row.tenant_id}}'), set('auditOpen', true)] },

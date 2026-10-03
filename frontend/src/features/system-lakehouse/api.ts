@@ -16,6 +16,10 @@ export interface LakehouseConfig {
   bucket?: string;
   /** null until set. There is no default and it can only be extended. */
   audit_retention_days: number | null;
+  /** What the bucket enforces by default. null until provisioned. It can lag audit_retention_days. */
+  retention_applied_days: number | null;
+  /** True while the bucket enforces less than the registry wants. */
+  retention_pending: boolean;
   lifecycle_state: LifecycleState;
   provisioned: boolean;
   version?: number;
@@ -24,6 +28,7 @@ export interface LakehouseConfig {
 
 export interface AuditDetail {
   audit_retention_days?: number;
+  retention_applied_days?: number;
   step?: string;
   error?: string;
   warehouse_id?: string;
@@ -97,5 +102,7 @@ export const systemLakehouseApi = {
     call<LakehouseConfig>(tenantPath(tenantId), { method: 'PUT', body: JSON.stringify({ audit_retention_days: days }) }),
   provision: (tenantId: string) =>
     call<{ workflow_id: string; tenant_id: string }>(`${tenantPath(tenantId)}/provision`, { method: 'POST', body: '{}' }),
+  syncRetention: (tenantId: string) =>
+    call<{ workflow_id: string; tenant_id: string }>(`${tenantPath(tenantId)}/retention/sync`, { method: 'POST', body: '{}' }),
   audit: (tenantId: string, limit = 100) => call<LakehouseAudit>(`${tenantPath(tenantId)}/audit?limit=${limit}`),
 };

@@ -5,7 +5,8 @@ import { auditChangeText, chainText, retentionText, stateLabel, toRow } from '..
 
 const cfg = (over: Partial<LakehouseConfig> = {}): LakehouseConfig => ({
   tenant_id: 't-1', tenant_name: 'Acme', tenant_code: 'acme', configured: true,
-  audit_retention_days: 2555, lifecycle_state: 'provisioning', provisioned: false, warehouse_name: 'ivy-t-abc', ...over,
+  audit_retention_days: 2555, retention_applied_days: null, retention_pending: false,
+  lifecycle_state: 'provisioning', provisioned: false, warehouse_name: 'ivy-t-abc', ...over,
 });
 
 describe('retentionText', () => {
@@ -64,12 +65,49 @@ describe('toRow', () => {
   });
 });
 
+describe('retention sync', () => {
+  const provisioned = (over: Partial<LakehouseConfig> = {}) =>
+    cfg({ provisioned: true, lifecycle_state: 'active', retention_applied_days: 365, audit_retention_days: 2555, retention_pending: true, ...over });
+
+  it('shows what the bucket enforces and offers a sync while it is behind', () => {
+    const r = toRow(provisioned());
+    expect(r.retention_text).toBe('7 years (2,555 days)');
+    expect(r.applied_text).toBe('1 year (365 days)');
+    expect(r.retention_pending).toBe(true);
+    expect(r.can_sync).toBe(true);
+  });
+
+  it('offers nothing once the bucket has caught up', () => {
+    const r = toRow(provisioned({ retention_applied_days: 2555, retention_pending: false }));
+    expect(r.applied_text).toBe('7 years (2,555 days)');
+    expect(r.retention_pending).toBe(false);
+    expect(r.can_sync).toBe(false);
+  });
+
+  it('never offers a sync for a tenant with no bucket, whatever the flag says', () => {
+    const r = toRow(cfg({ provisioned: false, retention_pending: true, retention_applied_days: null }));
+    expect(r.can_sync).toBe(false);
+    expect(r.retention_pending).toBe(false);
+    expect(r.applied_text).toBe(''); // nothing is enforced before there is a bucket
+  });
+
+  it('says plainly when a provisioned bucket reports nothing applied', () => {
+    expect(toRow(provisioned({ retention_applied_days: null })).applied_text).toBe('Not set');
+  });
+});
+
 describe('audit text', () => {
   it('describes each action in words', () => {
     expect(auditChangeText({ action: 'configured', after: { audit_retention_days: 365 } })).toBe('Audit retention set to 1 year (365 days)');
     expect(auditChangeText({ action: 'retention_extended', before: { audit_retention_days: 365 }, after: { audit_retention_days: 2555 } }))
       .toBe('Audit retention extended from 1 year (365 days) to 7 years (2,555 days)');
     expect(auditChangeText({ action: 'provision_requested' })).toBe('Provisioning requested');
+    expect(auditChangeText({ action: 'retention_applied', before: { retention_applied_days: 365 }, after: { retention_applied_days: 2555 } }))
+      .toBe('Bucket now enforces 7 years (2,555 days) by default (was 1 year (365 days))');
+    expect(auditChangeText({ action: 'retention_applied', after: { retention_applied_days: 365 } }))
+      .toBe('Bucket now enforces 1 year (365 days) by default (was Not set)');
+    expect(auditChangeText({ action: 'retention_sync_failed', after: { step: 'ExtendBucketRetention', error: 'governance mode' } }))
+      .toBe("Raising the bucket's retention failed at ExtendBucketRetention: governance mode. The bucket still enforces its previous retention; fix the cause and sync again.");
     expect(auditChangeText({ action: 'provision_failed', after: { step: 'EnsureLakehouseBucket', error: 'bucket exists without Object Lock' } }))
       .toBe('Provisioning failed at EnsureLakehouseBucket: bucket exists without Object Lock. Fix the cause and provision again; steps that already finished are safe to re-run.');
     expect(auditChangeText({ action: 'provision_failed' })).toBe('Provisioning failed. Fix the cause and provision again; steps that already finished are safe to re-run.');

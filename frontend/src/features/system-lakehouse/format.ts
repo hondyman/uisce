@@ -42,11 +42,18 @@ export interface LakehouseRow {
   can_provision: boolean;
   /** Why provisioning is unavailable, shown under the button; empty when it is available. */
   provision_hint: string;
+  /** What the bucket actually enforces by default, in words; empty until provisioned. */
+  applied_text: string;
+  /** True while the bucket enforces less than the registry wants. */
+  retention_pending: boolean;
+  /** The bucket is behind and can be brought up to date. */
+  can_sync: boolean;
 }
 
 export function toRow(c: LakehouseConfig): LakehouseRow {
   const retentionSet = c.audit_retention_days !== null && c.audit_retention_days !== undefined;
   const can = c.configured && retentionSet && !c.provisioned && c.lifecycle_state === 'provisioning';
+  const pending = c.provisioned && !!c.retention_pending;
   let hint = '';
   if (!can) {
     if (c.provisioned) hint = 'Already provisioned';
@@ -66,6 +73,9 @@ export function toRow(c: LakehouseConfig): LakehouseRow {
     provisioned: c.provisioned,
     can_provision: can,
     provision_hint: hint,
+    applied_text: c.provisioned ? retentionText(c.retention_applied_days) : '',
+    retention_pending: pending,
+    can_sync: pending,
   };
 }
 
@@ -88,6 +98,14 @@ export function auditChangeText(e: Pick<LakehouseAuditEntry, 'action' | 'before'
       const step = e.after?.step ? ` at ${e.after.step}` : '';
       const why = e.after?.error ? `: ${e.after.error}` : '';
       return `Provisioning failed${step}${why}. Fix the cause and provision again; steps that already finished are safe to re-run.`;
+    }
+    case 'retention_applied':
+      // These entries carry retention_applied_days, not audit_retention_days.
+      return `Bucket now enforces ${retentionText(e.after?.retention_applied_days)} by default (was ${retentionText(e.before?.retention_applied_days)})`;
+    case 'retention_sync_failed': {
+      const step = e.after?.step ? ` at ${e.after.step}` : '';
+      const why = e.after?.error ? `: ${e.after.error}` : '';
+      return `Raising the bucket's retention failed${step}${why}. The bucket still enforces its previous retention; fix the cause and sync again.`;
     }
     case 'state_changed':
       return 'Lifecycle state changed';

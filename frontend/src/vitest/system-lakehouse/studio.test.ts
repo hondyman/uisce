@@ -4,7 +4,7 @@ vi.mock('../../features/system-lakehouse/api', async (orig) => {
   const real = await orig<typeof import('../../features/system-lakehouse/api')>();
   return {
     ...real,
-    systemLakehouseApi: { list: vi.fn(), get: vi.fn(), setRetention: vi.fn(), provision: vi.fn(), audit: vi.fn() },
+    systemLakehouseApi: { list: vi.fn(), get: vi.fn(), setRetention: vi.fn(), provision: vi.fn(), syncRetention: vi.fn(), audit: vi.fn() },
   };
 });
 
@@ -16,6 +16,7 @@ const api = systemLakehouseApi as unknown as Record<keyof typeof systemLakehouse
 const run = (id: string, params: Record<string, unknown> = {}) => getOperation(id)!.run(params);
 const config = (over = {}) => ({
   tenant_id: 't-1', tenant_name: 'Acme', tenant_code: 'acme', configured: true, audit_retention_days: 365,
+  retention_applied_days: null, retention_pending: false,
   lifecycle_state: 'provisioning', provisioned: false, warehouse_name: 'ivy-t-x', version: 3, ...over,
 });
 
@@ -28,6 +29,7 @@ describe('operations are registered', () => {
     expect(getOperation('systemLakehouse.audit')?.kind).toBe('query');
     expect(getOperation('systemLakehouse.setRetention')?.kind).toBe('mutation');
     expect(getOperation('systemLakehouse.provision')?.kind).toBe('mutation');
+    expect(getOperation('systemLakehouse.syncRetention')?.kind).toBe('mutation');
   });
 });
 
@@ -107,6 +109,36 @@ describe('mutations', () => {
     await run('systemLakehouse.provision', { tenant_id: 't-1' });
     expect(api.provision).toHaveBeenCalledWith('t-1');
     await expect(run('systemLakehouse.provision', {})).rejects.toThrow(/tenant_id is required/);
+  });
+});
+
+describe('systemLakehouse.syncRetention', () => {
+  it('calls the API for exactly the named tenant', async () => {
+    api.syncRetention.mockResolvedValue({ workflow_id: 'w', tenant_id: 't-1' });
+    await run('systemLakehouse.syncRetention', { tenant_id: 't-1' });
+    expect(api.syncRetention).toHaveBeenCalledWith('t-1');
+  });
+
+  it('never reaches the API without a tenant, and surfaces its refusals', async () => {
+    await expect(run('systemLakehouse.syncRetention', {})).rejects.toThrow(/tenant_id is required/);
+    expect(api.syncRetention).not.toHaveBeenCalled();
+    api.syncRetention.mockRejectedValue(new Error('the bucket already enforces the registry\'s audit retention'));
+    await expect(run('systemLakehouse.syncRetention', { tenant_id: 't-1' })).rejects.toThrow(/already enforces/);
+  });
+});
+
+describe('systemLakehouse.list marks a lagging bucket', () => {
+  it('flags a provisioned tenant whose bucket is behind, and only that one', async () => {
+    api.list.mockResolvedValue({
+      items: [
+        config({ provisioned: true, lifecycle_state: 'active', audit_retention_days: 2555, retention_applied_days: 365, retention_pending: true }),
+        config({ tenant_id: 't-2', provisioned: true, lifecycle_state: 'active', audit_retention_days: 365, retention_applied_days: 365 }),
+      ],
+      total: 2, limit: 50, offset: 0,
+    });
+    const r = (await run('systemLakehouse.list', {})) as { rows: { id: string; can_sync: boolean; applied_text: string }[] };
+    expect(r.rows.map((x) => [x.id, x.can_sync])).toEqual([['t-1', true], ['t-2', false]]);
+    expect(r.rows[0].applied_text).toBe('1 year (365 days)');
   });
 });
 

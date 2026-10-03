@@ -44,6 +44,9 @@ const operations: OperationDef[] = [
       { name: 'state', label: 'State', type: 'string' },
       { name: 'state_label', label: 'State', type: 'string' },
       { name: 'retention_text', label: 'Audit retention', type: 'string' },
+      { name: 'applied_text', label: 'Bucket enforces', type: 'string' },
+      { name: 'retention_pending', label: 'Bucket is behind', type: 'boolean' },
+      { name: 'can_sync', label: 'Can sync retention', type: 'boolean' },
       { name: 'warehouse_name', label: 'Warehouse', type: 'string' },
       { name: 'can_provision', label: 'Can provision', type: 'boolean' },
       { name: 'provision_hint', label: 'Provision hint', type: 'string' },
@@ -101,6 +104,16 @@ const operations: OperationDef[] = [
     description: "Starts creating the tenant's bucket, key, credential and Iceberg warehouse. Needs the retention set first.",
     params: [{ name: 'tenant_id', type: 'string', required: true }],
     run: async (p) => systemLakehouseApi.provision(need(p, 'tenant_id')),
+  },
+  {
+    id: 'systemLakehouse.syncRetention',
+    domain: DOMAIN,
+    kind: 'mutation',
+    label: "Raise a tenant's bucket retention",
+    description:
+      "Raises the bucket's default Object Lock retention to the audit retention the registry wants. It only ever raises, and applies to objects written from then on; objects already stored keep their own retain-until.",
+    params: [{ name: 'tenant_id', type: 'string', required: true }],
+    run: async (p) => systemLakehouseApi.syncRetention(need(p, 'tenant_id')),
   },
   {
     id: 'systemLakehouse.audit',
