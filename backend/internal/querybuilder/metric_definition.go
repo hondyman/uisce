@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -536,6 +537,19 @@ func SyncMetricToCatalogGraph(ctx context.Context, tx *sqlx.Tx, tenantID string,
 		return "", fmt.Errorf("invalid tenant UUID %q: %w", tenantID, err)
 	}
 
+	// lineageWrites collects edges that could NOT be written for a reason that
+	// is not a database failure - currently only "the term is not a catalog
+	// node yet". They are not returned to the caller as errors (a metric may
+	// legitimately be imported before its term exists) but they are not
+	// discarded either: the caller logs them, so an absent edge is always
+	// explicable. An absent edge with no such line is a bug, not a state.
+	var lineageWrites []string
+	defer func() {
+		for _, w := range lineageWrites {
+			log.Printf("[metric-lineage] %s", w)
+		}
+	}()
+
 	metricNodeID := uuid.New()
 	if m.CatalogTermID != nil && *m.CatalogTermID != "" {
 		if parsed, err := uuid.Parse(*m.CatalogTermID); err == nil {
@@ -571,29 +585,71 @@ func SyncMetricToCatalogGraph(ctx context.Context, tx *sqlx.Tx, tenantID string,
 	err = tx.GetContext(ctx, &boNodeID, `
 		SELECT node_id FROM catalog_node WHERE tenant_id = $1 AND (qualified_path = $2 OR node_key = $3) LIMIT 1
 	`, parsedTenantID, boPath, m.BOID)
-	if err == nil {
-		// Link METRIC_OF edge (SEMANTIC_TERM -> BUSINESS_OBJECT)
-		_, _ = tx.ExecContext(ctx, `
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		// The business object is not a catalog node. Recorded, not fatal: a
+		// metric can be imported before its BO is.
+		lineageWrites = append(lineageWrites, fmt.Sprintf(
+			"metric %s: business object %q is not a catalog node - no METRIC_OF edge written", m.ID, m.BOID))
+	case err != nil:
+		return "", fmt.Errorf("look up business object %q for metric %s: %w", m.BOID, m.ID, err)
+	default:
+		// METRIC_OF edge (SEMANTIC_TERM -> BUSINESS_OBJECT). The insert's error
+		// is returned, not discarded: a swallowed failure here leaves a metric
+		// node in the graph with no owner, which reads as "never had one".
+		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO catalog_edge (tenant_id, source_node_id, target_node_id, edge_type)
 			SELECT $1, $2, $3, 'METRIC_OF'
 			WHERE NOT EXISTS (
 				SELECT 1 FROM catalog_edge WHERE tenant_id = $1 AND source_node_id = $2 AND target_node_id = $3 AND edge_type = 'METRIC_OF'
 			)
-		`, parsedTenantID, metricNodeID, boNodeID)
+		`, parsedTenantID, metricNodeID, boNodeID); err != nil {
+			return "", fmt.Errorf("write METRIC_OF edge for metric %s: %w", m.ID, err)
+		}
 	}
 
-	// 3. Link USES_TERM edges for underlying terms/columns
-	if m.Expression.TermNodeID != "" {
-		var termUUID uuid.UUID
-		if parsed, err := uuid.Parse(m.Expression.TermNodeID); err == nil {
-			termUUID = parsed
-			_, _ = tx.ExecContext(ctx, `
+	// 3. Link the USES_TERM edge to the underlying term.
+	//
+	// This used to be guarded by `uuid.Parse(m.Expression.TermNodeID)`, which
+	// meant the edge was only ever written when a metric named its term by UUID.
+	// Real metrics name terms by semantic key - the 8.3 golden corpus carries
+	// "revenue", "cost", "calc_term_net_interest_income" - so uuid.Parse failed
+	// for all of them and the edge was never written at all. Every metric's
+	// lineage to its underlying term was silently absent, and the failure was
+	// invisible because the insert's error was discarded.
+	//
+	// Resolution now matches step 4's DERIVED_FROM, which has always looked the
+	// target up by node_key. Both steps resolve a name the same way, so a metric
+	// whose base metrics are linked is no longer one whose term is not.
+	if termKey := strings.TrimSpace(m.Expression.TermNodeID); termKey != "" {
+		var termNodeID uuid.UUID
+		err = tx.GetContext(ctx, &termNodeID, `
+			SELECT node_id FROM catalog_node WHERE tenant_id = $1 AND node_key = $2 AND node_type = 'SEMANTIC_TERM' LIMIT 1
+		`, parsedTenantID, termKey)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			// The term is not a catalog node yet. That is a legitimate state
+			// (a metric may be imported before its term is), so it is not an
+			// error - but it is reported rather than dropped, because "no edge
+			// because the term is absent" and "no edge because the insert failed"
+			// must not look the same to whoever reads the graph.
+			lineageWrites = append(lineageWrites, fmt.Sprintf(
+				"metric %s: term %q is not a catalog SEMANTIC_TERM node - no USES_TERM edge written", m.ID, termKey))
+		case err != nil:
+			return "", fmt.Errorf("look up metric %s term %q: %w", m.ID, termKey, err)
+		default:
+			// An edge insert that fails is NOT swallowed. The whole point of the
+			// edge is that the graph is not silently wrong, and a discarded error
+			// here is indistinguishable from a term that needed no edge.
+			if _, err := tx.ExecContext(ctx, `
 				INSERT INTO catalog_edge (tenant_id, source_node_id, target_node_id, edge_type)
 				SELECT $1, $2, $3, 'USES_TERM'
 				WHERE NOT EXISTS (
 					SELECT 1 FROM catalog_edge WHERE tenant_id = $1 AND source_node_id = $2 AND target_node_id = $3 AND edge_type = 'USES_TERM'
 				)
-			`, parsedTenantID, metricNodeID, termUUID)
+			`, parsedTenantID, metricNodeID, termNodeID); err != nil {
+				return "", fmt.Errorf("write USES_TERM edge for metric %s term %q: %w", m.ID, termKey, err)
+			}
 		}
 	}
 
@@ -603,14 +659,22 @@ func SyncMetricToCatalogGraph(ctx context.Context, tx *sqlx.Tx, tenantID string,
 		err = tx.GetContext(ctx, &baseNodeID, `
 			SELECT node_id FROM catalog_node WHERE tenant_id = $1 AND node_key = $2 AND node_type = 'SEMANTIC_TERM' LIMIT 1
 		`, parsedTenantID, baseID)
-		if err == nil {
-			_, _ = tx.ExecContext(ctx, `
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			lineageWrites = append(lineageWrites, fmt.Sprintf(
+				"metric %s: base metric %q is not a catalog SEMANTIC_TERM node - no DERIVED_FROM edge written", m.ID, baseID))
+		case err != nil:
+			return "", fmt.Errorf("look up base metric %q for metric %s: %w", baseID, m.ID, err)
+		default:
+			if _, err := tx.ExecContext(ctx, `
 				INSERT INTO catalog_edge (tenant_id, source_node_id, target_node_id, edge_type)
 				SELECT $1, $2, $3, 'DERIVED_FROM'
 				WHERE NOT EXISTS (
 					SELECT 1 FROM catalog_edge WHERE tenant_id = $1 AND source_node_id = $2 AND target_node_id = $3 AND edge_type = 'DERIVED_FROM'
 				)
-			`, parsedTenantID, metricNodeID, baseNodeID)
+			`, parsedTenantID, metricNodeID, baseNodeID); err != nil {
+				return "", fmt.Errorf("write DERIVED_FROM edge for metric %s base %q: %w", m.ID, baseID, err)
+			}
 		}
 	}
 
