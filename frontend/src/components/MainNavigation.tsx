@@ -30,6 +30,7 @@ import {
   Assessment as AssessmentIcon,
   SystemUpdateAlt as SystemUpdateAltIcon,
   Settings as SettingsIcon,
+  Palette as PaletteIcon,
   Notifications as NotificationsIcon,
   QueryStats as QueryStatsIcon,
   Schema as SchemaIcon,
@@ -1065,6 +1066,18 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
           />
         </MenuItem>
         <Divider sx={{ my: 0.5 }} />
+        {/* Appearance (theme style + mode) is a per-user preference, so it is always offered here. */}
+        <MenuItem onClick={() => { handleSettingsClose(); void navigate('/fabric/settings'); }} data-testid="appearance-item">
+          <ListItemIcon>
+            <PaletteIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary="Appearance"
+            secondary="Theme style and mode"
+            primaryTypographyProps={{ variant: 'body2', fontWeight: 'bold' }}
+            secondaryTypographyProps={{ variant: 'caption' }}
+          />
+        </MenuItem>
         {/* IP Whitelist menu item above Sign Out */}
   <MenuItem onClick={() => { handleSettingsClose(); void navigate('/fabric/ip-whitelist'); }} data-testid="ip-whitelist-item">
           <ListItemIcon>
