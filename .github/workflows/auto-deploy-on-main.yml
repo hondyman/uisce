@@ -9,8 +9,13 @@ on:
       - 'scripts/deploy*'
       - 'backend/migrations/**'
 
+# createWorkflowDispatch is an API call: besides `actions: write` it needs
+# `contents: read`, or github-script fails with
+#   TypeError: Cannot read properties of undefined (reading 'createWorkflowDispatch')
+# which surfaces as a TypeError rather than a permissions error.
 permissions:
   actions: write
+  contents: read
 
 jobs:
   dispatch-deploy:
