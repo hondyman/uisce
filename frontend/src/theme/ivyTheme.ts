@@ -14,6 +14,7 @@ const tokens = {
     text: '#1A1A2E', textSecondary: '#5A6072', textDisabled: '#9CA3AF',
     primary: ivy[800], primaryLight: ivy[400], primaryDark: ivy[900],
     secondary: teal[600], secondaryLight: teal[400], secondaryDark: teal[800],
+    primaryContrast: '#FFFFFF',
     glow: 'rgba(46,125,50,0.25)',
   },
   dark: {
@@ -21,6 +22,7 @@ const tokens = {
     text: '#FFFFFF', textSecondary: '#B0B8C4', textDisabled: '#6B7280',
     primary: ivy[400], primaryLight: ivy[300], primaryDark: ivy[600],
     secondary: teal[400], secondaryLight: teal[300], secondaryDark: teal[600],
+    primaryContrast: '#0B1220',
     glow: 'rgba(76,175,80,0.35)',
   },
 } as const;
@@ -37,7 +39,7 @@ export function createIvyTheme(mode: 'light' | 'dark'): Theme {
   const options: ThemeOptions = {
     palette: {
       mode,
-      primary: { main: t.primary, light: t.primaryLight, dark: t.primaryDark, contrastText: '#FFFFFF' },
+      primary: { main: t.primary, light: t.primaryLight, dark: t.primaryDark, contrastText: t.primaryContrast },
       secondary: { main: t.secondary, light: t.secondaryLight, dark: t.secondaryDark, contrastText: '#FFFFFF' },
       success: { main: mode === 'light' ? ivy[500] : ivy[400] },
       background: { default: t.bg, paper: t.paper },
