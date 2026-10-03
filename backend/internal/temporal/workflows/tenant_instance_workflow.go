@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hondyman/uisce/backend/internal/migrations"
 	"github.com/hondyman/uisce/backend/internal/provisioning"
 	"github.com/hondyman/uisce/backend/internal/temporal/activities"
 	"go.temporal.io/sdk/workflow"
@@ -180,6 +181,11 @@ func (w *TenantInstanceProvisioningWorkflow) Execute(ctx workflow.Context, input
 // compensation fix below. Runs that started before it was deployed replay on the
 // legacy path; everything started after takes the new one.
 const sagaCompensationVersion = "saga-compensation-v2"
+
+// sagaTenantDatabaseVersion gates the tenant-database steps (role and credential, datasource
+// binding, tenant migrations, probe). They also require ProvisioningWorkflowInput.App, so a
+// request that does not name an app takes exactly the path it took before.
+const sagaTenantDatabaseVersion = "saga-tenant-database-v1"
 
 // TenantInstanceProvisioningWorkflowFn is the registered provisioning saga.
 func TenantInstanceProvisioningWorkflowFn(ctx workflow.Context, input provisioning.ProvisioningWorkflowInput) (*provisioning.ProvisioningWorkflowResult, error) {
@@ -384,6 +390,48 @@ func tenantInstanceProvisioning(ctx workflow.Context, input provisioning.Provisi
 		comps = append(comps, compensation{"RollbackCloneGoldCopyProducts", func(c workflow.Context) error {
 			return workflow.ExecuteActivity(c, acts.RollbackCloneGoldCopyProducts, cloneIn).Get(c, nil)
 		}})
+	}
+
+	// 8. Tenant database (ADR-030): its own role and credential, the app's datasource repointed
+	// at it, the app's migrations applied, and a probe through tenantdb, all before the binding
+	// goes active. A failure here is fatal and compensates: unlike the status writes below, an
+	// unreachable tenant database is not a tenant that is "otherwise fully provisioned".
+	if input.App != "" && workflow.GetVersion(ctx, sagaTenantDatabaseVersion, workflow.DefaultVersion, 1) == 1 {
+		tdIn := provisioning.TenantDatabaseInput{
+			TenantID:         input.TenantID,
+			InstanceID:       input.InstanceID,
+			App:              input.App,
+			DatabaseName:     input.DatabaseName,
+			GoldCopyDatabase: input.GoldCopyDatabase,
+			BaselineThrough:  input.BaselineThrough,
+		}
+		var bound provisioning.TenantDatabaseBinding
+		if e := workflow.ExecuteActivity(ctx, acts.BindTenantDatabase, tdIn).Get(ctx, &bound); e != nil {
+			return fail("BindTenantDatabase", e)
+		}
+		tdIn.DatasourceID = bound.DatasourceID
+		if state.Owned() {
+			rollbackIn := tdIn
+			comps = append(comps, compensation{"RollbackTenantDatabase", func(c workflow.Context) error {
+				return workflow.ExecuteActivity(c, acts.RollbackTenantDatabase, rollbackIn).Get(c, nil)
+			}})
+		}
+		if e := workflow.ExecuteActivity(ctx, acts.ProvisionTenantDatabaseAccess, tdIn).Get(ctx, nil); e != nil {
+			return fail("ProvisionTenantDatabaseAccess", e)
+		}
+		var report migrations.Report
+		if e := workflow.ExecuteActivity(ctx, acts.ApplyTenantMigrations, tdIn).Get(ctx, &report); e != nil {
+			return fail("ApplyTenantMigrations", e)
+		}
+		if !report.Done {
+			return fail("ApplyTenantMigrations", fmt.Errorf("migration report for %s is not done", report.Target))
+		}
+		if e := workflow.ExecuteActivity(ctx, acts.ProbeTenantDatabase, tdIn).Get(ctx, nil); e != nil {
+			return fail("ProbeTenantDatabase", e)
+		}
+		if e := workflow.ExecuteActivity(ctx, acts.ActivateTenantDatabase, tdIn).Get(ctx, nil); e != nil {
+			return fail("ActivateTenantDatabase", e)
+		}
 	}
 
 	// Activation. Unchanged behaviour: a failure here is logged, not fatal.

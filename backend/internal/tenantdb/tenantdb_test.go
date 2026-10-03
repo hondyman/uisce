@@ -309,3 +309,49 @@ func TestAssertIdentity_RefusesTheWrongDatabaseOrUser(t *testing.T) {
 	require.ErrorIs(t, assertIdentity(ctx, c, e.dbB, e.user), ErrDatabaseMismatch)
 	require.ErrorIs(t, assertIdentity(ctx, c, e.dbA, "someone_else"), ErrUserMismatch)
 }
+
+func TestProbe_AcceptsProvisioningButEveryOtherCheckStillApplies(t *testing.T) {
+	prov := Binding{Version: 1, Lifecycle: "provisioning"}
+
+	t.Run("a provisioning binding is not Resolvable", func(t *testing.T) {
+		r := newRouter(t, &fakeRegistry{ds: goodDS(), binding: prov, user: "u", pw: "p"}, "t-1")
+		_, err := r.Resolve(context.Background(), "ds-1")
+		require.ErrorIs(t, err, ErrUnbound)
+	})
+
+	// Each refusal below happens before anything is dialled or any credential is read.
+	for name, tc := range map[string]struct {
+		tenant string
+		reg    *fakeRegistry
+		want   error
+	}{
+		"no tenant":        {"", &fakeRegistry{ds: goodDS(), binding: prov}, ErrNoTenant},
+		"another tenant":   {"t-2", &fakeRegistry{ds: goodDS(), binding: prov}, ErrTenantMismatch},
+		"suspended":        {"t-1", &fakeRegistry{ds: goodDS(), binding: Binding{Version: 1, Lifecycle: "suspended"}}, ErrUnbound},
+		"offboarding":      {"t-1", &fakeRegistry{ds: goodDS(), binding: Binding{Version: 1, Lifecycle: "offboarding"}}, ErrUnbound},
+		"no binding":       {"t-1", &fakeRegistry{ds: goodDS(), bindErr: ErrUnbound}, ErrUnbound},
+		"incomplete row":   {"t-1", &fakeRegistry{ds: Datasource{ID: "ds-1", TenantID: "t-1", Host: "h", Port: 1}, binding: prov}, ErrIncomplete},
+		"credentials gone": {"t-1", &fakeRegistry{ds: goodDS(), binding: prov, credErr: errors.New("vault down")}, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := newRouter(t, tc.reg, tc.tenant)
+			err := r.Probe(context.Background(), "ds-1")
+			require.Error(t, err)
+			if tc.want != nil {
+				require.ErrorIs(t, err, tc.want)
+			}
+			require.Zero(t, r.Size(), "a probe must never cache a pool")
+		})
+	}
+}
+
+func TestProbe_ReachesTheDatabaseAndLeavesNoPoolBehind(t *testing.T) {
+	e := realPG(t)
+	reg := &fakeRegistry{ds: e.ds("ds-a", "t-1", e.dbA), binding: Binding{Version: 1, Lifecycle: "provisioning"}, user: e.user, pw: e.pw}
+	r := newRouter(t, reg, "t-1")
+	require.NoError(t, r.Probe(context.Background(), "ds-a"))
+	require.Zero(t, r.Size())
+
+	reg.ds = e.ds("ds-a", "t-1", e.dbA+"_missing")
+	require.Error(t, r.Probe(context.Background(), "ds-a"), "a database that is not there must fail the probe")
+}
