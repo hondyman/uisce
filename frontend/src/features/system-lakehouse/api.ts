@@ -22,14 +22,23 @@ export interface LakehouseConfig {
   updated_at?: string;
 }
 
+export interface AuditDetail {
+  audit_retention_days?: number;
+  step?: string;
+  error?: string;
+  warehouse_id?: string;
+  bucket?: string;
+}
+
 export interface LakehouseAuditEntry {
   id: number;
   at: string;
   actor_id: string;
   actor_role: string;
   action: string;
-  before?: { audit_retention_days?: number } | null;
-  after?: { audit_retention_days?: number } | null;
+  /** Free-form per action: retention changes carry audit_retention_days, a failure carries step and error. */
+  before?: AuditDetail | null;
+  after?: AuditDetail | null;
   prev_hash: string;
   hash: string;
 }

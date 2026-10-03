@@ -70,6 +70,9 @@ describe('audit text', () => {
     expect(auditChangeText({ action: 'retention_extended', before: { audit_retention_days: 365 }, after: { audit_retention_days: 2555 } }))
       .toBe('Audit retention extended from 1 year (365 days) to 7 years (2,555 days)');
     expect(auditChangeText({ action: 'provision_requested' })).toBe('Provisioning requested');
+    expect(auditChangeText({ action: 'provision_failed', after: { step: 'EnsureLakehouseBucket', error: 'bucket exists without Object Lock' } }))
+      .toBe('Provisioning failed at EnsureLakehouseBucket: bucket exists without Object Lock. Fix the cause and provision again; steps that already finished are safe to re-run.');
+    expect(auditChangeText({ action: 'provision_failed' })).toBe('Provisioning failed. Fix the cause and provision again; steps that already finished are safe to re-run.');
     expect(auditChangeText({ action: 'something_new' })).toBe('something_new');
   });
 

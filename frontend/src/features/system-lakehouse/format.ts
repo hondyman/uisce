@@ -82,6 +82,13 @@ export function auditChangeText(e: Pick<LakehouseAuditEntry, 'action' | 'before'
       return 'Provisioning requested';
     case 'provisioned':
       return 'Provisioned';
+    case 'provision_failed': {
+      // The step names where it stopped; the reason is the API's own text. Say what to do
+      // next only where it is true: every step is safe to re-run.
+      const step = e.after?.step ? ` at ${e.after.step}` : '';
+      const why = e.after?.error ? `: ${e.after.error}` : '';
+      return `Provisioning failed${step}${why}. Fix the cause and provision again; steps that already finished are safe to re-run.`;
+    }
     case 'state_changed':
       return 'Lifecycle state changed';
     default:
