@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
+import CoreLeafIcon from '../../../components/common/CoreLeafIcon';
 import {
   Box,
   Button,
@@ -43,7 +44,6 @@ import {
   ControlPoint as ControlPointIcon,
   ViewAgenda as TableViewIcon,
   ViewWeek as CardViewIcon,
-  WaterDrop as WaterDropIcon,
   Build as BuildIcon,
 } from '@mui/icons-material';
 import { useLookups, useLookupValues, useInfiniteLookupValues, createLookup, deleteLookup, createLookupValue, deleteLookupValue, updateLookup, updateLookupValue } from '../../../api/lookups';
@@ -510,7 +510,7 @@ export default function LookupsManagementTab({ tenantId, instanceFilter }: { ten
           <Stack spacing={1}>
             {[
               { key: 'all', label: 'All', count: facetCounts.all, icon: null },
-              { key: 'core', label: 'Core', count: facetCounts.core, icon: <WaterDropIcon sx={{ fontSize: 16, mr: 0.5 }} /> },
+              { key: 'core', label: 'Core', count: facetCounts.core, icon: <CoreLeafIcon sx={{ fontSize: 16, mr: 0.5 }} /> },
               { key: 'custom', label: 'Custom', count: facetCounts.custom, icon: <BuildIcon sx={{ fontSize: 16, mr: 0.5 }} /> },
             ].map((facet) => (
               <Button

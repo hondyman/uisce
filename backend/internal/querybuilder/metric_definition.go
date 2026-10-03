@@ -60,11 +60,25 @@ type MaterializationConfig struct {
 
 // MetricExpression defines the computation rules for a metric.
 type MetricExpression struct {
-	Kind          string   `json:"kind"`                 // "aggregation" | "formula" | "derived"
-	Fn            string   `json:"fn,omitempty"`         // "sum" | "avg" | "count" | "min" | "max"
-	TermNodeID    string   `json:"termNodeId,omitempty"` // For aggregation / column reference
-	Formula       string   `json:"formula,omitempty"`    // Safe AST expression e.g. "SUM(price * qty) * @fx_rate"
-	BaseMetricIDs []string `json:"baseMetricIds,omitempty"` // For derived metrics
+	Kind       string `json:"kind"`             // "aggregation" | "formula" | "derived"
+	Fn         string `json:"fn,omitempty"`     // "sum" | "avg" | "count" | "min" | "max"
+	TermNodeID string `json:"termNodeId,omitempty"` // For aggregation / column reference
+	// Formula is authored SQL text with @variable references, e.g.
+	// "SUM(price * qty) * @fx_rate". The compiler substitutes the variables
+	// with bound parameters; it does NOT parse, validate or allowlist the
+	// operators, which pass through as authored. See ADR-025.
+	Formula string `json:"formula,omitempty"`
+	// BaseMetricIDs are the operands of a derived metric, in the author's
+	// declared order. For a 2-operand ratio the first entry is the numerator.
+	BaseMetricIDs []string `json:"baseMetricIds,omitempty"`
+
+	// NumeratorID / DenominatorID state the operands of a ratio explicitly.
+	// They win over BaseMetricIDs order and are required to appear in it.
+	// Operand order must never be inferred from how IDs happen to be spelled:
+	// that made a declared revenue/cost ratio compile to cost/revenue. See
+	// ADR-025.
+	NumeratorID   string `json:"numeratorId,omitempty"`
+	DenominatorID string `json:"denominatorId,omitempty"`
 }
 
 // MetricDefinition represents a row in data_explorer.metric_definition.
@@ -146,7 +160,11 @@ func ComputeMetricContentHash(m MetricDefinition) string {
 	normExpr.Fn = strings.ToLower(strings.TrimSpace(normExpr.Fn))
 	// Tokenize / normalize formula to make whitespace/parentheses invariant for canonical comparison
 	normExpr.Formula = normalizeFormulaForHash(normExpr.Formula)
-	sort.Strings(normExpr.BaseMetricIDs)
+	// BaseMetricIDs are deliberately NOT sorted. Operand order is semantic: the
+	// first entry of a 2-operand derived metric is the numerator (ADR-025).
+	// Sorting here would give revenue/cost and cost/revenue the same content
+	// hash, and that hash is the cube deploy identity and part of the query
+	// cache key - so the two opposite metrics would share a cache entry.
 
 	// 2. Normalize Grain Allowlist
 	normGrains := make([]string, len(m.GrainAllowlist))
@@ -448,6 +466,60 @@ func ExportMetricBundle(metrics []MetricDefinition) (*MetricBundle, error) {
 
 // ValidateQueryMetricDependencies verifies that all metric IDs referenced in a query
 // exist in the tenant's metric definitions (or bundle dependencies). Fails closed (422) if missing.
+// ValidateMetricExpression is the canonical validation for a governed metric's
+// expression. It is the artifact a save path must call, so an unusable metric
+// is rejected at authoring time rather than at query or deploy time.
+//
+// NOTE ON SCOPE: as of this writing there is no user-facing CRUD endpoint for
+// data_explorer.metric_definition.expression - rows arrive via migration, seed
+// or import, and the reconciler only backfills catalog_term_id. So there is no
+// 422 to return today. The check is wired into ValidateCubeMetricReferences
+// (the earliest enforcement point that exists) and into CompileMetric, and it
+// is exported so a future save endpoint cannot skip it. See ADR-026.
+func ValidateMetricExpression(m MetricDefinition) error {
+	expr := m.Expression
+	switch strings.ToLower(strings.TrimSpace(expr.Kind)) {
+	case "aggregation", "formula", "":
+		return nil
+	case "derived":
+	default:
+		return fmt.Errorf("%w: unsupported expression kind %q", ErrInvalidMetricFormula, expr.Kind)
+	}
+
+	if len(expr.BaseMetricIDs) == 0 {
+		return fmt.Errorf("%w: derived metric requires baseMetricIds", ErrInvalidMetricFormula)
+	}
+
+	num, den := expr.NumeratorID, expr.DenominatorID
+	if num == "" && den == "" {
+		if len(expr.BaseMetricIDs) == 2 {
+			// A two-operand derived metric is a ratio, and a ratio's direction
+			// is the whole meaning. Reading it off positional order is how
+			// revenue/cost silently became cost/revenue: the sort decided the
+			// numerator. So the ordered form is rejected outright rather than
+			// guessed at.
+			return fmt.Errorf("%w: derived ratio requires numeratorId and denominatorId - the positional/ordered form was ambiguous by design (ADR-026)", ErrInvalidMetricFormula)
+		}
+		return nil // N-operand sum: order cannot change the value.
+	}
+	if num == "" || den == "" {
+		return fmt.Errorf("%w: derived ratio requires numeratorId and denominatorId (ADR-026)", ErrInvalidMetricFormula)
+	}
+	if num == den {
+		return fmt.Errorf("%w: derived ratio numeratorId and denominatorId are the same metric", ErrInvalidMetricFormula)
+	}
+	if len(expr.BaseMetricIDs) != 2 {
+		return fmt.Errorf("%w: numeratorId/denominatorId describe a 2-metric ratio, but baseMetricIds has %d entries", ErrInvalidMetricFormula, len(expr.BaseMetricIDs))
+	}
+	for _, id := range expr.BaseMetricIDs {
+		if id == num || id == den {
+			continue
+		}
+		return fmt.Errorf("%w: baseMetricIds contains %q, which is neither numeratorId nor denominatorId (ADR-026)", ErrInvalidMetricFormula, id)
+	}
+	return nil
+}
+
 func ValidateQueryMetricDependencies(referencedMetricIDs []string, availableMetricIDs map[string]bool) error {
 	var missing []string
 	for _, id := range referencedMetricIDs {

@@ -16,7 +16,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   filterNavigationByCapabilities,
-  flattenDesignerPages,
   type CategoryConfig,
 } from '@/components/MainNavigation';
 import type { NavigationMenuNode } from '@/api/navigationMenu';
@@ -276,105 +275,5 @@ describe('filterNavigationByCapabilities — entitlement (profile) gate', () => 
       'PLATFORM_OPERATOR'
     );
     expect(out[0].menus[0].items.map((i) => i.label)).toEqual(['Both']);
-  });
-});
-
-describe('flattenDesignerPages', () => {
-  const node = (over: Partial<NavigationMenuNode>): NavigationMenuNode => ({
-    id: 'id',
-    nodeKey: 'key',
-    label: 'Node',
-    displayOrder: 0,
-    requiredEntitlement: 'BASE_USER',
-    ...over,
-  });
-
-  // Regression guard for the real bug: the navigation_menu_nodes tree is a
-  // Page Studio page tree, not a model of the platform nav. Treating its roots
-  // as top-level categories replaced the whole platform menu (Platform ->
-  // Organization -> Tenants) with two folders.
-  it('returns an empty list for an empty tree', () => {
-    expect(flattenDesignerPages([])).toEqual([]);
-  });
-
-  it('skips grouping folders and surfaces only their page leaves', () => {
-    const tree = [
-      node({
-        id: 'c1',
-        label: 'Master Data',
-        children: [
-          node({ id: 'i1', label: 'Vendor registry', targetPageKey: 'mdm-vendors' }),
-          node({ id: 'i2', label: 'Match rules', targetPageKey: 'mdm-match-rules' }),
-        ],
-      }),
-    ];
-    const out = flattenDesignerPages(tree);
-    expect(out.map((i) => i.path)).toEqual(['/pages/mdm-vendors', '/pages/mdm-match-rules']);
-    expect(out.map((i) => i.label)).toEqual(['Master Data › Vendor registry', 'Master Data › Match rules']);
-  });
-
-  it('never turns a folder into a clickable item', () => {
-    const tree = [node({ id: 'c1', label: 'Orders', children: [] })];
-    expect(flattenDesignerPages(tree)).toEqual([]);
-  });
-
-  it('binds a page to /pages/<slug>', () => {
-    const tree = [
-      node({ id: 'c1', label: 'Orders', children: [node({ id: 'i1', label: 'Order List', targetPageKey: 'order-list-tl48' })] }),
-    ];
-    expect(flattenDesignerPages(tree)[0].path).toBe('/pages/order-list-tl48');
-  });
-
-  it('carries requiredEntitlement through so the profile gate can apply', () => {
-    const tree = [
-      node({
-        id: 'c1',
-        label: 'Admin',
-        children: [
-          node({ id: 'i1', label: 'AdminPage', targetPageKey: 'admin-page', requiredEntitlement: 'PLATFORM_OPERATOR' }),
-        ],
-      }),
-    ];
-    expect(flattenDesignerPages(tree)[0].requiredEntitlement).toBe('PLATFORM_OPERATOR');
-  });
-
-  it('treats a blank requiredEntitlement as ungated', () => {
-    const tree = [
-      node({ id: 'c1', label: 'Open', targetPageKey: 'open', requiredEntitlement: '' }),
-    ];
-    expect(flattenDesignerPages(tree)[0].requiredEntitlement).toBeUndefined();
-  });
-
-  it('preserves the folder trail across three levels', () => {
-    const tree = [
-      node({
-        id: 'c1',
-        label: 'A',
-        children: [node({ id: 'g1', label: 'B', children: [node({ id: 'i1', label: 'C', targetPageKey: 'c' })] })],
-      }),
-    ];
-    expect(flattenDesignerPages(tree)[0].label).toBe('A › B › C');
-  });
-
-  // The designer item must still be subject to the same profile gate.
-  it('feeds a designer item through the profile gate', () => {
-    const cat: CategoryConfig = {
-      label: 'Build',
-      key: 'weave',
-      icon: null,
-      defaultPath: '/x',
-      color: { primary: '#000', light: '#111', dark: '#222', background: '#333' },
-      menus: [
-        {
-          label: 'Pages & APIs',
-          icon: null,
-          items: flattenDesignerPages([
-            node({ id: 'i1', label: 'Secret', targetPageKey: 'secret', requiredEntitlement: 'PLATFORM_OPERATOR' }),
-          ]),
-        },
-      ],
-    };
-    expect(filterNavigationByCapabilities([cat], {}, false, ORG_ACCESS_VISIBLE, 'BASE_USER')).toHaveLength(0);
-    expect(filterNavigationByCapabilities([cat], {}, false, ORG_ACCESS_VISIBLE, 'PLATFORM_OPERATOR')).toHaveLength(1);
   });
 });

@@ -144,6 +144,15 @@ func (g *CubeDDLGenerator) GenerateCubeMaterializationDDL(
 		if strings.TrimSpace(compiled.SQLExpr) == "" {
 			return nil, fmt.Errorf("metric %q compiled to an empty expression", id)
 		}
+		// A materialized view is a stored statement, not a prepared one: it has
+		// no argument list to bind against. A formula metric with a bound
+		// variable compiles to positional placeholders ($1, $2, ...) that would
+		// reach StarRocks unbound, so reject it here with a real reason instead
+		// of letting the deploy fail on a syntax error. See ADR-025.
+		if len(compiled.Args) > 0 {
+			return nil, fmt.Errorf("metric %q is a parameterized formula (%d bound argument(s)); a cube measure must be a self-contained expression, so inline the value or use an aggregation",
+				id, len(compiled.Args))
+		}
 		if isHardcodedDefaultMeasure(compiled.SQLExpr, metric) {
 			return nil, fmt.Errorf("metric %q compiled to a hardcoded default measure (%q) rather than its own expression",
 				id, compiled.SQLExpr)
