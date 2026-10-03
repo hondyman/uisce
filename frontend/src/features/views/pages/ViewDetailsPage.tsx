@@ -39,7 +39,7 @@ const ViewDetailsPage: React.FC = () => {
       setResolving(true);
       setResolveError(null);
       try {
-  const u = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(identifier)}`));
+  const u = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(identifier)}`, true));
   if (tenantId) u.searchParams.set('tenant_id', tenantId);
   if (datasourceId) u.searchParams.set('tenant_instance_id', String(datasourceId));
   const res = await fetch(u.toString());
@@ -92,7 +92,7 @@ const ViewDetailsPage: React.FC = () => {
           // validation errors like "Invalid view name: \"dddddddd\"" and
           // allows the UI to try a fuzzy/alternate resolution.
           try {
-            const listUrl = new URL(resolveApiUrl('/api/views'));
+            const listUrl = new URL(resolveApiUrl('/api/views', true));
             listUrl.searchParams.set('q', identifier);
             if (tenantId) listUrl.searchParams.set('tenant_id', tenantId);
             if (datasourceId) listUrl.searchParams.set('tenant_instance_id', String(datasourceId));

@@ -116,7 +116,7 @@ const ViewsCatalogPage: React.FC = () => {
         setTotal(0);
         setLoading(false);
       }
-  const u = new URL(resolveApiUrl('/api/views'));
+  const u = new URL(resolveApiUrl('/api/views', true));
       if (qDebounced) u.searchParams.set('q', qDebounced);
       if (tenantId) u.searchParams.set('tenant_id', tenantId);
       if (datasourceId) u.searchParams.set('tenant_instance_id', String(datasourceId));
@@ -200,7 +200,7 @@ const ViewsCatalogPage: React.FC = () => {
         const results = await Promise.allSettled(toFetch.map(async (key) => {
           const orig = origMap[key] || key;
           const identifier = encodeURIComponent(orig);
-          const urlObj = new URL(resolveApiUrl(`/api/views/${identifier}`));
+          const urlObj = new URL(resolveApiUrl(`/api/views/${identifier}`, true));
           if (tenantId) urlObj.searchParams.set('tenant_id', tenantId);
           if (datasourceId) urlObj.searchParams.set('tenant_instance_id', String(datasourceId));
           const res = await fetch(urlObj.toString());
@@ -277,7 +277,7 @@ const ViewsCatalogPage: React.FC = () => {
 
   const download = (v: ViewItem) => {
   const identifier = v.id || v.name;
-  const downloadUrl = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(identifier)}/download`));
+  const downloadUrl = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(identifier)}/download`, true));
   if (tenantId) downloadUrl.searchParams.set('tenant_id', tenantId);
   if (datasourceId) downloadUrl.searchParams.set('tenant_instance_id', String(datasourceId));
     const a = document.createElement('a');
@@ -291,7 +291,7 @@ const ViewsCatalogPage: React.FC = () => {
   const downloadYAML = async (v: ViewItem) => {
     try {
   const identifier = v.id || v.name;
-  const urlObj = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(identifier)}`));
+  const urlObj = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(identifier)}`, true));
   if (tenantId) urlObj.searchParams.set('tenant_id', tenantId);
   if (datasourceId) urlObj.searchParams.set('tenant_instance_id', String(datasourceId));
   const res = await fetch(urlObj.toString());
@@ -315,7 +315,7 @@ const ViewsCatalogPage: React.FC = () => {
   const copyJSON = async (v: ViewItem) => {
     try {
   const identifier = v.id || v.name;
-  const urlObj = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(identifier)}`));
+  const urlObj = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(identifier)}`, true));
   if (tenantId) urlObj.searchParams.set('tenant_id', tenantId);
   if (datasourceId) urlObj.searchParams.set('tenant_instance_id', String(datasourceId));
   const res = await fetch(urlObj.toString());
@@ -377,8 +377,8 @@ const ViewsCatalogPage: React.FC = () => {
     try {
       const [a, b] = compareSelection;
     const [ra, rb] = await Promise.all([
-  fetch(new URL(resolveApiUrl(`/api/views/${encodeURIComponent(a)}`)).toString()).then(r=>r.json()),
-  fetch(new URL(resolveApiUrl(`/api/views/${encodeURIComponent(b)}`)).toString()).then(r=>r.json()),
+  fetch(new URL(resolveApiUrl(`/api/views/${encodeURIComponent(a)}`, true)).toString()).then(r=>r.json()),
+  fetch(new URL(resolveApiUrl(`/api/views/${encodeURIComponent(b)}`, true)).toString()).then(r=>r.json()),
     ]);
       setCompareViewsData({ left: ra.view ?? ra, right: rb.view ?? rb });
       setCompareOpen(true);
@@ -401,7 +401,7 @@ const ViewsCatalogPage: React.FC = () => {
     try {
   // Use PUT upsert to be compatible with servers that may not implement POST /api/views
   // Always target /api/views/{name} with optional tenant/datasource query params
-  const viewUrlObj = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(name)}`));
+  const viewUrlObj = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(name)}`, true));
       if (tenantId) viewUrlObj.searchParams.set('tenant_id', tenantId);
       if (datasourceId) viewUrlObj.searchParams.set('tenant_instance_id', String(datasourceId));
   const viewUrl = viewUrlObj.toString();
@@ -434,7 +434,7 @@ const ViewsCatalogPage: React.FC = () => {
     try {
       // Always target /api/views/{identifier} with optional tenant/datasource query params
   const identifier = v.id || v.name;
-  const viewUrlObj = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(identifier)}`));
+  const viewUrlObj = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(identifier)}`, true));
   if (tenantId) viewUrlObj.searchParams.set('tenant_id', tenantId);
   if (datasourceId) viewUrlObj.searchParams.set('tenant_instance_id', String(datasourceId));
   const authToken = typeof localStorage !== 'undefined' ? (localStorage.getItem('ADMIN_API_KEY') || localStorage.getItem('auth_token')) : null;
@@ -462,7 +462,7 @@ const ViewsCatalogPage: React.FC = () => {
     }
     try {
   const identifier = v.id || v.name;
-  const urlObj = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(identifier)}`));
+  const urlObj = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(identifier)}`, true));
   if (tenantId) urlObj.searchParams.set('tenant_id', tenantId);
   if (datasourceId) urlObj.searchParams.set('tenant_instance_id', String(datasourceId));
   const res = await fetch(urlObj.toString());
@@ -472,7 +472,7 @@ const ViewsCatalogPage: React.FC = () => {
       setNamePrompt({ open: true, title: 'Clone as name:', defaultValue: `${v.name}_copy`, onSubmit: async (newName) => {
         if (!newName) return;
       base.name = newName;
-  const viewUrlObj2 = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(newName)}`));
+  const viewUrlObj2 = new URL(resolveApiUrl(`/api/views/${encodeURIComponent(newName)}`, true));
       if (tenantId) viewUrlObj2.searchParams.set('tenant_id', tenantId);
       if (datasourceId) viewUrlObj2.searchParams.set('tenant_instance_id', String(datasourceId));
   const viewUrl = viewUrlObj2.toString();

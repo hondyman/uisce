@@ -169,7 +169,7 @@ export const useModelCatalog = (): UseModelCatalogResult => {
   const validToken = await getValidToken();
   if (!validToken && !DEV_ALLOW_UNAUTH_MODELS) throw new Error('Not authenticated');
 
-  const updateUrlObj = new URL(resolveApiUrl(`/api/models/${modelId}`));
+  const updateUrlObj = new URL(resolveApiUrl(`/api/models/${modelId}`, true));
       const resp = await authFetch(
         updateUrlObj.toString(),
         { method: 'PATCH', json: updates }
@@ -232,7 +232,7 @@ export const useModelCatalog = (): UseModelCatalogResult => {
   const validToken = await getValidToken();
   if (!validToken && !DEV_ALLOW_UNAUTH_MODELS) throw new Error('Not authenticated');
 
-  const deleteUrlObj = new URL(resolveApiUrl(`/api/models/${resolvedId}`));
+  const deleteUrlObj = new URL(resolveApiUrl(`/api/models/${resolvedId}`, true));
       const resp = await authFetch(
         deleteUrlObj.toString(),
         { method: 'DELETE' }
@@ -253,7 +253,7 @@ export const useModelCatalog = (): UseModelCatalogResult => {
           const altFound = models.find(m => m.model_key === modelId || m.model_key === `${modelId}_custom` || m.display_name === modelId || m.id === modelId);
           if (altFound && altFound.id && altFound.id !== resolvedId) {
             const retryId = altFound.id;
-            const retryDeleteUrlObj = new URL(resolveApiUrl(`/api/models/${retryId}`));
+            const retryDeleteUrlObj = new URL(resolveApiUrl(`/api/models/${retryId}`, true));
             const retryResp = await authFetch(
               retryDeleteUrlObj.toString(),
               { method: 'DELETE' }
