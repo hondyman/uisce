@@ -92,10 +92,15 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO PUBLIC;
 
 func newSagaRig(t *testing.T) *sagaRig { return newSagaRigOn(t, nil) }
 
-// newSagaRigOn builds a rig. With shared == nil it resets the scratch alpha and starts from
+// newSagaRigOn builds a rig, creating the tenant's database through the real activity.
+func newSagaRigOn(t *testing.T, shared *sagaRig) *sagaRig { return newSagaRigOpts(t, shared, true) }
+
+// newSagaRigOpts builds a rig. With shared == nil it resets the scratch alpha and starts from
 // nothing. With a shared rig it adds ANOTHER tenant (own instance, datasources and database) to
-// the same alpha and the same secrets store, which is what an isolation test needs.
-func newSagaRigOn(t *testing.T, shared *sagaRig) *sagaRig {
+// the same alpha and the same secrets store, which is what an isolation test needs. With
+// createDB false the tenant's database is left for the caller to create (a concurrency test wants
+// to drive CreateTenantDatabase itself); its cleanup still drops it.
+func newSagaRigOpts(t *testing.T, shared *sagaRig, createDB bool) *sagaRig {
 	t.Helper()
 	adminDSN, appDSN := os.Getenv("SAGA_TEST_ALPHA_ADMIN_DSN"), os.Getenv("SAGA_TEST_ALPHA_APP_DSN")
 	host, user := os.Getenv("SAGA_TEST_PG_HOST"), os.Getenv("SAGA_TEST_PG_USER")
@@ -154,12 +159,16 @@ func newSagaRigOn(t *testing.T, shared *sagaRig) *sagaRig {
 
 	// The tenant's database, as the gold-copy clone leaves it: tables owned by the administrator.
 	t.Setenv("DATABASE_URL", fmt.Sprintf("postgres://%s:%s@%s:%d/postgres?sslmode=disable", r.cluster.User, r.cluster.Password, r.cluster.Host, r.cluster.Port))
-	require.NoError(t, r.acts.CreateTenantDatabase(context.Background(), r.database), "the real activity creates the database and closes PUBLIC's CONNECT")
-	tdb, err := r.cluster.Open(r.database)
-	require.NoError(t, err)
-	_, err = tdb.Exec(`CREATE TABLE orders (id serial PRIMARY KEY, note text)`)
-	require.NoError(t, err)
-	tdb.Close()
+	if createDB {
+		require.NoError(t, r.acts.CreateTenantDatabase(context.Background(), r.database), "the real activity creates the database and closes PUBLIC's CONNECT")
+	}
+	if createDB {
+		tdb, err := r.cluster.Open(r.database)
+		require.NoError(t, err)
+		_, err = tdb.Exec(`CREATE TABLE orders (id serial PRIMARY KEY, note text)`)
+		require.NoError(t, err)
+		tdb.Close()
+	}
 	t.Cleanup(func() {
 		c, err := r.cluster.Open("postgres")
 		if err != nil {
