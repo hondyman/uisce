@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -41,6 +42,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
 	dbpkg "github.com/hondyman/uisce/backend/internal/db"
+	"github.com/hondyman/uisce/backend/internal/sourceconn"
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/financial"
@@ -187,6 +189,8 @@ type Server struct {
 	ChartHandler            *handlers.ChartHandler
 	ExecutionMonitorHandler *handlers.ExecutionMonitorHandler
 	ProfileJobs             sync.Map
+	// Sources is the one audited opener of tenant SOURCE databases (internal/sourceconn).
+	Sources *sourceconn.Connector
 	NLQService              *services.NLQService
 	FeedbackService         *services.FeedbackService
 	EvalService             *services.EvalService
@@ -1258,6 +1262,14 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	daxHandler := handlers.NewDAXHandler()
 
 	srv.TemporalClient = temporalClient
+
+	// Tenant source databases are opened only through the source connector (ADR-030). Without it
+	// every operation that needs one fails closed; nothing falls back to another database.
+	if sc, err := newSourceConnector(db); err != nil {
+		logging.GetLogger().Sugar().Errorf("source connector unavailable; profiling and source access are disabled: %v", err)
+	} else {
+		srv.Sources = sc
+	}
 
 	// Initialize timeout triggers handler
 	timeoutTriggersHandler := handlers.NewTimeoutTriggersHandler(sqlxDB)
@@ -2986,6 +2998,24 @@ func (s *Server) startProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	req.DatasourceID = r.Header.Get("X-Tenant-Datasource-ID")
 
+	// The datasource must be one this tenant owns, and it must be reachable through the source
+	// connector. There is no fallback: a request without a datasource this tenant owns used to be
+	// profiled against the control-plane alpha database ("for development"), and a missing
+	// ALPHA_DB_URL called log.Fatal inside the request handler.
+	if s.Sources == nil {
+		http.Error(w, "source access is not available", http.StatusServiceUnavailable)
+		return
+	}
+	if _, err := s.Sources.Pool(dbpkg.WithTenantContextToCtx(r.Context(), req.TenantID), req.DatasourceID, sourceconn.OwnerOnly); err != nil {
+		if errors.Is(err, sourceconn.ErrNotFound) || errors.Is(err, sourceconn.ErrNotAllowed) || errors.Is(err, sourceconn.ErrNoTenant) {
+			http.Error(w, "datasource not found", http.StatusNotFound) // the same answer for "absent" and "not yours"
+			return
+		}
+		logging.GetLogger().Sugar().Warnw("profiler: datasource not reachable", "datasource", req.DatasourceID, "error", err)
+		http.Error(w, "datasource is not reachable", http.StatusBadGateway)
+		return
+	}
+
 	// If node_ids are provided, resolve them to schema/tables
 	if len(req.NodeIDs) > 0 {
 		schemaTables, err := s.resolveNodeIDsToSchemaTables(r.Context(), req.TenantID, req.DatasourceID, req.NodeIDs)
@@ -3025,20 +3055,6 @@ func (s *Server) startProfile(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-	}
-
-	// Look up datasource DSN
-	var connectionString string
-	err := s.DB.QueryRow("SELECT connection_string FROM public.tenant_datasources WHERE tenant_id = $1 AND datasource_id = $2", req.TenantID, req.DatasourceID).Scan(&connectionString)
-	if err != nil {
-		// For development, use alpha database as the source database
-		alphaDBURL := os.Getenv("ALPHA_DB_URL")
-		if alphaDBURL == "" {
-			log.Fatal("ALPHA_DB_URL environment variable is required")
-		}
-		req.DataSource = alphaDBURL
-	} else {
-		req.DataSource = connectionString
 	}
 
 	if err := s.Validate.Struct(req); err != nil {
@@ -3350,7 +3366,11 @@ func (s *Server) runProfile(jobID string) {
 	if getEnv("SEMLAYER_TEST_SKIP_ALPHA_POOL", "") != "1" {
 		alphaURL := os.Getenv("ALPHA_DB_URL")
 		if alphaURL == "" {
-			log.Fatal("ALPHA_DB_URL environment variable is required")
+			job.mu.Lock()
+			job.Status = "failed"
+			job.Error = "ALPHA_DB_URL is not configured"
+			job.mu.Unlock()
+			return
 		}
 		var err error
 		alphaPool, err = pgxpool.New(context.Background(), alphaURL)
@@ -3400,10 +3420,22 @@ func (s *Server) runProfile(jobID string) {
 	}
 
 	logging.GetLogger().Sugar().Infow("schemas to profile (grouped)", "schemas", schemaTableMap)
+	var srcPool *pgxpool.Pool
+	if s.Sources != nil {
+		var serr error
+		srcPool, serr = s.Sources.Pool(dbpkg.WithTenantContextToCtx(context.Background(), job.Req.TenantID), job.Req.DatasourceID, sourceconn.OwnerOnly)
+		if serr != nil {
+			job.mu.Lock()
+			job.Status = "failed"
+			job.Error = "datasource is not available: " + serr.Error()
+			job.mu.Unlock()
+			return
+		}
+	}
 	var allErrors []string
 	for schema, tables := range schemaTableMap {
-		logging.GetLogger().Sugar().Infow("starting profiler", "schema", schema, "tables", tables, "datasource", job.Req.DataSource)
-		if err := profiler.ProfileTablesFunc(context.Background(), logging.GetLogger(), alphaPool, job.Req.TenantID, job.Req.DatasourceID, job.Req.DataSource, schema, tables, job.Req.SampleSize, job.Req.FPRate, job.Req.BatchSize, progress); err != nil {
+		logging.GetLogger().Sugar().Infow("starting profiler", "schema", schema, "tables", tables, "datasource", job.Req.DatasourceID)
+		if err := profiler.ProfileTablesFunc(context.Background(), logging.GetLogger(), alphaPool, job.Req.TenantID, job.Req.DatasourceID, srcPool, schema, tables, job.Req.SampleSize, job.Req.FPRate, job.Req.BatchSize, progress); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}

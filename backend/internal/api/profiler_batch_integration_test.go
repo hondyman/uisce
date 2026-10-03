@@ -3,15 +3,19 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/hondyman/uisce/backend/internal/profiler"
+	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
 	dockertest "github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
+	"go.uber.org/zap"
 )
 
 // TestProfilerE2E starts a real Postgres container, creates a table with many
@@ -114,11 +118,24 @@ func TestProfilerE2E(t *testing.T) {
 	// Allow runProfile to connect to this test Postgres
 	_ = os.Setenv("ALPHA_DB_URL", dsn)
 
+	// The profiler now receives a pool from the source connector, never a DSN. This test has no alpha
+	// datasource rows, so it hands the real ProfileTables a pool it opens itself on the test database.
+	orig := profiler.ProfileTablesFunc
+	profiler.ProfileTablesFunc = func(ctx context.Context, logger *zap.Logger, alphaPool *pgxpool.Pool, tenantID, datasourceID string, _ *pgxpool.Pool, schema string, tables []string, sampleSize int, fpRate float64, batchSize int, progress profiler.ProgressFunc) error {
+		pool, err := pgxpool.New(ctx, dsn)
+		if err != nil {
+			return err
+		}
+		defer pool.Close()
+		return orig(ctx, logger, alphaPool, tenantID, datasourceID, pool, schema, tables, sampleSize, fpRate, batchSize, progress)
+	}
+	t.Cleanup(func() { profiler.ProfileTablesFunc = orig })
+
 	// Create jobs
 	smallJob := generateJobID()
-	srv.ProfileJobs.Store(smallJob, &ProfileJob{ID: smallJob, Status: "pending", CreatedAt: time.Now(), Req: ProfileRequest{DataSource: dsn, Schema: "public", Tables: []string{"wide_table"}, BatchSize: 1}})
+	srv.ProfileJobs.Store(smallJob, &ProfileJob{ID: smallJob, Status: "pending", CreatedAt: time.Now(), Req: ProfileRequest{Schema: "public", Tables: []string{"wide_table"}, BatchSize: 1}})
 	largeJob := generateJobID()
-	srv.ProfileJobs.Store(largeJob, &ProfileJob{ID: largeJob, Status: "pending", CreatedAt: time.Now(), Req: ProfileRequest{DataSource: dsn, Schema: "public", Tables: []string{"wide_table"}, BatchSize: 100}})
+	srv.ProfileJobs.Store(largeJob, &ProfileJob{ID: largeJob, Status: "pending", CreatedAt: time.Now(), Req: ProfileRequest{Schema: "public", Tables: []string{"wide_table"}, BatchSize: 100}})
 
 	startSmall := time.Now()
 	srv.runProfile(smallJob)

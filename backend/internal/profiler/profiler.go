@@ -25,13 +25,15 @@ var ProfileTablesFunc = ProfileTables
 // implementation focuses on being correct and compilable; it intentionally
 // stores minimal metadata (data_type=text, cardinality=0) so callers can read
 // results later. The real sampling/analytics can be added iteratively.
-func ProfileTables(ctx context.Context, logger *zap.Logger, alphaPool *pgxpool.Pool, tenantID string, datasourceID string, sourceDSN string, schema string, tables []string, sampleSize int, fpRate float64, batchSize int, progress ProgressFunc) error {
-	// Connect to the source DB to inspect columns
-	srcPool, err := pgxpool.New(ctx, sourceDSN)
-	if err != nil {
-		return fmt.Errorf("failed to connect to source dsn: %w", err)
+//
+// srcPool is the source database's connection pool, obtained from internal/sourceconn for a datasource
+// the requesting tenant owns. This package no longer receives a connection string: it used to take the
+// source DSN, open its own pool, and write the DSN (password included) into
+// sml.column_profiles.datasource on every insert. The pool is the caller's; it is not closed here.
+func ProfileTables(ctx context.Context, logger *zap.Logger, alphaPool *pgxpool.Pool, tenantID string, datasourceID string, srcPool *pgxpool.Pool, schema string, tables []string, sampleSize int, fpRate float64, batchSize int, progress ProgressFunc) error {
+	if srcPool == nil {
+		return fmt.Errorf("no source connection for datasource %s", datasourceID)
 	}
-	defer srcPool.Close()
 
 	// sane defaults
 	if sampleSize <= 0 {
@@ -122,7 +124,7 @@ func ProfileTables(ctx context.Context, logger *zap.Logger, alphaPool *pgxpool.P
 								cardinality = EXCLUDED.cardinality,
 								bloom_filter = EXCLUDED.bloom_filter,
 								created_at = EXCLUDED.created_at
-						`, tenantID, datasourceID, sourceDSN, schema, table, col, "text", 0, nil, time.Now())
+						`, tenantID, datasourceID, datasourceID, schema, table, col, "text", 0, nil, time.Now())
 					}
 					continue
 				}
@@ -164,14 +166,14 @@ func ProfileTables(ctx context.Context, logger *zap.Logger, alphaPool *pgxpool.P
 								cardinality = EXCLUDED.cardinality,
 								bloom_filter = EXCLUDED.bloom_filter,
 								created_at = EXCLUDED.created_at
-						`, tenantID, datasourceID, sourceDSN, schema, table, col, "text", 0, nil, time.Now())
+						`, tenantID, datasourceID, datasourceID, schema, table, col, "text", 0, nil, time.Now())
 					}
 					continue
 				}
 
 				// compute profile using shared helpers
 				prof := helpers.ComputeProfile(values)
-				prof.DataSource = sourceDSN
+				prof.DataSource = datasourceID // an id, never a connection string
 				prof.Schema = schema
 				prof.TableName = table
 				prof.ColumnName = col
@@ -215,7 +217,7 @@ func ProfileTables(ctx context.Context, logger *zap.Logger, alphaPool *pgxpool.P
 								properties = EXCLUDED.properties,
 								bloom_filter = EXCLUDED.bloom_filter,
 								created_at = EXCLUDED.created_at
-						`, tenantID, datasourceID, sourceDSN, schema, table, col, prof.DataType, prof.Cardinality, prof.MinLength, prof.MaxLength, prof.AvgLength, propertiesJSON, nil, time.Now())
+						`, tenantID, datasourceID, datasourceID, schema, table, col, prof.DataType, prof.Cardinality, prof.MinLength, prof.MaxLength, prof.AvgLength, propertiesJSON, nil, time.Now())
 					}
 					continue
 				}
@@ -251,7 +253,7 @@ func ProfileTables(ctx context.Context, logger *zap.Logger, alphaPool *pgxpool.P
 							properties = EXCLUDED.properties,
 							bloom_filter = EXCLUDED.bloom_filter,
 							created_at = EXCLUDED.created_at
-					`, tenantID, datasourceID, sourceDSN, schema, table, col, prof.DataType, prof.Cardinality, prof.MinLength, prof.MaxLength, prof.AvgLength, propertiesJSON, bloomBytes, time.Now())
+					`, tenantID, datasourceID, datasourceID, schema, table, col, prof.DataType, prof.Cardinality, prof.MinLength, prof.MaxLength, prof.AvgLength, propertiesJSON, bloomBytes, time.Now())
 				}
 			}
 
