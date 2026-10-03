@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS public.tenant_lakehouse_audit (
     actor_role  TEXT        NOT NULL DEFAULT '',
     action      TEXT        NOT NULL CHECK (action IN (
                     'configured', 'retention_extended', 'provision_requested',
-                    'provisioned', 'state_changed')),
+                    'provisioned', 'provision_failed', 'state_changed')),
     before      JSONB,
     after       JSONB,
     prev_hash   TEXT        NOT NULL,

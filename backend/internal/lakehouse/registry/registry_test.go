@@ -3,6 +3,7 @@ package registry_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -278,4 +279,123 @@ func TestSetRetention_ConcurrentWritersLeaveAConsistentChain(t *testing.T) {
 	broken, err := s.VerifyAudit(ctx, id)
 	require.NoError(t, err)
 	require.Nil(t, broken, "the chain must survive concurrent writers")
+}
+
+func TestMarkProvisioned(t *testing.T) {
+	db := openDB(t)
+	s := registry.NewStore(db)
+	ctx := context.Background()
+	wh := uuid.New()
+
+	t.Run("refuses a tenant that was never configured", func(t *testing.T) {
+		id := newTenant(t, db, "Unconfigured")
+		require.ErrorIs(t, s.MarkProvisioned(ctx, id, wh, "key-"+id.String(), actor), registry.ErrNotConfigured)
+	})
+
+	t.Run("binds the warehouse, goes active, and audits it", func(t *testing.T) {
+		id := newTenant(t, db, "Provision")
+		_, err := s.SetRetention(ctx, id, 2555, actor)
+		require.NoError(t, err)
+		before, err := s.Get(ctx, id)
+		require.NoError(t, err)
+
+		require.NoError(t, s.MarkProvisioned(ctx, id, uuid.New(), "key-"+id.String(), actor))
+		got, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		require.True(t, got.Provisioned)
+		require.Equal(t, "active", got.LifecycleState)
+		require.Equal(t, before.Version+1, got.Version)
+		require.Equal(t, []string{"configured", "provisioned"}, actions(t, s, id))
+
+		entries, err := s.Audit(ctx, id, 10)
+		require.NoError(t, err)
+		require.JSONEq(t, `{"audit_retention_days":2555,"bucket":"`+got.Bucket+`","warehouse_id":"`+
+			extractWarehouse(t, entries[0].After)+`"}`, string(entries[0].After))
+		broken, err := s.VerifyAudit(ctx, id)
+		require.NoError(t, err)
+		require.Nil(t, broken)
+	})
+
+	t.Run("is idempotent for the same warehouse and refuses a different one", func(t *testing.T) {
+		id := newTenant(t, db, "Idempotent")
+		_, err := s.SetRetention(ctx, id, 365, actor)
+		require.NoError(t, err)
+		same, key := uuid.New(), "key-"+id.String()
+		require.NoError(t, s.MarkProvisioned(ctx, id, same, key, actor))
+		require.NoError(t, s.MarkProvisioned(ctx, id, same, key, actor), "a retry of the same binding is a no-op")
+		require.Equal(t, []string{"configured", "provisioned"}, actions(t, s, id), "and writes no second audit entry")
+
+		require.ErrorIs(t, s.MarkProvisioned(ctx, id, uuid.New(), key, actor), registry.ErrWarehouseMismatch,
+			"a tenant's one warehouse is never silently replaced")
+		got, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		require.True(t, got.Provisioned)
+	})
+
+	t.Run("refuses a tenant that is not in the provisioning state", func(t *testing.T) {
+		id := newTenant(t, db, "Suspended")
+		_, err := s.SetRetention(ctx, id, 365, actor)
+		require.NoError(t, err)
+		require.NoError(t, dbpkg.WithTenantTransaction(ctx, db, id.String(), func(tx *sql.Tx) error {
+			_, e := tx.Exec(`UPDATE public.tenant_lakehouse SET lifecycle_state = 'suspended' WHERE tenant_id = $1`, id)
+			return e
+		}))
+		require.ErrorIs(t, s.MarkProvisioned(ctx, id, uuid.New(), "key-"+id.String(), actor), registry.ErrInvalidState)
+	})
+
+	t.Run("two tenants can never share a warehouse", func(t *testing.T) {
+		a, b := newTenant(t, db, "Share A"), newTenant(t, db, "Share B")
+		for _, id := range []uuid.UUID{a, b} {
+			_, err := s.SetRetention(ctx, id, 365, actor)
+			require.NoError(t, err)
+		}
+		shared := uuid.New()
+		require.NoError(t, s.MarkProvisioned(ctx, a, shared, "key-"+a.String(), actor))
+		require.Error(t, s.MarkProvisioned(ctx, b, shared, "key-"+b.String(), actor), "the unique index must refuse it")
+		got, err := s.Get(ctx, b)
+		require.NoError(t, err)
+		require.False(t, got.Provisioned, "and the failed attempt must leave tenant B untouched")
+	})
+
+	t.Run("requires a warehouse id and a key", func(t *testing.T) {
+		id := newTenant(t, db, "Blank")
+		_, err := s.SetRetention(ctx, id, 365, actor)
+		require.NoError(t, err)
+		require.Error(t, s.MarkProvisioned(ctx, id, uuid.Nil, "k", actor))
+		require.Error(t, s.MarkProvisioned(ctx, id, uuid.New(), "", actor))
+	})
+}
+
+func extractWarehouse(t *testing.T, after []byte) string {
+	t.Helper()
+	var v struct {
+		WarehouseID string `json:"warehouse_id"`
+	}
+	require.NoError(t, json.Unmarshal(after, &v))
+	return v.WarehouseID
+}
+
+func TestRecordProvisionFailure(t *testing.T) {
+	db := openDB(t)
+	s := registry.NewStore(db)
+	ctx := context.Background()
+	id := newTenant(t, db, "Failing")
+	_, err := s.SetRetention(ctx, id, 365, actor)
+	require.NoError(t, err)
+
+	require.NoError(t, s.RecordProvisionFailure(ctx, id, actor, "EnsureLakehouseBucket", strings.Repeat("x", 900)))
+	entries, err := s.Audit(ctx, id, 10)
+	require.NoError(t, err)
+	require.Equal(t, "provision_failed", entries[0].Action)
+	var after map[string]string
+	require.NoError(t, json.Unmarshal(entries[0].After, &after))
+	require.Equal(t, "EnsureLakehouseBucket", after["step"])
+	require.Len(t, after["error"], 500, "a long reason is truncated, not stored whole")
+
+	got, err := s.Get(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, "provisioning", got.LifecycleState, "a failure leaves the tenant waiting, not broken")
+	broken, err := s.VerifyAudit(ctx, id)
+	require.NoError(t, err)
+	require.Nil(t, broken)
 }

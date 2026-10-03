@@ -37,6 +37,15 @@ var (
 	ErrTenantNotFound   = errors.New("tenant not found")
 	ErrInvalidRetention = fmt.Errorf("audit retention must be between %d and %d days", MinRetentionDays, MaxRetentionDays)
 	ErrRetentionLowered = errors.New("audit retention can only be extended once set")
+
+	// ErrNotConfigured: no registry row, or no audit retention set, so there is nothing
+	// to provision against.
+	ErrNotConfigured = errors.New("lakehouse is not configured: set the audit retention first")
+	// ErrInvalidState: the tenant's lakehouse is not in a state that allows the change.
+	ErrInvalidState = errors.New("lakehouse is not in a state that allows this")
+	// ErrWarehouseMismatch: the tenant is already bound to a different warehouse. One
+	// tenant has exactly one, and it is never silently replaced.
+	ErrWarehouseMismatch = errors.New("tenant is already bound to a different warehouse")
 )
 
 // Config is a tenant's lakehouse registry entry. A tenant with no row is returned
@@ -199,6 +208,65 @@ func (s *Store) SetRetention(ctx context.Context, tenantID uuid.UUID, days int, 
 		return nil, fmt.Errorf("set retention: %w", err)
 	}
 	return s.Get(ctx, tenantID)
+}
+
+// MarkProvisioned records that the tenant's bucket, key and warehouse now exist: it
+// binds the Lakekeeper warehouse id and KMS key and moves the tenant to "active", with
+// the audit entry in the same transaction. It is idempotent for the same warehouse id,
+// and refuses a different one (ErrWarehouseMismatch): a tenant's warehouse is never
+// silently replaced.
+func (s *Store) MarkProvisioned(ctx context.Context, tenantID, warehouseID uuid.UUID, kmsKeyID string, actor Actor) error {
+	if warehouseID == uuid.Nil || kmsKeyID == "" {
+		return errors.New("a warehouse id and a KMS key id are required")
+	}
+	err := dbpkg.WithTenantTransaction(ctx, s.db, tenantID.String(), func(tx *sql.Tx) error {
+		var state, bucket string
+		var current uuid.NullUUID
+		var days sql.NullInt32
+		e := tx.QueryRowContext(ctx, `
+			SELECT lifecycle_state, lakekeeper_warehouse_id, audit_retention_days, bucket
+			  FROM public.tenant_lakehouse WHERE tenant_id = $1 FOR UPDATE`, tenantID).Scan(&state, &current, &days, &bucket)
+		if errors.Is(e, sql.ErrNoRows) || (e == nil && !days.Valid) {
+			return ErrNotConfigured
+		}
+		if e != nil {
+			return fmt.Errorf("lock lakehouse row: %w", e)
+		}
+		if current.Valid {
+			if current.UUID == warehouseID {
+				return nil // already provisioned; nothing to change or audit
+			}
+			return ErrWarehouseMismatch
+		}
+		if state != "provisioning" {
+			return fmt.Errorf("%w: state is %q", ErrInvalidState, state)
+		}
+		if _, e := tx.ExecContext(ctx, `
+			UPDATE public.tenant_lakehouse
+			   SET lakekeeper_warehouse_id = $2, kms_key_id = $3, lifecycle_state = 'active',
+			       version = version + 1, updated_at = now()
+			 WHERE tenant_id = $1`, tenantID, warehouseID, kmsKeyID); e != nil {
+			return fmt.Errorf("mark provisioned: %w", e)
+		}
+		return insertAudit(ctx, tx, tenantID, actor, "provisioned", nil,
+			mustJSON(map[string]any{"warehouse_id": warehouseID.String(), "bucket": bucket, "audit_retention_days": int(days.Int32)}))
+	})
+	if err != nil {
+		if errors.Is(err, ErrNotConfigured) || errors.Is(err, ErrWarehouseMismatch) || errors.Is(err, ErrInvalidState) {
+			return err
+		}
+		return fmt.Errorf("mark provisioned: %w", err)
+	}
+	return nil
+}
+
+// RecordProvisionFailure appends a "provision_failed" audit entry naming the step and
+// the reason, so an admin can see in the audit trail why a tenant is still waiting.
+func (s *Store) RecordProvisionFailure(ctx context.Context, tenantID uuid.UUID, actor Actor, step, reason string) error {
+	if len(reason) > 500 {
+		reason = reason[:500]
+	}
+	return s.Record(ctx, tenantID, actor, "provision_failed", nil, map[string]string{"step": step, "error": reason})
 }
 
 // Record appends an audit entry for an action that changes no registry column

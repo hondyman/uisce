@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/sse"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeBuckets models just the bucket state this provisioner reads and writes.
@@ -128,6 +129,7 @@ func TestEnsureTenantBucket_RefusesBucketWithoutObjectLock(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "without Object Lock") {
 		t.Fatalf("a non-WORM bucket must be refused, got %v", err)
 	}
+	require.ErrorIs(t, err, ErrBucketConflict, "a refusal is a conflict, which a caller must not retry")
 	if f.setLock != 0 || f.setSSE != 0 {
 		t.Fatal("nothing may be configured on a bucket that cannot hold audit")
 	}
@@ -138,18 +140,16 @@ func TestEnsureTenantBucket_NeverChangesExistingRetention(t *testing.T) {
 
 	t.Run("governance mode is refused", func(t *testing.T) {
 		f := &fakeBuckets{exists: true, lockOn: true, mode: ptr(minio.Governance), validity: ptr(uint(9999)), unit: ptr(minio.Days)}
-		if _, err := prov(f).EnsureTenantBucket(context.Background(), spec); err == nil {
-			t.Fatal("want error")
-		}
+		_, err := prov(f).EnsureTenantBucket(context.Background(), spec)
+		require.ErrorIs(t, err, ErrBucketConflict)
 		if f.setLock != 0 {
 			t.Fatal("must not rewrite retention")
 		}
 	})
 	t.Run("shorter compliance retention is refused", func(t *testing.T) {
 		f := &fakeBuckets{exists: true, lockOn: true, mode: ptr(minio.Compliance), validity: ptr(uint(30)), unit: ptr(minio.Days)}
-		if _, err := prov(f).EnsureTenantBucket(context.Background(), spec); err == nil {
-			t.Fatal("want error")
-		}
+		_, err := prov(f).EnsureTenantBucket(context.Background(), spec)
+		require.ErrorIs(t, err, ErrBucketConflict)
 		if f.setLock != 0 {
 			t.Fatal("must not rewrite retention")
 		}
@@ -167,9 +167,8 @@ func TestEnsureTenantBucket_NeverChangesExistingRetention(t *testing.T) {
 
 func TestEnsureTenantBucket_RefusesDifferentKey(t *testing.T) {
 	f := &fakeBuckets{exists: true, lockOn: true, mode: ptr(minio.Compliance), validity: ptr(uint(2555)), unit: ptr(minio.Days), kmsKey: "someone-elses-key"}
-	if _, err := prov(f).EnsureTenantBucket(context.Background(), goodSpec()); err == nil {
-		t.Fatal("a bucket under a different key must be refused")
-	}
+	_, err := prov(f).EnsureTenantBucket(context.Background(), goodSpec())
+	require.ErrorIs(t, err, ErrBucketConflict, "a bucket under a different key must be refused")
 	if f.setSSE != 0 {
 		t.Fatal("must not change the default key")
 	}
@@ -185,9 +184,11 @@ func TestEnsureTenantBucket_RequiresKeyAndRetention(t *testing.T) {
 	for name, mutate := range cases {
 		s := goodSpec()
 		mutate(&s)
-		if _, err := prov(f).EnsureTenantBucket(context.Background(), s); err == nil {
+		_, err := prov(f).EnsureTenantBucket(context.Background(), s)
+		if err == nil {
 			t.Errorf("%s: want error", name)
 		}
+		require.NotErrorIs(t, err, ErrBucketConflict, "%s: bad input is not a conflict with an existing bucket", name)
 	}
 	if len(f.made) != 0 {
 		t.Fatalf("an invalid spec must not create anything; made %d", len(f.made))

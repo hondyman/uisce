@@ -19,6 +19,11 @@ import (
 // to reconcile anything that differs. The retention period is a required input
 // with no default: it is a regulatory decision, not a tunable.
 
+// ErrBucketConflict marks a refusal to reconcile an existing bucket: it has no Object
+// Lock, a non-compliance or shorter retention, or a different key. Retrying cannot
+// fix it, and it must reach a human, so a caller treats it as non-retryable.
+var ErrBucketConflict = errors.New("tenant bucket conflicts with the required settings")
+
 // sseNotFoundCode is the S3 error code for "no default encryption configured".
 const sseNotFoundCode = "ServerSideEncryptionConfigurationNotFoundError"
 
@@ -111,7 +116,7 @@ func (p *TenantBucketProvisioner) ensureObjectLock(ctx context.Context, name str
 	if enabled != "Enabled" {
 		// Not repairable here and not safe to continue: this bucket would hold
 		// audit with no WORM guarantee.
-		return fmt.Errorf("tenant bucket: %s exists without Object Lock; it cannot hold tenant audit and must be replaced", name)
+		return fmt.Errorf("%w: %s exists without Object Lock; it cannot hold tenant audit and must be replaced", ErrBucketConflict, name)
 	}
 
 	if mode == nil {
@@ -125,11 +130,11 @@ func (p *TenantBucketProvisioner) ensureObjectLock(ctx context.Context, name str
 	}
 
 	if *mode != minio.Compliance {
-		return fmt.Errorf("tenant bucket: %s has %s retention, want COMPLIANCE; refusing to change it", name, *mode)
+		return fmt.Errorf("%w: %s has %s retention, want COMPLIANCE; refusing to change it", ErrBucketConflict, name, *mode)
 	}
 	have := retentionDays(validity, unit)
 	if have < wantDays {
-		return fmt.Errorf("tenant bucket: %s retains %d days, want at least %d; refusing to change an existing compliance retention", name, have, wantDays)
+		return fmt.Errorf("%w: %s retains %d days, want at least %d; refusing to change an existing compliance retention", ErrBucketConflict, name, have, wantDays)
 	}
 	return nil
 }
@@ -150,7 +155,7 @@ func (p *TenantBucketProvisioner) ensureEncryption(ctx context.Context, name, km
 		}
 		// Objects already written are under the other key; changing the default
 		// does not re-encrypt them and would split the bucket across two keys.
-		return fmt.Errorf("tenant bucket: %s is encrypted under a different key; refusing to change it", name)
+		return fmt.Errorf("%w: %s is encrypted under a different key; refusing to change it", ErrBucketConflict, name)
 	}
 
 	if err := p.api.SetBucketEncryption(ctx, name, sse.NewConfigurationSSEKMS(kmsKey)); err != nil {
