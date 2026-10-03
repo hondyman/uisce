@@ -88,6 +88,8 @@ services:
     environment:
       PORT: 8080
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5432/alpha
+      # The ORM (crims) database is never guessed from DATABASE_URL: it must be named.
+      CRIMS_ORM_DSN: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5432/crims
       JWT_SECRET: ${JWT_SECRET}
     ports:
       - "8080:8080"
