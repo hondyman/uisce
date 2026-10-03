@@ -1507,6 +1507,20 @@ Item 2 decides whether the port is a rename or a vocabulary-creation task.
 Verification queries are in `docs/FAILURES_LEDGER.md`; they need alpha access,
 which is already blocking other work.
 
+**Ruling 2026-10-03: hold.** No port work until the schema answers land —
+building a corrected writer against answers that do not exist yet would repeat
+the original error one level up. The alpha session runs Q5 first, because it
+can dissolve the finding entirely; then Q1/Q2 together to settle the mismatch
+against live reality rather than the dump; then Q3/Q4, which are input to the
+fix rather than to the diagnosis. The same session carries the four-file sweep
+(`semanticmatch/resolver.go`, `catalog/sti_column_scanner.go`,
+`catalog/subtype_bo_builder.go`, `bo/layout_service.go` — same root cause, so
+one investigation) and the cube stream's staging DDL validation, which shares
+the access and faces the same risk class. Dispositions for the sweep are a 2×2
+of schema-match against reachability; two of the four cells end in deletion.
+The C2 calc-term and reconciler-backfill work stays parked, and may be
+reshaped or invalidated by what the answers say.
+
 **To fix while wiring.** `metric_reconciler.go:22` claims the reconciler is
 "Safe for concurrent runs across multiple instance replicas using advisory
 locking / upsert semantics." There is no advisory lock and no upsert — the edge
