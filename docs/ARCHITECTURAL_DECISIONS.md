@@ -787,17 +787,20 @@ one gap stated plainly:
   **8.3's corpus**, which builds the first import path and must call the
   validator there. Recorded so the corpus is not written assuming compile-time
   checking was always sufficient.
-- **A second SQL builder bypasses the compiler entirely, and is currently dead.**
-  `starrocks_mv_manager.go:62` hardcodes `measureExpr := "SUM(notional)"` and
-  only special-cases `Kind == "aggregation"`, so a derived or formula metric
+- **A second SQL builder bypasses the compiler entirely — now deleted.**
+  `starrocks_mv_manager.go:62` hardcoded `measureExpr := "SUM(notional)"` and
+  only special-cased `Kind == "aggregation"`, so a derived or formula metric
   reaching it would materialize as `SUM(notional)` — silently wrong, and exactly
-  the bug class the cube DDL guard exists to prevent. It is dead today:
-  `NewStarRocksMaterializationManager` has **zero production callers** (its
-  policy helpers `EvaluateABACMVCompatibility` and `EvaluateStaleMVAction` are
-  used by `cube_router.go:147,169`, but they emit no SQL). Flagged rather than
-  deleted, because retiring the legacy materialization path is a separate
-  decision. **If it is ever wired, it must route through `CompileMetric` or call
-  `ValidateMetricExpression` first.**
+  the bug class the cube DDL guard exists to prevent. `NewStarRocksMaterializationManager`
+  had **zero production callers** (its policy helpers `EvaluateABACMVCompatibility`
+  and `EvaluateStaleMVAction` were used by `cube_router.go:147,169`, but emitted
+  no SQL). The SQL-generating half — `StarRocksMaterializationManager`,
+  `GenerateMVDDL`, `GeneratedMVDDL`, `ParseStarRocksExplainPlan`,
+  `MVHitParseResult` — is removed, along with the three tests that only exercised
+  it. The four live routing predicates moved to `mv_routing_policy.go` and keep
+  their tests. **Any future materialization path must route through
+  `CompileMetric` or call `ValidateMetricExpression` first**; that obligation is
+  unchanged by the deletion.
 
 **Evidence (production call sites).** `ValidateMetricExpression`
 (`internal/querybuilder/metric_definition.go`) is called from
