@@ -1504,6 +1504,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize Kafka audit publisher
 
 	boService := catalogmeta.NewBusinessObjectService(sqlxDB, tenantManager, auditPublisher, sqlRepo)
+	// A bound business object's backend database is opened only through the source connector.
+	boService.SetSourceConnector(srv.Sources)
 	srv.BusinessObjectService = boService
 	boHandler := NewBusinessObjectHandler(boService, srv.DatasourceResolver, sqlxDB)
 	// boHandler.RegisterRoutes(r) - Moved below into /api group

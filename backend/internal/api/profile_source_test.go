@@ -201,3 +201,15 @@ func TestProfilerHandlerHasNoLegacyDSNLookupOrAlphaFallback(t *testing.T) {
 		t.Error("runProfile must not log.Fatal: a missing setting fails the job, it does not kill the server")
 	}
 }
+
+// The business-object service opens a bound backend only through the source connector, so it must be
+// given one.
+func TestBusinessObjectServiceIsGivenTheSourceConnector(t *testing.T) {
+	src, err := os.ReadFile("api.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(src), "boService.SetSourceConnector(srv.Sources)") {
+		t.Fatal("api.go must wire the source connector into the business-object service, or every bound backend fails closed")
+	}
+}
