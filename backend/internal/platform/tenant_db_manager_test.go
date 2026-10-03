@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -89,4 +90,12 @@ func TestManagerDoesNotReopenItsOwnPathAroundTheRouter(t *testing.T) {
 			require.NotContains(t, line, banned, "tenant_db_manager.go must reach tenant databases only through tenantdb")
 		}
 	}
+}
+
+// Production serves the wealth service and business-object operations with the authorization cache on.
+func TestManagerRunsWithTheDefaultAuthorizationTTL(t *testing.T) {
+	src, err := os.ReadFile("tenant_db_manager.go")
+	require.NoError(t, err)
+	require.Contains(t, string(src), "AuthTTL: tenantdb.DefaultAuthTTL")
+	require.Equal(t, 3*time.Second, tenantdb.DefaultAuthTTL, "\"a few seconds\" is a decision; change it deliberately")
 }

@@ -1141,6 +1141,34 @@ never healthy-by-absence), and it never executes. Remediation stays with the wor
 the lifecycle change, so each change has one execution path and no second provisioner exists.
 It must never auto-remediate a resource under compliance Object Lock.
 
+### ADR-040: A Successful Authorization Is Cached For A Few Seconds; A Refusal Never Is
+
+**Decision.** `tenantdb.Router` may reuse a **successful** authorization (ownership, completeness,
+active binding, and the app-to-datasource lookup) for `Config.AuthTTL`; production wiring uses
+`DefaultAuthTTL` (3 s). `0` disables the cache and restores a full alpha check on every `Resolve`.
+
+- **Keyed by the verified caller tenant** as well as the datasource, so one tenant is never served
+  another's cached entry.
+- **Only successes are stored.** Every refusal (unbound, suspended, mismatched, incomplete, registry
+  down) is evaluated afresh each time, so recovery is immediate.
+- **Bounded:** `MaxAuthEntries` (default 4 x `MaxPools`); expired entries go first.
+- **Coalesced:** concurrent refreshes of one key cost alpha one lookup, detached from any single
+  caller's cancellation so one cancelled request cannot fail the others.
+- **`Probe` never uses it:** it is the last gate before a binding goes active.
+- **`InvalidateDatasource` / `InvalidateTenant`** make an in-process suspension, offboarding or
+  rebind take effect at once.
+
+**The trade, stated plainly.** After a suspension, offboarding or cutover in alpha, a process keeps
+resolving the old answer for at most `AuthTTL`. That is a fail-closed *latency* decision, not a
+performance tweak. In exchange a warm `Resolve` no longer costs alpha 18 statements: at 200 tenants
+it went from p50 0.74 ms / 5,986 resolves/s (32 goroutines, bounded by alpha's pool) to microseconds
+and over a million resolves/s, with zero alpha statements.
+
+**Consequence for cutovers (Phase 4b).** A cutover is a registry flip plus a binding version bump. With
+the cache on, each process follows it within `AuthTTL`, so the cutover procedure is: pause writes, flip,
+wait at least `AuthTTL` (or invalidate in-process), verify, resume. Writes must not resume before every
+process has converged.
+
 ## Open items
 
 - **C1 (9.1) ported metric primitives into the rule VM.**

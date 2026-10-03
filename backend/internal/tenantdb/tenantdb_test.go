@@ -25,16 +25,47 @@ type fakeRegistry struct {
 	credCalls int
 	appDS     string
 	appErr    error
+
+	gate chan struct{} // when set, ResolveDatasource blocks until it is closed
+
+	mu                           sync.Mutex
+	dsCalls, bindCalls, appCalls int
 }
 
-func (f *fakeRegistry) ResolveDatasource(context.Context, string) (Datasource, error) {
+func (f *fakeRegistry) ResolveDatasource(ctx context.Context, _ string) (Datasource, error) {
+	if g := f.gate; g != nil {
+		select { // like a real database call, give up when the context is cancelled
+		case <-g:
+		case <-ctx.Done():
+			return Datasource{}, ctx.Err()
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dsCalls++
 	return f.ds, f.dsErr
 }
 func (f *fakeRegistry) LoadBinding(context.Context, string) (Binding, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.bindCalls++
 	return f.binding, f.bindErr
 }
 func (f *fakeRegistry) AppDatasource(_ context.Context, _, _ string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.appCalls++
 	return f.appDS, f.appErr
+}
+func (f *fakeRegistry) set(fn func(*fakeRegistry)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fn(f)
+}
+func (f *fakeRegistry) calls() (ds, bind, app int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.dsCalls, f.bindCalls, f.appCalls
 }
 func (f *fakeRegistry) Credentials(context.Context, Datasource) (string, string, error) {
 	f.credCalls++
