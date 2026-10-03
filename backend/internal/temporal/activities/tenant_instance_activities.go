@@ -63,7 +63,10 @@ func (a *TenantProvisioningActivities) RegisterTenant(ctx context.Context, input
 func (a *TenantProvisioningActivities) RollbackRegisterTenant(ctx context.Context, tenantID string) error {
 	a.Logger.Infof("Rolling back tenant: %s", tenantID)
 
-	query := `DELETE FROM public.tenants WHERE id = $1`
+	// Only a tenant still in 'provisioning'. RegisterTenant upserts on code and
+	// can return an existing, active tenant's id; that tenant must never be deleted
+	// by a failed provisioning run.
+	query := `DELETE FROM public.tenants WHERE id = $1 AND status = 'provisioning'`
 	_, err := a.ControlDB.ExecContext(ctx, query, tenantID)
 	if err != nil {
 		a.Logger.Errorf("Failed to rollback tenant %s: %v", tenantID, err)
@@ -98,7 +101,10 @@ func (a *TenantProvisioningActivities) RegisterInstance(ctx context.Context, inp
 func (a *TenantProvisioningActivities) RollbackRegisterInstance(ctx context.Context, instanceID string) error {
 	a.Logger.Infof("Rolling back instance: %s", instanceID)
 
-	query := `DELETE FROM public.tenant_instance WHERE id = $1`
+	// Only an instance still in 'provisioning', for the same reason as
+	// RollbackRegisterTenant: RegisterInstance upserts and can return an
+	// existing instance's id.
+	query := `DELETE FROM public.tenant_instance WHERE id = $1 AND status = 'provisioning'`
 	_, err := a.ControlDB.ExecContext(ctx, query, instanceID)
 	if err != nil {
 		a.Logger.Errorf("Failed to rollback instance %s: %v", instanceID, err)
@@ -328,6 +334,24 @@ func (a *TenantProvisioningActivities) RollbackCloneGoldCopyProducts(ctx context
 		return err
 	}
 	return nil
+}
+
+// InspectProvisioningState is read-only. It records, before the saga creates
+// anything, which of the resources it is about to touch it may later undo. See
+// provisioning.ProvisioningState.
+func (a *TenantProvisioningActivities) InspectProvisioningState(ctx context.Context, tenantID, instanceID, databaseName string) (provisioning.ProvisioningState, error) {
+	var st provisioning.ProvisioningState
+	const q = `
+		SELECT
+		    COALESCE((SELECT status = 'provisioning' FROM public.tenants WHERE id = $1), false),
+		    COALESCE((SELECT status = 'provisioning' FROM public.tenant_instance WHERE id = $2), false),
+		    EXISTS (SELECT 1 FROM pg_database WHERE datname = $3)`
+	err := a.ControlDB.QueryRowContext(ctx, q, tenantID, instanceID, databaseName).
+		Scan(&st.TenantOwned, &st.InstanceOwned, &st.DatabaseExisted)
+	if err != nil {
+		return provisioning.ProvisioningState{}, fmt.Errorf("failed to inspect provisioning state: %w", err)
+	}
+	return st, nil
 }
 
 func (a *TenantProvisioningActivities) EmitProvisioningEvent(ctx context.Context, input provisioning.EmitEventInput) error {

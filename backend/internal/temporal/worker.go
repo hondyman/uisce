@@ -99,8 +99,6 @@ func registerActivities(w worker.Worker, db *sql.DB, controlDB *sql.DB, logger *
 	w.RegisterActivity(act.RollbackPostgresTenant)
 	w.RegisterActivity(act.InitializeMinIOPrefix)
 	w.RegisterActivity(act.RollbackMinIOPrefix)
-	w.RegisterActivity(act.ProvisionPolarisCatalog)
-	w.RegisterActivity(act.DeprovisionPolarisCatalog)
 	w.RegisterActivity(act.ExpireIcebergSnapshots)
 	w.RegisterActivity(act.RemoveOrphanFiles)
 	w.RegisterActivity(act.CompactManifests)

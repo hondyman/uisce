@@ -42,12 +42,9 @@ func main() {
 	if s3Bucket == "" {
 		s3Bucket = "iceberg-warehouse"
 	}
-	catalogURI := os.Getenv("POLARIS_URI")
+	catalogURI := os.Getenv("ICEBERG_CATALOG_URI")
 	if catalogURI == "" {
-		catalogURI = os.Getenv("ICEBERG_CATALOG_URI")
-		if catalogURI == "" {
-			catalogURI = "http://localhost:8181"
-		}
+		catalogURI = "http://localhost:8181"
 	}
 
 	topics := []string{

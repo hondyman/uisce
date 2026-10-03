@@ -10,3 +10,4 @@ import '../features/schedules/studio';
 import '../features/mdm-scoring/studio';
 import '../features/validation-rules/studio';
 import '../features/lakehouse-streaming/studio';
+import '../features/system-lakehouse/studio';

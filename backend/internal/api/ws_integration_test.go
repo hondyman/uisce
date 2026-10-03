@@ -71,7 +71,14 @@ func TestWebSocketEndToEndProfiler(t *testing.T) {
 	}
 	defer conn.Close()
 
-	// Now that the client is attached, run the job so no message can be missed.
+	// Dial returns as soon as the server's 101 reply arrives, which is BEFORE the handler
+	// goroutine has registered the client with the hub, and the hub only delivers to registered
+	// clients. Against an unreachable source the profile finishes in microseconds, so starting
+	// it now can broadcast "progress" and "completed" to nobody and leave ReadJSON waiting out
+	// its 10s deadline (seen on loaded CI runners). Wait for the registration first.
+	waitForHubClients(t, srv.WsHub, 1)
+
+	// Now that the client is registered, run the job so no message can be missed.
 	go srv.runProfile(jobID)
 
 	// Read messages until we receive completed
@@ -100,3 +107,22 @@ func TestWebSocketEndToEndProfiler(t *testing.T) {
 }
 
 // (we use bytes.NewReader above)
+
+// waitForHubClients blocks until the hub has n registered clients, so a test never broadcasts
+// before the client it is reading from can receive.
+func waitForHubClients(t *testing.T, hub *WebSocketHub, n int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		hub.mutex.RLock()
+		got := len(hub.clients)
+		hub.mutex.RUnlock()
+		if got >= n {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("hub has %d registered clients after 5s, want %d", got, n)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+}

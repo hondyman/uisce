@@ -433,7 +433,7 @@ services:
   #       S3_ACCESS_KEY: "${DATA_FUSION_AWS_ACCESS_KEY_ID:-minioadmin}"
   #       S3_SECRET_KEY: "${DATA_FUSION_AWS_SECRET_ACCESS_KEY:-minioadmin}"
   #       S3_PATH_STYLE_ACCESS: "true"
-      # Iceberg REST catalog endpoint & credentials for Apache Polaris
+      # Iceberg REST catalog endpoint & credentials (Lakekeeper)
   #       ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://lakekeeper:8181}"
   #       ICEBERG_REST_CREDENTIAL: "${ICEBERG_REST_CREDENTIAL:-root:secret}"
   #       ICEBERG_WAREHOUSE: "${ICEBERG_WAREHOUSE:-tenant-alpha}"
@@ -455,7 +455,7 @@ services:
   # 
   # ===========================================================
   # Lakekeeper — Rust-native Iceberg REST Catalog
-  # Replaces Apache Polaris. Uses its own PostgreSQL 17 for
+  # Uses its own PostgreSQL 17 for
   # catalog metadata and existing uisce-minio for S3 storage.
   # ===========================================================
   lakekeeper-db:

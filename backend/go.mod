@@ -80,13 +80,21 @@ require (
 )
 
 require (
+	aead.dev/mem v0.2.0 // indirect
 	cloud.google.com/go/iam v1.5.0 // indirect
 	github.com/go-resty/resty/v2 v2.13.1 // indirect
 	github.com/gofrs/flock v0.8.1 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/infisical/go-sdk v0.8.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
+	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
+	github.com/minio/kes-go v0.2.1
+	github.com/minio/madmin-go/v3 v3.0.20
 	github.com/oracle/oci-go-sdk/v65 v65.95.2 // indirect
+	github.com/prometheus/prom2json v1.3.3 // indirect
 	github.com/rs/zerolog v1.26.1 // indirect
+	github.com/secure-io/sio-go v0.3.1 // indirect
 	github.com/sony/gobreaker v0.5.0 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
@@ -168,7 +176,7 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
-	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
+	github.com/lufia/plan9stats v0.0.0-20230110061619-bbe2e5e100de // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/minio/crc64nvme v1.1.0 // indirect
@@ -187,7 +195,7 @@ require (
 	github.com/parquet-go/jsonlite v1.0.0 // indirect
 	github.com/parquet-go/parquet-go v0.32.0
 	github.com/philhofer/fwd v1.2.0 // indirect
-	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
+	github.com/power-devops/perfstat v0.0.0-20221212215047-62379fc7944b // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.54.0 // indirect
 	github.com/rs/xid v1.6.0 // indirect

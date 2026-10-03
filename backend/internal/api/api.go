@@ -51,7 +51,6 @@ import (
 	"github.com/hondyman/uisce/backend/internal/governance/contracts"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/household"
-	"github.com/hondyman/uisce/backend/internal/iceberg"
 	"github.com/hondyman/uisce/backend/internal/infrastructure"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
@@ -1045,7 +1044,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	adminTenantAccessHandler := handlers.NewAdminTenantAccessHandler(db)
 
 	// Initialize Onboarding handler for tenant provisioning (OLTP + Iceberg)
-	onboardingHandler := NewOnboardingHandler(db, iceberg.PolarisFromEnv())
+	onboardingHandler := NewOnboardingHandler(db)
 
 	// Initialize BP Notification handlers
 	// Note: sqlxDB is initialized below, so we need to move this or use db if compatible,
@@ -1863,6 +1862,15 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Register handlers that were previously orphaned
 		ipWhitelistHandler.RegisterRoutes(r)
 		onboardingHandler.RegisterRoutes(r)
+		// System > Lakehouse: per-tenant audit retention and warehouse provisioning
+		// (ADR-032). Global admins only. Provisioning starts the workflow registered on
+		// cmd/worker; without a Temporal client POST .../provision answers 503, and the
+		// configuration endpoints still work.
+		var lakehouseProvisioner handlers.LakehouseProvisioner // stays a true nil interface without Temporal
+		if temporalClient != nil {
+			lakehouseProvisioner = handlers.NewTemporalLakehouseProvisioner(temporalClient)
+		}
+		handlers.NewSystemLakehouseHandler(db, lakehouseProvisioner).RegisterRoutes(r)
 		abbreviationHandler.RegisterRoutes(r)
 		bundleHandler.RegisterRoutes(r)
 		domainHandler.RegisterRoutes(r)

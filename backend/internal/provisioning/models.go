@@ -99,6 +99,25 @@ type EmitEventInput struct {
 	CompletedAt  time.Time
 }
 
+// ProvisioningState is what the saga may safely undo. RegisterTenant and
+// RegisterInstance are upserts that return an EXISTING row's id, and
+// CreateTenantDatabase treats "already exists" as success, so a failed run cannot
+// assume it created what it touched. It is read once, after registration and
+// before anything is created.
+type ProvisioningState struct {
+	// TenantOwned and InstanceOwned are true only while the row is still in
+	// status 'provisioning': created by this run, or abandoned by an earlier one.
+	// An active tenant or instance is never owned by a running saga.
+	TenantOwned   bool
+	InstanceOwned bool
+	// DatabaseExisted is true if the tenant database already existed before this
+	// run created it, in which case the run must not drop it.
+	DatabaseExisted bool
+}
+
+// Owned reports whether the saga may compensate at all.
+func (s ProvisioningState) Owned() bool { return s.TenantOwned && s.InstanceOwned }
+
 func GenerateTenantCode(name string) string {
 	code := ""
 	for i, c := range name {

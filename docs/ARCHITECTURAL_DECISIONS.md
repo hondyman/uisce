@@ -901,6 +901,162 @@ protect.
 which strips each corpus ratio's operands and asserts the importer refuses it —
 so the corpus is a boundary test, not a pile of fixtures.
 
+### ADR-029: `alpha` Is the Control Plane; the Tenant Datasource Model Is the Registry
+
+**Decision.** `alpha` holds the metadata and audit for every tenant and is the
+only control plane. Where a tenant's data plane lives is recorded by the
+existing datasource chain — `tenants` → `tenant_instance` → `tenant_product` →
+`tenant_product_datasource` — plus a sibling `tenant_datasource_binding` table
+(keyed by `tenant_product_datasource.id`) for the warm and cache tiers (StarRocks database
+and role, Redis ACL user and prefix, lifecycle state) and the datasource's lake
+namespace. The cold tier is bound per *tenant*, not per datasource, in
+`tenant_lakehouse` (ADR-032). No second registry is created, and
+`internal/ops/region_router.go` reads from this model rather than holding its
+own mapping.
+
+**Invariant: metadata never leaves `alpha`.** All metadata for all tenants, and
+the audit of changes to it, lives in `alpha` and stays there. Nothing in this
+group of decisions moves, tiers out, archives away or drops a metadata or audit
+row from `alpha`. Other stores (StarRocks, the lake) may hold *copies* for
+analytics, history or immutable retention; the copy is never the system of record
+and its existence is never a reason to delete from `alpha`. Only a tenant's own
+operational data (the data plane) is tiered.
+
+**Context.** The datasource chain already names a tenant database
+(`config.host/port/database`) and a credential reference (`secret_path`,
+validated by `dscreds.CanonicalPath`). A parallel `ctl.tenant_resource` table
+would have been a second source of truth for the same fact.
+
+**Consequence.** Gold-copy metadata and the tenant overlay stay in `alpha`
+(read-only inheritance, never written back). Tenant databases hold operational
+data only. Connection DSNs are never stored in plain text; `tenant_connections.dsn`
+moves to the `dscreds` secret-path pattern.
+
+**Why not `public.tenant_datasources`.** That table already keys a tenant
+datasource (`tenant_id`, `datasource_id`) and carries `resource_group`,
+`provisioning_status` and inline `username`/`password` columns, but it is created
+only in `backend/migrations/20251130_007_tenant_automation.sql`, a directory the
+runner does not read (`backend/db/MIGRATION_DIRECTORY_DRIFT_AUDIT.md`), so it is
+not reproducible from the migration set (ADR-024). The binding table is a new,
+migration-owned table holding references only. `tenant_datasources` stays the
+provisioning-state table until it is adopted or retired separately; its inline
+credentials are drained by `cmd/migrate-datasource-creds`.
+
+**Evidence.** `internal/security/datasource_resolver.go` (`Resolve`),
+`internal/dscreds/dscreds.go` (`CanonicalPath`, `Hydrate`),
+`db/migrations/20261206_001_tenant_datasource_binding.up.sql`.
+
+### ADR-030: Tenant OLTP Data Lives in a Database Per Datasource, Reached Only Through `tenantdb`
+
+**Decision.** Each OLTP datasource (e.g. ORM) gets its own Postgres database.
+All access goes through `internal/tenantdb.Resolve(ctx, datasourceID)`, which
+resolves the owning tenant, checks it against the caller's tenant, hydrates
+credentials through `dscreds`, and returns a pooled connection. Every checkout
+asserts `current_database()` equals the datasource's configured database. Any
+failure — missing, ambiguous or unauthorized tenant — returns an error; there is
+no fallback and no dev override.
+
+**Consequence.** Archguard forbids opening a database handle for a tenant
+datasource outside `tenantdb`. Tenant migrations are applied per target by the
+migration runner, with the same sha256 drift check and fix-forward rule as
+`alpha` (ADR-024).
+
+### ADR-031: Lakekeeper Is the Single Iceberg Catalog; Polaris Is Removed
+
+**Decision.** Lakekeeper is the only Iceberg REST catalog. The Polaris
+provisioner, its onboarding call, its stub activities and its environment
+variables are deleted. Namespaces and warehouses are provisioned through
+`internal/iceberg/lakekeeper_provisioner.go`. Nessie, still defined in
+`docker-compose.starrocks.yml` and `starrocks_init.sql`, is not removed by this
+decision and remains to be retired separately.
+
+**Context.** Polaris had already been replaced in deployment: the compose files
+define Lakekeeper (with its own database, migrate job and a separate
+`lakekeeper-gold` service for the gold-copy plane) and no Polaris service, and the
+only Polaris deployments in history are two early commits. The code did not follow.
+`OnboardTenant` still called `http://uisce-polaris:8185`, a host defined nowhere in
+the repository. An earlier draft of this ADR was written before that was checked,
+and a first decision to keep Polaris was reversed once it was.
+
+**Consequence.** `OnboardTenant` no longer provisions any catalog and returns
+`lakehouse_status: "unconfigured"`; a tenant's warehouse is configured and
+provisioned separately (ADR-032), because its audit retention is a per-tenant
+decision. The `polaris_catalog_url` response field is removed; nothing in the
+repository read it.
+
+### ADR-032: Cold Storage Isolation Is Bucket, Key and Lock Per Tenant
+
+**Decision.** Every tenant has exactly one Iceberg warehouse, and a warehouse
+belongs to exactly one tenant. The warehouse is a Lakekeeper warehouse over its
+own bucket (`ivy-t-<tenant id without hyphens>`), with its own KMS key and a
+tenant-scoped STS policy. The one-to-one rule is enforced by the database, not by
+convention: `public.tenant_lakehouse` has `tenant_id` as its primary key, and
+`CHECK` constraints force the warehouse and bucket names to be derived from that
+id. A tenant's datasources do not get warehouses; each gets a *namespace* inside
+the tenant's one warehouse (`tenant_datasource_binding.lake_namespace`).
+
+`ivy-control` is the platform's own warehouse for cross-tenant audit and
+metadata history and belongs to no tenant. Audit uses Object Lock in compliance
+mode. Offboarding destroys the tenant's key (crypto-shred) after the retention
+period. The gold-copy tenant is a tenant like any other and gets its own
+warehouse; gold-copy inheritance is metadata in `alpha` (ADR-029), never shared
+lake storage.
+
+**Context.** Today every tenant shares one bucket and one default warehouse,
+separated only by a namespace named after the tenant
+(`LakekeeperProvisioner.CreateNamespace` posts to `/v1/namespaces` with no
+warehouse selector). A namespace is a naming convention; a warehouse is a
+storage, credential and authorization boundary. Per-warehouse storage credentials
+are already proven by `cmd/smoke`.
+
+**Consequence.** `tenant_lakehouse` references `tenants` with `ON DELETE
+RESTRICT`: the warehouse holds WORM audit and must outlive the tenant row.
+Existing tenants' tables must be migrated out of the shared warehouse into their
+own; that data move is a separate, reversible step. Beyond roughly 2,000 tenants
+this moves to prefixes with per-prefix IAM; that threshold is the trigger to
+revisit this ADR.
+
+### ADR-033: StarRocks Tenant Isolation Is a Database and Role, Not a Row Filter
+
+**Decision.** Each tenant has a native StarRocks database `t_<short>` and a
+role `r_<short>`, with a resource-group classifier by tier. Cold data is exposed
+through read-only views over that tenant's Iceberg namespace only. Cross-tenant
+analytics runs only under a platform role against `ivy_control`.
+
+**Context.** Today's isolation is a `tenantID` argument and a `tenant_id`
+column (`internal/analytics/starrocks_client.go`); one forgotten predicate leaks
+a tenant. A database boundary is enforced by the server, not by the caller.
+
+### ADR-034: Redis Keys Are Built Only by the Tenant Key Builder
+
+**Decision.** Every key is produced by `cache.Key(ctx, ns, parts...)` as
+`t:{<tenantId>}:<ns>:…`; global keys use `g:`. Each tenant has an ACL user
+limited to `~t:{<id>}:*`. Pub/sub channels follow the same prefix. Archguard
+bans raw key formatting outside the builder.
+
+**Consequence.** The global `tenant:goldcopy:id` key and the ad-hoc prefixes
+(`semantic_view:`, `nl:`, `sq:`, `ratelimit:`, `notifications:tenant:`) migrate
+to the builder.
+
+### ADR-035: Tenant Data Tiers Hot → Warm → Cold; `alpha` Metadata Is Never Tiered Out
+
+**Decision.** This applies to a tenant's **operational data** (the data plane),
+not to metadata. Hot is the tenant's Postgres database (90 days), warm is
+StarRocks native (13 months), cold is Iceberg. Event-like tables in a tenant
+database are range-partitioned and flow through CDC and Kafka to Iceberg. A tenant
+database partition is detached only after a verification job proves the Iceberg
+copy matches (row count and, where present, seal chain). Retention is enforced by
+dropping those partitions (ADR-018); a legal hold suspends drops.
+
+**Not covered, deliberately.** Nothing here applies to `alpha`. Metadata and the
+audit of changes to it are never detached, archived away or dropped (ADR-029).
+
+**Consequence.** ADR-009 ("audit log never purged") is satisfied by `alpha`
+keeping its audit log permanently. A copy may additionally be written to the lake
+under Object Lock (ADR-032) for immutable retention and time-travel queries; that
+copy adds a guarantee and removes nothing from `alpha`. An earlier draft of this
+ADR said Postgres would hold only a hot window of audit; that is withdrawn.
+
 ## Open items
 
 - **Call-site verification for ADR-001 … ADR-010.** The imported entries assert
