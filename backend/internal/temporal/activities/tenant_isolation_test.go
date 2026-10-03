@@ -3,9 +3,12 @@ package activities_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -441,4 +444,106 @@ func TestIsolation_TheTenantDBManagerServesEachTenantThroughTheRouter(t *testing
 		_, err = m.GetConnection(g.b.in.TenantID)
 		require.NoError(t, err)
 	})
+}
+
+// The operator's fix for what the probe refuses is scripts/harden-tenant-cluster.sh. This ties the
+// two together: provisioning refuses a cluster with an open database, the script closes it
+// (dry run first, idempotent), and provisioning then goes through. It also proves the script keeps
+// its safety promises on a real cluster.
+func TestIsolation_TheHardeningScriptClosesWhatTheProbeRefuses(t *testing.T) {
+	if _, err := exec.LookPath("psql"); err != nil {
+		t.Skip("psql not on PATH")
+	}
+	r := newSagaRig(t)
+	ctx := context.Background()
+	in := r.provisioned(t)
+
+	script, err := filepath.Abs("../../../../scripts/harden-tenant-cluster.sh")
+	require.NoError(t, err)
+	runScript := func(args ...string) (string, int) {
+		cmd := exec.Command(script, args...)
+		cmd.Env = append(os.Environ(), "PGHOST="+r.cluster.Host, "PGPORT="+strconv.Itoa(r.cluster.Port),
+			"PGUSER="+r.cluster.User, "PGPASSWORD="+r.cluster.Password, "PGDATABASE=postgres")
+		out, err := cmd.CombinedOutput()
+		code := 0
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			code = ee.ExitCode()
+		} else {
+			require.NoError(t, err)
+		}
+		return string(out), code
+	}
+
+	open := "tdb_legacy_" + r.database[len("tdb_saga_"):]
+	adm, err := r.cluster.Open("postgres")
+	require.NoError(t, err)
+	_, err = adm.Exec(`CREATE DATABASE ` + open) // a legacy path that never revoked PUBLIC
+	require.NoError(t, err)
+	t.Cleanup(func() { _, _ = adm.Exec(`DROP DATABASE IF EXISTS ` + open + ` WITH (FORCE)`); adm.Close() })
+
+	require.True(t, isNonRetryableOf(r.acts.ProbeTenantDatabase(ctx, in), "TenantDatabaseNotIsolated"),
+		"provisioning must refuse while a database is open")
+
+	out, code := runScript()
+	require.Equal(t, 3, code, "a dry run with work to do exits 3:\n%s", out)
+	require.Contains(t, out, `PLAN REVOKE CONNECT ON DATABASE `+open+` FROM PUBLIC;`)
+	require.True(t, isNonRetryableOf(r.acts.ProbeTenantDatabase(ctx, in), "TenantDatabaseNotIsolated"), "a dry run must change nothing")
+
+	out, code = runScript("--apply")
+	require.Equal(t, 0, code, out)
+	require.Contains(t, out, "verified")
+	require.NoError(t, r.acts.ProbeTenantDatabase(ctx, in), "after the script, provisioning goes through")
+
+	out, code = runScript("--apply")
+	require.Equal(t, 0, code, out)
+	require.Contains(t, out, "nothing to do", "a second run must change nothing")
+}
+
+// The script must refuse to lock out an ordinary role that only had access through PUBLIC.
+func TestIsolation_TheHardeningScriptRefusesToLockOutAnOrdinaryRole(t *testing.T) {
+	if _, err := exec.LookPath("psql"); err != nil {
+		t.Skip("psql not on PATH")
+	}
+	r := newSagaRig(t)
+	script, _ := filepath.Abs("../../../../scripts/harden-tenant-cluster.sh")
+	adm, err := r.cluster.Open("postgres")
+	require.NoError(t, err)
+	t.Cleanup(func() { adm.Close() })
+
+	open, who := "tdb_lockout_"+r.database[len("tdb_saga_"):], "reporting_reader_"+r.database[len("tdb_saga_"):]
+	_, err = adm.Exec(`CREATE DATABASE ` + open)
+	require.NoError(t, err)
+	_, err = adm.Exec(`CREATE ROLE ` + who + ` LOGIN`) // not a tenant role: it relies on PUBLIC
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = adm.Exec(`DROP DATABASE IF EXISTS ` + open + ` WITH (FORCE)`)
+		_, _ = adm.Exec(`DROP ROLE IF EXISTS ` + who)
+	})
+
+	run := func(args ...string) (string, int) {
+		cmd := exec.Command(script, args...)
+		cmd.Env = append(os.Environ(), "PGHOST="+r.cluster.Host, "PGPORT="+strconv.Itoa(r.cluster.Port),
+			"PGUSER="+r.cluster.User, "PGPASSWORD="+r.cluster.Password, "PGDATABASE=postgres")
+		out, err := cmd.CombinedOutput()
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return string(out), ee.ExitCode()
+		}
+		require.NoError(t, err)
+		return string(out), 0
+	}
+
+	out, code := run("--apply")
+	require.Equal(t, 4, code, "must refuse, not lock the role out:\n%s", out)
+	require.Contains(t, out, "LOSES-ACCESS role "+who+" on database "+open)
+	var acl *string
+	require.NoError(t, adm.QueryRow(`SELECT datacl::text FROM pg_database WHERE datname = $1`, open).Scan(&acl))
+	require.Nil(t, acl, "a refused apply must change nothing")
+
+	out, code = run("--apply", "--grant", open+"="+who)
+	require.Equal(t, 0, code, out)
+	var ok bool
+	require.NoError(t, adm.QueryRow(`SELECT has_database_privilege($1, $2, 'CONNECT')`, who, open).Scan(&ok))
+	require.True(t, ok, "the granted role keeps its access")
 }
