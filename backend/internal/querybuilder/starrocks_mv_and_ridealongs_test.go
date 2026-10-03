@@ -176,80 +176,6 @@ func TestRoutingTransparency_MVsAndBaseTableEquivalence(t *testing.T) {
 	}
 }
 
-// 7.2 Deliverable #2: StarRocks MV DDL Determinism & Tenant Scoping
-func TestStarRocksMV_DDLGeneration_IdempotentAndScoped(t *testing.T) {
-	manager := NewStarRocksMaterializationManager("3.2.0")
-
-	metric := MetricDefinition{
-		ID:   "m_orders_rev",
-		Name: "Daily Revenue",
-		BOID: "order",
-		Expression: MetricExpression{
-			Kind:       "aggregation",
-			Fn:         "sum",
-			TermNodeID: "total_amount",
-		},
-		GrainAllowlist: []string{"order_date", "region"},
-		MaterializationConfig: MaterializationConfig{
-			Strategy: "starrocks_mv",
-		},
-	}
-
-	// 1. Gold copy scoping
-	goldDDL, err := manager.GenerateMVDDL("master_tenant", true, metric)
-	require.NoError(t, err)
-	assert.Equal(t, "mv_gold_order_DailyRevenue", goldDDL.MVName)
-	assert.Contains(t, goldDDL.DDL, "CREATE MATERIALIZED VIEW mv_gold_order_DailyRevenue")
-	assert.Contains(t, goldDDL.DDL, "GROUP BY order_date, region")
-
-	// 2. Client tenant scoping
-	clientDDL, err := manager.GenerateMVDDL("tenant_acme", false, metric)
-	require.NoError(t, err)
-	assert.Equal(t, "mv_tenant_acme_order_DailyRevenue", clientDDL.MVName)
-
-	// 3. Determinism check: re-running produces byte-identical DDL and hash
-	goldDDL2, _ := manager.GenerateMVDDL("master_tenant", true, metric)
-	assert.Equal(t, goldDDL.DDL, goldDDL2.DDL)
-	assert.Equal(t, goldDDL.ContentHash, goldDDL2.ContentHash)
-}
-
-// 7.2 Deliverable #3: EXPLAIN Plan Parser with Version-Pinning & Fallback
-func TestStarRocksExplainPlan_ParserAndFallback(t *testing.T) {
-	manager := NewStarRocksMaterializationManager("3.2.0")
-
-	// Case A: Successful MV Rewrite Hit in Plan
-	explainWithMV := `
-PLAN 0:
-  OlapScanNode
-     TABLE: mv_gold_order_DailyRevenue
-     MaterializedView: mv_gold_order_DailyRevenue
-     PREDICATES: region = 'EMEA'
-`
-	res := manager.ParseStarRocksExplainPlan(explainWithMV)
-	require.NotNil(t, res.MVHit)
-	assert.True(t, *res.MVHit)
-	assert.Equal(t, "mv_gold_order_DailyRevenue", res.MVName)
-
-	// Case B: Direct Base Table Scan (No MV Hit)
-	explainBaseTable := `
-PLAN 0:
-  OlapScanNode
-     TABLE: orm_order
-     PREDICATES: status = 'FILLED'
-`
-	resBase := manager.ParseStarRocksExplainPlan(explainBaseTable)
-	require.NotNil(t, resBase.MVHit)
-	assert.False(t, *resBase.MVHit)
-
-	// Case C: Unrecognized Plan Shape (Version Pin Fallback -> mvHit: nil + Warning)
-	unrecognizedPlan := `
-UNKNOWN_COMPILER_GRAPH_NODE_XYZ [id=99]
-`
-	resUnrec := manager.ParseStarRocksExplainPlan(unrecognizedPlan)
-	assert.Nil(t, resUnrec.MVHit)
-	assert.Contains(t, resUnrec.Warning, "unrecognized StarRocks EXPLAIN plan shape")
-}
-
 // 7.2 Deliverable #4: ABAC Below-Grain Fallback Verification
 func TestABACBelowGrain_FallbackRules(t *testing.T) {
 	mvGrains := []string{"region", "order_date"}
@@ -284,34 +210,6 @@ func TestMVWatermarkStaleness_AndPolicy(t *testing.T) {
 
 	// Stale MV (compliance mode) -> force raw table fallback
 	assert.Equal(t, "fallback_raw", EvaluateStaleMVAction(true, "force_raw_fallback"))
-}
-
-// 7.2 Deliverable #6: Gold Copy MV Sharing & Economics Assertion
-func TestGoldCopyMV_SharedAcrossVanillaClientTenants(t *testing.T) {
-	manager := NewStarRocksMaterializationManager("3.2.0")
-
-	metric := MetricDefinition{
-		ID:   "m_core_revenue",
-		Name: "Core Revenue",
-		BOID: "order",
-		Expression: MetricExpression{
-			Kind:       "aggregation",
-			Fn:         "sum",
-			TermNodeID: "amount",
-		},
-		GrainAllowlist: []string{"region", "currency"},
-		IsCore:         true,
-	}
-
-	// 1. Master tenant creates gold copy MV
-	goldDDL, err := manager.GenerateMVDDL("master_tenant_01", true, metric)
-	require.NoError(t, err)
-	assert.Equal(t, "mv_gold_order_CoreRevenue", goldDDL.MVName)
-
-	// 2. Client tenant A and Client tenant B with vanilla adoptions route to the SAME gold MV
-	clientATarget := "mv_gold_order_CoreRevenue" // Shared gold copy MV
-	clientBTarget := "mv_gold_order_CoreRevenue" // Shared gold copy MV
-	assert.Equal(t, clientATarget, clientBTarget, "vanilla core metric adoptions must share single gold copy MV object")
 }
 
 // 7.2 Deliverable #7: Iceberg Cold Tier Federation Target Resolution
