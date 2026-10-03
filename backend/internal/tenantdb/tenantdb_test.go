@@ -222,7 +222,7 @@ func TestPool_WrongPasswordIsAnErrorAtResolve(t *testing.T) {
 	e := realPG(t)
 	if c, err := pgx.Connect(context.Background(), "postgres://"+e.user+":"+e.pw+"-wrong@"+e.host+":"+strconv.Itoa(e.port)+"/"+e.dbA); err == nil {
 		c.Close(context.Background())
-		t.Skip("the test server does not check passwords (trust auth); nothing to prove here")
+		t.Skip("requires password auth on the server: the bad-credentials path is NOT exercised by this run")
 	}
 	reg := &fakeRegistry{ds: e.ds("ds-a", "t-1", e.dbA), binding: Binding{Version: 1, Lifecycle: "active"}, user: e.user, pw: e.pw + "-wrong"}
 	r := newRouter(t, reg, "t-1")
