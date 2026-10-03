@@ -155,11 +155,38 @@ func (g *ASLTypeGenerator) extractFromFile(file *ast.File, structs map[string]*S
 	}
 }
 
+// aslIgnoreMarker excludes a type from the generated ASL surface even when it
+// lives in a package this generator enumerates. See the full rationale on the
+// copy in cmd/generate-types - this is the same AST path, and the three
+// generators are kept in step by hand.
+const aslIgnoreMarker = "asl:ignore"
+
+// isASLIgnored reports whether a type declaration carries the marker. The doc
+// comment lands on GenDecl.Doc for a standalone `type X struct` and on
+// TypeSpec.Doc inside a grouped `type (...)` block, so both are consulted.
+func isASLIgnored(typeSpec *ast.TypeSpec, decl *ast.GenDecl) bool {
+	doc := typeSpec.Doc
+	if doc == nil {
+		doc = typeSpec.Comment
+	}
+	if doc == nil {
+		doc = decl.Doc
+	}
+	if doc == nil {
+		return false
+	}
+	return strings.Contains(doc.Text(), aslIgnoreMarker)
+}
+
 // extractTypes extracts struct and type alias information
 func (g *ASLTypeGenerator) extractTypes(decl *ast.GenDecl, structs map[string]*StructInfo, enums map[string]*EnumInfo) {
 	for _, spec := range decl.Specs {
 		typeSpec, ok := spec.(*ast.TypeSpec)
 		if !ok {
+			continue
+		}
+
+		if isASLIgnored(typeSpec, decl) {
 			continue
 		}
 

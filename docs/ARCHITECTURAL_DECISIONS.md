@@ -1095,6 +1095,70 @@ before anything depends on them.
 
 ## Open items
 
+- **C1 (9.1) ported metric primitives into the rule VM.**
+  `MetricVariable`, `MetricFormatConfig`, `MetricExpression`,
+  `DeriveDecomposable`, `NormalizeFormulaForHash` and
+  `ComputeMetricContentHash` now live in `internal/rules/vm`
+  (`metric_expression.go`), and the `querybuilder` implementations
+  **delegate** rather than reimplement. One implementation, so the compiler's
+  canonicalization and the content hash cannot drift. Recorded because the port
+  is a *move*, and the next person will otherwise look for the originals.
+
+  Two properties are pinned by this decision and must survive it:
+
+  - **Operand order is semantic.** `BaseMetricIDs` is deliberately unsorted, and
+    `NumeratorID`/`DenominatorID` (ADR-026) are hashed as distinct fields.
+    Sorting, or dropping the named operands, makes `revenue/cost` and
+    `cost/revenue` share a content hash — and that hash is the cube deploy
+    identity and part of the query cache key, so the two opposite metrics would
+    share a cache entry. This is not hypothetical: the first port attempt
+    dropped the two named-operand fields, and the 8.3 golden corpus caught it.
+  - **The hash input surface is explicit.** `MetricContentInput` is a flat
+    struct, not the full `MetricDefinition`, so adding a definition field does
+    not silently change deploy identity or cache keys.
+
+  The port is behavioural, and the golden corpus
+  (`internal/querybuilder/testdata/metric_corpus`) is the evidence: it was
+  regenerated *not at all*, and the failures it reported were real defects in
+  the new mapper. `NormalizeFormulaForHash` is byte-identical to the function it
+  replaced, including its paren-stripping quirk (`SUM(a)` → `suma`) — fixing
+  that would have changed already-deployed hashes, so it is preserved and
+  documented instead.
+
+  Go will not convert between distinct named struct types, so the
+  querybuilder→VM mappers are written field by field. That is intentional: a
+  field added to one side without the other becomes a compile error rather than
+  a silently dropped field, which is exactly how the named-operand regression
+  would otherwise have shipped.
+
+  The port also had a side effect that had nothing to do with metric semantics.
+  `generate-types`, `generate-schema` and `generate-monaco` enumerate
+  `internal/rules/vm`, so any exported struct there lands in the published ASL
+  schema — and, carrying a discriminator-shaped field, as an insertable Monaco
+  node. The four metric types were in `internal/querybuilder`, never enumerated,
+  so `main` has no `Metric*` entry in any generated artifact; the port alone
+  added four, including `MetricExpression`, whose `kind` field looks exactly
+  like the discriminator that earns a struct a node kind. The WASM evaluator has
+  no node kind for any of them, so the port would have let an author insert a
+  node the browser could not evaluate — the precise failure
+  `cmd/check-drift`'s own header says that pipeline exists to prevent.
+
+  Resolution: an `// asl:ignore` doc-comment marker, honored by all three
+  generators (`generate-schema` and `generate-types` read it from the AST,
+  `generate-monaco` recovers it from the syntax trees it already loads, since
+  `go/types` discards comments). The four types carry it, and the generated
+  artifacts and their goldens are byte-identical to `main` again. The marker
+  keeps a type's new home from silently changing the published browser
+  contract; it is the escape hatch C2/C3 lineage and calc-term types will need.
+  Removing one marker reintroduces the type into all three artifacts and fails
+  both golden tests, so the guard is enforced rather than decorative.
+
+  Note for the next person: `frontend/public/asl.monaco.json` is a
+  **manually-synced** copy of the backend artifact, and no CI step guards it
+  (only `rule_engine.wasm` has a verify step). Nothing in C1 needed to sync it,
+  because the contract no longer changes — but a future change to the Monaco
+  surface will desync it silently unless the copy is updated in the same commit.
+
 - **Call-site verification for ADR-001 … ADR-010.** The imported entries assert
   no call sites because the original recorded none. Verifying each is
   outstanding; ADR-012 and ADR-013 exist because that verification already
