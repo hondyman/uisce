@@ -124,6 +124,9 @@ func (a *TenantProvisioningActivities) RollbackRegisterInstance(ctx context.Cont
 }
 
 func (a *TenantProvisioningActivities) CreateTenantDatabase(ctx context.Context, databaseName string) error {
+	if !pgIdent.MatchString(databaseName) {
+		return nonRetryable(errTypeTenantDBInput, fmt.Errorf("database name %q is not a safe identifier", databaseName))
+	}
 	a.Logger.Infof("Creating database: %s", databaseName)
 
 	dbURL := os.Getenv("DATABASE_URL")
@@ -171,6 +174,9 @@ func (a *TenantProvisioningActivities) CreateTenantDatabase(ctx context.Context,
 }
 
 func (a *TenantProvisioningActivities) RollbackCreateTenantDatabase(ctx context.Context, databaseName string) error {
+	if !pgIdent.MatchString(databaseName) {
+		return nonRetryable(errTypeTenantDBInput, fmt.Errorf("database name %q is not a safe identifier", databaseName))
+	}
 	a.Logger.Infof("Rolling back database: %s", databaseName)
 
 	dbURL := os.Getenv("DATABASE_URL")

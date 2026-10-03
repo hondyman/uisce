@@ -460,3 +460,13 @@ func TestRunner_ALogFailureRollsTheFileBack(t *testing.T) {
 	require.False(t, exists(t, db, "orders"), "002 ran but could not be logged; it must have rolled back")
 	require.Equal(t, 1, count(t, db, `SELECT count(*) FROM ivy_meta.migration_log`))
 }
+
+// The repository's orm directory exists, so App="orm" is a valid app (even while it has no
+// migrations) and an unknown app is still ErrNoApp.
+func TestRepoOrmDirectoryIsAValidApp(t *testing.T) {
+	r := &TenantRunner{Root: "../../db/tenant_migrations"}
+	_, _, err := r.files(target("orm"))
+	require.NoError(t, err)
+	_, _, err = r.files(target("nosuchapp"))
+	require.ErrorIs(t, err, ErrNoApp)
+}

@@ -10,7 +10,11 @@ type ProvisionTenantRequest struct {
 	TenantName   string `json:"tenant_name" validate:"required,min=2,max=100"`
 	InstanceName string `json:"instance_name" validate:"required,min=2,max=100"`
 	TenantCode   string `json:"tenant_code,omitempty"`
-	RequesterID  string `json:"requester_id,omitempty"`
+	// RequesterID is ignored: the requester is always the authenticated caller.
+	RequesterID string `json:"requester_id,omitempty"`
+	// App names the application whose datasource the new tenant database serves (e.g. "orm").
+	// When set, the tenant also gets its own role, binding, migrations and a probe (ADR-030).
+	App string `json:"app,omitempty"`
 }
 
 type ProvisionTenantResponse struct {

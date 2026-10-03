@@ -1,6 +1,7 @@
 package activities_test
 
 import (
+	"context"
 	"os"
 	"reflect"
 	"runtime"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/hondyman/uisce/backend/internal/temporal/activities"
 )
@@ -56,5 +58,20 @@ func TestBothWorkersRegisterTheTenantDatabaseActivitiesAndNeverAsBPSafe(t *testi
 				t.Errorf("%s: these activities create roles and credentials and must never be BP-Designer client-safe: %s", f, strings.TrimSpace(line))
 			}
 		}
+	}
+}
+
+// CreateTenantDatabase and RollbackCreateTenantDatabase build CREATE/DROP DATABASE from the name.
+// Now that a request can reach them they must refuse anything that is not a plain identifier,
+// before they open any connection (so no database is needed here).
+func TestDatabaseActivitiesRefuseUnsafeNames(t *testing.T) {
+	acts := &activities.TenantProvisioningActivities{Logger: zap.NewNop().Sugar()}
+	for _, bad := range []string{`x"; DROP DATABASE postgres; --`, "tenant acme", "Tenant_Acme", "", "tenant_acme;", strings.Repeat("a", 64)} {
+		err := acts.CreateTenantDatabase(context.Background(), bad)
+		require.Error(t, err, bad)
+		require.True(t, isNonRetryableOf(err, "TenantDatabaseInvalidInput"), "%q: %v", bad, err)
+		err = acts.RollbackCreateTenantDatabase(context.Background(), bad)
+		require.Error(t, err, bad)
+		require.True(t, isNonRetryableOf(err, "TenantDatabaseInvalidInput"), "%q: %v", bad, err)
 	}
 }
