@@ -28,6 +28,12 @@ var (
 	// ErrInvalidMetricBundle is the ingestion-boundary error: a bundle that
 	// cannot be imported as-is. See ImportMetricBundle and ADR-026.
 	ErrInvalidMetricBundle = errors.New("invalid metric bundle")
+	// ErrMetricTermNotPermitted is the C2 PII gate: a metric tried to read a
+	// term whose column is classified above the caller's masking threshold.
+	// Distinct from ErrInvalidMetricFormula because the formula is well-formed
+	// - it is the data it reaches that is not permitted, and the two deserve
+	// different remediation.
+	ErrMetricTermNotPermitted = errors.New("metric term is not permitted at this masking threshold")
 )
 
 // MetricFormatConfig specifies how metric values are rendered.

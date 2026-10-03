@@ -10,9 +10,53 @@ import (
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 )
 
+// MetricTermGate decides whether a metric may read a term, given the field that
+// term resolves to. It is the metric-path equivalent of the BO path's masking
+// check (boresolver's resolveCol closure), which has always run for calc terms
+// and did not exist here.
+//
+// field is nil when the term does not resolve to a field in the supplied BO,
+// which is itself a refusal: a metric may not name a column the semantic layer
+// does not know about.
+type MetricTermGate func(termNodeID string, field *boresolver.BOField) error
+
+// NewSensitivityTermGate returns the standard gate: a term is permitted only if
+// it resolves to a field whose masking tier is passthrough for this caller's
+// role and clearance. This is the same rule, and the same
+// boresolver.DetermineMaskingTier, that the BO path applies to a calc term
+// referencing a tagged column - so a metric and a calc term over the same
+// column are permitted or refused identically.
+func NewSensitivityTermGate(boDef *boresolver.BODefinition, userRole, clearanceLevel string) MetricTermGate {
+	return func(termNodeID string, _ *boresolver.BOField) error {
+		if boDef == nil {
+			return fmt.Errorf("%w: no business object supplied to resolve term %q against", ErrMetricTermNotPermitted, termNodeID)
+		}
+		field, err := resolveTermToField(boDef, termNodeID)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrMetricTermNotPermitted, err)
+		}
+		if field.SensitivityTag == "" {
+			return nil
+		}
+		tier := boresolver.DetermineMaskingTier(field.SensitivityTag, userRole, clearanceLevel)
+		if tier != boresolver.MaskingTierPassthrough {
+			return fmt.Errorf("%w: term %q resolves to %q tagged %q, tier %s at role %q/clearance %q",
+				ErrMetricTermNotPermitted, termNodeID, field.PhysicalColumn, field.SensitivityTag, tier, userRole, clearanceLevel)
+		}
+		return nil
+	}
+}
+
 // MetricCompiler compiles metric definitions and AST expressions into safe SQL expressions and arguments.
 type MetricCompiler struct {
 	dialect boresolver.Dialect
+	// termGate is the C2 PII gate. It is consulted for every term a metric
+	// reads. A nil gate means "no classification is available for this
+	// compilation", which is why CubeDDLGenerator refuses to run without one:
+	// emitting physical SQL from an ungated metric is how a PII column gets
+	// materialized. Compile-only callers (the golden corpus, the equivalence
+	// suite) legitimately have no BO and are not affected.
+	termGate MetricTermGate
 }
 
 // NewMetricCompiler creates a new metric compiler instance.
@@ -21,6 +65,23 @@ func NewMetricCompiler(dialect boresolver.Dialect) *MetricCompiler {
 		dialect = boresolver.PostgresDialect{}
 	}
 	return &MetricCompiler{dialect: dialect}
+}
+
+// WithTermGate installs the PII gate and returns the compiler, so a gate cannot
+// be forgotten at a call site that then looks configured.
+func (mc *MetricCompiler) WithTermGate(gate MetricTermGate) *MetricCompiler {
+	mc.termGate = gate
+	return mc
+}
+
+// checkTerm applies the gate if one is installed. A nil gate is a no-op here by
+// design; the fail-closed decision belongs to the DDL generator, which is the
+// only caller that turns compiled output into a physical artifact.
+func (mc *MetricCompiler) checkTerm(termNodeID string) error {
+	if mc.termGate == nil {
+		return nil
+	}
+	return mc.termGate(termNodeID, nil)
 }
 
 // CompiledMetricResult contains the SQL expression and parameterized arguments.
@@ -61,6 +122,14 @@ func (mc *MetricCompiler) compileMetricWithCycleDetection(
 		termID := m.Expression.TermNodeID
 		if termID == "" {
 			return nil, fmt.Errorf("%w: aggregation metric requires termNodeId", ErrInvalidMetricFormula)
+		}
+		// C2 PII gate. This is the only point in the metric compiler where an
+		// authored term becomes a physical column name, so it is the only point
+		// at which the term has to be cleared for reading. It runs before the
+		// identifier is sanitized into SQL rather than after, so a refused term
+		// never reaches the emitted string at all.
+		if err := mc.checkTerm(termID); err != nil {
+			return nil, fmt.Errorf("metric %s (%s): %w", m.ID, m.Name, err)
 		}
 		// Render aggregation column: e.g. SUM(t0.price)
 		colRef := fmt.Sprintf("t0.%s", sanitizeIdentifier(termID))

@@ -84,13 +84,31 @@ var metricCompilerFreeze = allowance{
 // metricCompilerFuncPins is the file's declared top-level func surface.
 // Methods are receiver-qualified so a method cannot be smuggled in by
 // shadowing a pinned function name on another type.
+//
+// C2 ADDS THREE ENTRIES, DELIBERATELY. The freeze's own failure message says
+// "C2 adds the vm resolver, and that is expected to break this pin - lift the
+// freeze deliberately when it does", and C2 has started. These are admitted
+// because the freeze protects against a second *expression* system, and none of
+// them adds expression capability:
+//
+//   - NewSensitivityTermGate / WithTermGate / checkTerm are the PII gate over
+//     term resolution (ADR-024). They decide whether a term may be read; they
+//     do not parse, compile, evaluate or emit an expression. The emitted SQL is
+//     produced by the same pre-existing code path as before.
+//
+// The pin stays ENFORCED and is simply wider: the next func added here still
+// fails this test, which is the point. Lifting a pin by deleting it would have
+// turned the guard off; this turns it forward by one deliberate step.
 var metricCompilerFuncPins = []string{
 	"(*MetricCompiler).CompileMetric",
+	"(*MetricCompiler).WithTermGate",
+	"(*MetricCompiler).checkTerm",
 	"(*MetricCompiler).compileFormula",
 	"(*MetricCompiler).compileMetricWithCycleDetection",
 	"ComputeQueryAndMetricsAndCubeCacheKey",
 	"ComputeQueryAndMetricsCacheKey",
 	"NewMetricCompiler",
+	"NewSensitivityTermGate",
 	"sanitizeIdentifier",
 }
 
