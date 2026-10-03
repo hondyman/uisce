@@ -251,6 +251,14 @@ Operational entry, not a CI failure. Full analysis and decision in
 `docs/ARCHITECTURAL_DECISIONS.md` → *Metric catalog lineage: the writer targets
 a schema that does not exist*.
 
+**Record the answers here, not in chat.** The session's output goes in
+`docs/alpha-audit-2026-10.md` — raw query output first, conclusions separately,
+with every answer marked `verified-live` or `couldn't-look`. The finding is
+that the dump lied about the database, so the database's real state is not
+recoverable from the repository and has to be captured as a first-class
+artifact. That file is written to be executable by anyone holding the mTLS
+certs, with no chat history.
+
 ### The situation
 
 `SyncMetricToCatalogGraph` has no production caller **and** its SQL references
@@ -329,17 +337,26 @@ SELECT c.relname, pg_get_expr(c.relpartbound, c.oid) AS bounds
 ### Scope amendment — the four-file sweep (ruling 2026-10-03)
 
 Folded into the same alpha session, same root cause. Four other non-test
-production files reference the pre-glossary generation: `semanticmatch/resolver.go:75`,
-`catalog/sti_column_scanner.go:56` and `:70`, `catalog/subtype_bo_builder.go:36`,
-`bo/layout_service.go:108-115`.
+production files reference the pre-glossary generation. **Correction to the
+original report:** two of them were understated — each writes *both* tables, not
+just `catalog_node`. Citations verified against `11b114167`.
+
+| # | File | What it uses |
+|---|---|---|
+| 1 | `semanticmatch/resolver.go:75,77,80` | `catalog_node (tenant_id, node_id, node_type, node_key, …)`, `ON CONFLICT (tenant_id, node_key)`, `RETURNING node_id` |
+| 2 | `catalog/sti_column_scanner.go:56,70` **and `:80,83`** | `catalog_node (node_id, …)` **and** `catalog_edge (…, edge_type)` text — `COLUMN_OF` |
+| 3 | `catalog/subtype_bo_builder.go:36,50` **and `:60,63`** | `catalog_node (node_id, …)` **and** `catalog_edge (…, edge_type)` text — `ATTRIBUTE_OF` |
+| 4 | `bo/layout_service.go:104,108,110,112,114,116` | reads `tax.node_key`; joins on `st.node_id`, `e_bt.from_node_id`, `e_bt.edge_type IN ('DEFINED_BY','DESCRIBES')`, `e_bt.to_node_id`, `e_tax.from_node_id`, `e_tax.edge_type = 'MEMBER_OF'`, `tax.node_id` |
+
+`resolver.go:18-20` carries its own comment — *"node_id TEXT PK (if yours is
+bigserial, drop node_id from the INSERT and keep RETURNING node_id)"* and
+*"UNIQUE (tenant_id, node_key) (if absent, swap to SELECT-then-INSERT)"* — so
+that file is schema-adaptive debt with adaptation instructions left in place,
+not a plain oversight. That should weight its disposition.
 
 The sweep must answer **two** questions per file, not one. Schema match alone
 is not enough — a file can reference a missing column and never be called, so
 liveness has to be established separately rather than assumed.
-
-1. **Schema match** — does the file's SQL match the *live* alpha schema (Q1/Q2),
-   not just the dump?
-2. **Reachability** — does the file execute at all?
 
 Each cell of the 2×2 has a different disposition:
 
@@ -369,6 +386,7 @@ dump. Check its targets against Q1/Q2's answers while there.
 | **Reachability check before *extending*** — the rule above is not only for new work. Run it before adding a function to a path you did not create, and before building on one. It has now caught one false premise; that makes it a named pre-build step, not a habit. | this ledger | Live |
 | **A schema dump proves shape, not data** — `schema-snapshot.sql` carries no row data, so an entity's absence from it is *couldn't-look*, never proof of absence. Pair the dump with the migration log, and regenerate both together. | this ledger | Live |
 | **Main red for N consecutive runs is its own finding** — when `main` fails 12 of its last 12 runs, every PR's CI signal is noise until main is fixed. Alert on the default branch independently of any PR context; do not let it surface as a surprise on someone's branch. Observed 2026-10-03: #355's `TestEveryDatabaseOpenerIsClassified` was tripped by #358 and fixed by #360, and nothing flagged the 12-run window. | this ledger | Live |
+| **Verify merged content by commit-list, never by PR diffstat** — a PR's diffstat is computed against its *original* base. After a rebase onto a moving `main`, the stat includes every upstream commit that came along with it, so a two-file docs PR reports the base PR's files too. `gh pr merge` printing `10 files changed, 755 insertions(+)` for a docs-only PR looked like a corrupted merge. The decisive check is `git log <verified-base>..origin/main`, which showed exactly three entries: two doc commits and the merge. A diffstat describes the original review surface, not the merge content. | this ledger | Live |
 | **A doc comment asserting a safety property is a claim, not a guarantee** — `metric_reconciler.go:22` promises advisory locking that does not exist. Read the code, not the comment above it. | `backend/internal/querybuilder/metric_reconciler.go` | Open |
 | **A concurrency test that runs one goroutine cannot test concurrency** — `TestMetricCatalogReconciler_IdempotentRun` passes against code with a cross-replica race. Naming a test `Idempotent` does not make it a race test. | `backend/internal/querybuilder/starrocks_mv_and_ridealongs_test.go` | Open |
 
