@@ -95,6 +95,11 @@ var metricCompilerFreeze = allowance{
 //     term resolution (ADR-024). They decide whether a term may be read; they
 //     do not parse, compile, evaluate or emit an expression. The emitted SQL is
 //     produced by the same pre-existing code path as before.
+//   - collectFieldRefs walks a calc term's vm.Expression so the gate can reach
+//     the columns that term reads. It is a tree walk, not an evaluator: it
+//     returns field paths and interprets nothing. It panics on an unhandled
+//     node type rather than skipping it, so a new AST node cannot silently
+//     become an unchecked branch.
 //
 // The pin stays ENFORCED and is simply wider: the next func added here still
 // fails this test, which is the point. Lifting a pin by deleting it would have
@@ -109,17 +114,32 @@ var metricCompilerFuncPins = []string{
 	"ComputeQueryAndMetricsCacheKey",
 	"NewMetricCompiler",
 	"NewSensitivityTermGate",
+	"collectFieldRefs",
 	"sanitizeIdentifier",
 }
 
-// metricCompilerImportPins is the file's import set. C2 adds the vm resolver,
-// so this pin is expected to break when C2 starts - that is the freeze doing
-// its job, not a bug in it.
+// metricCompilerImportPins is the file's import set.
+//
+// C2 ADDS ONE ENTRY, DELIBERATELY - this is the break this pin was written to
+// expect. Its own comment said "C2 adds the vm resolver, so this pin is expected
+// to break when C2 starts - that is the freeze doing its job, not a bug in it",
+// and the func-surface pin beside it said to lift the freeze deliberately when
+// it does.
+//
+// internal/rules/vm is added for the calc-term walk: the gate has to read a calc
+// term's vm.Expression to find the columns that term can reach, which is the
+// whole point of the check (see ADR-024's C2 entry for why inspecting only the
+// term a metric names was a hole). vm is the intended survivor of C1-C3 and
+// already a dependency of this package via metric_definition.go, so the pin now
+// records the dependency the C1-C3 plan intends rather than forbidding it.
+//
+// The pin stays ENFORCED: one more import still fails this test.
 var metricCompilerImportPins = []string{
 	"crypto/sha256",
 	"encoding/hex",
 	"fmt",
 	"github.com/hondyman/uisce/backend/internal/boresolver",
+	"github.com/hondyman/uisce/backend/internal/rules/vm",
 	"sort",
 	"strings",
 }

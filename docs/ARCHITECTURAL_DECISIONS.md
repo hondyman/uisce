@@ -1197,6 +1197,40 @@ before anything depends on them.
     The formula is well-formed; it is the data it reaches that is not permitted.
     The two have different remediation, so they are not the same error.
 
+  **The gate must recurse into calc terms — and the first version did not.**
+  The BO predicate fires *inside* a calc term's expression, on the sensitivity tag
+  of the column that expression references. A metric-path gate that inspected
+  only the term the metric names would therefore miss the exact case the BO rule
+  exists for: a calc term carries no `PhysicalColumn` and usually no
+  `SensitivityTag` of its own, so it passes, and the PII is read one level down.
+
+  That was a real hole in the first implementation of this gate, found before
+  merge rather than after: a metric over calc term `net_per_order`, whose
+  expression reads `customers.ssn`, compiled to `SUM(t0.net_per_order)` with no
+  error. `NewSensitivityTermGate` now takes the calc-term expressions (the same
+  shape as `boresolver.GenerationContext.CalcTermConfigs`) and walks them, with
+  the same two structural guards the BO resolver's `resolveCol` closure carries:
+  a cycle guard and `maxMetricCalcTermDepth`, matched to the BO path's value of
+  `1` so both refuse the same chains. A calc term with **no** preloaded
+  expression is refused rather than permitted — an uninspectable chain is not a
+  clean chain, and permitting it would make "clear the term" mean "clear the term
+  if someone remembered to hand us its expression". The walk
+  (`collectFieldRefs`) panics on an unhandled AST node type rather than skipping
+  it, so a new node cannot become a silently unchecked branch.
+
+  **Equivalence is measured against the reference, not restated.** The BO path's
+  behaviour is already pinned by `boresolver`'s own
+  `TestCalcTerm_MaskingBlocked`, which drives the real generator and asserts the
+  refusal names `REDACT_FULL`. This gate does not re-implement that test: a copy
+  would only assert a reading of the predicate back to itself, and would pass
+  equally happily if the reading were wrong. The metric-side equivalence cases
+  are what pin the two paths together — and they must be built from a **tagged**
+  term at passthrough tier, not an untagged one. An untagged field returns before
+  the tier check is ever consulted, so an equivalence case built from one passes
+  even against a gate that treats "tagged" as "forbidden". Both mutations were
+  run to confirm the tests bite: disabling the calc-term recursion fails four
+  tests, and ignoring the tier fails the passthrough equivalence case.
+
   **Reachability, stated plainly:** the vulnerable path has **no production
   caller today**. `CompileMetric` is called only from
   `CubeDDLGenerator.GenerateCubeMaterializationDDL` (`cube_ddl.go:138`), and

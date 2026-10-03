@@ -77,7 +77,7 @@ func ddlGen() *CubeDDLGenerator {
 		})
 	}
 	gen := NewCubeDDLGenerator("starrocks")
-	gen.SetTermGate(NewSensitivityTermGate(bo, "admin", ""))
+	gen.SetTermGate(NewSensitivityTermGate(bo, "admin", "", nil))
 	return gen
 }
 

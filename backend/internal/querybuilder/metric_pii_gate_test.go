@@ -38,6 +38,7 @@ import (
 	"testing"
 
 	"github.com/hondyman/uisce/backend/internal/boresolver"
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 )
 
 // piiField is a BO field whose physical column is classified as PII.
@@ -122,6 +123,129 @@ func TestUngatedMetricCompilerIsUnsafe(t *testing.T) {
 	t.Logf("CONFIRMED HOLE: metric over PII term %q compiled to %q with no error", term.PhysicalColumn, got.SQLExpr)
 }
 
+// calcTermBO is a BO where one term is a CALC TERM whose own expression reads
+// the PII column. This is the shape the BO path's predicate at
+// boresolver/bo_sql_generator.go:781-787 is written for: the check fires inside
+// a calc term's expression, on the tag of the column that expression references.
+// A calc term has no PhysicalColumn and usually no SensitivityTag of its own, so
+// a gate that only inspected the term a metric names would pass it and the PII
+// would be read one level down. That is a real hole, and it was in the first
+// version of this gate - see TestMetricGateReachesThroughCalcTerm and the
+// ADR-024 C2 entry.
+func calcTermBO() *boresolver.BODefinition {
+	bo := testBO()
+	bo.Fields = append(bo.Fields, boresolver.BOField{
+		ID:             "f_net",
+		Name:           "net_per_order",
+		PhysicalColumn: "", // a calc term has none
+		TermType:       "calculated",
+		SemanticTermID: "calc_net",
+		// SensitivityTag deliberately empty: the tag lives on the column the
+		// calc term reads, not on the term.
+	})
+	return bo
+}
+
+// calcNetExpr is the calc term's compiled expression: it references the PII
+// column by name.
+func calcNetExpr(refPath string) *vm.Expression {
+	return &vm.Expression{Root: &vm.BinaryExpr{
+		Op:    "-",
+		Left:  &vm.FieldRef{Path: refPath},
+		Right: &vm.Literal{Value: 1},
+	}}
+}
+
+// TestMetricGateReachesThroughCalcTerm is the second hole, and the one the BO
+// predicate is actually about.
+//
+// It asserts the metric path refuses a metric whose term is a calc term reading
+// a PII column. Before the recursion was added this compiled to
+// SUM(t0.net_per_order) with no error: the gate resolved the term, saw a calc
+// term with no sensitivity tag of its own, and permitted it.
+func TestMetricGateReachesThroughCalcTerm(t *testing.T) {
+	bo := calcTermBO()
+	gate := NewSensitivityTermGate(bo, "analyst", "", map[string]*vm.Expression{
+		"calc_net": calcNetExpr("customer_ssn"),
+	})
+
+	mc := NewMetricCompiler(nil).WithTermGate(gate)
+	got, err := mc.CompileMetric(aggregationOver("net_per_order", "SUM"), nil, nil)
+	if err == nil {
+		t.Fatalf("gate did not reach through the calc term: compiled to %q", got.SQLExpr)
+	}
+	if !errors.Is(err, ErrMetricTermNotPermitted) {
+		t.Fatalf("want ErrMetricTermNotPermitted, got %v", err)
+	}
+	// The error must name the PII column reached THROUGH the calc term, not the
+	// calc term itself - otherwise an operator cannot tell what was refused.
+	if !strings.Contains(err.Error(), "customers.ssn") {
+		t.Fatalf("error should name the PII column reached through the calc term, got %v", err)
+	}
+}
+
+// TestMetricGateRefusesUninspectableCalcTerm pins the fail-closed choice for a
+// calc term with no preloaded expression. An uninspectable chain is not a clean
+// chain: permitting it would make "clear the term" mean "clear the term if
+// someone remembered to hand us its expression".
+func TestMetricGateRefusesUninspectableCalcTerm(t *testing.T) {
+	bo := calcTermBO()
+	// calcTerms deliberately nil: the calc term's expression is unavailable.
+	mc := NewMetricCompiler(nil).WithTermGate(NewSensitivityTermGate(bo, "admin", "CONFIDENTIAL", nil))
+	if _, err := mc.CompileMetric(aggregationOver("net_per_order", "SUM"), nil, nil); err == nil {
+		t.Fatal("a calc term with no inspectable expression must not pass the gate")
+	}
+}
+
+// TestMetricGateStopsCalcTermCycles pins the cycle guard. A calc term chain that
+// loops must terminate with an error rather than recursing until the stack dies -
+// the same failure the BO resolver's seenPtr prevents.
+func TestMetricGateStopsCalcTermCycles(t *testing.T) {
+	bo := &boresolver.BODefinition{ID: "bo_order", DrivingTable: "order_lines"}
+	bo.Fields = []boresolver.BOField{
+		{ID: "f_a", Name: "a", TermType: "calculated", SemanticTermID: "calc_a"},
+		{ID: "f_b", Name: "b", TermType: "calculated", SemanticTermID: "calc_b"},
+	}
+	// clearance CONFIDENTIAL so the tier check is passthrough throughout and
+	// only the structural guards can be what refuses these.
+	mk := func(terms map[string]*vm.Expression) *MetricCompiler {
+		return NewMetricCompiler(nil).WithTermGate(NewSensitivityTermGate(bo, "admin", "CONFIDENTIAL", terms))
+	}
+
+	t.Run("a self-referencing calc term is named as a cycle", func(t *testing.T) {
+		// a -> a is detected by the cycle guard at depth 0, before the depth cap
+		// can preempt it, so this pins the cycle detector specifically.
+		mc := mk(map[string]*vm.Expression{"calc_a": calcNetExpr("a")})
+		_, err := mc.CompileMetric(aggregationOver("a", "SUM"), nil, nil)
+		if err == nil {
+			t.Fatal("a self-referencing calc term must not compile")
+		}
+		if !strings.Contains(err.Error(), "cycle") {
+			t.Fatalf("want a cycle error for a self-reference, got %v", err)
+		}
+	})
+
+	t.Run("a mutually-referencing chain terminates with an error", func(t *testing.T) {
+		// a -> b -> a trips the depth cap before the cycle guard, because
+		// maxMetricCalcTermDepth is 1. Which guard fires first is an
+		// implementation detail; the property that matters is that it
+		// TERMINATES with a structural refusal rather than recursing until the
+		// stack dies. Asserting "error mentions cycle OR depth" keeps the test
+		// from passing on an unrelated error while not over-specifying.
+		mc := mk(map[string]*vm.Expression{
+			"calc_a": calcNetExpr("b"),
+			"calc_b": calcNetExpr("a"),
+		})
+		_, err := mc.CompileMetric(aggregationOver("a", "SUM"), nil, nil)
+		if err == nil {
+			t.Fatal("a mutually-referencing calc-term chain must not compile")
+		}
+		if !strings.Contains(err.Error(), "cycle") && !strings.Contains(err.Error(), "depth") {
+			t.Fatalf("want a cycle or depth error, got %v", err)
+		}
+	})
+}
+
 // TestMetricCompilerRejectsMetricOverMaskedTerm is the gate.
 //
 // Two properties, because either alone is insufficient. A gate that refuses
@@ -138,7 +262,7 @@ func TestUngatedMetricCompilerIsUnsafe(t *testing.T) {
 //     to - which would be a correctness regression traded for a security fix.
 func TestMetricCompilerRejectsMetricOverMaskedTerm(t *testing.T) {
 	bo := testBO()
-	gate := NewSensitivityTermGate(bo, "analyst", "")
+	gate := NewSensitivityTermGate(bo, "analyst", "", nil)
 
 	t.Run("refuses a metric over a PII term", func(t *testing.T) {
 		mc := NewMetricCompiler(nil).WithTermGate(gate)
@@ -156,6 +280,43 @@ func TestMetricCompilerRejectsMetricOverMaskedTerm(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "customers.ssn") {
 			t.Fatalf("error should name the physical column it refused, got %v", err)
+		}
+	})
+
+	t.Run("permits a tagged term whose tier is passthrough for this caller", func(t *testing.T) {
+		// The term is TAGGED. That is the point: an equivalence case built from
+		// an untagged term passes even if the gate ignores tiers entirely, so it
+		// cannot demonstrate the tier condition. DetermineMaskingTier returns
+		// PASSTHROUGH for clearance CONFIDENTIAL regardless of the tag, so this
+		// is a genuinely permitted PII-tagged term.
+		permissive := NewSensitivityTermGate(bo, "analyst", "CONFIDENTIAL", nil)
+		ungated := NewMetricCompiler(nil)
+		gated := NewMetricCompiler(nil).WithTermGate(permissive)
+
+		before, err := ungated.CompileMetric(aggregationOver("customer_ssn", "SUM"), nil, nil)
+		if err != nil {
+			t.Fatalf("ungated compile must succeed: %v", err)
+		}
+		after, err := gated.CompileMetric(aggregationOver("customer_ssn", "SUM"), nil, nil)
+		if err != nil {
+			t.Fatalf("a passthrough-tier tagged term must be permitted, got: %v", err)
+		}
+		if before.SQLExpr != after.SQLExpr {
+			t.Fatalf("gate changed the SQL for a permitted term: %q -> %q", before.SQLExpr, after.SQLExpr)
+		}
+		if before.ContentHash != after.ContentHash {
+			t.Fatalf("gate changed the content hash: %s -> %s", before.ContentHash, after.ContentHash)
+		}
+	})
+
+	t.Run("the same tagged term is refused at a lower clearance", func(t *testing.T) {
+		// The tier condition is the whole difference between these two cases.
+		// Together they pin that the gate reads the tier rather than treating
+		// "tagged" as synonymous with "forbidden".
+		strict := NewSensitivityTermGate(bo, "analyst", "", nil)
+		mc := NewMetricCompiler(nil).WithTermGate(strict)
+		if _, err := mc.CompileMetric(aggregationOver("customer_ssn", "SUM"), nil, nil); err == nil {
+			t.Fatal("the same tagged term must be refused for a caller without the clearance")
 		}
 	})
 
@@ -204,6 +365,21 @@ func TestCubeDDLRequiresTermGate(t *testing.T) {
 		t.Fatalf("error should name the missing gate, got %v", err)
 	}
 }
+
+// On the BO-path CONTROL: the reference behaviour is already pinned where the
+// code lives - boresolver's own TestCalcTerm_MaskingBlocked
+// (internal/boresolver/bo_sql_generator_test.go) drives the real generator and
+// asserts that a calc term referencing a PII-tagged column is refused with
+// "references masked column" at tier REDACT_FULL, and that the untagged case
+// returns NoError.
+//
+// That test is the control, and this file deliberately does NOT re-implement it.
+// A copy here would only assert my reading of a predicate back to myself, and
+// would pass just as happily if that reading were wrong - which is the circularity
+// that makes "BO-path equivalence" worthless as a phrase. The metric gate's
+// expected behaviour is anchored to that existing test; the equivalence cases
+// above are what pin the metric path to it, including the tier condition in both
+// directions.
 
 // cubeWithOneMetric is the minimum cube that reaches the gate check.
 func cubeWithOneMetric(metricID string) CubeDefinition {
