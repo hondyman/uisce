@@ -839,6 +839,68 @@ mirrors is `ComputeQueryAndMetricsAndCubeCacheKey`
 (`internal/querybuilder/metric_compiler.go:194`). The test is
 `TestComputeCubeContentHash_TracksReferencedMetricContent`.
 
+### ADR-028: The Golden Metric Corpus Is Versioned In-Repo And Ingested, Not Read
+
+**Decision.** A versioned metric corpus lives at
+`backend/internal/querybuilder/testdata/metric_corpus/v1/`, built on
+`ExportMetricBundle`'s format with no parallel exporter, and it is **ingested
+through `ImportMetricBundle`** before any metric in it is compiled. Corpus
+version `uisce.metric-corpus/1` is tracked separately from the bundle schema
+version, because the corpus changing shape and the wire format changing are
+different events. Regenerate with `go test -run TestMetricCorpus -update-corpus`
+and **read the diff** — it is a change to the semantics the corpus exists to
+protect.
+
+**The importer is the first non-compile consumer of the validator.**
+`ImportMetricBundle` (`internal/querybuilder/metric_bundle_import.go`) is the
+counterpart to `ExportMetricBundle`, and it is where ADR-026's obligation lands.
+A bundle can arrive by migration, seed, import or corpus and never touch
+`CompileMetric`; without validation at ingestion, an ambiguous metric would be
+stored and rejected much later, at query or deploy time, far from whoever
+authored it. It runs four passes — shape, content, references, cycles — and
+rejects with the offending metric named.
+
+**The corpus records what the code does, including what is wrong.** Two cases
+are pinned deliberately rather than fixed:
+
+- `m_calc_fed_core` — a calc-fed metric, pinned as `SUM(t0.<calcTermId>)`, a
+  column that does not exist. There is no `calcTermID` field on
+  `MetricExpression`; routing a metric through a calc term is the C1/C2 gap.
+  Its expectation carries a `knownDefect` field saying so.
+- The corpus is only trustworthy if a wrong expectation is visibly wrong. An
+  unmarked defect would let the corpus quietly become the defence of a bug —
+  which is precisely what would have happened to the ratio semantics had the
+  corpus been built before ADR-026.
+
+**What the corpus caught on its first run.** The first generated expectations
+recorded `m_margin_core` — a ratio naming revenue as numerator — as
+cost/revenue, and `m_cost_ratio_core` with the operands named the other way
+round as the *same* SQL. The two were indistinguishable. The cause was not a
+code regression: the working tree mixed `metric_definition.go` from merged
+`main` with a pre-ADR-026 `metric_compiler.go`, so the old sorted behaviour was
+being recorded. `origin/main` was correct throughout. Had the generated
+expectations been committed without being read, the corpus would have enshrined
+the inversion — the same trap, entered from the other direction.
+
+**Evidence that the gate bites.** Reverting the numerator logic in
+`metric_compiler.go` makes `TestMetricCorpus` fail, naming `m_margin_core` and
+stating that this is a change to protected semantics. Regenerating instead of
+reading is how a corpus becomes decorative.
+
+**Span.** Core (master-tenant, `IsCore`) and custom metrics; aggregation,
+formula and derived — ratio *and* n-operand sum; two tenants, so nothing can
+assume a single one; a cross-tenant base reference, resolved through the
+import's `existing` set. A parameterised formula is deliberately **absent**: it
+is refused at cube deploy (ADR-025), so it has no stable compiled output to
+protect.
+
+**Evidence (production call sites).** `ImportMetricBundle`
+(`internal/querybuilder/metric_bundle_import.go`) and `ExportMetricBundle`
+(`internal/querybuilder/metric_definition.go:436`). The corpus is exercised by
+`TestMetricCorpus` and `TestMetricCorpus_RejectsAmbiguousRatioAtIngestion`,
+which strips each corpus ratio's operands and asserts the importer refuses it —
+so the corpus is a boundary test, not a pile of fixtures.
+
 ## Open items
 
 - **Call-site verification for ADR-001 … ADR-010.** The imported entries assert

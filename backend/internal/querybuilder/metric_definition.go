@@ -27,6 +27,9 @@ var (
 	ErrInvalidMetricFormula = errors.New("invalid metric formula expression")
 	ErrCyclicMetricRef      = errors.New("cyclic metric dependency detected")
 	ErrMissingMetricDep     = errors.New("missing referenced metric dependency")
+	// ErrInvalidMetricBundle is the ingestion-boundary error: a bundle that
+	// cannot be imported as-is. See ImportMetricBundle and ADR-026.
+	ErrInvalidMetricBundle = errors.New("invalid metric bundle")
 )
 
 // MetricFormatConfig specifies how metric values are rendered.
