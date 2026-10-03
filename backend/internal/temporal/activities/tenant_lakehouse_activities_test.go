@@ -1,0 +1,309 @@
+package activities_test
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/iceberg"
+	"github.com/hondyman/uisce/backend/internal/lakehouse/registry"
+	"github.com/hondyman/uisce/backend/internal/temporal/activities"
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/temporal"
+)
+
+type fakeReg struct {
+	cfg      *registry.Config
+	getErr   error
+	markErr  error
+	marked   []markCall
+	failures []failCall
+}
+type markCall struct {
+	tenant, warehouse uuid.UUID
+	key               string
+	actor             registry.Actor
+}
+type failCall struct {
+	tenant       uuid.UUID
+	step, reason string
+	actor        registry.Actor
+}
+
+func (f *fakeReg) Get(context.Context, uuid.UUID) (*registry.Config, error) { return f.cfg, f.getErr }
+func (f *fakeReg) MarkProvisioned(_ context.Context, t, w uuid.UUID, k string, a registry.Actor) error {
+	f.marked = append(f.marked, markCall{t, w, k, a})
+	return f.markErr
+}
+func (f *fakeReg) RecordProvisionFailure(_ context.Context, t uuid.UUID, a registry.Actor, step, reason string) error {
+	f.failures = append(f.failures, failCall{t, step, reason, a})
+	return nil
+}
+
+type fakeKeys struct {
+	names []string
+	err   error
+}
+
+func (f *fakeKeys) EnsureKey(_ context.Context, n string) error {
+	f.names = append(f.names, n)
+	return f.err
+}
+
+type fakeBuckets struct {
+	specs []iceberg.TenantBucketSpec
+	err   error
+}
+
+func (f *fakeBuckets) EnsureTenantBucket(_ context.Context, s iceberg.TenantBucketSpec) (*iceberg.TenantBucket, error) {
+	f.specs = append(f.specs, s)
+	return &iceberg.TenantBucket{Name: "b"}, f.err
+}
+
+type fakeCreds struct {
+	ensured            []string
+	ensureErr, readErr error
+	key, secret        string
+}
+
+func (f *fakeCreds) EnsureBucketCredential(_ context.Context, _ uuid.UUID, bucket string) error {
+	f.ensured = append(f.ensured, bucket)
+	return f.ensureErr
+}
+func (f *fakeCreds) Read(context.Context, uuid.UUID) (string, string, error) {
+	return f.key, f.secret, f.readErr
+}
+
+type fakeWarehouses struct {
+	specs []iceberg.TenantWarehouseSpec
+	id    string
+	err   error
+}
+
+func (f *fakeWarehouses) EnsureTenantWarehouse(_ context.Context, s iceberg.TenantWarehouseSpec) (*iceberg.TenantWarehouse, error) {
+	f.specs = append(f.specs, s)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &iceberg.TenantWarehouse{ID: f.id}, nil
+}
+
+type rig struct {
+	acts *activities.TenantLakehouseActivities
+	reg  *fakeReg
+	keys *fakeKeys
+	bkt  *fakeBuckets
+	cr   *fakeCreds
+	wh   *fakeWarehouses
+	in   activities.LakehouseProvisionInput
+	id   uuid.UUID
+}
+
+func newRig() *rig {
+	id := uuid.New()
+	days := 2555
+	r := &rig{
+		reg:  &fakeReg{cfg: &registry.Config{TenantID: id.String(), Configured: true, AuditRetentionDays: &days, LifecycleState: "provisioning"}},
+		keys: &fakeKeys{}, bkt: &fakeBuckets{}, cr: &fakeCreds{key: "AKIA-TEST", secret: "s3cr3t-value"},
+		wh: &fakeWarehouses{id: uuid.NewString()}, id: id,
+		in: activities.LakehouseProvisionInput{TenantID: id.String(), ActorID: "alice", ActorRole: "global_admin"},
+	}
+	r.acts = &activities.TenantLakehouseActivities{
+		Registry: r.reg, Keys: r.keys, Buckets: r.bkt, Credentials: r.cr, Warehouses: r.wh,
+		S3Endpoint: "http://minio:9000", S3Region: "us-east-1",
+	}
+	return r
+}
+
+func isNonRetryable(err error) bool {
+	var ae *temporal.ApplicationError
+	return errors.As(err, &ae) && ae.NonRetryable()
+}
+
+func wantName(id uuid.UUID) string {
+	n, _ := iceberg.TenantWarehouseName(id)
+	return n
+}
+
+func TestLoadLakehouseSpec(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("returns the retention for a configured tenant", func(t *testing.T) {
+		r := newRig()
+		spec, err := r.acts.LoadLakehouseSpec(ctx, r.in)
+		require.NoError(t, err)
+		require.Equal(t, 2555, spec.RetentionDays)
+		require.False(t, spec.AlreadyProvisioned)
+	})
+
+	t.Run("an already provisioned tenant is a no-op, not an error", func(t *testing.T) {
+		r := newRig()
+		r.reg.cfg.Provisioned = true
+		spec, err := r.acts.LoadLakehouseSpec(ctx, r.in)
+		require.NoError(t, err)
+		require.True(t, spec.AlreadyProvisioned)
+	})
+
+	for name, mutate := range map[string]func(*rig){
+		"no registry row":     func(r *rig) { r.reg.cfg = &registry.Config{LifecycleState: "unconfigured"} },
+		"retention not set":   func(r *rig) { r.reg.cfg.AuditRetentionDays = nil },
+		"suspended":           func(r *rig) { r.reg.cfg.LifecycleState = "suspended" },
+		"offboarding":         func(r *rig) { r.reg.cfg.LifecycleState = "offboarding" },
+		"unknown tenant":      func(r *rig) { r.reg.getErr = registry.ErrTenantNotFound },
+		"malformed tenant id": func(r *rig) { r.in.TenantID = "nope" },
+		"nil tenant id":       func(r *rig) { r.in.TenantID = uuid.Nil.String() },
+	} {
+		t.Run("is not retried when "+name, func(t *testing.T) {
+			r := newRig()
+			mutate(r)
+			_, err := r.acts.LoadLakehouseSpec(ctx, r.in)
+			require.Error(t, err)
+			require.True(t, isNonRetryable(err), "a condition a retry cannot fix must not be retried: %v", err)
+		})
+	}
+
+	t.Run("a registry outage is retried", func(t *testing.T) {
+		r := newRig()
+		r.reg.getErr = errors.New("connection refused")
+		_, err := r.acts.LoadLakehouseSpec(ctx, r.in)
+		require.Error(t, err)
+		require.False(t, isNonRetryable(err))
+	})
+}
+
+func TestEnsureLakehouseKey(t *testing.T) {
+	r := newRig()
+	key, err := r.acts.EnsureLakehouseKey(context.Background(), r.in)
+	require.NoError(t, err)
+	require.Equal(t, wantName(r.id), key, "the key is named for the tenant's warehouse; the name is derived, never supplied")
+	require.Equal(t, []string{key}, r.keys.names)
+
+	r.keys.err = errors.New("kes unavailable")
+	_, err = r.acts.EnsureLakehouseKey(context.Background(), r.in)
+	require.Error(t, err)
+	require.False(t, isNonRetryable(err), "an outage is retried")
+}
+
+func TestEnsureLakehouseBucket(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("passes the tenant, key, retention and region through", func(t *testing.T) {
+		r := newRig()
+		require.NoError(t, r.acts.EnsureLakehouseBucket(ctx, r.in, "the-key", 2555))
+		require.Len(t, r.bkt.specs, 1)
+		require.Equal(t, iceberg.TenantBucketSpec{TenantID: r.id, KMSKeyID: "the-key", RetentionDays: 2555, Region: "us-east-1"}, r.bkt.specs[0])
+	})
+
+	t.Run("a bucket that conflicts with the required settings is not retried", func(t *testing.T) {
+		r := newRig()
+		r.bkt.err = errors.Join(errors.New("detail"), iceberg.ErrBucketConflict)
+		err := r.acts.EnsureLakehouseBucket(ctx, r.in, "k", 365)
+		require.Error(t, err)
+		require.True(t, isNonRetryable(err))
+	})
+
+	t.Run("an outage is retried", func(t *testing.T) {
+		r := newRig()
+		r.bkt.err = errors.New("minio unreachable")
+		err := r.acts.EnsureLakehouseBucket(ctx, r.in, "k", 365)
+		require.Error(t, err)
+		require.False(t, isNonRetryable(err))
+	})
+
+	t.Run("a non-positive retention never reaches the provisioner", func(t *testing.T) {
+		r := newRig()
+		err := r.acts.EnsureLakehouseBucket(ctx, r.in, "k", 0)
+		require.True(t, isNonRetryable(err))
+		require.Empty(t, r.bkt.specs)
+	})
+}
+
+func TestEnsureLakehouseCredential(t *testing.T) {
+	r := newRig()
+	require.NoError(t, r.acts.EnsureLakehouseCredential(context.Background(), r.in))
+	require.Equal(t, []string{wantName(r.id)}, r.cr.ensured, "scoped to the tenant's own derived bucket")
+
+	r.cr.ensureErr = errors.New("admin api down")
+	err := r.acts.EnsureLakehouseCredential(context.Background(), r.in)
+	require.Error(t, err)
+	require.False(t, isNonRetryable(err))
+}
+
+func TestEnsureLakehouseWarehouse(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("reads the credential itself and returns only the warehouse id", func(t *testing.T) {
+		r := newRig()
+		id, err := r.acts.EnsureLakehouseWarehouse(ctx, r.in)
+		require.NoError(t, err)
+		require.Equal(t, r.wh.id, id)
+		require.NotContains(t, id, "s3cr3t", "a credential must never come back from an activity")
+		require.Equal(t, []iceberg.TenantWarehouseSpec{{
+			TenantID: r.id, Region: "us-east-1", Endpoint: "http://minio:9000", AccessKeyID: "AKIA-TEST", SecretAccessKey: "s3cr3t-value",
+		}}, r.wh.specs)
+	})
+
+	t.Run("no credential, no warehouse", func(t *testing.T) {
+		r := newRig()
+		r.cr.readErr = errors.New("secret not found")
+		_, err := r.acts.EnsureLakehouseWarehouse(ctx, r.in)
+		require.Error(t, err)
+		require.Empty(t, r.wh.specs, "the warehouse step must not run without the tenant's own credential")
+	})
+
+	t.Run("a Lakekeeper outage is retried", func(t *testing.T) {
+		r := newRig()
+		r.wh.err = errors.New("lakekeeper 503")
+		_, err := r.acts.EnsureLakehouseWarehouse(ctx, r.in)
+		require.Error(t, err)
+		require.False(t, isNonRetryable(err))
+	})
+}
+
+func TestMarkLakehouseProvisioned(t *testing.T) {
+	ctx := context.Background()
+	wh := uuid.NewString()
+
+	t.Run("records the warehouse, key and actor", func(t *testing.T) {
+		r := newRig()
+		require.NoError(t, r.acts.MarkLakehouseProvisioned(ctx, r.in, wh, "key"))
+		require.Len(t, r.reg.marked, 1)
+		require.Equal(t, r.id, r.reg.marked[0].tenant)
+		require.Equal(t, wh, r.reg.marked[0].warehouse.String())
+		require.Equal(t, "key", r.reg.marked[0].key)
+		require.Equal(t, registry.Actor{ID: "alice", Role: "global_admin"}, r.reg.marked[0].actor)
+	})
+
+	t.Run("a bad warehouse id is not retried and writes nothing", func(t *testing.T) {
+		r := newRig()
+		require.True(t, isNonRetryable(r.acts.MarkLakehouseProvisioned(ctx, r.in, "not-a-uuid", "key")))
+		require.Empty(t, r.reg.marked)
+	})
+
+	for name, e := range map[string]error{
+		"a different warehouse already bound": registry.ErrWarehouseMismatch,
+		"tenant not configured":               registry.ErrNotConfigured,
+		"wrong lifecycle state":               registry.ErrInvalidState,
+	} {
+		t.Run("is not retried for "+name, func(t *testing.T) {
+			r := newRig()
+			r.reg.markErr = e
+			require.True(t, isNonRetryable(r.acts.MarkLakehouseProvisioned(ctx, r.in, wh, "key")))
+		})
+	}
+
+	t.Run("a database outage is retried", func(t *testing.T) {
+		r := newRig()
+		r.reg.markErr = errors.New("deadlock")
+		err := r.acts.MarkLakehouseProvisioned(ctx, r.in, wh, "key")
+		require.Error(t, err)
+		require.False(t, isNonRetryable(err))
+	})
+}
+
+func TestRecordLakehouseFailure(t *testing.T) {
+	r := newRig()
+	require.NoError(t, r.acts.RecordLakehouseFailure(context.Background(), r.in, "EnsureLakehouseBucket", "boom"))
+	require.Equal(t, []failCall{{r.id, "EnsureLakehouseBucket", "boom", registry.Actor{ID: "alice", Role: "global_admin"}}}, r.reg.failures)
+}
