@@ -245,3 +245,77 @@ a pre-existing condition on `main`. Merged as #347 (`353c0b0bf`).
 
 ---
 
+## Entry 2026-10-03 — Metric lineage writer: schema unverifiable from the repository
+
+Operational entry, not a CI failure. Full analysis and decision in
+`docs/ARCHITECTURAL_DECISIONS.md` → *Metric catalog lineage: the writer targets
+a schema that does not exist*.
+
+### The situation
+
+`SyncMetricToCatalogGraph` has no production caller **and** its SQL references
+`catalog_node.node_id`, `catalog_node.node_key` and a text `catalog_edge.edge_type`
+that the authoritative schema snapshot does not contain. The port that the
+wiring decision depends on cannot be completed from the repository alone. These
+queries settle it. All are read-only.
+
+```sql
+-- Q1. Does catalog_node actually lack node_id / node_key on the live DB?
+SELECT column_name, data_type, is_nullable, column_default
+  FROM information_schema.columns
+ WHERE table_schema = 'public' AND table_name = 'catalog_node'
+ ORDER BY ordinal_position;
+
+-- Q2. Same for catalog_edge. Also shows whether it is still partitioned.
+SELECT column_name, data_type, is_nullable, column_default
+  FROM information_schema.columns
+ WHERE table_schema = 'public' AND table_name = 'catalog_edge'
+ ORDER BY ordinal_position;
+
+-- Q3. Do METRIC_OF / USES_TERM / DERIVED_FROM exist as edge types?
+--     This is the load-bearing unknown: the snapshot carries no row data,
+--     so their absence from it proved nothing.
+SELECT id, edge_type_name, is_active
+  FROM public.catalog_edge_types
+ WHERE upper(edge_type_name) IN ('METRIC_OF','USES_TERM','DERIVED_FROM');
+
+-- Q4. Which partitions of catalog_edge exist, and is there a DEFAULT one?
+SELECT c.relname, pg_get_expr(c.relpartbound, c.oid) AS bounds
+  FROM pg_inherits i
+  JOIN pg_class c ON c.oid = i.inhrelid
+  JOIN pg_class p ON p.oid = i.inhparent
+ WHERE p.relname = 'catalog_edge'
+ ORDER BY c.relname;
+
+-- Q5. Has any metric lineage edge ever actually been written?
+SELECT edge_type, count(*) FROM public.catalog_edge
+ WHERE upper(edge_type) IN ('METRIC_OF','USES_TERM','DERIVED_FROM')
+ GROUP BY 1;
+```
+
+### What each answer implies
+
+| Answer | Consequence |
+|---|---|
+| Q1/Q2 return the snapshot's columns | The writer must be ported: `id`, `node_type_id`, `edge_type_id`. Proceed with the port; the remaining unknown is vocabulary. |
+| Q1/Q2 return `node_id` / `node_key` | The snapshot is **stale**. Stop trusting it for these two tables, and re-run `backend/db/snapshots/regenerate.sh` — the dump and the migration log are one artifact pair. |
+| Q3 returns three rows | The port is a rename. Book the three `edge_type_id` UUIDs. |
+| Q3 returns nothing | The port must also **create** the vocabulary, and must decide the edge-type semantics first. This is a schema change, not a code change. |
+| Q4 shows a partition covering today (or a DEFAULT) | Insertion is possible. Otherwise an insert dated in the current quarter fails with *"no partition of relation catalog_edge found for row"* — the port needs a partition-creation step first. |
+| Q5 returns non-zero | Some path writes these edges today, and the search for callers missed it. Re-open the reachability audit before assuming the writer is dead. |
+
+Q5 is deliberately last in importance rather than last in the list: it is the
+one answer that would invalidate the central claim, so it is worth running
+first even though it is cheapest to interpret.
+
+### Structural notes
+
+| Note | File | Status |
+|---|---|---|
+| **Reachability check before building** — a code path whose only callers are in `_test.go` files has never run in production. Search the whole repo, not the package, and state *looked-and-found-nothing* vs *couldn't-look* explicitly. The PII gate caught this for `CubeDDLGenerator`; the same check was owed to the #359 lineage fix and was missed. | this ledger | Live |
+| **A schema dump proves shape, not data** — `schema-snapshot.sql` carries no row data, so an entity's absence from it is *couldn't-look*, never proof of absence. Pair the dump with the migration log, and regenerate both together. | this ledger | Live |
+| **A doc comment asserting a safety property is a claim, not a guarantee** — `metric_reconciler.go:22` promises advisory locking that does not exist. Read the code, not the comment above it. | `backend/internal/querybuilder/metric_reconciler.go` | Open |
+| **A concurrency test that runs one goroutine cannot test concurrency** — `TestMetricCatalogReconciler_IdempotentRun` passes against code with a cross-replica race. Naming a test `Idempotent` does not make it a race test. | `backend/internal/querybuilder/starrocks_mv_and_ridealongs_test.go` | Open |
+
+---
+
