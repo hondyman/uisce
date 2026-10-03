@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { MantineProvider } from '@mantine/core';
 import { ThemeProvider } from '@mui/material/styles';
-import { createUisceTheme } from '../theme';
+import { createThemeForStyle } from '../theme/themeStyles';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';import { RouterCapabilityProvider } from '../components/RouteBlocker/RouterCapabilityContext';
@@ -35,9 +35,9 @@ export const ColorModeContext = React.createContext({ toggleColorMode: () => {} 
  * tree reads via useTheme().
  */
 export const RootProviders: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
-  const { effectiveTheme } = useTheme();
+  const { effectiveTheme, style } = useTheme();
 
-  const theme = useMemo(() => createUisceTheme(effectiveTheme), [effectiveTheme]);
+  const theme = useMemo(() => createThemeForStyle(style, effectiveTheme), [style, effectiveTheme]);
 
   const colorMode = useMemo(
     () => ({

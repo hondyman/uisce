@@ -1,18 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Box, Typography, TextField, InputAdornment, Button, Card, CardActionArea, CardContent,
-  Chip, Stack, CircularProgress, Alert, Grid, IconButton, Tooltip, Menu, MenuItem, Dialog,
-  DialogTitle, DialogContent, DialogActions, Select, MenuItem as SelectMenuItem, InputLabel, FormControl,
-  FormControlLabel, Switch, ToggleButton, ToggleButtonGroup, Divider,
-} from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
+import { Box, Typography, TextField, Button, Chip, Stack, CircularProgress, Alert, Tooltip, Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Select, MenuItem as SelectMenuItem, InputLabel, FormControl, FormControlLabel, Switch, Divider } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
-import DescriptionIcon from '@mui/icons-material/Description';
-import VerifiedIcon from '@mui/icons-material/Verified';
-import PersonIcon from '@mui/icons-material/Person';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import EditIcon from '@mui/icons-material/Edit';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -23,6 +13,7 @@ import RestoreIcon from '@mui/icons-material/Restore';
 import CallSplitIcon from '@mui/icons-material/CallSplit';
 import PublishIcon from '@mui/icons-material/Publish';
 import UnpublishedIcon from '@mui/icons-material/Unpublished';
+import CatalogList from '../../components/common/CatalogList';
 import CoreCompareDialog from './CoreCompareDialog';
 import PlaceOnMenuDialog from './PlaceOnMenuDialog';
 import MenuOpenIcon from '@mui/icons-material/MenuOpen';
@@ -58,7 +49,6 @@ const PageStudioListPage: React.FC = () => {
   const [pages, setPages] = useState<CorePageDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
   const [menuAnchor, setMenuAnchor] = useState<{ el: HTMLElement; page: CorePageDefinition } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CorePageDefinition | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -66,7 +56,6 @@ const PageStudioListPage: React.FC = () => {
   const [renameTarget, setRenameTarget] = useState<CorePageDefinition | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [renaming, setRenaming] = useState(false);
-  const [scope, setScope] = useState<'all' | 'core' | 'custom'>('all');
   // Menu section (top-level menu entry) filter; NO_SECTION = not on the menu.
   const [section, setSection] = useState('');
   const [placeTarget, setPlaceTarget] = useState<CorePageDefinition | null>(null);
@@ -151,20 +140,9 @@ const PageStudioListPage: React.FC = () => {
 
   useEffect(load, []);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const scoped = pages
-      .filter((p) => scope === 'all' || (scope === 'core') === !!p.isCore)
-      .filter((p) => !section || (section === NO_SECTION
-        ? !(p.menuPlacements?.length)
-        : (p.menuPlacements ?? []).some((m) => m.path[0] === section)));
-    if (!q) return scoped;
-    return scoped.filter((p) =>
-      p.name.toLowerCase().includes(q) ||
-      p.slug.toLowerCase().includes(q) ||
-      (p.description || '').toLowerCase().includes(q)
-    );
-  }, [pages, search, scope, section]);
+  const sectionFilter = useCallback((p: CorePageDefinition) => !section || (section === NO_SECTION
+    ? !(p.menuPlacements?.length)
+    : (p.menuPlacements ?? []).some((m) => m.path[0] === section)), [section]);
   const sectionOptions = useMemo(
     () => Array.from(new Set(pages.flatMap((p) => (p.menuPlacements ?? []).map((m) => m.path[0])))).sort(),
     [pages],
@@ -339,118 +317,93 @@ const PageStudioListPage: React.FC = () => {
         </Stack>
       </Stack>
 
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
-        <TextField
-          fullWidth
-          placeholder="Search pages by name, slug, or description…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
-        />
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <InputLabel id="ps-section">Menu section</InputLabel>
-          <Select labelId="ps-section" label="Menu section" value={section} onChange={(e) => setSection(e.target.value as string)}>
-            <SelectMenuItem value="">All sections</SelectMenuItem>
-            {sectionOptions.map((s) => <SelectMenuItem key={s} value={s}>{s}</SelectMenuItem>)}
-            <SelectMenuItem value={NO_SECTION}>Not on the menu</SelectMenuItem>
-          </Select>
-        </FormControl>
-        <ToggleButtonGroup exclusive size="small" value={scope} onChange={(_, v) => v && setScope(v)}>
-          <ToggleButton value="all" sx={{ textTransform: 'none', px: 2 }}>All</ToggleButton>
-          <ToggleButton value="core" sx={{ textTransform: 'none', px: 2 }}>Core</ToggleButton>
-          <ToggleButton value="custom" sx={{ textTransform: 'none', px: 2 }}>Custom</ToggleButton>
-        </ToggleButtonGroup>
-      </Stack>
-
-      {loading && <Box sx={{ display: 'flex', justifyContent: 'center', p: 6 }}><CircularProgress /></Box>}
-      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
       {cloning && <Alert severity="info" sx={{ mb: 2 }}>Cloning page…</Alert>}
-
-      {!loading && filtered.length === 0 && (
-        <Alert severity="info">
-          {pages.length === 0 ? 'No pages yet - create your first one.' : 'No pages match your search.'}
-        </Alert>
-      )}
-
-      <Grid container spacing={2}>
-        {filtered.map((page) => (
-          <Grid key={page.id} size={{ xs: 12, sm: 6, md: 4 }}>
-            <Card variant="outlined" sx={{ borderRadius: 2, height: '100%', position: 'relative' }}>
-              <IconButton
+      <CatalogList<CorePageDefinition>
+        items={pages}
+        getId={(pg) => pg.id}
+        getTitle={(pg) => pg.name}
+        getSubtitle={(pg) => `/${pg.slug}`}
+        getDescription={(pg) => pg.description}
+        getSearchText={(pg) => pg.slug}
+        isCore={(pg) => !!pg.isCore}
+        filter={sectionFilter}
+        storageKey="page-studio-view"
+        searchPlaceholder="Search pages by name, slug, or description…"
+        loading={loading}
+        error={error}
+        onDismissError={() => setError(null)}
+        emptyMessage="No pages yet - create your first one."
+        noMatchMessage="No pages match your search."
+        onOpen={(pg) => navigate(pg.id)}
+        onActions={(pg, el) => setMenuAnchor({ el, page: pg })}
+        toolbarExtra={(
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel id="ps-section">Menu section</InputLabel>
+            <Select labelId="ps-section" label="Menu section" value={section} onChange={(e) => setSection(e.target.value as string)}>
+              <SelectMenuItem value="">All sections</SelectMenuItem>
+              {sectionOptions.map((s) => <SelectMenuItem key={s} value={s}>{s}</SelectMenuItem>)}
+              <SelectMenuItem value={NO_SECTION}>Not on the menu</SelectMenuItem>
+            </Select>
+          </FormControl>
+        )}
+        renderTileMeta={(page) => (
+          <>
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+            <Chip
+              size="small"
+              label={page.status === 'published' ? 'Published' : 'Draft'}
+              color={page.status === 'published' ? 'success' : 'default'}
+              variant={page.status === 'published' ? 'filled' : 'outlined'}
+            />
+            <Chip size="small" label={`v${page.version ?? 1}`} variant="outlined" />
+            {page.customization && (
+              <Chip
                 size="small"
-                sx={{ position: 'absolute', top: 6, right: 6, zIndex: 1 }}
-                onClick={(e) => { e.stopPropagation(); setMenuAnchor({ el: e.currentTarget, page }); }}
-              >
-                <MoreVertIcon fontSize="small" />
-              </IconButton>
-              <CardActionArea onClick={() => navigate(page.id)} sx={{ height: '100%', p: 0.5 }}>
-                <CardContent>
-                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, pr: 3 }}>
-                    <Tooltip title={page.isCore ? 'Core page (gold copy)' : page.clonedFrom ? 'Clone of a core page' : 'Custom page'}>
-                      {page.isCore ? <VerifiedIcon color="primary" fontSize="small" /> : <PersonIcon color="action" fontSize="small" />}
-                    </Tooltip>
-                    <DescriptionIcon color="disabled" fontSize="small" />
-                    <Typography variant="subtitle1" fontWeight={700} noWrap>{page.name}</Typography>
-                  </Stack>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                    /{page.slug}
-                  </Typography>
-                  {page.description && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                      {page.description}
-                    </Typography>
-                  )}
-                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                    <Chip
-                      size="small"
-                      label={page.status === 'published' ? 'Published' : 'Draft'}
-                      color={page.status === 'published' ? 'success' : 'default'}
-                      variant={page.status === 'published' ? 'filled' : 'outlined'}
-                    />
-                    <Chip size="small" label={`v${page.version ?? 1}`} variant="outlined" />
-                    {page.customization && (
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        color={page.customization.mode === 'extended' ? 'secondary' : 'default'}
-                        label={{ vanilla: 'Vanilla', extended: `Extended · v${page.customization.baseVersion}`, cloned: 'Cloned' }[page.customization.mode]}
-                      />
-                    )}
-                    {page.customization && !page.customization.active && <Chip size="small" color="error" variant="outlined" label="Inactive" />}
-                    {page.customization?.upgradeAvailable && (
-                      <Chip
-                        size="small"
-                        color="warning"
-                        label={`Upgrade v${page.customization.baseVersion} → v${page.customization.coreVersion}`}
-                        onClick={(e) => { e.stopPropagation(); setCompareTarget(page); }}
-                      />
-                    )}
-                    {page.clonedFrom && (
-                      <Tooltip title="An independent copy - core upgrades do not reach it.">
-                        <Chip size="small" variant="outlined" label={`Clone of core v${page.clonedFrom.version}`} />
-                      </Tooltip>
-                    )}
-                  </Stack>
-                  {/* Where the page lives: menu entries and app routes it serves. */}
-                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
-                    {(page.menuPlacements ?? []).map((m) => (
-                      <Tooltip key={m.nodeId} title={m.inherited ? 'Menu entry from the gold copy' : 'Menu entry'}>
-                        <Chip size="small" variant="outlined" color="info" icon={<MenuOpenIcon />} label={m.path.join(' › ')} />
-                      </Tooltip>
-                    ))}
-                    {!(page.menuPlacements?.length) && <Chip size="small" variant="outlined" label="Not on the menu" />}
-                    {routesForSlug(page.slug).map((r) => (
-                      <Tooltip key={r} title="Served at this app route">
-                        <Chip size="small" variant="outlined" label={r} sx={{ fontFamily: 'monospace' }} />
-                      </Tooltip>
-                    ))}
-                  </Stack>
-                </CardContent>
-              </CardActionArea>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
+                variant="outlined"
+                color={page.customization.mode === 'extended' ? 'secondary' : 'default'}
+                label={{ vanilla: 'Vanilla', extended: `Extended · v${page.customization.baseVersion}`, cloned: 'Cloned' }[page.customization.mode]}
+              />
+            )}
+            {page.customization && !page.customization.active && <Chip size="small" color="error" variant="outlined" label="Inactive" />}
+            {page.customization?.upgradeAvailable && (
+              <Chip
+                size="small"
+                color="warning"
+                label={`Upgrade v${page.customization.baseVersion} → v${page.customization.coreVersion}`}
+                onClick={(e) => { e.stopPropagation(); setCompareTarget(page); }}
+              />
+            )}
+            {page.clonedFrom && (
+              <Tooltip title="An independent copy - core upgrades do not reach it.">
+                <Chip size="small" variant="outlined" label={`Clone of core v${page.clonedFrom.version}`} />
+              </Tooltip>
+            )}
+          </Stack>
+          {/* Where the page lives: menu entries and app routes it serves. */}
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
+            {(page.menuPlacements ?? []).map((m) => (
+              <Tooltip key={m.nodeId} title={m.inherited ? 'Menu entry from the gold copy' : 'Menu entry'}>
+                <Chip size="small" variant="outlined" color="info" icon={<MenuOpenIcon />} label={m.path.join(' › ')} />
+              </Tooltip>
+            ))}
+            {!(page.menuPlacements?.length) && <Chip size="small" variant="outlined" label="Not on the menu" />}
+            {routesForSlug(page.slug).map((r) => (
+              <Tooltip key={r} title="Served at this app route">
+                <Chip size="small" variant="outlined" label={r} sx={{ fontFamily: 'monospace' }} />
+              </Tooltip>
+            ))}
+          </Stack>
+          </>
+        )}
+        columns={[
+          { key: 'slug', header: 'Slug', render: (pg) => <span style={{ fontFamily: 'monospace' }}>/{pg.slug}</span> },
+          { key: 'status', header: 'Status', render: (pg) => (
+            <Chip size="small" label={pg.status === 'published' ? 'Published' : 'Draft'} color={pg.status === 'published' ? 'success' : 'default'} variant={pg.status === 'published' ? 'filled' : 'outlined'} />
+          ) },
+          { key: 'version', header: 'Version', render: (pg) => `v${pg.version ?? 1}` },
+          { key: 'menu', header: 'Menu', render: (pg) => (pg.menuPlacements ?? []).map((m) => m.path.join(' › ')).join(', ') || 'Not on the menu' },
+        ]}
+      />
 
       <Menu anchorEl={menuAnchor?.el} open={!!menuAnchor} onClose={closeMenu}>
         {menuAnchor && inherited(menuAnchor.page) ? (() => {

@@ -34,8 +34,8 @@ func sampleCube() CubeDefinition {
 // non-empty, mirroring the metric-layer hash test.
 func TestComputeCubeContentHash_Stable(t *testing.T) {
 	c := sampleCube()
-	h1 := ComputeCubeContentHash(c)
-	h2 := ComputeCubeContentHash(c)
+	h1 := ComputeCubeContentHash(c, nil)
+	h2 := ComputeCubeContentHash(c, nil)
 	assert.Equal(t, h1, h2)
 	assert.NotEmpty(t, h1)
 	assert.Len(t, h1, 64, "SHA-256 hex is 64 chars")
@@ -46,12 +46,12 @@ func TestComputeCubeContentHash_Stable(t *testing.T) {
 // meaningful differences do.
 func TestComputeCubeContentHash_CanonicalizationInsensitivity(t *testing.T) {
 	base := sampleCube()
-	baseHash := ComputeCubeContentHash(base)
+	baseHash := ComputeCubeContentHash(base, nil)
 
 	t.Run("metric id order is irrelevant", func(t *testing.T) {
 		c := sampleCube()
 		c.MetricIDs = []string{"m_units", "m_revenue"}
-		assert.Equal(t, baseHash, ComputeCubeContentHash(c),
+		assert.Equal(t, baseHash, ComputeCubeContentHash(c, nil),
 			"metric IDs are a set, so order must not matter")
 	})
 
@@ -61,7 +61,7 @@ func TestComputeCubeContentHash_CanonicalizationInsensitivity(t *testing.T) {
 			{"order_date", "product", "country"},
 			{"order_date", "country"},
 		}
-		assert.Equal(t, baseHash, ComputeCubeContentHash(c),
+		assert.Equal(t, baseHash, ComputeCubeContentHash(c, nil),
 			"dimensions within a grain are a set")
 	})
 
@@ -69,13 +69,13 @@ func TestComputeCubeContentHash_CanonicalizationInsensitivity(t *testing.T) {
 		c := sampleCube()
 		c.MetricIDs = []string{"  M_REVENUE ", "M_UNITS"}
 		c.Dimensions[0].TermNodeID = " Country "
-		assert.Equal(t, baseHash, ComputeCubeContentHash(c))
+		assert.Equal(t, baseHash, ComputeCubeContentHash(c, nil))
 	})
 
 	t.Run("drill path order is normalized", func(t *testing.T) {
 		c := sampleCube()
 		c.Dimensions[1].DrillPath = []string{"product", "product_category"}
-		assert.Equal(t, baseHash, ComputeCubeContentHash(c))
+		assert.Equal(t, baseHash, ComputeCubeContentHash(c, nil))
 	})
 
 	// These must differ: a hash that ignored real content would make deploy
@@ -83,26 +83,26 @@ func TestComputeCubeContentHash_CanonicalizationInsensitivity(t *testing.T) {
 	t.Run("changing metrics changes the hash", func(t *testing.T) {
 		c := sampleCube()
 		c.MetricIDs = append(c.MetricIDs, "m_margin")
-		assert.NotEqual(t, baseHash, ComputeCubeContentHash(c))
+		assert.NotEqual(t, baseHash, ComputeCubeContentHash(c, nil))
 	})
 
 	t.Run("changing grains changes the hash", func(t *testing.T) {
 		c := sampleCube()
 		c.Grains = append(c.Grains, []string{"customer", "order_date"})
-		assert.NotEqual(t, baseHash, ComputeCubeContentHash(c))
+		assert.NotEqual(t, baseHash, ComputeCubeContentHash(c, nil))
 	})
 
 	t.Run("reordering dimensions changes the hash", func(t *testing.T) {
 		c := sampleCube()
 		c.Dimensions[0], c.Dimensions[1] = c.Dimensions[1], c.Dimensions[0]
-		assert.NotEqual(t, baseHash, ComputeCubeContentHash(c),
+		assert.NotEqual(t, baseHash, ComputeCubeContentHash(c, nil),
 			"dimension order is the axis order and is significant")
 	})
 
 	t.Run("changing stale policy changes the hash", func(t *testing.T) {
 		c := sampleCube()
 		c.Materialization.StalePolicy = "force_raw_fallback"
-		assert.NotEqual(t, baseHash, ComputeCubeContentHash(c))
+		assert.NotEqual(t, baseHash, ComputeCubeContentHash(c, nil))
 	})
 }
 
@@ -167,14 +167,18 @@ func TestValidateCubeStructural(t *testing.T) {
 }
 
 // TestValidateCubeMetricReferences covers the governance constraint: a cube
-// may only aggregate metrics that exist in the tenant.
+// may only aggregate metrics that exist in the tenant, and every metric it
+// names must be one it could actually materialize.
 func TestValidateCubeMetricReferences(t *testing.T) {
-	known := map[string]bool{"m_revenue": true, "m_units": true}
+	known := map[string]MetricDefinition{
+		"m_revenue": {ID: "m_revenue", Expression: MetricExpression{Kind: "aggregation", Fn: "sum", TermNodeID: "revenue"}},
+		"m_units":   {ID: "m_units", Expression: MetricExpression{Kind: "aggregation", Fn: "sum", TermNodeID: "units_sold"}},
+	}
 
 	require.NoError(t, ValidateCubeMetricReferences(sampleCube(), known))
 
 	t.Run("unknown metric is rejected", func(t *testing.T) {
-		err := ValidateCubeMetricReferences(sampleCube(), map[string]bool{"m_revenue": true})
+		err := ValidateCubeMetricReferences(sampleCube(), map[string]MetricDefinition{"m_revenue": known["m_revenue"]})
 		require.ErrorIs(t, err, ErrCubeUnknownMetric)
 		assert.Contains(t, err.Error(), "m_units")
 	})
@@ -183,10 +187,104 @@ func TestValidateCubeMetricReferences(t *testing.T) {
 		require.NoError(t, ValidateCubeMetricReferences(sampleCube(), known),
 			"IDs are normalized before lookup")
 	})
+
+	// The ambiguity must be caught where the cube is authored, not discovered
+	// at DDL generation. A cube naming an ordered-only ratio is rejected even
+	// though the metric "exists".
+	t.Run("a ratio with no explicit operands is rejected", func(t *testing.T) {
+		ambiguous := map[string]MetricDefinition{
+			"m_revenue": known["m_revenue"],
+			"m_units":   known["m_units"],
+			"m_margin": {
+				ID:   "m_margin",
+				Expression: MetricExpression{
+					Kind:          "derived",
+					BaseMetricIDs: []string{"m_revenue", "m_units"},
+				},
+			},
+		}
+		c := sampleCube()
+		c.MetricIDs = []string{"m_margin"}
+		err := ValidateCubeMetricReferences(c, ambiguous)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "requires numeratorId and denominatorId")
+		assert.Contains(t, err.Error(), "m_margin",
+			"the error must name the offending metric")
+	})
+
+	t.Run("a ratio with explicit operands is accepted", func(t *testing.T) {
+		explicit := map[string]MetricDefinition{
+			"m_margin": {
+				ID:   "m_margin",
+				Expression: MetricExpression{
+					Kind:          "derived",
+					BaseMetricIDs: []string{"m_revenue", "m_units"},
+					NumeratorID:   "m_revenue",
+					DenominatorID: "m_units",
+				},
+			},
+		}
+		c := sampleCube()
+		c.MetricIDs = []string{"m_margin"}
+		require.NoError(t, ValidateCubeMetricReferences(c, explicit))
+	})
 }
 
 // TestCubeDimensionSet verifies the normalized dimension set used by grain
 // coverage checks.
+// TestComputeCubeContentHash_TracksReferencedMetricContent is the ADR-027
+// regression test. The cube hash used to cover metric IDs only, so editing a
+// metric's definition left the cube hash unchanged, the deploy stayed a no-op
+// under ADR-011, and a materialized view kept serving the pre-edit expression.
+// A hash that cannot see the thing it must distinguish.
+func TestComputeCubeContentHash_TracksReferencedMetricContent(t *testing.T) {
+	c := sampleCube()
+
+	base := ComputeCubeContentHash(c, []string{"hash_revenue_v1", "hash_units_v1"})
+
+	t.Run("editing a referenced metric changes the cube hash", func(t *testing.T) {
+		edited := ComputeCubeContentHash(c, []string{"hash_revenue_v2", "hash_units_v1"})
+		assert.NotEqual(t, base, edited,
+			"a metric definition edit must be a cube change, or deploy stays a no-op against a stale materialization")
+	})
+
+	t.Run("an unrelated metric leaves the hash stable", func(t *testing.T) {
+		same := ComputeCubeContentHash(c, []string{"hash_units_v1", "hash_revenue_v1"})
+		assert.Equal(t, base, same,
+			"resolution order must not change the cube's identity")
+	})
+
+	t.Run("content hash order is normalized", func(t *testing.T) {
+		assert.Equal(t, base, ComputeCubeContentHash(c, []string{"  HASH_REVENUE_V1 ", "hash_units_v1"}),
+			"case and whitespace are normalized, as for metric IDs")
+	})
+
+	t.Run("a real metric content hash is carried through", func(t *testing.T) {
+		// The end-to-end shape: an actual metric definition edit, through the
+		// real hash function, into the cube identity.
+		m := MetricDefinition{
+			ID:   "m_revenue",
+			Name: "Revenue",
+			Expression: MetricExpression{
+				Kind:          "derived",
+				BaseMetricIDs: []string{"m_units", "m_cost"},
+				NumeratorID:   "m_units",
+				DenominatorID: "m_cost",
+			},
+		}
+		c2 := sampleCube()
+		c2.MetricIDs = []string{"m_revenue"}
+		before := ComputeCubeContentHash(c2, []string{ComputeMetricContentHash(m)})
+
+		m.Expression.NumeratorID = "m_cost"
+		m.Expression.DenominatorID = "m_units"
+		after := ComputeCubeContentHash(c2, []string{ComputeMetricContentHash(m)})
+
+		assert.NotEqual(t, before, after,
+			"inverting a ratio's operands must invalidate the cube, or the materialized view keeps the old direction")
+	})
+}
+
 func TestCubeDimensionSet(t *testing.T) {
 	c := sampleCube()
 	assert.Equal(t, []string{"country", "product"}, c.DimensionSet())
@@ -229,8 +327,8 @@ func TestCacheKey_NoCubeMatchesLegacyKey(t *testing.T) {
 // TestCubeContentHashChangesWithContent confirms the hash the cache key consumes
 // is content-sensitive, which is what makes the invalidation above meaningful.
 func TestCubeContentHashChangesWithContent(t *testing.T) {
-	base := ComputeCubeContentHash(sampleCube())
+	base := ComputeCubeContentHash(sampleCube(), nil)
 	changed := sampleCube()
 	changed.Grains = append(changed.Grains, []string{"customer", "order_date"})
-	assert.NotEqual(t, base, ComputeCubeContentHash(changed))
+	assert.NotEqual(t, base, ComputeCubeContentHash(changed, nil))
 }
