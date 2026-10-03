@@ -20,6 +20,7 @@ type fakeLakehouseRegistry struct {
 	cfg        *registry.Config
 	err        error // returned by every call when set
 	setCalls   []int
+	setResult  *registry.Config // what SetRetention returns, when set
 	recorded   []string
 	broken     *int64
 	listArgs   [3]any
@@ -40,6 +41,11 @@ func (f *fakeLakehouseRegistry) SetRetention(_ context.Context, id uuid.UUID, da
 	f.setCalls = append(f.setCalls, days)
 	if f.err != nil {
 		return nil, f.err
+	}
+	if f.setResult != nil {
+		c := *f.setResult
+		c.TenantID = id.String()
+		return &c, nil
 	}
 	d := days
 	return &registry.Config{TenantID: id.String(), Configured: true, AuditRetentionDays: &d, LifecycleState: "provisioning"}, nil
@@ -69,6 +75,8 @@ func (f *fakeLakehouseRegistry) Record(_ context.Context, _ uuid.UUID, _ registr
 type fakeProvisioner struct {
 	started int
 	err     error
+	syncs   int
+	syncErr error
 }
 
 func (p *fakeProvisioner) StartProvision(_ context.Context, id uuid.UUID, _ registry.Actor) (string, error) {
@@ -77,6 +85,14 @@ func (p *fakeProvisioner) StartProvision(_ context.Context, id uuid.UUID, _ regi
 		return "", p.err
 	}
 	return "lakehouse-" + id.String(), nil
+}
+
+func (p *fakeProvisioner) StartRetentionSync(_ context.Context, id uuid.UUID, _ registry.Actor) (string, error) {
+	p.syncs++
+	if p.syncErr != nil {
+		return "", p.syncErr
+	}
+	return "lakehouse-retention-" + id.String(), nil
 }
 
 var testTenant = uuid.MustParse("11111111-2222-3333-4444-555555555555")
@@ -126,6 +142,7 @@ func TestSystemLakehouse_RequiresGlobalAdmin(t *testing.T) {
 		{"PUT", lakehousePath(""), `{"audit_retention_days":365}`},
 		{"GET", lakehousePath("/audit"), ""},
 		{"POST", lakehousePath("/provision"), ""},
+		{"POST", lakehousePath("/retention/sync"), ""},
 	}
 	for _, rt := range routes {
 		t.Run(rt.method+" "+rt.path, func(t *testing.T) {
@@ -307,6 +324,100 @@ func TestSystemLakehouse_Provision(t *testing.T) {
 
 		w = call(newLakehouseRouter(&fakeLakehouseRegistry{cfg: configured(false)}, &fakeProvisioner{err: errors.New("temporal down")}),
 			"POST", lakehousePath("/provision"), "", globalAdmin)
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+		require.NotContains(t, w.Body.String(), "temporal down")
+	})
+}
+
+func pendingCfg() *registry.Config {
+	d, applied := 3650, 365
+	return &registry.Config{Configured: true, Provisioned: true, AuditRetentionDays: &d, RetentionAppliedDays: &applied,
+		RetentionPending: true, LifecycleState: "active"}
+}
+
+// Raising the retention of a provisioned tenant starts raising its bucket, but that is best
+// effort: the new retention is already saved and audited, so a failure to start must not fail
+// the request.
+func TestSystemLakehouse_PutStartsARetentionSyncOnlyWhenTheBucketIsBehind(t *testing.T) {
+	t.Run("provisioned and behind: a sync starts", func(t *testing.T) {
+		reg := &fakeLakehouseRegistry{cfg: &registry.Config{}, setResult: pendingCfg()}
+		prov := &fakeProvisioner{}
+		w := call(newLakehouseRouter(reg, prov), "PUT", lakehousePath(""), `{"audit_retention_days":3650}`, globalAdmin)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, 1, prov.syncs)
+	})
+
+	t.Run("not provisioned, or already current: nothing starts", func(t *testing.T) {
+		for name, cfg := range map[string]*registry.Config{
+			"not provisioned": {Configured: true, LifecycleState: "provisioning"},
+			"already current": func() *registry.Config { c := pendingCfg(); c.RetentionPending = false; return c }(),
+		} {
+			prov := &fakeProvisioner{}
+			reg := &fakeLakehouseRegistry{cfg: &registry.Config{}, setResult: cfg}
+			w := call(newLakehouseRouter(reg, prov), "PUT", lakehousePath(""), `{"audit_retention_days":3650}`, globalAdmin)
+			require.Equal(t, http.StatusOK, w.Code, name)
+			require.Zero(t, prov.syncs, name)
+		}
+	})
+
+	t.Run("no provisioner configured: the PUT still succeeds", func(t *testing.T) {
+		reg := &fakeLakehouseRegistry{cfg: &registry.Config{}, setResult: pendingCfg()}
+		w := call(newLakehouseRouter(reg, nil), "PUT", lakehousePath(""), `{"audit_retention_days":3650}`, globalAdmin)
+		require.Equal(t, http.StatusOK, w.Code)
+		var got registry.Config
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+		require.True(t, got.RetentionPending, "and the gap is reported")
+	})
+
+	t.Run("a failure to start never fails the request", func(t *testing.T) {
+		for name, e := range map[string]error{"temporal down": errors.New("temporal down"), "already running": ErrRetentionSyncInProgress} {
+			reg := &fakeLakehouseRegistry{cfg: &registry.Config{}, setResult: pendingCfg()}
+			prov := &fakeProvisioner{syncErr: e}
+			w := call(newLakehouseRouter(reg, prov), "PUT", lakehousePath(""), `{"audit_retention_days":3650}`, globalAdmin)
+			require.Equal(t, http.StatusOK, w.Code, name)
+			require.Equal(t, []int{3650}, reg.setCalls, name+": the retention was saved regardless")
+		}
+	})
+}
+
+func TestSystemLakehouse_RetentionSyncEndpoint(t *testing.T) {
+	path := lakehousePath("/retention/sync")
+
+	t.Run("202 starts it for a provisioned tenant whose bucket is behind", func(t *testing.T) {
+		prov := &fakeProvisioner{}
+		w := call(newLakehouseRouter(&fakeLakehouseRegistry{cfg: pendingCfg()}, prov), "POST", path, "", globalAdmin)
+		require.Equal(t, http.StatusAccepted, w.Code)
+		require.Equal(t, 1, prov.syncs)
+		var b map[string]string
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &b))
+		require.Equal(t, "lakehouse-retention-"+testTenant.String(), b["workflow_id"])
+	})
+
+	t.Run("409 when there is no bucket, or the bucket is already current", func(t *testing.T) {
+		notProv := &registry.Config{Configured: true, LifecycleState: "provisioning"}
+		current := pendingCfg()
+		current.RetentionPending = false
+		for name, c := range map[string]struct {
+			cfg  *registry.Config
+			code string
+		}{"not provisioned": {notProv, "not_provisioned"}, "already current": {current, "retention_current"}} {
+			prov := &fakeProvisioner{}
+			w := call(newLakehouseRouter(&fakeLakehouseRegistry{cfg: c.cfg}, prov), "POST", path, "", globalAdmin)
+			require.Equal(t, http.StatusConflict, w.Code, name)
+			require.Equal(t, c.code, errCode(t, w), name)
+			require.Zero(t, prov.syncs, name)
+		}
+	})
+
+	t.Run("503 without a provisioner, 409 while one is running, 500 on other failures", func(t *testing.T) {
+		w := call(newLakehouseRouter(&fakeLakehouseRegistry{cfg: pendingCfg()}, nil), "POST", path, "", globalAdmin)
+		require.Equal(t, http.StatusServiceUnavailable, w.Code)
+
+		w = call(newLakehouseRouter(&fakeLakehouseRegistry{cfg: pendingCfg()}, &fakeProvisioner{syncErr: ErrRetentionSyncInProgress}), "POST", path, "", globalAdmin)
+		require.Equal(t, http.StatusConflict, w.Code)
+		require.Equal(t, "sync_in_progress", errCode(t, w))
+
+		w = call(newLakehouseRouter(&fakeLakehouseRegistry{cfg: pendingCfg()}, &fakeProvisioner{syncErr: errors.New("temporal down")}), "POST", path, "", globalAdmin)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 		require.NotContains(t, w.Body.String(), "temporal down")
 	})

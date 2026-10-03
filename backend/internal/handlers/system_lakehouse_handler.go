@@ -28,6 +28,7 @@ import (
 //	PUT  /api/system/tenants/{tenantID}/lakehouse            set/extend retention
 //	GET  /api/system/tenants/{tenantID}/lakehouse/audit      audit trail + chain check
 //	POST /api/system/tenants/{tenantID}/lakehouse/provision  start provisioning
+//	POST /api/system/tenants/{tenantID}/lakehouse/retention/sync  raise the bucket to the retention
 type SystemLakehouseHandler struct {
 	reg  lakehouseRegistry
 	prov LakehouseProvisioner
@@ -50,11 +51,19 @@ type LakehouseProvisioner interface {
 	// StartProvision must be idempotent per tenant and return the workflow id. It
 	// returns ErrProvisionInProgress if one is already running.
 	StartProvision(ctx context.Context, tenantID uuid.UUID, actor registry.Actor) (workflowID string, err error)
+
+	// StartRetentionSync starts raising a provisioned tenant's bucket to the retention the
+	// registry wants. Unlike provisioning it recurs, so a finished run does not block a new one;
+	// it returns ErrRetentionSyncInProgress while one is running.
+	StartRetentionSync(ctx context.Context, tenantID uuid.UUID, actor registry.Actor) (workflowID string, err error)
 }
 
 // ErrProvisionInProgress is returned by a LakehouseProvisioner when provisioning
 // for the tenant is already running.
 var ErrProvisionInProgress = errors.New("lakehouse provisioning already in progress")
+
+// ErrRetentionSyncInProgress is returned when a retention sync for the tenant is already running.
+var ErrRetentionSyncInProgress = errors.New("lakehouse retention sync already in progress")
 
 func NewSystemLakehouseHandler(db *sql.DB, prov LakehouseProvisioner) *SystemLakehouseHandler {
 	return &SystemLakehouseHandler{reg: registry.NewStore(db), prov: prov}
@@ -66,6 +75,7 @@ func (h *SystemLakehouseHandler) RegisterRoutes(r chi.Router) {
 	r.Put("/system/tenants/{tenantID}/lakehouse", h.put)
 	r.Get("/system/tenants/{tenantID}/lakehouse/audit", h.audit)
 	r.Post("/system/tenants/{tenantID}/lakehouse/provision", h.provision)
+	r.Post("/system/tenants/{tenantID}/lakehouse/retention/sync", h.retentionSync)
 }
 
 // admin returns the caller if they are a global admin, and has already written the
@@ -160,6 +170,15 @@ func (h *SystemLakehouseHandler) put(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
+	// A provisioned tenant's bucket still enforces the old retention. Start raising it now. This
+	// is best effort and must not fail the request: the new retention is already saved and
+	// audited, retention_pending stays true until the bucket catches up, and the sync endpoint
+	// retries it.
+	if cfg.RetentionPending && h.prov != nil {
+		if _, serr := h.prov.StartRetentionSync(r.Context(), id, actor); serr != nil && !errors.Is(serr, ErrRetentionSyncInProgress) {
+			slog.Error("could not start the lakehouse retention sync", "tenant", id, "error", serr)
+		}
+	}
 	writeLakehouseJSON(w, http.StatusOK, cfg)
 }
 
@@ -235,6 +254,45 @@ func (h *SystemLakehouseHandler) provision(w http.ResponseWriter, r *http.Reques
 	wfID, err := h.prov.StartProvision(r.Context(), id, actor)
 	if errors.Is(err, ErrProvisionInProgress) {
 		writeLakehouseError(w, http.StatusConflict, "provision_in_progress", "provisioning is already running for this tenant")
+		return
+	}
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeLakehouseJSON(w, http.StatusAccepted, map[string]any{"workflow_id": wfID, "tenant_id": id.String()})
+}
+
+func (h *SystemLakehouseHandler) retentionSync(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.admin(w, r)
+	if !ok {
+		return
+	}
+	id, ok := tenantParam(w, r)
+	if !ok {
+		return
+	}
+	cfg, err := h.reg.Get(r.Context(), id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if !cfg.Provisioned {
+		writeLakehouseError(w, http.StatusConflict, "not_provisioned", "this tenant has no provisioned bucket to apply retention to")
+		return
+	}
+	if !cfg.RetentionPending {
+		writeLakehouseError(w, http.StatusConflict, "retention_current", "the bucket already enforces the registry's audit retention")
+		return
+	}
+	if h.prov == nil {
+		writeLakehouseError(w, http.StatusServiceUnavailable, "provisioner_unavailable",
+			"lakehouse provisioning is not configured on this server")
+		return
+	}
+	wfID, err := h.prov.StartRetentionSync(r.Context(), id, actor)
+	if errors.Is(err, ErrRetentionSyncInProgress) {
+		writeLakehouseError(w, http.StatusConflict, "sync_in_progress", "a retention sync is already running for this tenant")
 		return
 	}
 	if err != nil {

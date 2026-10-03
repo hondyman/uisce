@@ -399,6 +399,9 @@ func main() {
 	w.RegisterWorkflowWithOptions(provisioningworkflows.TenantLakehouseProvisioningWorkflow, temporalworkflow.RegisterOptions{
 		Name: provisioningworkflows.TenantLakehouseProvisioningWorkflowName,
 	})
+	w.RegisterWorkflowWithOptions(provisioningworkflows.TenantLakehouseRetentionWorkflow, temporalworkflow.RegisterOptions{
+		Name: provisioningworkflows.TenantLakehouseRetentionWorkflowName,
+	})
 	w.RegisterActivity(lakehouseActivities)
 	log.Println("✅ Registered Tenant Lakehouse Provisioning Workflow")
 	pkgworkflows.RegisterSafeActivity("HealthCheck", provisioningActivities.HealthCheck)

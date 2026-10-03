@@ -72,6 +72,7 @@ func TestTemporalLakehouseProvisioner_Errors(t *testing.T) {
 // from happening again, silently.
 func TestLakehouseWorkflowIsWiredIntoTheDeployedWorker(t *testing.T) {
 	require.Equal(t, workflows.TenantLakehouseProvisioningWorkflowName, LakehouseWorkflowName)
+	require.Equal(t, workflows.TenantLakehouseRetentionWorkflowName, LakehouseRetentionWorkflowName)
 
 	src, err := os.ReadFile("../../cmd/worker/main.go")
 	require.NoError(t, err)
@@ -85,10 +86,36 @@ func TestLakehouseWorkflowIsWiredIntoTheDeployedWorker(t *testing.T) {
 	}
 	has(`worker.New(temporalClient, "`+LakehouseTaskQueue+`"`, "cmd/worker must poll the queue the starter uses")
 	has("TenantLakehouseProvisioningWorkflow", "the workflow must be registered on that worker")
+	has("TenantLakehouseRetentionWorkflow", "and so must the retention reconcile")
 	has("TenantLakehouseActivities", "and so must its activities")
 	for _, line := range strings.Split(main, "\n") {
 		if strings.Contains(line, "RegisterSafeActivity") && strings.Contains(line, "Lakehouse") {
 			t.Errorf("lakehouse activities must never be BP-Designer client-safe: %s", strings.TrimSpace(line))
 		}
 	}
+}
+
+func TestTemporalLakehouseProvisioner_RetentionSync(t *testing.T) {
+	id := uuid.New()
+	f := &fakeStarter{}
+	p := &TemporalLakehouseProvisioner{c: f, queue: LakehouseTaskQueue}
+
+	wfID, err := p.StartRetentionSync(context.Background(), id, registry.Actor{ID: "alice", Role: "global_admin"})
+	require.NoError(t, err)
+	require.Equal(t, "run-id", wfID)
+	require.Equal(t, "lakehouse-retention-"+id.String(), f.opts.ID, "at most one sync runs per tenant")
+	require.Equal(t, "bp_queue", f.opts.TaskQueue)
+	require.Equal(t, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, f.opts.WorkflowIDReusePolicy,
+		"every extension needs a new run, so a finished one must not block it")
+	require.Equal(t, LakehouseRetentionWorkflowName, f.wf)
+	require.Equal(t, []interface{}{activities.LakehouseProvisionInput{TenantID: id.String(), ActorID: "alice", ActorRole: "global_admin"}}, f.args)
+
+	f.err = serviceerror.NewWorkflowExecutionAlreadyStarted("running", "", "")
+	_, err = p.StartRetentionSync(context.Background(), id, registry.Actor{})
+	require.ErrorIs(t, err, ErrRetentionSyncInProgress)
+
+	f.err = errors.New("temporal unavailable")
+	_, err = p.StartRetentionSync(context.Background(), id, registry.Actor{})
+	require.ErrorContains(t, err, "temporal unavailable")
+	require.NotErrorIs(t, err, ErrRetentionSyncInProgress)
 }
