@@ -12,8 +12,9 @@
 -- Each row carries prev_hash and hash. The trigger, not the client, computes both,
 -- so a caller cannot forge or skip a link. This is tamper-EVIDENT (verify
 -- recomputes the chain), not tamper-PROOF: the hash is unkeyed, and a role that can
--- rewrite the whole table could rewrite the chain. The durable copy is the lake
--- (ADR-032), where the audit bucket is under Object Lock.
+-- rewrite the whole table could rewrite the chain. alpha is the system of record
+-- and nothing is ever dropped from this table (ADR-029); the lake may additionally
+-- hold an immutable copy under Object Lock (ADR-032).
 --
 -- Additive: new table and functions only.
 
@@ -132,4 +133,4 @@ CREATE POLICY tenant_lakehouse_audit_isolation_policy ON public.tenant_lakehouse
     WITH CHECK (tenant_id = uisce_get_current_tenant());
 
 COMMENT ON TABLE public.tenant_lakehouse_audit IS
-    'Append-only hash-chained audit of a tenant''s lakehouse configuration. The trigger computes prev_hash/hash. Tamper-evident, not tamper-proof; the durable copy is the lake (ADR-032).';
+    'Append-only hash-chained audit of a tenant''s lakehouse configuration. The trigger computes prev_hash/hash. Tamper-evident, not tamper-proof; alpha is the system of record; the lake may hold an immutable copy (ADR-032).';

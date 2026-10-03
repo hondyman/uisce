@@ -914,6 +914,14 @@ namespace. The cold tier is bound per *tenant*, not per datasource, in
 `internal/ops/region_router.go` reads from this model rather than holding its
 own mapping.
 
+**Invariant: metadata never leaves `alpha`.** All metadata for all tenants, and
+the audit of changes to it, lives in `alpha` and stays there. Nothing in this
+group of decisions moves, tiers out, archives away or drops a metadata or audit
+row from `alpha`. Other stores (StarRocks, the lake) may hold *copies* for
+analytics, history or immutable retention; the copy is never the system of record
+and its existence is never a reason to delete from `alpha`. Only a tenant's own
+operational data (the data plane) is tiered.
+
 **Context.** The datasource chain already names a tenant database
 (`config.host/port/database`) and a credential reference (`secret_path`,
 validated by `dscreds.CanonicalPath`). A parallel `ctl.tenant_resource` table
@@ -1030,17 +1038,24 @@ bans raw key formatting outside the builder.
 (`semantic_view:`, `nl:`, `sq:`, `ratelimit:`, `notifications:tenant:`) migrate
 to the builder.
 
-### ADR-035: Tiering Is Hot → Warm → Cold, and a Partition Is Dropped Only After the Lake Copy Verifies
+### ADR-035: Tenant Data Tiers Hot → Warm → Cold; `alpha` Metadata Is Never Tiered Out
 
-**Decision.** Hot is tenant Postgres (90 days), warm is StarRocks native (13
-months), cold is Iceberg. Event-like tables are range-partitioned and flow
-through CDC and Kafka to Iceberg. A Postgres partition is detached only after a
-verification job proves the Iceberg copy matches (row count and seal chain).
-Retention is enforced by dropping partitions (ADR-018); a legal hold suspends
-drops.
+**Decision.** This applies to a tenant's **operational data** (the data plane),
+not to metadata. Hot is the tenant's Postgres database (90 days), warm is
+StarRocks native (13 months), cold is Iceberg. Event-like tables in a tenant
+database are range-partitioned and flow through CDC and Kafka to Iceberg. A tenant
+database partition is detached only after a verification job proves the Iceberg
+copy matches (row count and, where present, seal chain). Retention is enforced by
+dropping those partitions (ADR-018); a legal hold suspends drops.
 
-**Consequence.** This satisfies ADR-009 ("audit log never purged"): the audit
-record is permanent in the lake, and Postgres holds only the hot window.
+**Not covered, deliberately.** Nothing here applies to `alpha`. Metadata and the
+audit of changes to it are never detached, archived away or dropped (ADR-029).
+
+**Consequence.** ADR-009 ("audit log never purged") is satisfied by `alpha`
+keeping its audit log permanently. A copy may additionally be written to the lake
+under Object Lock (ADR-032) for immutable retention and time-travel queries; that
+copy adds a guarantee and removes nothing from `alpha`. An earlier draft of this
+ADR said Postgres would hold only a hot window of audit; that is withdrawn.
 
 ## Open items
 
