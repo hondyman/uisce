@@ -1093,6 +1093,54 @@ the documented StarRocks 3.3 and Lakekeeper interfaces and the properties this r
 already uses; they have not been run against the deployed instances and need a smoke run
 before anything depends on them.
 
+### ADR-037: Inside One Tenant Bucket, Object Lock Is Compliance For Everything; History Cannot Be Governance-Mode
+
+**Decision.** A tenant has one bucket (ADR-032), and `EnsureTenantBucket` sets its default
+Object Lock retention to COMPLIANCE for `audit_retention_days`, refusing any other mode
+(`ErrBucketConflict`). Every object the tenant's warehouse writes inherits that default. We do
+**not** plan on a second, governance-mode bucket or on per-object retention for "history": the
+writers of tenant Iceberg data are StarRocks and Lakekeeper, which cannot set a per-object
+retention header, so an `audit` namespace and an `<app>` namespace in the same bucket are locked
+identically. The audit/history distinction is therefore a *table* distinction (namespace and
+maintenance rules), not a storage-lock one.
+
+**Consequences.**
+- Tenant history written to the lake is retained for at least the tenant's audit retention and
+  cannot be dropped earlier, even by an operator. That is acceptable only because the lake holds
+  copies; `alpha` and the tenant's Postgres remain where data is created and, for metadata,
+  kept (ADR-029, ADR-035).
+- Retention-driven drops of tenant history (ADR-035) therefore act on Postgres and StarRocks
+  partitions, not on lake objects, until the lock lapses. Snapshot expiry and orphan cleanup
+  skip every table in a tenant warehouse until then (same limit as ADR-036).
+- Raising retention applies to new objects only (already recorded in `tenant_lakehouse`).
+- If a tenant needs history that can be deleted before the audit term, that needs a second
+  bucket and warehouse for that tenant, which contradicts one-warehouse-per-tenant. It is a
+  decision to take per tenant, with this ADR revisited, not a default.
+
+**Evidence.** `internal/iceberg/tenant_bucket.go` (`ensureObjectLock`, `ExtendTenantRetention`).
+
+### ADR-038: The Binding Carries Lifecycle Windows and Legal Hold, As Additive Columns
+
+**Decision.** `tenant_datasource_binding` gains `pg_cluster`, `hot_window_days` (default 90),
+`warm_window_months` (default 13), `legal_hold` and a uniqueness guard on `redis_key_prefix`, by
+a forward migration of `ADD COLUMN IF NOT EXISTS` and a new index only (ADR-024). Nothing in
+`20261206_001` is edited, dropped or retyped. Cold retention is not repeated here: it is
+`tenant_lakehouse.audit_retention_days`, per tenant (ADR-032). Maker-checker approval on
+binding changes is not added by this decision; it needs its own, using the staging-binding
+approach rather than invented columns.
+
+**Consequence.** The tiering job (ADR-035) reads the windows and `legal_hold` from the binding;
+`legal_hold` suspends partition drops and never touches Object Lock.
+
+### ADR-039: Drift Is Reported, Not Remediated, By a Reporter Over Existing Sources
+
+**Decision.** Any reconciler of registry versus tier state is a reporter. Its expected state
+comes from the existing sources (`InspectProvisioningState`, the retention reconcile and the
+registry), it reports `missing`, `orphan`, `drift` and `unknown` (a failed probe is `unknown`,
+never healthy-by-absence), and it never executes. Remediation stays with the workflow that owns
+the lifecycle change, so each change has one execution path and no second provisioner exists.
+It must never auto-remediate a resource under compliance Object Lock.
+
 ## Open items
 
 - **Call-site verification for ADR-001 … ADR-010.** The imported entries assert
@@ -1108,3 +1156,11 @@ before anything depends on them.
   materialization transitions to `failed`, since a scheduler that silently fails
   turns staleness from an edge case into the steady state. The reconciler
   health-check surface is a candidate host but is not yet chosen.
+- **Seal-chain amendments (not adopted).** Two ideas were considered for the audit chain and
+  parked: (1) a per-partition boundary seal in `ivy-control`, and (2) a key version in each seal.
+  (1) exists to prove continuity after a Postgres partition is detached, but `alpha` audit is
+  never detached (ADR-029), so it is only needed once a *tenant database* event table carries a
+  seal chain and ADR-035's detach-verification job is built. (2) does not apply: the shipped
+  chain is an unkeyed hash, so there is no key to version. Decide (1) before that job is written.
+- **ADR-036 dependency.** ADR-037 refers to ADR-036, which is introduced by the audit-copy PR;
+  merge that first.
