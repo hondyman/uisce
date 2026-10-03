@@ -1862,6 +1862,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Register handlers that were previously orphaned
 		ipWhitelistHandler.RegisterRoutes(r)
 		onboardingHandler.RegisterRoutes(r)
+		// System > Lakehouse: per-tenant audit retention and warehouse provisioning
+		// (ADR-032). Global admins only. The provisioner is nil until the
+		// provisioning workflow is wired, so POST .../provision answers 503; the
+		// configuration endpoints work now.
+		handlers.NewSystemLakehouseHandler(db, nil).RegisterRoutes(r)
 		abbreviationHandler.RegisterRoutes(r)
 		bundleHandler.RegisterRoutes(r)
 		domainHandler.RegisterRoutes(r)

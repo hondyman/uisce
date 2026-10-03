@@ -41,7 +41,7 @@ type OnboardTenantResponse struct {
 	// LakehouseStatus is always "unconfigured" here: a tenant's Iceberg warehouse
 	// is configured and provisioned separately, because its audit retention is a
 	// per-tenant decision that cannot be defaulted (ADR-032). See
-	// PUT /api/v1/system/tenants/{tenant_id}/lakehouse.
+	// PUT /api/system/tenants/{tenant_id}/lakehouse.
 	LakehouseStatus string `json:"lakehouse_status"`
 }
 
