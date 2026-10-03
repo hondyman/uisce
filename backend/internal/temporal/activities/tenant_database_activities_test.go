@@ -33,6 +33,12 @@ import (
 //	                           a member of uisce_gold_copy_sync
 //	SAGA_TEST_PG_HOST/PORT/USER  a superuser on the cluster that holds the tenant databases
 //
+// The cluster must be a DEDICATED, hardened test cluster: provisioning now proves a tenant's role
+// can connect to no other database, so every other database on the cluster, including postgres and
+// template1, must have PUBLIC's CONNECT revoked (the scratch alpha is hardened by the rig itself).
+// A shared dev cluster whose other databases are open will fail the probe, by design. A throwaway
+// one is two commands: initdb -A trust, then REVOKE CONNECT ON DATABASE postgres, template1 FROM PUBLIC.
+//
 // Alpha's datasource chain is rebuilt here from the columns the code reads, with the REAL binding
 // migrations and an equivalent isolation policy on the datasource table. That policy is a stub
 // for production's, and the cluster here trusts all connections, so password rejection is not
@@ -84,7 +90,12 @@ GRANT USAGE ON SCHEMA public TO PUBLIC;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO PUBLIC;
 `
 
-func newSagaRig(t *testing.T) *sagaRig {
+func newSagaRig(t *testing.T) *sagaRig { return newSagaRigOn(t, nil) }
+
+// newSagaRigOn builds a rig. With shared == nil it resets the scratch alpha and starts from
+// nothing. With a shared rig it adds ANOTHER tenant (own instance, datasources and database) to
+// the same alpha and the same secrets store, which is what an isolation test needs.
+func newSagaRigOn(t *testing.T, shared *sagaRig) *sagaRig {
 	t.Helper()
 	adminDSN, appDSN := os.Getenv("SAGA_TEST_ALPHA_ADMIN_DSN"), os.Getenv("SAGA_TEST_ALPHA_APP_DSN")
 	host, user := os.Getenv("SAGA_TEST_PG_HOST"), os.Getenv("SAGA_TEST_PG_USER")
@@ -104,9 +115,11 @@ func newSagaRig(t *testing.T) *sagaRig {
 	require.NoError(t, err)
 	b2, err := os.ReadFile(migDir + "20261210_001_binding_pg_credential.up.sql")
 	require.NoError(t, err)
-	for _, q := range []string{`DROP SCHEMA public CASCADE`, `CREATE SCHEMA public`, sagaStub, string(b1), string(b2), sagaPolicies} {
-		_, err := adm.Exec(q)
-		require.NoError(t, err)
+	if shared == nil {
+		for _, q := range []string{`DROP SCHEMA public CASCADE`, `CREATE SCHEMA public`, sagaStub, string(b1), string(b2), sagaPolicies} {
+			_, err := adm.Exec(q)
+			require.NoError(t, err)
+		}
 	}
 	app, err := sql.Open("pgx", appDSN)
 	require.NoError(t, err)
@@ -114,12 +127,23 @@ func newSagaRig(t *testing.T) *sagaRig {
 	var bypass bool
 	require.NoError(t, app.QueryRow(`SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user`).Scan(&bypass))
 	require.False(t, bypass, "the app role bypasses row-level security; the isolation tests would be vacuous")
+	if shared == nil {
+		// The scratch alpha stands in for the control plane. Like production's it must not be
+		// connectable by tenant roles, so close PUBLIC's CONNECT and keep the app role's.
+		var appUser string
+		require.NoError(t, app.QueryRow(`SELECT current_user`).Scan(&appUser))
+		_, err := adm.Exec(fmt.Sprintf(`REVOKE CONNECT ON DATABASE "%s" FROM PUBLIC; GRANT CONNECT ON DATABASE "%s" TO "%s"`, name, name, appUser))
+		require.NoError(t, err)
+	}
 
 	r := &sagaRig{
 		app: app, admin: adm, sec: secrets.NewMemoryProvider(),
 		cluster: activities.TenantDatabaseAdmin{Host: host, Port: port, User: user, Password: "x"},
 		tenant:  uuid.NewString(), instance: uuid.NewString(), dsOrm: uuid.NewString(), dsOther: uuid.NewString(),
 		database: "tdb_saga_" + strings.ReplaceAll(uuid.NewString()[:8], "-", ""), gold: "gold_copy_db",
+	}
+	if shared != nil {
+		r.sec = shared.sec
 	}
 	r.acts = &activities.TenantProvisioningActivities{
 		ControlDB: sqlx.NewDb(app, "pgx"), Logger: zap.NewNop().Sugar(),
@@ -129,11 +153,8 @@ func newSagaRig(t *testing.T) *sagaRig {
 	}
 
 	// The tenant's database, as the gold-copy clone leaves it: tables owned by the administrator.
-	cl, err := r.cluster.Open("postgres")
-	require.NoError(t, err)
-	_, err = cl.Exec(`CREATE DATABASE ` + r.database)
-	require.NoError(t, err)
-	cl.Close()
+	t.Setenv("DATABASE_URL", fmt.Sprintf("postgres://%s:%s@%s:%d/postgres?sslmode=disable", r.cluster.User, r.cluster.Password, r.cluster.Host, r.cluster.Port))
+	require.NoError(t, r.acts.CreateTenantDatabase(context.Background(), r.database), "the real activity creates the database and closes PUBLIC's CONNECT")
 	tdb, err := r.cluster.Open(r.database)
 	require.NoError(t, err)
 	_, err = tdb.Exec(`CREATE TABLE orders (id serial PRIMARY KEY, note text)`)
