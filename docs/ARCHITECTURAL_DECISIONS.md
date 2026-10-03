@@ -1301,6 +1301,36 @@ It must never auto-remediate a resource under compliance Object Lock.
   metric compiler's own cycle detection does not cover), and calc-term lineage
   edges plus reconciler backfill.
 
+- **The metric-to-term `USES_TERM` lineage edge was never written. C2 fixes it, and
+  the unit test was part of the bug.** `SyncMetricToCatalogGraph` guarded the
+  insert with `uuid.Parse(m.Expression.TermNodeID)`, so the edge ran only when a
+  metric named its term by UUID. Real metrics name terms by semantic key — the
+  8.3 corpus carries `revenue`, `cost`, `units_sold`, `returns`,
+  `calc_term_net_interest_income` — and 0 of 5 parse. Every metric's lineage to
+  its underlying term was absent, and the reconciler (`metric_reconciler.go:51`)
+  called the function and appeared to succeed.
+
+  Two pieces of evidence, not one. The corpus gave the data shape. The unit test
+  gave the confirmation: `TestMetricCatalogSync_TransactionalEmission` set
+  `TermNodeID` to a **UUID**, because that was the only shape the implementation
+  accepted. A test written around the implementation's constraint rather than
+  production's data passes while production takes the other branch — the same
+  family as a vacuous fixture, one level up.
+
+  Resolution now matches `DERIVED_FROM`, twelve lines below, which has always
+  resolved its target by `node_key`. Both steps resolve a name the same way, so
+  a metric whose base metrics are linked is no longer one whose term is not.
+
+  The three `_, _ = tx.ExecContext(...)` in that function are gone, and the two
+  failure classes are distinguished rather than merged: a **database error is
+  returned** and rolls the transaction back, because a metric node in the graph
+  with no lineage reads as "it never had any"; a **missing target is not fatal**
+  (a metric can legitimately be imported before its term exists) but is
+  **recorded and logged**, so an absent edge is always explicable. An absent edge
+  with no log line is a bug, not a state. This is the `G104` argument from the
+  security-scan discussion made concrete in the product rather than in the
+  tooling.
+
 - **Call-site verification for ADR-001 … ADR-010.** The imported entries assert
   no call sites because the original recorded none. Verifying each is
   outstanding; ADR-012 and ADR-013 exist because that verification already
@@ -1353,18 +1383,39 @@ It must never auto-remediate a resource under compliance Object Lock.
   thing that catches the shared-global-cache class of bug — the guardrails cache
   race this engagement already fixed being a live example. The time is recovered
   by removing the duplicate, not by weakening the suite.
-- **Security scanning is not yet tiered, and the measurement says it should not
-  be the first move.** Per-job wall-clock on `main`'s recent CI/CD Pipeline runs:
-  the critical path was `Build Backend` at 13.4m and 10.3m, and `Security Scan`
-  at 11.1m — Gosec leads exactly one run in three, so tiering it off the PR path
-  removes the blocker on a third of runs and leaves the other two unchanged. The
-  workflow jobs already run in parallel, so there is no serial chain to
-  parallelise either. If tiering proceeds, two defects in the original design
-  must be corrected first: a baseline keyed on `rule_id` alone would suppress
-  every *future* finding of that rule anywhere in the repo (it needs
-  file+line+rule, with re-baselining as a reviewed commit), and a PR gate that
-  applies no baseline fails on pre-existing debt in any touched file. Any
-  wholesale `G104` exclusion must also go — unhandled errors are the class behind
+- **Decision: security scanning is NOT tiered. One full scan on every PR.**
+  Considered and declined: a three-tier design (PR diff-scan, nightly full scan
+  with baseline, release gate on unexplained HIGH/CRITICAL). The tiering was
+  designed on the premise that *"PR merges are Gosec-bound"*, and that premise
+  turned out to be measured **false** once `security-scan` stopped declaring
+  `needs: [build-backend, build-frontend]`.
+
+  That job checks the repository out fresh and scans the source tree itself —
+  Trivy filesystem, Snyk, Gosec over `./backend/...` — so it consumes no
+  artifact from either build job. The `needs:` was gratuitous and serialized a
+  full 8–11 minute scan behind 10–13 minutes of builds, making it additive to
+  every PR. With it removed the scan overlaps the builds and costs approximately
+  zero wall-clock, so a nightly tier would buy runner compute in exchange for
+  per-PR detection latency, a baseline file to maintain forever, and permanent
+  baseline drift. **Full-scan-every-PR is simultaneously the more secure and the
+  cheaper option**, which is rare enough to be worth stating plainly rather than
+  discovering again.
+
+  The measurement correction behind this is recorded because it is the kind of
+  error that is invisible until measured: the scan looked like the critical path
+  on one run in three when judged by longest-single-job, but the pipeline's
+  critical path is the longest **dependency chain**. Longest-job was off by
+  9.8–22.7m against actual run wall-clock; the chain figure tracked reality to
+  0.8–12.2m.
+
+  **If runner compute ever becomes a real constraint — measured, not assumed —
+  the tiered design is preserved here for that contingency**, together with the
+  two defects that must be fixed before it is built: a baseline keyed on
+  `rule_id` alone suppresses every *future* finding of that rule repo-wide (it
+  needs file+line+rule, re-baselined only by reviewed commit), and a PR gate
+  that applies no baseline fails on pre-existing debt in any touched file. Any
+  wholesale `G104` exclusion is also out: unhandled errors are the class behind
   the three discarded `tx.ExecContext` results in `SyncMetricToCatalogGraph`, so
-  silencing the rule would blind the scanner to a defect class this codebase keeps
-  producing. Per-site `#nosec` with a reason is the reviewed-exclusion pattern.
+  silencing the rule would blind the scanner to a defect class this codebase
+  keeps producing. Per-site `#nosec` with a reason is the reviewed-exclusion
+  pattern.
