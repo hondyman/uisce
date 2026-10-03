@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,6 +16,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/iceberg"
 	"github.com/hondyman/uisce/backend/internal/provisioning"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	"go.uber.org/zap"
 )
 
@@ -162,14 +164,25 @@ func (a *TenantProvisioningActivities) CreateTenantDatabase(ctx context.Context,
 
 	_, err = db.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE %s", databaseName))
 	if err != nil {
-		if err.Error() == "pq: database \""+databaseName+"\" already exists" {
-			a.Logger.Infof("Database %s already exists, continuing", databaseName)
-			return nil
+		// Match the SQLSTATE (duplicate_database), not the message: the driver's message now
+		// carries a "(42P04)" suffix, and a text comparison made a retry after a partial failure
+		// fail forever instead of continuing.
+		var pqErr *pq.Error
+		if !errors.As(err, &pqErr) || pqErr.Code != "42P04" {
+			return fmt.Errorf("failed to create database: %w", err)
 		}
-		return fmt.Errorf("failed to create database: %w", err)
+		a.Logger.Infof("Database %s already exists, continuing", databaseName)
+	} else {
+		a.Logger.Infof("Created database: %s", databaseName)
 	}
 
-	a.Logger.Infof("Created database: %s", databaseName)
+	// A new database is connectable by every role on the cluster (PUBLIC's default CONNECT). Close
+	// that now, in both the created and the already-existed case so a retry after a failure here
+	// still closes it, instead of leaving a window until the tenant's role is provisioned in which
+	// another tenant's role could connect. The name is validated above, so quoting it is enough.
+	if _, err := db.ExecContext(ctx, fmt.Sprintf(`REVOKE CONNECT ON DATABASE "%s" FROM PUBLIC`, databaseName)); err != nil {
+		return fmt.Errorf("failed to revoke PUBLIC connect on %s: %w", databaseName, err)
+	}
 	return nil
 }
 
