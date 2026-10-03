@@ -1419,3 +1419,98 @@ It must never auto-remediate a resource under compliance Object Lock.
   silencing the rule would blind the scanner to a defect class this codebase
   keeps producing. Per-site `#nosec` with a reason is the reviewed-exclusion
   pattern.
+
+## Metric catalog lineage: the writer targets a schema that does not exist
+
+Recorded 2026-10-03, found while starting C2's calc-term lineage work. This
+qualifies the #359 entry above, which treated `SyncMetricToCatalogGraph` as a
+live code path needing a smaller fix.
+
+**The finding.** `SyncMetricToCatalogGraph` has no production caller, and its
+SQL does not match the authoritative schema. Two independent defects, either
+of which alone would stop it executing.
+
+*Reachability.* `SyncMetricToCatalogGraph` is called from exactly one place,
+`metric_reconciler.go:51`. `ReconcileAll` and `NewMetricCatalogReconciler` have
+**no production callers at all** — their only callers are
+`starrocks_mv_and_ridealongs_test.go:90` and `:98`. Verified by searching all
+Go source plus `cmd/`, `k8s/`, `deploy/`, `scripts/`, `.github/` and `docs/`,
+not just the one package: this is *looked-and-found-nothing*, not
+*couldn't-look*. The #359 fix is a correct fix to a real bug, but it repairs a
+path that never runs. That was a miss — the PII gate work established that
+reachability is checked before building, and the check was not applied to the
+lineage branch before merging.
+
+*Schema.* `backend/db/snapshots/schema-snapshot.sql` (the authoritative dump,
+regenerated 2026-10-02) defines:
+
+- `catalog_node` (line 33593): `id`, `node_type_id uuid NOT NULL`, `node_name`,
+  `qualified_path NOT NULL`, `properties`, `config`, `tenant_id`, … There is
+  **no `node_id` and no `node_key` column.**
+- `catalog_edge` (line 33391): `id`, `source_node_id uuid NOT NULL`,
+  `target_node_id uuid NOT NULL`, `edge_type_id uuid NOT NULL`, `tenant_id`,
+  `properties`, … **No `edge_type` text column and no `source_id`/`target_id`**,
+  and the table is `PARTITION BY RANGE (created_at)` with only `2026q1` and
+  `2026q2` partitions present.
+
+Against that, `metric_definition.go:573` inserts
+`(node_id, tenant_id, node_type, node_key, node_name, qualified_path,
+properties)` — two non-existent columns plus an omitted `node_type_id NOT
+NULL`. `metric_definition.go:650` inserts into `catalog_edge` using a text
+`edge_type` that does not exist, omitting both `id` and `edge_type_id`, neither
+of which has a default. The `SELECT node_id … WHERE node_key = $2` lookups
+fail the same way.
+
+No migration in any of the repository's 15 migration roots adds `node_id` or
+`node_key` to `catalog_node`; the eight `node_key` hits under
+`backend/db/migrations/` all belong to the unrelated `navigation_menu_nodes`
+table. The one clause that *is* valid is `ON CONFLICT (tenant_id,
+qualified_path)`, backed by `catalog_node_tenant_path_uniq` (line 71916).
+
+**Blast radius beyond C2.** The same missing columns appear in other non-test
+production files: `semanticmatch/resolver.go:75` (also `ON CONFLICT (tenant_id,
+node_key)` and `RETURNING node_id`), `catalog/sti_column_scanner.go:56` and
+`:70`, `catalog/subtype_bo_builder.go:36`, and `bo/layout_service.go:108–115`
+(which joins on `st.node_id`, and on `e_bt.from_node_id` / `e_bt.edge_type IN
+(…)` — `from_node_id` is not a column of the real `catalog_edge` either).
+Same class as #346, the deleted unwired StarRocks MV path: a generation of code
+left behind when the glossary model moved `catalog_node` to `node_type_id` and
+`catalog_edge` to `edge_type_id`.
+
+**The reader is sound, which is why this is a missing link and not dead code.**
+`lineage/sql_repo.go:113` walks the graph with a recursive CTE that is
+edge-type-agnostic and traverses `ce.source_node_id` / `ce.target_node_id` —
+columns that *do* exist. Its consumers are production
+(`catalog-worker/main.go:122`, `worker/main.go:422`, `cmd/sync-graph`). The
+graph walk runs today and cannot traverse metric → term → BO, because nothing
+ever emits those edges.
+
+**Decision: wire it, but not yet.** The ruling is to give `ReconcileAll` a
+production entry point with the complete writer — calc-term lineage included —
+landing in the same PR, so the writer is whole before it can execute against
+real data. The port is not a mechanical rename, and it is blocked on a fact the
+repository cannot supply:
+
+1. Whether the snapshot is faithful to the live alpha database, or alpha
+   carries columns no migration creates. Everything above is verified *against
+   the repository*, not against a running system.
+2. Whether `METRIC_OF`, `USES_TERM` and `DERIVED_FROM` exist in
+   `catalog_edge_types`. The snapshot contains **no row data**, so their
+   absence from it proves nothing — a genuine *couldn't-look*, and load-bearing,
+   because a correct port needs their `edge_type_id` UUIDs.
+3. Whether `catalog_edge` partitions beyond `2026q2` exist operationally. No
+   migration creates them and there is no `pg_partman` configuration for this
+   table, so on the repository's evidence an insert dated 2026-10-03 (2026q4)
+   has no partition to land in.
+
+Item 2 decides whether the port is a rename or a vocabulary-creation task.
+Verification queries are in `docs/FAILURES_LEDGER.md`; they need alpha access,
+which is already blocking other work.
+
+**To fix while wiring.** `metric_reconciler.go:22` claims the reconciler is
+"Safe for concurrent runs across multiple instance replicas using advisory
+locking / upsert semantics." There is no advisory lock and no upsert — the edge
+write is `INSERT … SELECT … WHERE NOT EXISTS`, which races across replicas.
+`TestMetricCatalogReconciler_IdempotentRun` passes only because a
+single-threaded run cannot expose the race. The comment asserts a property the
+code lacks, and the test's name claims coverage it does not provide.
