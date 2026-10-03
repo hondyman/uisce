@@ -1,0 +1,202 @@
+{
+  "schemaVersion": "uisce.metric-bundle/1",
+  "exportedAt": "0001-01-01T00:00:00Z",
+  "metrics": [
+    {
+      "id": "m_rev_core",
+      "tenantId": "00000000-0000-4000-8000-000000000001",
+      "name": "Revenue",
+      "description": "",
+      "boId": "bo_sales",
+      "expression": {
+        "kind": "aggregation",
+        "fn": "sum",
+        "termNodeId": "revenue"
+      },
+      "grainAllowlist": [
+        "country",
+        "product",
+        "order_date"
+      ],
+      "formatConfig": {
+        "type": ""
+      },
+      "variables": null,
+      "materializationConfig": {
+        "strategy": ""
+      },
+      "decomposable": true,
+      "contentHash": "71ef14987a40d989334b6d0b31cd27511dabbb29b4ca256d0d0df426fe363c70",
+      "tags": null,
+      "isCore": true,
+      "status": "active",
+      "createdAt": "0001-01-01T00:00:00Z",
+      "updatedAt": "0001-01-01T00:00:00Z"
+    },
+    {
+      "id": "m_cost_core",
+      "tenantId": "00000000-0000-4000-8000-000000000001",
+      "name": "Cost",
+      "description": "",
+      "boId": "bo_sales",
+      "expression": {
+        "kind": "aggregation",
+        "fn": "sum",
+        "termNodeId": "cost"
+      },
+      "grainAllowlist": [
+        "country",
+        "product",
+        "order_date"
+      ],
+      "formatConfig": {
+        "type": ""
+      },
+      "variables": null,
+      "materializationConfig": {
+        "strategy": ""
+      },
+      "decomposable": true,
+      "contentHash": "8bc5607b0af021bfe732ac08910feb5a88832efe932f7d880ee7a93800b479e3",
+      "tags": null,
+      "isCore": true,
+      "status": "active",
+      "createdAt": "0001-01-01T00:00:00Z",
+      "updatedAt": "0001-01-01T00:00:00Z"
+    },
+    {
+      "id": "m_margin_core",
+      "tenantId": "00000000-0000-4000-8000-000000000001",
+      "name": "Margin Ratio",
+      "description": "",
+      "boId": "bo_sales",
+      "expression": {
+        "kind": "derived",
+        "baseMetricIds": [
+          "m_rev_core",
+          "m_cost_core"
+        ],
+        "numeratorId": "m_rev_core",
+        "denominatorId": "m_cost_core"
+      },
+      "grainAllowlist": [
+        "country",
+        "product",
+        "order_date"
+      ],
+      "formatConfig": {
+        "type": ""
+      },
+      "variables": null,
+      "materializationConfig": {
+        "strategy": ""
+      },
+      "decomposable": true,
+      "contentHash": "6fcc13b0f5c1f785ae6b4daf5cad1b72a67800ecc8839dfacf40e6e631ed901f",
+      "tags": null,
+      "isCore": true,
+      "status": "active",
+      "createdAt": "0001-01-01T00:00:00Z",
+      "updatedAt": "0001-01-01T00:00:00Z"
+    },
+    {
+      "id": "m_calc_fed_core",
+      "tenantId": "00000000-0000-4000-8000-000000000001",
+      "name": "Net Interest Income",
+      "description": "",
+      "boId": "bo_banking",
+      "expression": {
+        "kind": "aggregation",
+        "fn": "sum",
+        "termNodeId": "calc_term_net_interest_income"
+      },
+      "grainAllowlist": [
+        "account",
+        "period"
+      ],
+      "formatConfig": {
+        "type": ""
+      },
+      "variables": null,
+      "materializationConfig": {
+        "strategy": ""
+      },
+      "decomposable": true,
+      "contentHash": "da11d6e59becc064f2263ebc90bce84eecd861a04dc768d0f012c53a490eef7d",
+      "tags": null,
+      "isCore": true,
+      "status": "active",
+      "createdAt": "0001-01-01T00:00:00Z",
+      "updatedAt": "0001-01-01T00:00:00Z"
+    },
+    {
+      "id": "m_cost_ratio_core",
+      "tenantId": "00000000-0000-4000-8000-000000000001",
+      "name": "Cost Ratio",
+      "description": "",
+      "boId": "bo_sales",
+      "expression": {
+        "kind": "derived",
+        "baseMetricIds": [
+          "m_cost_core",
+          "m_rev_core"
+        ],
+        "numeratorId": "m_cost_core",
+        "denominatorId": "m_rev_core"
+      },
+      "grainAllowlist": [
+        "country",
+        "product",
+        "order_date"
+      ],
+      "formatConfig": {
+        "type": ""
+      },
+      "variables": null,
+      "materializationConfig": {
+        "strategy": ""
+      },
+      "decomposable": true,
+      "contentHash": "d44a539e624fea4b52e288ef63d4d1611e354eade4562a9265026b0bd11b94f2",
+      "tags": null,
+      "isCore": true,
+      "status": "active",
+      "createdAt": "0001-01-01T00:00:00Z",
+      "updatedAt": "0001-01-01T00:00:00Z"
+    },
+    {
+      "id": "m_triple_core",
+      "tenantId": "00000000-0000-4000-8000-000000000001",
+      "name": "Rev + Cost + Units",
+      "description": "",
+      "boId": "bo_sales",
+      "expression": {
+        "kind": "derived",
+        "baseMetricIds": [
+          "m_units_acme",
+          "m_cost_core",
+          "m_rev_core"
+        ]
+      },
+      "grainAllowlist": [
+        "country",
+        "product",
+        "order_date"
+      ],
+      "formatConfig": {
+        "type": ""
+      },
+      "variables": null,
+      "materializationConfig": {
+        "strategy": ""
+      },
+      "decomposable": true,
+      "contentHash": "ed06590ef2b47d7f7d7f109f677d49a8aca0e2b293c79437580c78dbb00a6e6e",
+      "tags": null,
+      "isCore": true,
+      "status": "active",
+      "createdAt": "0001-01-01T00:00:00Z",
+      "updatedAt": "0001-01-01T00:00:00Z"
+    }
+  ]
+}

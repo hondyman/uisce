@@ -1,0 +1,9 @@
+{
+  "version": "uisce.metric-corpus/1",
+  "bundleSchema": "uisce.metric-bundle/1",
+  "tenants": [
+    "00000000-0000-4000-8000-000000000001",
+    "00000000-0000-4000-8000-000000000002"
+  ],
+  "cases": 10
+}
