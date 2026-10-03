@@ -1,4 +1,5 @@
-import { DEFAULT_THEME_STYLE, isThemeStyle, type ThemeStyle } from '../theme/themeStyles';
+import { alpha } from '@mui/material/styles';
+import { createThemeForStyle, DEFAULT_THEME_STYLE, isThemeStyle, type ThemeStyle } from '../theme/themeStyles';
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
 export type Theme = 'light' | 'dark' | 'system';
@@ -88,31 +89,32 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     // Uisce brand CSS variables for nav
     const r = document.documentElement.style;
-    if (style === 'ivy') {
+    if (style !== 'uisce') {
+      // Every non-Uisce style derives its nav variables from its own theme palette.
+      const p = createThemeForStyle(style, effectiveTheme).palette;
+      const accent = p.primary.main;
+      const surface = p.background.paper;
+      const line = p.divider;
       const dark = effectiveTheme === 'dark';
-      const accent = dark ? '#66BB6A' : '#2E7D32';
-      const rgb = dark ? '102, 187, 106' : '46, 125, 50';
-      const surface = dark ? '#161B22' : '#FFFFFF';
-      const line = dark ? '#21262D' : '#E5E7EB';
       r.setProperty('--nav-accent', accent);
-      r.setProperty('--nav-bg', dark ? '#0D1117' : '#F5F7FA');
-      r.setProperty('--nav-text', dark ? '#FFFFFF' : '#1A1A2E');
+      r.setProperty('--nav-bg', p.background.default);
+      r.setProperty('--nav-text', p.text.primary);
       r.setProperty('--nav-appbar-bg', surface);
       r.setProperty('--nav-appbar-border', line);
-      r.setProperty('--nav-border-accent', `rgba(${rgb}, 0.5)`);
-      r.setProperty('--nav-accent-muted', `rgba(${rgb}, 0.10)`);
-      r.setProperty('--nav-hover-fill', `rgba(${rgb}, 0.06)`);
+      r.setProperty('--nav-border-accent', alpha(accent, 0.5));
+      r.setProperty('--nav-accent-muted', alpha(accent, 0.1));
+      r.setProperty('--nav-hover-fill', alpha(accent, 0.06));
       r.setProperty('--nav-glass-bg', surface);
       r.setProperty('--nav-glass-border', line);
       r.setProperty('--nav-menu-shadow', dark ? '0 8px 32px rgba(0, 0, 0, 0.5)' : '0 4px 16px rgba(0, 0, 0, 0.08)');
-      r.setProperty('--nav-item-active', `rgba(${rgb}, 0.12)`);
-      r.setProperty('--nav-item-text', dark ? '#FFFFFF' : '#1A1A2E');
-      r.setProperty('--nav-item-hover', `rgba(${rgb}, 0.06)`);
+      r.setProperty('--nav-item-active', alpha(accent, 0.12));
+      r.setProperty('--nav-item-text', p.text.primary);
+      r.setProperty('--nav-item-hover', alpha(accent, 0.06));
       r.setProperty('--nav-sidebar-bg', surface);
       r.setProperty('--nav-sidebar-border', line);
       r.setProperty('--nav-rail-accent', accent);
-      r.setProperty('--nav-text-dim', dark ? '#B0B8C4' : '#5A6072');
-      r.setProperty('--nav-glow-color', `rgba(${rgb}, 0.35)`);
+      r.setProperty('--nav-text-dim', p.text.secondary);
+      r.setProperty('--nav-glow-color', alpha(accent, 0.35));
     } else if (effectiveTheme === 'dark') {
       r.setProperty('--nav-accent', '#F5C518');
       r.setProperty('--nav-bg', '#0A0C12');
