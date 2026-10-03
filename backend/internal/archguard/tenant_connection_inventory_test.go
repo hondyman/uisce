@@ -5,6 +5,7 @@ package archguard
 // by path. The tenant-datasource entries are the work list for moving tenant data access behind
 // internal/tenantdb.
 var openerInventory = map[string]opener{
+	"internal/sourceconn/sourceconn.go":                          {Kind: kindSourceConnector, Max: 2, Reason: "the audited opener of tenant source databases: a pgxpool per authorized datasource (credentials from the secrets store, ownership under an explicit policy, bounded) and the ad hoc open used to test an unsaved connection"},
 	"cmd/admin_audit_check/main.go":                              {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/admin_http_check/main.go":                               {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/apikeygen/main.go":                                      {Kind: kindControlPlane, Max: 1, Reason: "a served command: opens alpha from DATABASE_URL-style configuration"},
@@ -42,7 +43,6 @@ var openerInventory = map[string]opener{
 	"cmd/outbox-processor/main.go":                               {Kind: kindControlPlane, Max: 1, Reason: "a served command: opens alpha from DATABASE_URL-style configuration"},
 	"cmd/populate_bo_fields/main.go":                             {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/preaggregation/main.go":                                 {Kind: kindControlPlane, Max: 1, Reason: "a served command: opens alpha from DATABASE_URL-style configuration"},
-	"cmd/profiler/main.go":                                       {Kind: kindTenantDatasource, Max: 2, Reason: "opens alpha (alphaPool) and the source DSN of a datasource", Until: "4a follow-up with the scanner"},
 	"cmd/provision_tenant/main.go":                               {Kind: kindTenantDatasource, Max: 3, Reason: "CLI that creates and connects to a tenant database directly with connection strings; the provisioning saga supersedes it", Until: "retire in favour of POST /api/system/tenants/provision"},
 	"cmd/register_oms_preagg/main.go":                            {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/report-smoke-test/main.go":                              {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
@@ -103,7 +103,6 @@ var openerInventory = map[string]opener{
 	"internal/metadata/catalog_scan_service.go":                  {Kind: kindTenantDatasource, Max: 1, Reason: "opens a datasource's connection from hydrated config; the business-object service reaches tenant datasources through it. These are tenant SOURCE databases of several types, so Postgres-only tenantdb is not the whole answer", Until: "4a follow-up: Postgres datasources behind tenantdb, other types behind a source-connector sibling"},
 	"internal/observability/slo_report_generator.go":             {Kind: kindControlPlane, Max: 1, Reason: "opens alpha or another platform database from the process's own configuration"},
 	"internal/planner/test_fixtures.go":                          {Kind: kindTool, Max: 1, Reason: "test fixtures"},
-	"internal/profiler/profiler.go":                              {Kind: kindTenantDatasource, Max: 1, Reason: "opens the source DSN it is handed for a datasource", Until: "4a follow-up with the scanner"},
 	"internal/scanner/service.go":                                {Kind: kindTenantDatasource, Max: 1, Reason: "builds a DSN from datasource config with inline basic-auth credentials, bypassing dscreds", Until: "4a follow-up: hydrate through dscreds, then route Postgres through tenantdb"},
 	"internal/sync/starrocks_worker.go":                          {Kind: kindWarehouse, Max: 1, Reason: "opens StarRocks (MySQL protocol) from configuration"},
 	"internal/temporal/activities/tenant_database_activities.go": {Kind: kindProvisioning, Max: 2, Reason: "administrator connection to the shared cluster to create roles, grants and run tenant migrations, plus the isolation check that connects AS the tenant role to other databases to prove it is denied (the saga)"},
