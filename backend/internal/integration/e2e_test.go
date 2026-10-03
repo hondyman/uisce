@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -380,16 +381,26 @@ func TestE2EHighVolume(t *testing.T) {
 	}
 	defer ws.Close()
 
-	ws.SetReadDeadline(time.Now().Add(15 * time.Second))
+	// The server subscribes to the broker only after the WebSocket upgrade
+	// completes (handlers/websocket_handler.go: Upgrade, then Subscribe), but
+	// Dial returns as soon as the client sees the 101. Anything published in
+	// that window is dropped: the broker does not replay to a late subscriber.
+	// Wait for the subscription to exist before publishing, or the first
+	// events race the handler and vanish -- which is what made this test fail
+	// only on loaded runners.
+	waitForSubscriber(t, broker, "test-tenant", 5*time.Second)
 
 	factory := events.NewIncidentEventFactory(broker)
 
 	// Publish 50 rapid incidents
 	numEvents := 50
 	eventChan := make(chan struct{}, 10)
+	var published sync.WaitGroup
 
 	for i := 0; i < numEvents; i++ {
+		published.Add(1)
 		go func(idx int) {
+			defer published.Done()
 			eventChan <- struct{}{}
 			defer func() { <-eventChan }()
 
@@ -399,13 +410,24 @@ func TestE2EHighVolume(t *testing.T) {
 			)
 		}(i)
 	}
+	// Every publisher must finish before we judge what arrived; otherwise a
+	// slow publish is indistinguishable from a dropped event.
+	published.Wait()
 
-	// Collect received events
+	// Collect received events. Drain until the deadline rather than bailing on
+	// the first read error: a partial read is a legitimate outcome to report,
+	// not a reason to stop measuring.
 	receivedCount := 0
-	for i := 0; i < numEvents; i++ {
+	collectDeadline := time.Now().Add(15 * time.Second)
+	for receivedCount < numEvents && time.Now().Before(collectDeadline) {
+		if err := ws.SetReadDeadline(collectDeadline); err != nil {
+			t.Fatalf("Failed to set read deadline: %v", err)
+		}
 		event := &events.StreamedEvent{}
 		if err := ws.ReadJSON(event); err != nil {
-			t.Logf("Failed to receive event %d: %v", i, err)
+			// Out of time (or the stream closed). Report the shortfall
+			// honestly below instead of claiming validation.
+			t.Logf("Stopped collecting after %d/%d events: %v", receivedCount, numEvents, err)
 			break
 		}
 		receivedCount++
@@ -413,9 +435,28 @@ func TestE2EHighVolume(t *testing.T) {
 
 	if receivedCount < numEvents-5 {
 		t.Errorf("Expected ~%d events, received %d", numEvents, receivedCount)
+		return
 	}
 
-	t.Logf("✅ High-volume event handling validated: %d events received", receivedCount)
+	t.Logf("High-volume event handling validated: %d/%d events received", receivedCount, numEvents)
+}
+
+// waitForSubscriber blocks until the broker has at least one registered
+// subscriber for tenantID, or fails the test. It closes the upgrade/subscribe
+// window that otherwise drops the first events of a burst.
+func waitForSubscriber(t *testing.T, broker *events.EventStreamBroker, tenantID string, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		for _, sub := range broker.GetSubscribers() {
+			if sub.TenantID == tenantID {
+				return
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("No subscriber registered for tenant %q within %s; events published now would be dropped", tenantID, timeout)
 }
 
 // BenchmarkE2EPipelineThroughput benchmarks the complete incident pipeline
