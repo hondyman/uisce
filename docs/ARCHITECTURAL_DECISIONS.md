@@ -1162,5 +1162,3 @@ It must never auto-remediate a resource under compliance Object Lock.
   never detached (ADR-029), so it is only needed once a *tenant database* event table carries a
   seal chain and ADR-035's detach-verification job is built. (2) does not apply: the shipped
   chain is an unkeyed hash, so there is no key to version. Decide (1) before that job is written.
-- **ADR-036 dependency.** ADR-037 refers to ADR-036, which is introduced by the audit-copy PR;
-  merge that first.
