@@ -21,6 +21,8 @@ import (
 	"github.com/hondyman/uisce/backend/internal/secrets"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/tenantdb"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"time"
 )
 
@@ -365,8 +367,100 @@ func (a *TenantProvisioningActivities) ProbeTenantDatabase(ctx context.Context, 
 		return err
 	}
 	defer router.Close()
-	return router.Probe(db.WithTenantContextToCtx(ctx, in.TenantID), in.DatasourceID)
+	if err := router.Probe(db.WithTenantContextToCtx(ctx, in.TenantID), in.DatasourceID); err != nil {
+		return err
+	}
+	return a.verifyRoleIsIsolated(ctx, in)
 }
+
+// ErrTenantRoleNotIsolated: the tenant's role can connect to a database other than its own.
+var ErrTenantRoleNotIsolated = errors.New("tenant database role can connect to other databases")
+
+const errTypeTenantDBIsolation = "TenantDatabaseNotIsolated"
+
+// verifyRoleIsIsolated proves the new role can reach exactly one database, its own. It tries every
+// other connectable database on the cluster as the role and fails provisioning if any accepts, or
+// if it cannot tell (an unexpected error is not "denied").
+//
+// The saga revokes PUBLIC's CONNECT on the tenant's own database, but a cluster's other databases
+// keep the default grant to PUBLIC: postgres, template1 and, unless an operator revoked it, the
+// control plane's alpha. A role that can connect to postgres can list every database and role on
+// the cluster, which is every tenant's code. This is deliberately a check and not a REVOKE: the
+// saga does not silently change privileges that other roles on the cluster depend on.
+func (a *TenantProvisioningActivities) verifyRoleIsIsolated(ctx context.Context, in provisioning.TenantDatabaseInput) error {
+	role, err := TenantDatabaseRole(in.DatabaseName)
+	if err != nil {
+		return nonRetryable(errTypeTenantDBInput, err)
+	}
+	path, err := dscreds.CanonicalPath(dscreds.KindDatasource, in.TenantID, in.DatasourceID)
+	if err != nil {
+		return nonRetryable(errTypeTenantDBInput, err)
+	}
+	if a.Secrets == nil {
+		return nonRetryable(errTypeTenantDBConfig, fmt.Errorf("%w: no secrets provider", ErrTenantDatabaseNotConfigured))
+	}
+	creds, err := a.Secrets.GetMap(ctx, path)
+	if err != nil || creds[dscreds.KeyUsername] != role || creds[dscreds.KeyPassword] == "" {
+		return fmt.Errorf("cannot verify isolation: the role's credential is not readable at %s", path)
+	}
+
+	adm, err := a.TenantDB.Open("postgres")
+	if err != nil {
+		return fmt.Errorf("connect to list databases: %w", err)
+	}
+	defer adm.Close()
+	rows, err := adm.QueryContext(ctx, `SELECT datname FROM pg_database WHERE datallowconn AND datname <> $1 ORDER BY datname`, in.DatabaseName)
+	if err != nil {
+		return fmt.Errorf("list databases: %w", err)
+	}
+	var others []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return err
+		}
+		others = append(others, n)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	var reachable []string
+	for _, name := range others {
+		cfg, err := pgx.ParseConfig("")
+		if err != nil {
+			return err
+		}
+		cfg.Host, cfg.Port, cfg.Database = a.TenantDB.Host, uint16(a.TenantDB.Port), name
+		cfg.User, cfg.Password = role, creds[dscreds.KeyPassword]
+		cfg.ConnectTimeout = 10 * time.Second
+		c, cerr := pgx.ConnectConfig(ctx, cfg)
+		if cerr == nil {
+			_ = c.Close(ctx)
+			reachable = append(reachable, name)
+			continue
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(cerr, &pgErr) && pgErr.Code == "42501" { // insufficient_privilege: CONNECT is denied
+			continue
+		}
+		return fmt.Errorf("cannot verify isolation: connecting to %q as the tenant role failed for a reason other than a denied privilege: %w", name, redact(cerr, creds[dscreds.KeyPassword]))
+	}
+	if len(reachable) > 0 {
+		var fixes []string
+		for _, n := range reachable {
+			fixes = append(fixes, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM PUBLIC;", pgQuoteIdent(n)))
+		}
+		return nonRetryable(errTypeTenantDBIsolation, fmt.Errorf(
+			"%w: role %s can connect to %d other database(s): %s. Revoke the default PUBLIC grant (and grant CONNECT only to the roles that need it): %s",
+			ErrTenantRoleNotIsolated, role, len(reachable), strings.Join(reachable, ", "), strings.Join(fixes, " ")))
+	}
+	return nil
+}
+
+func pgQuoteIdent(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
 
 // ActivateTenantDatabase makes the binding live. Idempotent; it never moves a binding that is
 // not 'provisioning' (a suspended or offboarding one stays so).
