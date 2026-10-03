@@ -18,9 +18,6 @@
     "Event",
     "HierarchicalNode",
     "Job",
-    "MetricExpression",
-    "MetricFormatConfig",
-    "MetricVariable",
     "Notification",
     "ReactFlowNode",
     "RoleCreateInput",
@@ -178,21 +175,6 @@
       "label": "MIRR",
       "insert": "MIRR()",
       "detail": "(cash_flows number[], finance_rate number, reinvest_rate number) -\u003e number - Modified IRR: (FV(positive cash flows, reinvest_rate) / -PV(negative cash flows, finance_rate))^(1/n) - 1. Unlike IRR/XIRR this IS closed-form (no iterative solver) - Pushdownable is still false here, but only because the SQL emitter (a conditional FV/PV expansion over grouped rows, more involved than NPV's) hasn't been written and verified against a live table yet, not because it's impossible. See docs/unified-rule-engine-handoff.md."
-    },
-    {
-      "label": "MetricExpression",
-      "insert": "MetricExpression {\n  \n}",
-      "detail": "Insert MetricExpression node"
-    },
-    {
-      "label": "MetricFormatConfig",
-      "insert": "MetricFormatConfig {\n  \n}",
-      "detail": "Insert MetricFormatConfig node"
-    },
-    {
-      "label": "MetricVariable",
-      "insert": "MetricVariable {\n  \n}",
-      "detail": "Insert MetricVariable node"
     },
     {
       "label": "NOT_EMPTY",

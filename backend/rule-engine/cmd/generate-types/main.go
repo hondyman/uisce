@@ -155,11 +155,54 @@ func (g *ASLTypeGenerator) extractFromFile(file *ast.File, structs map[string]*S
 	}
 }
 
+// aslIgnoreMarker excludes a type from the generated ASL surface even when it
+// lives in a package this generator enumerates.
+//
+// A type's package - not just its name - decides whether it is published, and
+// that is easy to change by accident. Moving a backend type into
+// internal/rules/vm (which IS enumerated) silently widens the browser editor's
+// contract: the type appears in asl.d.ts/asl.schema.json and, if it carries a
+// discriminator-shaped field, as an insertable Monaco node the WASM evaluator
+// has no node kind for. The C1 port moved the metric primitives there and picked
+// up four published types they were never meant to have; see the note on
+// vm.MetricVariable. This marker lets a type keep its new home without changing
+// the published surface.
+//
+// Kept in step by hand across the three generators: generate-schema mirrors
+// this AST path, and generate-monaco reads the same comment through
+// go/packages instead. All three parse with ParseComments, so the marker has to
+// be a comment rather than a runtime registry for the two AST-based ones to see
+// it.
+const aslIgnoreMarker = "asl:ignore"
+
+// isASLIgnored reports whether a type declaration carries the marker. The doc
+// comment lands on GenDecl.Doc for a standalone `type X struct` and on
+// TypeSpec.Doc inside a grouped `type (...)` block, so both are consulted - as
+// is decl.Doc as a last resort, which for a grouped block means the marker
+// applies to every type in that group.
+func isASLIgnored(typeSpec *ast.TypeSpec, decl *ast.GenDecl) bool {
+	doc := typeSpec.Doc
+	if doc == nil {
+		doc = typeSpec.Comment
+	}
+	if doc == nil {
+		doc = decl.Doc
+	}
+	if doc == nil {
+		return false
+	}
+	return strings.Contains(doc.Text(), aslIgnoreMarker)
+}
+
 // extractTypes extracts struct and type alias information
 func (g *ASLTypeGenerator) extractTypes(decl *ast.GenDecl, structs map[string]*StructInfo, enums map[string][]string) {
 	for _, spec := range decl.Specs {
 		typeSpec, ok := spec.(*ast.TypeSpec)
 		if !ok {
+			continue
+		}
+
+		if isASLIgnored(typeSpec, decl) {
 			continue
 		}
 

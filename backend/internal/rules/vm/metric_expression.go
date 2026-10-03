@@ -26,6 +26,15 @@ const (
 )
 
 // MetricVariable defines a parameter/variable bound into the metric calculation.
+//
+// asl:ignore - backend metric plumbing, not a rule/calc AST node. This package
+// is enumerated by generate-types/generate-schema/generate-monaco, so an
+// exported struct here lands in the published ASL schema and the browser
+// editor's Monaco autocomplete. That widening is a side effect of WHERE the type
+// lives, not a statement that it is authorable: the WASM evaluator has no node
+// kind for it, so an author could insert one the browser could not evaluate.
+// The type was in internal/querybuilder (never enumerated) before C1 moved it
+// here; the marker keeps the published contract identical to that.
 type MetricVariable struct {
 	Name         string      `json:"name"`
 	Type         string      `json:"type"` // "number" | "string" | "date"
@@ -35,6 +44,8 @@ type MetricVariable struct {
 }
 
 // MetricFormatConfig controls presentation of a computed metric value.
+//
+// asl:ignore - see the note on MetricVariable above.
 type MetricFormatConfig struct {
 	Type           string  `json:"type"` // "currency" | "percentage" | "compact" | "number"
 	Precision      *int    `json:"precision,omitempty"`
@@ -44,6 +55,11 @@ type MetricFormatConfig struct {
 }
 
 // MetricExpression is the semantic definition of how a metric is computed.
+//
+// asl:ignore - see the note on MetricVariable above. This one is the most
+// misleading of the four: its `kind` field looks exactly like the
+// discriminator that earns a struct a Monaco node kind, which is how it would
+// otherwise have been offered to rule authors as an insertable node.
 type MetricExpression struct {
 	Kind       string `json:"kind"`                 // "aggregation" | "formula" | "derived"
 	Fn         string `json:"fn,omitempty"`         // "sum" | "avg" | "count" | "min" | "max"
@@ -123,6 +139,8 @@ func NormalizeFormulaForHash(f string) string {
 // It is a flat struct rather than the full MetricDefinition so the hash has an
 // explicit, narrow input surface: adding a field to a definition must not
 // silently change deploy identity or cache keys.
+//
+// asl:ignore - see the note on MetricVariable above.
 type MetricContentInput struct {
 	Name           string
 	BOID           string

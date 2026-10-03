@@ -1098,6 +1098,34 @@ ADR said Postgres would hold only a hot window of audit; that is withdrawn.
   a silently dropped field, which is exactly how the named-operand regression
   would otherwise have shipped.
 
+  The port also had a side effect that had nothing to do with metric semantics.
+  `generate-types`, `generate-schema` and `generate-monaco` enumerate
+  `internal/rules/vm`, so any exported struct there lands in the published ASL
+  schema — and, carrying a discriminator-shaped field, as an insertable Monaco
+  node. The four metric types were in `internal/querybuilder`, never enumerated,
+  so `main` has no `Metric*` entry in any generated artifact; the port alone
+  added four, including `MetricExpression`, whose `kind` field looks exactly
+  like the discriminator that earns a struct a node kind. The WASM evaluator has
+  no node kind for any of them, so the port would have let an author insert a
+  node the browser could not evaluate — the precise failure
+  `cmd/check-drift`'s own header says that pipeline exists to prevent.
+
+  Resolution: an `// asl:ignore` doc-comment marker, honored by all three
+  generators (`generate-schema` and `generate-types` read it from the AST,
+  `generate-monaco` recovers it from the syntax trees it already loads, since
+  `go/types` discards comments). The four types carry it, and the generated
+  artifacts and their goldens are byte-identical to `main` again. The marker
+  keeps a type's new home from silently changing the published browser
+  contract; it is the escape hatch C2/C3 lineage and calc-term types will need.
+  Removing one marker reintroduces the type into all three artifacts and fails
+  both golden tests, so the guard is enforced rather than decorative.
+
+  Note for the next person: `frontend/public/asl.monaco.json` is a
+  **manually-synced** copy of the backend artifact, and no CI step guards it
+  (only `rule_engine.wasm` has a verify step). Nothing in C1 needed to sync it,
+  because the contract no longer changes — but a future change to the Monaco
+  surface will desync it silently unless the copy is updated in the same commit.
+
 - **Call-site verification for ADR-001 … ADR-010.** The imported entries assert
   no call sites because the original recorded none. Verifying each is
   outstanding; ADR-012 and ADR-013 exist because that verification already
