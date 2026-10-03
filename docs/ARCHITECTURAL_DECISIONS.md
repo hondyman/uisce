@@ -1062,6 +1062,42 @@ ADR said Postgres would hold only a hot window of audit; that is withdrawn.
 
 ## Open items
 
+- **C1 (9.1) ported metric primitives into the rule VM.**
+  `MetricVariable`, `MetricFormatConfig`, `MetricExpression`,
+  `DeriveDecomposable`, `NormalizeFormulaForHash` and
+  `ComputeMetricContentHash` now live in `internal/rules/vm`
+  (`metric_expression.go`), and the `querybuilder` implementations
+  **delegate** rather than reimplement. One implementation, so the compiler's
+  canonicalization and the content hash cannot drift. Recorded because the port
+  is a *move*, and the next person will otherwise look for the originals.
+
+  Two properties are pinned by this decision and must survive it:
+
+  - **Operand order is semantic.** `BaseMetricIDs` is deliberately unsorted, and
+    `NumeratorID`/`DenominatorID` (ADR-026) are hashed as distinct fields.
+    Sorting, or dropping the named operands, makes `revenue/cost` and
+    `cost/revenue` share a content hash — and that hash is the cube deploy
+    identity and part of the query cache key, so the two opposite metrics would
+    share a cache entry. This is not hypothetical: the first port attempt
+    dropped the two named-operand fields, and the 8.3 golden corpus caught it.
+  - **The hash input surface is explicit.** `MetricContentInput` is a flat
+    struct, not the full `MetricDefinition`, so adding a definition field does
+    not silently change deploy identity or cache keys.
+
+  The port is behavioural, and the golden corpus
+  (`internal/querybuilder/testdata/metric_corpus`) is the evidence: it was
+  regenerated *not at all*, and the failures it reported were real defects in
+  the new mapper. `NormalizeFormulaForHash` is byte-identical to the function it
+  replaced, including its paren-stripping quirk (`SUM(a)` → `suma`) — fixing
+  that would have changed already-deployed hashes, so it is preserved and
+  documented instead.
+
+  Go will not convert between distinct named struct types, so the
+  querybuilder→VM mappers are written field by field. That is intentional: a
+  field added to one side without the other becomes a compile error rather than
+  a silently dropped field, which is exactly how the named-operand regression
+  would otherwise have shipped.
+
 - **Call-site verification for ADR-001 … ADR-010.** The imported entries assert
   no call sites because the original recorded none. Verifying each is
   outstanding; ADR-012 and ADR-013 exist because that verification already
