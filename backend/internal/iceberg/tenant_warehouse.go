@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// ADR-031: every tenant has exactly one Iceberg warehouse, over its own bucket.
+// ADR-032: every tenant has exactly one Iceberg warehouse, over its own bucket.
 // The database enforces the one-to-one rule (public.tenant_lakehouse, with
 // CHECKs deriving both names from tenant_id); this file is the only place that
 // derives the name in Go, and it must stay identical to those CHECKs.

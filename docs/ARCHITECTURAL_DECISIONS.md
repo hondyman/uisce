@@ -953,15 +953,28 @@ datasource outside `tenantdb`. Tenant migrations are applied per target by the
 migration runner, with the same sha256 drift check and fix-forward rule as
 `alpha` (ADR-024).
 
-### ADR-031: Lakekeeper Is the Single Iceberg Catalog
+### ADR-031: Lakekeeper Is the Single Iceberg Catalog; Polaris Is Removed
 
-**Decision.** Lakekeeper is the only Iceberg REST catalog. Nessie and Polaris
-are retired. Namespaces and warehouses are provisioned through
-`internal/iceberg/lakekeeper_provisioner.go`.
+**Decision.** Lakekeeper is the only Iceberg REST catalog. The Polaris
+provisioner, its onboarding call, its stub activities and its environment
+variables are deleted. Namespaces and warehouses are provisioned through
+`internal/iceberg/lakekeeper_provisioner.go`. Nessie, still defined in
+`docker-compose.starrocks.yml` and `starrocks_init.sql`, is not removed by this
+decision and remains to be retired separately.
 
-**Context.** The repository carries three catalog stacks (Lakekeeper, Polaris,
-Nessie in `docker-compose.starrocks.yml`). Three catalogs means three
-authorization models for the same tables.
+**Context.** Polaris had already been replaced in deployment: the compose files
+define Lakekeeper (with its own database, migrate job and a separate
+`lakekeeper-gold` service for the gold-copy plane) and no Polaris service, and the
+only Polaris deployments in history are two early commits. The code did not follow.
+`OnboardTenant` still called `http://uisce-polaris:8185`, a host defined nowhere in
+the repository. An earlier draft of this ADR was written before that was checked,
+and a first decision to keep Polaris was reversed once it was.
+
+**Consequence.** `OnboardTenant` no longer provisions any catalog and returns
+`lakehouse_status: "unconfigured"`; a tenant's warehouse is configured and
+provisioned separately (ADR-032), because its audit retention is a per-tenant
+decision. The `polaris_catalog_url` response field is removed; nothing in the
+repository read it.
 
 ### ADR-032: Cold Storage Isolation Is Bucket, Key and Lock Per Tenant
 

@@ -83,16 +83,7 @@ func (a *TenantActivities) RollbackMinIOPrefix(ctx context.Context, p TenantProv
 	return err
 }
 
-// 3. Apache Polaris Catalog Provisioning & Compensation
-func (a *TenantActivities) ProvisionPolarisCatalog(ctx context.Context, p TenantProvisionParams) error {
-	return nil
-}
-
-func (a *TenantActivities) DeprovisionPolarisCatalog(ctx context.Context, p TenantProvisionParams) error {
-	return nil
-}
-
-// 4. Lakehouse Maintenance Activities
+// 3. Lakehouse Maintenance Activities
 func (a *TenantActivities) ExpireIcebergSnapshots(ctx context.Context, catalogName string) error {
 	return nil
 }

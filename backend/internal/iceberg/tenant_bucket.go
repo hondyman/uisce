@@ -10,7 +10,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/sse"
 )
 
-// ADR-031: a tenant's warehouse sits on its own bucket, created with Object Lock
+// ADR-032: a tenant's warehouse sits on its own bucket, created with Object Lock
 // in compliance mode and default SSE-KMS under the tenant's own key.
 //
 // Compliance-mode retention cannot be shortened or removed once objects are

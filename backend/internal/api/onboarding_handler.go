@@ -3,27 +3,21 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	dbpkg "github.com/hondyman/uisce/backend/internal/db"
-	"github.com/hondyman/uisce/backend/internal/iceberg"
 	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 type OnboardingHandler struct {
-	platformDB     *sql.DB
-	polaris        *iceberg.PolarisProvisioner
+	platformDB *sql.DB
 }
 
-func NewOnboardingHandler(platformDB *sql.DB, polaris *iceberg.PolarisProvisioner) *OnboardingHandler {
-	return &OnboardingHandler{
-		platformDB: platformDB,
-		polaris:   polaris,
-	}
+func NewOnboardingHandler(platformDB *sql.DB) *OnboardingHandler {
+	return &OnboardingHandler{platformDB: platformDB}
 }
 
 func (h *OnboardingHandler) RegisterRoutes(r chi.Router) {
@@ -41,16 +35,20 @@ type OnboardTenantRequest struct {
 }
 
 type OnboardTenantResponse struct {
-	TenantID          string `json:"tenant_id"`
-	TenantKey        string `json:"tenant_key"`
-	PolarisCatalogURL string `json:"polaris_catalog_url"`
-	Status            string `json:"status"`
+	TenantID  string `json:"tenant_id"`
+	TenantKey string `json:"tenant_key"`
+	Status    string `json:"status"`
+	// LakehouseStatus is always "unconfigured" here: a tenant's Iceberg warehouse
+	// is configured and provisioned separately, because its audit retention is a
+	// per-tenant decision that cannot be defaulted (ADR-032). See
+	// PUT /api/v1/system/tenants/{tenant_id}/lakehouse.
+	LakehouseStatus string `json:"lakehouse_status"`
 }
 
 func (h *OnboardingHandler) OnboardTenant(w http.ResponseWriter, r *http.Request) {
-	// Provisioning a tenant creates real infrastructure (an Iceberg catalog)
-	// and grants it access to gold-copy Business Objects/security profiles —
-	// this had no auth check at all. Restricted to global admins.
+	// Onboarding a tenant grants it access to gold-copy Business Objects and
+	// security profiles — this had no auth check at all. Restricted to global
+	// admins.
 	auth, ok := security.RequireAuth(w, r)
 	if !ok {
 		return
@@ -72,10 +70,6 @@ func (h *OnboardingHandler) OnboardTenant(w http.ResponseWriter, r *http.Request
 	domain := strings.ToLower(strings.TrimSpace(req.Domain))
 	if h.platformDB == nil {
 		http.Error(w, "platform DB not configured", http.StatusInternalServerError)
-		return
-	}
-	if h.polaris == nil {
-		http.Error(w, "Polaris provisioner not configured", http.StatusInternalServerError)
 		return
 	}
 
@@ -106,12 +100,6 @@ func (h *OnboardingHandler) OnboardTenant(w http.ResponseWriter, r *http.Request
 	`, tenantID, tenantKey, displayName)
 	if err != nil {
 		http.Error(w, "failed to insert tenant: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	err = h.polaris.Provision(r.Context(), tenantKey)
-	if err != nil {
-		http.Error(w, "Polaris provisioning failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -153,10 +141,10 @@ func (h *OnboardingHandler) OnboardTenant(w http.ResponseWriter, r *http.Request
 	}
 
 	resp := OnboardTenantResponse{
-		TenantID:          tenantID,
-		TenantKey:        tenantKey,
-		PolarisCatalogURL: fmt.Sprintf("http://uisce-polaris:8185/api/catalog/v1/%s", tenantKey),
-		Status:            "provisioned",
+		TenantID:        tenantID,
+		TenantKey:       tenantKey,
+		Status:          "provisioned",
+		LakehouseStatus: "unconfigured",
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)

@@ -49,13 +49,5 @@ func TenantOnboardingWorkflow(ctx workflow.Context, p TenantProvisionParams) err
 	}
 	step2Done = true
 
-	// Step 3: Apache Polaris Catalog Provisioning
-	err = workflow.ExecuteActivity(ctx, act.ProvisionPolarisCatalog, p).Get(ctx, nil)
-	if err != nil {
-		_ = workflow.ExecuteActivity(ctx, act.RollbackMinIOPrefix, p).Get(ctx, nil)
-		_ = workflow.ExecuteActivity(ctx, act.RollbackPostgresTenant, p).Get(ctx, nil)
-		return fmt.Errorf("saga failed at step 3 (polaris): %w", err)
-	}
-
 	return nil
 }

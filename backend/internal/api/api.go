@@ -51,7 +51,6 @@ import (
 	"github.com/hondyman/uisce/backend/internal/governance/contracts"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/household"
-	"github.com/hondyman/uisce/backend/internal/iceberg"
 	"github.com/hondyman/uisce/backend/internal/infrastructure"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
@@ -1045,7 +1044,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	adminTenantAccessHandler := handlers.NewAdminTenantAccessHandler(db)
 
 	// Initialize Onboarding handler for tenant provisioning (OLTP + Iceberg)
-	onboardingHandler := NewOnboardingHandler(db, iceberg.PolarisFromEnv())
+	onboardingHandler := NewOnboardingHandler(db)
 
 	// Initialize BP Notification handlers
 	// Note: sqlxDB is initialized below, so we need to move this or use db if compatible,

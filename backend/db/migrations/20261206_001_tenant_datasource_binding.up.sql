@@ -1,6 +1,6 @@
 -- 20261206_001_tenant_datasource_binding.up.sql
 --
--- ADR-028 / ADR-031. Data-plane registry additions, in two tables:
+-- ADR-029 / ADR-032. Data-plane registry additions, in two tables:
 --
 --   tenant_lakehouse           exactly ONE Iceberg warehouse per tenant (the
 --                              tenant_id primary key is the guarantee).
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS public.tenant_lakehouse (
     -- PRIMARY KEY on tenant_id is what makes it one-and-only-one.
     -- ON DELETE RESTRICT, not CASCADE: the warehouse holds WORM audit and must
     -- outlive the tenant row. Offboarding moves lifecycle_state forward; it does
-    -- not delete this record (ADR-031).
+    -- not delete this record (ADR-032).
     tenant_id             UUID PRIMARY KEY
         REFERENCES public.tenants(id) ON DELETE RESTRICT,
 
@@ -104,16 +104,16 @@ CREATE TABLE IF NOT EXISTS public.tenant_datasource_binding (
     tenant_id                 UUID NOT NULL
         REFERENCES public.tenants(id) ON DELETE CASCADE,
 
-    -- Warm tier (ADR-032): one native database and role per tenant.
+    -- Warm tier (ADR-033): one native database and role per tenant.
     starrocks_database        TEXT,
     starrocks_role            TEXT,
     starrocks_resource_group  TEXT,
 
-    -- Cache (ADR-033): ACL user restricted to ~t:{<tenant>}:* .
+    -- Cache (ADR-034): ACL user restricted to ~t:{<tenant>}:* .
     redis_acl_user            TEXT,
     redis_key_prefix          TEXT,
 
-    -- Cold tier (ADR-031): the datasource's namespace inside the tenant's ONE
+    -- Cold tier (ADR-032): the datasource's namespace inside the tenant's ONE
     -- warehouse. A namespace is a name, not a warehouse.
     lake_namespace            TEXT,
 
@@ -166,6 +166,6 @@ CREATE POLICY tenant_datasource_binding_isolation_policy
     WITH CHECK (tenant_id = uisce_get_current_tenant());
 
 COMMENT ON TABLE public.tenant_lakehouse IS
-    'The one Iceberg warehouse of a tenant (ADR-031). Names are derived from tenant_id by CHECK. References only.';
+    'The one Iceberg warehouse of a tenant (ADR-032). Names are derived from tenant_id by CHECK. References only.';
 COMMENT ON TABLE public.tenant_datasource_binding IS
-    'Warm/cache bindings and lake namespace for a tenant datasource (ADR-028). References only; credentials live in the secrets store.';
+    'Warm/cache bindings and lake namespace for a tenant datasource (ADR-029). References only; credentials live in the secrets store.';
