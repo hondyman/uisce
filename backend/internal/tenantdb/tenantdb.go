@@ -9,14 +9,17 @@ package tenantdb
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 var (
@@ -32,7 +35,13 @@ var (
 	ErrUserMismatch = errors.New("tenantdb: connection is not the expected user")
 	// ErrIncomplete: the datasource row lacks a host, port, database or credential.
 	ErrIncomplete = errors.New("tenantdb: datasource connection details are incomplete")
+	// ErrAmbiguousApp: the tenant has more than one datasource for the app. There is no "first".
+	ErrAmbiguousApp = errors.New("tenantdb: tenant has more than one datasource for the app")
+	// ErrBadApp: the app code is not a plain identifier.
+	ErrBadApp = errors.New("tenantdb: invalid app code")
 )
+
+var appCode = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 
 // Datasource is the registry's description of one tenant database. No credential is in it.
 type Datasource struct {
@@ -58,6 +67,9 @@ type Registry interface {
 	ResolveDatasource(ctx context.Context, datasourceID string) (Datasource, error)
 	// LoadBinding returns the datasource's binding; no binding is ErrUnbound.
 	LoadBinding(ctx context.Context, datasourceID string) (Binding, error)
+	// AppDatasource returns the id of the tenant's one datasource for the app. None is
+	// ErrUnbound; more than one is ErrAmbiguousApp. The tenant is the verified caller's.
+	AppDatasource(ctx context.Context, tenantID, app string) (string, error)
 	// Credentials returns the database user and password for the datasource.
 	Credentials(ctx context.Context, ds Datasource) (user, password string, err error)
 }
@@ -86,6 +98,16 @@ type cacheKey struct {
 type entry struct {
 	pool    *pgxpool.Pool
 	lastUse time.Time
+	sqlView *sqlView
+}
+
+// sqlView is one lazily built database/sql view over a cached pgxpool, shared by every Pool handed
+// out for it. It does not own the pool: closing it leaves the pool (and the router's accounting)
+// alone, and it holds no idle connections, so every connection stays governed by the pgxpool's
+// MaxConns and its identity and session-reset hooks.
+type sqlView struct {
+	once sync.Once
+	db   *sql.DB
 }
 
 // Router hands out pools. Resolve once per request or job and pass the *Pool down.
@@ -118,6 +140,26 @@ func (r *Router) Resolve(ctx context.Context, datasourceID string) (*Pool, error
 		return nil, err
 	}
 	return r.get(ctx, ds, b)
+}
+
+// ResolveApp maps the caller's tenant and an app code to that tenant's pool: it finds the
+// tenant's one datasource for the app (the tenant is the verified caller's, never an argument)
+// and then resolves it exactly as Resolve does, so ownership, binding lifecycle, credential and
+// identity checks all apply again. Exactly one datasource per app: none is ErrUnbound, more
+// than one is ErrAmbiguousApp.
+func (r *Router) ResolveApp(ctx context.Context, app string) (*Pool, error) {
+	if !appCode.MatchString(app) {
+		return nil, ErrBadApp
+	}
+	actor, err := r.cfg.CallerTenant(ctx)
+	if err != nil || actor == "" {
+		return nil, ErrNoTenant
+	}
+	id, err := r.cfg.Registry.AppDatasource(ctx, actor, app)
+	if err != nil {
+		return nil, fmt.Errorf("tenantdb: find %q datasource: %w", app, err)
+	}
+	return r.Resolve(ctx, id)
 }
 
 // Probe proves a datasource is reachable the way production will reach it (the registered
@@ -172,9 +214,9 @@ func (r *Router) get(ctx context.Context, ds Datasource, b Binding) (*Pool, erro
 	r.mu.Lock()
 	if e, ok := r.pools[key]; ok {
 		e.lastUse = r.now()
-		p := e.pool
+		p, v := e.pool, e.sqlView
 		r.mu.Unlock()
-		return &Pool{ds: ds, p: p}, nil
+		return &Pool{ds: ds, p: p, view: v}, nil
 	}
 	r.mu.Unlock()
 
@@ -187,9 +229,10 @@ func (r *Router) get(ctx context.Context, ds Datasource, b Binding) (*Pool, erro
 	if e, ok := r.pools[key]; ok { // lost a race; keep the existing pool
 		r.mu.Unlock()
 		p.Close()
-		return &Pool{ds: ds, p: e.pool}, nil
+		return &Pool{ds: ds, p: e.pool, view: e.sqlView}, nil
 	}
-	r.pools[key] = &entry{pool: p, lastUse: r.now()}
+	e := &entry{pool: p, lastUse: r.now(), sqlView: &sqlView{}}
+	r.pools[key] = e
 	victims := r.evictLocked(key)
 	r.mu.Unlock()
 
@@ -197,7 +240,7 @@ func (r *Router) get(ctx context.Context, ds Datasource, b Binding) (*Pool, erro
 	for _, v := range victims {
 		v.Close()
 	}
-	return &Pool{ds: ds, p: p}, nil
+	return &Pool{ds: ds, p: p, view: e.sqlView}, nil
 }
 
 // build opens a pool for the datasource and proves it reaches the registered database as the
@@ -320,8 +363,22 @@ func assertIdentity(ctx context.Context, c *pgx.Conn, wantDB, wantUser string) e
 
 // Pool is a tenant's database, already proven to be the right one.
 type Pool struct {
-	ds Datasource
-	p  *pgxpool.Pool
+	ds   Datasource
+	p    *pgxpool.Pool
+	view *sqlView
+}
+
+// SQLDB is a database/sql view of this pool, for callers written against *sql.DB. It is the SAME
+// pool: every connection comes from the router's pgxpool, so the per-pool connection cap, the
+// identity assertion on every checkout and the session reset on every release all still apply. The
+// view holds no idle connections and closing it does not close the pool. It is valid until the
+// router evicts or closes the pool, so fetch it per use (cheap) rather than holding it for long.
+func (p *Pool) SQLDB() *sql.DB {
+	if p.view == nil { // a Pool the router did not build; never share state across them
+		return stdlib.OpenDBFromPool(p.p)
+	}
+	p.view.once.Do(func() { p.view.db = stdlib.OpenDBFromPool(p.p) })
+	return p.view.db
 }
 
 // Database is the registered database name.

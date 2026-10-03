@@ -133,3 +133,46 @@ func credentialsFromConfig(hydrated []byte) (string, string, error) {
 	}
 	return user, pass, nil
 }
+
+// AppDatasource finds the tenant's one active datasource for an app, read inside the tenant's
+// own transaction so row-level security applies.
+func (r *AlphaRegistry) AppDatasource(ctx context.Context, tenantID, app string) (string, error) {
+	if r == nil || r.DB == nil {
+		return "", errors.New("tenantdb: alpha registry is not configured")
+	}
+	var ids []string
+	err := db.WithTenantTransaction(ctx, r.DB, tenantID, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `
+			SELECT tpd.id
+			FROM public.tenant_product_datasource tpd
+			JOIN public.tenant_product tp ON tp.id = tpd.tenant_product_id
+			JOIN public.tenant_instance ti ON ti.id = tp.datasource_id
+			JOIN public.alpha_datasource ad ON ad.id = tpd.alpha_datasource_id
+			WHERE ti.tenant_id = $1 AND ad.datasource_code = $2
+			  AND tpd.is_active AND tp.is_active AND ti.is_active
+			ORDER BY tpd.id`, tenantID, app)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			ids = append(ids, id)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return "", fmt.Errorf("read app datasources: %w", err)
+	}
+	switch len(ids) {
+	case 0:
+		return "", fmt.Errorf("%w: no %q datasource", ErrUnbound, app)
+	case 1:
+		return ids[0], nil
+	default:
+		return "", fmt.Errorf("%w: %d for %q", ErrAmbiguousApp, len(ids), app)
+	}
+}

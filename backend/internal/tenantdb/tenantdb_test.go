@@ -6,10 +6,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,6 +23,8 @@ type fakeRegistry struct {
 	user, pw  string
 	credErr   error
 	credCalls int
+	appDS     string
+	appErr    error
 }
 
 func (f *fakeRegistry) ResolveDatasource(context.Context, string) (Datasource, error) {
@@ -28,6 +32,9 @@ func (f *fakeRegistry) ResolveDatasource(context.Context, string) (Datasource, e
 }
 func (f *fakeRegistry) LoadBinding(context.Context, string) (Binding, error) {
 	return f.binding, f.bindErr
+}
+func (f *fakeRegistry) AppDatasource(_ context.Context, _, _ string) (string, error) {
+	return f.appDS, f.appErr
 }
 func (f *fakeRegistry) Credentials(context.Context, Datasource) (string, string, error) {
 	f.credCalls++
@@ -354,4 +361,113 @@ func TestProbe_ReachesTheDatabaseAndLeavesNoPoolBehind(t *testing.T) {
 
 	reg.ds = e.ds("ds-a", "t-1", e.dbA+"_missing")
 	require.Error(t, r.Probe(context.Background(), "ds-a"), "a database that is not there must fail the probe")
+}
+
+func TestResolveApp_FailsClosed(t *testing.T) {
+	active := Binding{Version: 1, Lifecycle: "active"}
+	t.Run("a bad app code is refused before the registry is touched", func(t *testing.T) {
+		reg := &fakeRegistry{appDS: "ds-1", ds: goodDS(), binding: active}
+		r := newRouter(t, reg, "t-1")
+		for _, bad := range []string{"", "Core", "../core", "core;drop", "1core", "a b"} {
+			_, err := r.ResolveApp(context.Background(), bad)
+			require.ErrorIs(t, err, ErrBadApp, bad)
+		}
+	})
+	t.Run("no tenant in context", func(t *testing.T) {
+		reg := &fakeRegistry{appDS: "ds-1", ds: goodDS(), binding: active}
+		_, err := newRouter(t, reg, "").ResolveApp(context.Background(), "core")
+		require.ErrorIs(t, err, ErrNoTenant)
+	})
+	t.Run("the lookup's refusals reach the caller and leave no pool", func(t *testing.T) {
+		for name, e := range map[string]error{"unbound": ErrUnbound, "ambiguous": ErrAmbiguousApp, "registry down": errors.New("alpha down")} {
+			r := newRouter(t, &fakeRegistry{appErr: e}, "t-1")
+			p, err := r.ResolveApp(context.Background(), "core")
+			require.Error(t, err, name)
+			require.ErrorIs(t, err, e, name)
+			require.Nil(t, p)
+			require.Zero(t, r.Size())
+		}
+	})
+	t.Run("what the lookup returns is still fully checked", func(t *testing.T) {
+		// A registry that hands back ANOTHER tenant's datasource must still be refused by Resolve's
+		// ownership check: ResolveApp is not a shortcut around it.
+		other := goodDS()
+		other.TenantID = "t-2"
+		r := newRouter(t, &fakeRegistry{appDS: "ds-x", ds: other, binding: active, user: "u", pw: "p"}, "t-1")
+		_, err := r.ResolveApp(context.Background(), "core")
+		require.ErrorIs(t, err, ErrTenantMismatch)
+
+		r = newRouter(t, &fakeRegistry{appDS: "ds-1", ds: goodDS(), binding: Binding{Version: 1, Lifecycle: "suspended"}}, "t-1")
+		_, err = r.ResolveApp(context.Background(), "core")
+		require.ErrorIs(t, err, ErrUnbound)
+	})
+}
+
+func TestSQLDB_IsTheRoutersPoolNotASecondOne(t *testing.T) {
+	e := realPG(t)
+	reg := &fakeRegistry{ds: e.ds("ds-a", "t-1", e.dbA), binding: Binding{Version: 1, Lifecycle: "active"}, user: e.user, pw: e.pw, appDS: "ds-a"}
+	r, err := New(Config{Registry: reg, CallerTenant: caller("t-1"), MaxPools: 2, MaxConnsPerPool: 2, IdleTTL: time.Minute, DialTimeout: 2 * time.Second})
+	require.NoError(t, err)
+	t.Cleanup(r.Close)
+	ctx := context.Background()
+
+	p, err := r.ResolveApp(ctx, "core")
+	require.NoError(t, err)
+	db := p.SQLDB()
+
+	var name string
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT current_database()`).Scan(&name))
+	require.Equal(t, e.dbA, name)
+	_, err = db.ExecContext(ctx, `CREATE TEMP TABLE sqlview_probe (x int)`)
+	require.NoError(t, err)
+
+	t.Run("the same view is shared and still one pool", func(t *testing.T) {
+		p2, err := r.ResolveApp(ctx, "core")
+		require.NoError(t, err)
+		require.Same(t, db, p2.SQLDB())
+		require.Equal(t, 1, r.Size())
+	})
+
+	t.Run("connections are capped by the router's MaxConnsPerPool", func(t *testing.T) {
+		// Ten concurrent sessions through database/sql must never hold more than 2 server connections.
+		var wg sync.WaitGroup
+		peak := make(chan int, 10)
+		for i := 0; i < 10; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				var n int
+				// pg_sleep keeps the connection busy so the sessions overlap.
+				err := db.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM pg_stat_activity WHERE usename = current_user AND datname = current_database() AND pid <> pg_backend_pid()) + 1 FROM pg_sleep(0.15)`).Scan(&n)
+				require.NoError(t, err)
+				peak <- n
+			}()
+		}
+		wg.Wait()
+		close(peak)
+		for n := range peak {
+			require.LessOrEqual(t, n, 2, "the sql view must not open connections beyond the pgxpool's cap")
+		}
+	})
+
+	t.Run("session state never leaks between uses", func(t *testing.T) {
+		_, err := db.ExecContext(ctx, `SET application_name = 'leaked'`)
+		require.NoError(t, err)
+		var app string
+		require.NoError(t, db.QueryRowContext(ctx, `SHOW application_name`).Scan(&app))
+		require.NotContains(t, app, "leaked", "AfterRelease resets the session, so a later use must not see it")
+	})
+
+	t.Run("a wrapper does not own the pool", func(t *testing.T) {
+		require.NoError(t, stdlibCloseProbe(p))
+		// The pool still serves other users after a wrapper built from it is closed.
+		p3, err := r.ResolveApp(ctx, "core")
+		require.NoError(t, err)
+		require.NoError(t, p3.SQLDB().QueryRowContext(ctx, `SELECT 1`).Scan(new(int)))
+	})
+}
+
+// stdlibCloseProbe closes a throwaway wrapper over the pool, as a careless caller of an old API might.
+func stdlibCloseProbe(p *Pool) error {
+	return stdlib.OpenDBFromPool(p.p).Close()
 }

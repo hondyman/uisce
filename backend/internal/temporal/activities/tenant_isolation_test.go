@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/require"
@@ -16,6 +17,7 @@ import (
 	uiscedb "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/dscreds"
 	"github.com/hondyman/uisce/backend/internal/migrations"
+	"github.com/hondyman/uisce/backend/internal/platform"
 	"github.com/hondyman/uisce/backend/internal/provisioning"
 	"github.com/hondyman/uisce/backend/internal/secrets"
 	"github.com/hondyman/uisce/backend/internal/security"
@@ -389,4 +391,54 @@ func TestIsolation_CreateTenantDatabaseClosesPublicConnect(t *testing.T) {
 	require.True(t, canConnect())
 	require.NoError(t, r.acts.CreateTenantDatabase(ctx, r.database), "the retry path")
 	require.False(t, canConnect(), "the already-exists path must close PUBLIC's CONNECT too")
+}
+
+// The manager used by the wealth service and business-object instance operations serves each tenant
+// through the router: its own database, no second pool set, and a closed door for anyone else.
+func TestIsolation_TheTenantDBManagerServesEachTenantThroughTheRouter(t *testing.T) {
+	g := newIsoRig(t)
+	m := platform.NewTenantDBManagerWithRouter(g.router, "orm")
+
+	dbOf := func(tenant string) (string, *sql.DB) {
+		conn, err := m.GetConnection(tenant)
+		require.NoError(t, err)
+		var name string
+		require.NoError(t, conn.QueryRow(`SELECT current_database()`).Scan(&name))
+		return name, conn
+	}
+	nameA, connA := dbOf(g.a.in.TenantID)
+	nameB, connB := dbOf(g.b.in.TenantID)
+	require.Equal(t, g.a.rig.database, nameA)
+	require.Equal(t, g.b.rig.database, nameB)
+
+	_, err := connA.Exec(`INSERT INTO notes (owner, body) VALUES ('a', 'only-a')`)
+	require.NoError(t, err)
+	var n int
+	require.NoError(t, connB.QueryRow(`SELECT count(*) FROM notes`).Scan(&n))
+	require.Zero(t, n, "tenant B's connection must not see tenant A's row")
+
+	for i := 0; i < 5; i++ {
+		dbOf(g.a.in.TenantID)
+		dbOf(g.b.in.TenantID)
+	}
+	require.Equal(t, 2, g.router.Size(), "the manager must not hold a second pool set: one pool per tenant, owned by the router")
+
+	t.Run("a tenant with no datasource for the app gets nothing", func(t *testing.T) {
+		conn, err := m.GetConnection(uuid.NewString())
+		require.Error(t, err)
+		require.Nil(t, conn)
+	})
+	t.Run("a different app code finds nothing", func(t *testing.T) {
+		conn, err := platform.NewTenantDBManagerWithRouter(g.router, "wealth").GetConnection(g.a.in.TenantID)
+		require.Error(t, err)
+		require.Nil(t, conn)
+	})
+	t.Run("a suspended tenant is refused and the other is unaffected", func(t *testing.T) {
+		_, err := g.a.rig.admin.Exec(`UPDATE tenant_datasource_binding SET lifecycle_state = 'suspended' WHERE datasource_id = $1`, g.a.in.DatasourceID)
+		require.NoError(t, err)
+		_, err = m.GetConnection(g.a.in.TenantID)
+		require.ErrorIs(t, err, tenantdb.ErrUnbound)
+		_, err = m.GetConnection(g.b.in.TenantID)
+		require.NoError(t, err)
+	})
 }
