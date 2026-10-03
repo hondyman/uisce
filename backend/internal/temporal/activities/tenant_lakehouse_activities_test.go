@@ -22,10 +22,14 @@ type fakeReg struct {
 	failures    []failCall
 	credMarks   int
 	credMarkErr error
+	applied     []int
+	appliedErr  error
+	syncFails   []failCall
 }
 type markCall struct {
 	tenant, warehouse uuid.UUID
 	key               string
+	applied           int
 	actor             registry.Actor
 }
 type failCall struct {
@@ -35,9 +39,17 @@ type failCall struct {
 }
 
 func (f *fakeReg) Get(context.Context, uuid.UUID) (*registry.Config, error) { return f.cfg, f.getErr }
-func (f *fakeReg) MarkProvisioned(_ context.Context, t, w uuid.UUID, k string, a registry.Actor) error {
-	f.marked = append(f.marked, markCall{t, w, k, a})
+func (f *fakeReg) MarkProvisioned(_ context.Context, t, w uuid.UUID, k string, applied int, a registry.Actor) error {
+	f.marked = append(f.marked, markCall{t, w, k, applied, a})
 	return f.markErr
+}
+func (f *fakeReg) MarkRetentionApplied(_ context.Context, _ uuid.UUID, days int, _ registry.Actor) error {
+	f.applied = append(f.applied, days)
+	return f.appliedErr
+}
+func (f *fakeReg) RecordRetentionSyncFailure(_ context.Context, t uuid.UUID, a registry.Actor, step, reason string) error {
+	f.syncFails = append(f.syncFails, failCall{t, step, reason, a})
+	return nil
 }
 func (f *fakeReg) MarkCredentialIssued(context.Context, uuid.UUID) error {
 	f.credMarks++
@@ -59,13 +71,27 @@ func (f *fakeKeys) EnsureKey(_ context.Context, n string) error {
 }
 
 type fakeBuckets struct {
-	specs []iceberg.TenantBucketSpec
-	err   error
+	specs    []iceberg.TenantBucketSpec
+	err      error
+	extended []uint
+	extErr   error
+	extGot   uint
 }
 
 func (f *fakeBuckets) EnsureTenantBucket(_ context.Context, s iceberg.TenantBucketSpec) (*iceberg.TenantBucket, error) {
 	f.specs = append(f.specs, s)
 	return &iceberg.TenantBucket{Name: "b"}, f.err
+}
+
+func (f *fakeBuckets) ExtendTenantRetention(_ context.Context, _ uuid.UUID, days uint) (uint, error) {
+	f.extended = append(f.extended, days)
+	if f.extErr != nil {
+		return 0, f.extErr
+	}
+	if f.extGot != 0 {
+		return f.extGot, nil
+	}
+	return days, nil
 }
 
 type fakeCreds struct {
@@ -276,17 +302,18 @@ func TestMarkLakehouseProvisioned(t *testing.T) {
 
 	t.Run("records the warehouse, key and actor", func(t *testing.T) {
 		r := newRig()
-		require.NoError(t, r.acts.MarkLakehouseProvisioned(ctx, r.in, wh, "key"))
+		require.NoError(t, r.acts.MarkLakehouseProvisioned(ctx, r.in, wh, "key", 2555))
 		require.Len(t, r.reg.marked, 1)
 		require.Equal(t, r.id, r.reg.marked[0].tenant)
 		require.Equal(t, wh, r.reg.marked[0].warehouse.String())
 		require.Equal(t, "key", r.reg.marked[0].key)
+		require.Equal(t, 2555, r.reg.marked[0].applied, "records the retention the bucket was created with")
 		require.Equal(t, registry.Actor{ID: "alice", Role: "global_admin"}, r.reg.marked[0].actor)
 	})
 
 	t.Run("a bad warehouse id is not retried and writes nothing", func(t *testing.T) {
 		r := newRig()
-		require.True(t, isNonRetryable(r.acts.MarkLakehouseProvisioned(ctx, r.in, "not-a-uuid", "key")))
+		require.True(t, isNonRetryable(r.acts.MarkLakehouseProvisioned(ctx, r.in, "not-a-uuid", "key", 2555)))
 		require.Empty(t, r.reg.marked)
 	})
 
@@ -298,14 +325,14 @@ func TestMarkLakehouseProvisioned(t *testing.T) {
 		t.Run("is not retried for "+name, func(t *testing.T) {
 			r := newRig()
 			r.reg.markErr = e
-			require.True(t, isNonRetryable(r.acts.MarkLakehouseProvisioned(ctx, r.in, wh, "key")))
+			require.True(t, isNonRetryable(r.acts.MarkLakehouseProvisioned(ctx, r.in, wh, "key", 2555)))
 		})
 	}
 
 	t.Run("a database outage is retried", func(t *testing.T) {
 		r := newRig()
 		r.reg.markErr = errors.New("deadlock")
-		err := r.acts.MarkLakehouseProvisioned(ctx, r.in, wh, "key")
+		err := r.acts.MarkLakehouseProvisioned(ctx, r.in, wh, "key", 2555)
 		require.Error(t, err)
 		require.False(t, isNonRetryable(err))
 	})
@@ -409,4 +436,113 @@ func TestEnsureLakehouseCredential_MintingFollowsTheRegistryNotTheSecretsStore(t
 		require.False(t, isNonRetryable(err))
 		require.Empty(t, r.cr.ensured)
 	})
+}
+
+func TestLoadRetentionTarget(t *testing.T) {
+	ctx := context.Background()
+	provisionedCfg := func(r *rig, desired int, pending bool) {
+		r.reg.cfg.Provisioned = true
+		r.reg.cfg.AuditRetentionDays = &desired
+		r.reg.cfg.RetentionPending = pending
+	}
+
+	t.Run("reports what the registry wants and whether the bucket is behind", func(t *testing.T) {
+		r := newRig()
+		provisionedCfg(r, 3650, true)
+		got, err := r.acts.LoadRetentionTarget(ctx, r.in)
+		require.NoError(t, err)
+		require.Equal(t, activities.RetentionTarget{DesiredDays: 3650, Pending: true}, got)
+
+		provisionedCfg(r, 3650, false)
+		got, err = r.acts.LoadRetentionTarget(ctx, r.in)
+		require.NoError(t, err)
+		require.False(t, got.Pending)
+	})
+
+	for name, mutate := range map[string]func(*rig){
+		"not provisioned":  func(r *rig) { provisionedCfg(r, 365, true); r.reg.cfg.Provisioned = false },
+		"no retention":     func(r *rig) { provisionedCfg(r, 365, true); r.reg.cfg.AuditRetentionDays = nil },
+		"unknown tenant":   func(r *rig) { r.reg.getErr = registry.ErrTenantNotFound },
+		"malformed tenant": func(r *rig) { r.in.TenantID = "nope" },
+	} {
+		t.Run("is not retried when "+name, func(t *testing.T) {
+			r := newRig()
+			mutate(r)
+			_, err := r.acts.LoadRetentionTarget(ctx, r.in)
+			require.Error(t, err)
+			require.True(t, isNonRetryable(err), "%v", err)
+		})
+	}
+
+	t.Run("a registry outage is retried", func(t *testing.T) {
+		r := newRig()
+		r.reg.getErr = errors.New("db down")
+		_, err := r.acts.LoadRetentionTarget(ctx, r.in)
+		require.Error(t, err)
+		require.False(t, isNonRetryable(err))
+	})
+}
+
+func TestExtendBucketRetention(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("passes the tenant and days through and returns what the bucket now enforces", func(t *testing.T) {
+		r := newRig()
+		got, err := r.acts.ExtendBucketRetention(ctx, r.in, 2555)
+		require.NoError(t, err)
+		require.Equal(t, 2555, got)
+		require.Equal(t, []uint{2555}, r.bkt.extended)
+	})
+
+	t.Run("a bucket that is not compliance-locked is not retried", func(t *testing.T) {
+		r := newRig()
+		r.bkt.extErr = errors.Join(errors.New("governance"), iceberg.ErrBucketConflict)
+		_, err := r.acts.ExtendBucketRetention(ctx, r.in, 2555)
+		require.True(t, isNonRetryable(err))
+	})
+
+	t.Run("an outage is retried and missing configuration is not", func(t *testing.T) {
+		r := newRig()
+		r.bkt.extErr = errors.New("minio unreachable")
+		_, err := r.acts.ExtendBucketRetention(ctx, r.in, 2555)
+		require.Error(t, err)
+		require.False(t, isNonRetryable(err))
+
+		r.bkt.extErr = errors.Join(errors.New("MinIO needs [LAKEHOUSE_MINIO_ENDPOINT]"), infra.ErrNotConfigured)
+		_, err = r.acts.ExtendBucketRetention(ctx, r.in, 2555)
+		require.True(t, isNonRetryable(err))
+	})
+
+	t.Run("a non-positive retention never reaches the bucket", func(t *testing.T) {
+		r := newRig()
+		_, err := r.acts.ExtendBucketRetention(ctx, r.in, 0)
+		require.True(t, isNonRetryable(err))
+		require.Empty(t, r.bkt.extended)
+	})
+}
+
+func TestMarkRetentionApplied(t *testing.T) {
+	ctx := context.Background()
+	r := newRig()
+	require.NoError(t, r.acts.MarkRetentionApplied(ctx, r.in, 2555))
+	require.Equal(t, []int{2555}, r.reg.applied)
+
+	for name, e := range map[string]error{
+		"not provisioned":    registry.ErrInvalidState,
+		"not configured":     registry.ErrNotConfigured,
+		"exceeds the wanted": registry.ErrInvalidRetention,
+	} {
+		r := newRig()
+		r.reg.appliedErr = e
+		require.True(t, isNonRetryable(r.acts.MarkRetentionApplied(ctx, r.in, 2555)), name)
+	}
+	r2 := newRig()
+	r2.reg.appliedErr = errors.New("deadlock")
+	err := r2.acts.MarkRetentionApplied(ctx, r2.in, 2555)
+	require.Error(t, err)
+	require.False(t, isNonRetryable(err))
+
+	r3 := newRig()
+	require.NoError(t, r3.acts.RecordRetentionSyncFailure(ctx, r3.in, "ExtendBucketRetention", "boom"))
+	require.Equal(t, []failCall{{r3.id, "ExtendBucketRetention", "boom", registry.Actor{ID: "alice", Role: "global_admin"}}}, r3.reg.syncFails)
 }

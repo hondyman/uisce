@@ -94,7 +94,7 @@ func TenantLakehouseProvisioningWorkflow(ctx workflow.Context, in activities.Lak
 	}
 
 	step = "MarkLakehouseProvisioned"
-	if err = workflow.ExecuteActivity(ctx, acts.MarkLakehouseProvisioned, in, warehouseID, keyID).Get(ctx, nil); err != nil {
+	if err = workflow.ExecuteActivity(ctx, acts.MarkLakehouseProvisioned, in, warehouseID, keyID, spec.RetentionDays).Get(ctx, nil); err != nil {
 		return result, err
 	}
 

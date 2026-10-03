@@ -59,8 +59,12 @@ type Config struct {
 	WarehouseName      string `json:"warehouse_name,omitempty"`
 	Bucket             string `json:"bucket,omitempty"`
 	AuditRetentionDays *int   `json:"audit_retention_days"`
-	LifecycleState     string `json:"lifecycle_state"`
-	Provisioned        bool   `json:"provisioned"`
+	// RetentionAppliedDays is what the bucket enforces by default; AuditRetentionDays is
+	// what the registry wants. RetentionPending is true while the bucket enforces less.
+	RetentionAppliedDays *int   `json:"retention_applied_days"`
+	RetentionPending     bool   `json:"retention_pending"`
+	LifecycleState       string `json:"lifecycle_state"`
+	Provisioned          bool   `json:"provisioned"`
 	// CredentialIssued is true once the tenant's storage credential has been issued. After
 	// that, a credential the secrets store cannot find is an error, never a reason to mint a
 	// new one.
@@ -111,21 +115,27 @@ func (s *Store) tenantRow(ctx context.Context, tenantID uuid.UUID) (name, code s
 }
 
 const selectConfig = `
-	SELECT warehouse_name, bucket, audit_retention_days, lifecycle_state,
+	SELECT warehouse_name, bucket, audit_retention_days, retention_applied_days, lifecycle_state,
 	       lakekeeper_warehouse_id IS NOT NULL, credential_issued_at IS NOT NULL, version, updated_at
 	  FROM public.tenant_lakehouse
 	 WHERE tenant_id = $1`
 
 func scanConfig(row *sql.Row, c *Config) error {
-	var days sql.NullInt32
+	var days, applied sql.NullInt32
 	var updated time.Time
-	if err := row.Scan(&c.WarehouseName, &c.Bucket, &days, &c.LifecycleState, &c.Provisioned, &c.CredentialIssued, &c.Version, &updated); err != nil {
+	if err := row.Scan(&c.WarehouseName, &c.Bucket, &days, &applied, &c.LifecycleState, &c.Provisioned, &c.CredentialIssued, &c.Version, &updated); err != nil {
 		return err
 	}
 	if days.Valid {
 		d := int(days.Int32)
 		c.AuditRetentionDays = &d
 	}
+	if applied.Valid {
+		a := int(applied.Int32)
+		c.RetentionAppliedDays = &a
+	}
+	c.RetentionPending = c.Provisioned && c.AuditRetentionDays != nil &&
+		(c.RetentionAppliedDays == nil || *c.RetentionAppliedDays < *c.AuditRetentionDays)
 	c.Configured = true
 	c.UpdatedAt = &updated
 	return nil
@@ -219,9 +229,9 @@ func (s *Store) SetRetention(ctx context.Context, tenantID uuid.UUID, days int, 
 // the audit entry in the same transaction. It is idempotent for the same warehouse id,
 // and refuses a different one (ErrWarehouseMismatch): a tenant's warehouse is never
 // silently replaced.
-func (s *Store) MarkProvisioned(ctx context.Context, tenantID, warehouseID uuid.UUID, kmsKeyID string, actor Actor) error {
-	if warehouseID == uuid.Nil || kmsKeyID == "" {
-		return errors.New("a warehouse id and a KMS key id are required")
+func (s *Store) MarkProvisioned(ctx context.Context, tenantID, warehouseID uuid.UUID, kmsKeyID string, appliedDays int, actor Actor) error {
+	if warehouseID == uuid.Nil || kmsKeyID == "" || appliedDays < MinRetentionDays {
+		return errors.New("a warehouse id, a KMS key id and the retention the bucket was created with are required")
 	}
 	err := dbpkg.WithTenantTransaction(ctx, s.db, tenantID.String(), func(tx *sql.Tx) error {
 		var state, bucket string
@@ -248,18 +258,69 @@ func (s *Store) MarkProvisioned(ctx context.Context, tenantID, warehouseID uuid.
 		if _, e := tx.ExecContext(ctx, `
 			UPDATE public.tenant_lakehouse
 			   SET lakekeeper_warehouse_id = $2, kms_key_id = $3, lifecycle_state = 'active',
-			       version = version + 1, updated_at = now()
-			 WHERE tenant_id = $1`, tenantID, warehouseID, kmsKeyID); e != nil {
+			       retention_applied_days = $4, version = version + 1, updated_at = now()
+			 WHERE tenant_id = $1`, tenantID, warehouseID, kmsKeyID, appliedDays); e != nil {
 			return fmt.Errorf("mark provisioned: %w", e)
 		}
 		return insertAudit(ctx, tx, tenantID, actor, "provisioned", nil,
-			mustJSON(map[string]any{"warehouse_id": warehouseID.String(), "bucket": bucket, "audit_retention_days": int(days.Int32)}))
+			mustJSON(map[string]any{"warehouse_id": warehouseID.String(), "bucket": bucket, "audit_retention_days": int(days.Int32), "retention_applied_days": appliedDays}))
 	})
 	if err != nil {
 		if errors.Is(err, ErrNotConfigured) || errors.Is(err, ErrWarehouseMismatch) || errors.Is(err, ErrInvalidState) {
 			return err
 		}
 		return fmt.Errorf("mark provisioned: %w", err)
+	}
+	return nil
+}
+
+// MarkRetentionApplied records that the tenant's bucket now enforces `days` by default,
+// with an audit entry in the same transaction. It only ever raises the applied value, never
+// exceeds the retention the registry wants, and requires a provisioned tenant. Setting a
+// value the bucket already has (or less) is a no-op: reconcile can be retried freely.
+func (s *Store) MarkRetentionApplied(ctx context.Context, tenantID uuid.UUID, days int, actor Actor) error {
+	if days < MinRetentionDays || days > MaxRetentionDays {
+		return ErrInvalidRetention
+	}
+	err := dbpkg.WithTenantTransaction(ctx, s.db, tenantID.String(), func(tx *sql.Tx) error {
+		var want, applied sql.NullInt32
+		var provisioned bool
+		e := tx.QueryRowContext(ctx, `
+			SELECT audit_retention_days, retention_applied_days, lakekeeper_warehouse_id IS NOT NULL
+			  FROM public.tenant_lakehouse WHERE tenant_id = $1 FOR UPDATE`, tenantID).Scan(&want, &applied, &provisioned)
+		if errors.Is(e, sql.ErrNoRows) {
+			return ErrNotConfigured
+		}
+		if e != nil {
+			return fmt.Errorf("lock lakehouse row: %w", e)
+		}
+		if !provisioned {
+			return fmt.Errorf("%w: nothing is provisioned to apply retention to", ErrInvalidState)
+		}
+		if !want.Valid || days > int(want.Int32) {
+			return fmt.Errorf("%w: cannot apply %d days, the registry wants %d", ErrInvalidRetention, days, want.Int32)
+		}
+		if applied.Valid && int(applied.Int32) >= days {
+			return nil // the bucket already enforces this much
+		}
+		var before []byte
+		if applied.Valid {
+			before = mustJSON(map[string]int{"retention_applied_days": int(applied.Int32)})
+		}
+		if _, e := tx.ExecContext(ctx, `
+			UPDATE public.tenant_lakehouse
+			   SET retention_applied_days = $2, version = version + 1, updated_at = now()
+			 WHERE tenant_id = $1`, tenantID, days); e != nil {
+			return fmt.Errorf("record applied retention: %w", e)
+		}
+		return insertAudit(ctx, tx, tenantID, actor, "retention_applied", before,
+			mustJSON(map[string]int{"retention_applied_days": days}))
+	})
+	if err != nil {
+		if errors.Is(err, ErrNotConfigured) || errors.Is(err, ErrInvalidState) || errors.Is(err, ErrInvalidRetention) {
+			return err
+		}
+		return fmt.Errorf("mark retention applied: %w", err)
 	}
 	return nil
 }
@@ -294,6 +355,15 @@ func (s *Store) MarkCredentialIssued(ctx context.Context, tenantID uuid.UUID) er
 		}
 	}
 	return nil
+}
+
+// RecordRetentionSyncFailure appends a "retention_sync_failed" audit entry naming the step and
+// the reason, so a retention reconcile that stopped is visible in the audit trail.
+func (s *Store) RecordRetentionSyncFailure(ctx context.Context, tenantID uuid.UUID, actor Actor, step, reason string) error {
+	if len(reason) > 500 {
+		reason = reason[:500]
+	}
+	return s.Record(ctx, tenantID, actor, "retention_sync_failed", nil, map[string]string{"step": step, "error": reason})
 }
 
 // RecordProvisionFailure appends a "provision_failed" audit entry naming the step and

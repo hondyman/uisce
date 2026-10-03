@@ -17,6 +17,8 @@ import (
 // Buckets creates a tenant's WORM, encrypted bucket.
 type Buckets interface {
 	EnsureTenantBucket(ctx context.Context, spec iceberg.TenantBucketSpec) (*iceberg.TenantBucket, error)
+	// ExtendTenantRetention raises the bucket's default retention to at least days; it never lowers.
+	ExtendTenantRetention(ctx context.Context, tenantID uuid.UUID, days uint) (uint, error)
 }
 
 // Environment, all required, none defaulted:
@@ -142,6 +144,10 @@ func BucketsFromEnv() Buckets {
 }
 
 type unconfiguredBuckets struct{ err error }
+
+func (u unconfiguredBuckets) ExtendTenantRetention(context.Context, uuid.UUID, uint) (uint, error) {
+	return 0, u.err
+}
 
 func (u unconfiguredBuckets) EnsureTenantBucket(context.Context, iceberg.TenantBucketSpec) (*iceberg.TenantBucket, error) {
 	return nil, u.err

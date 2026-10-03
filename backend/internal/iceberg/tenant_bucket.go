@@ -108,6 +108,63 @@ func (p *TenantBucketProvisioner) EnsureTenantBucket(ctx context.Context, spec T
 	return &TenantBucket{Name: name, Created: created, RetentionDays: spec.RetentionDays, KMSKeyID: spec.KMSKeyID}, nil
 }
 
+// ExtendTenantRetention raises the default Object Lock retention of an existing tenant bucket
+// to at least `days`, and returns `days`: the retention the bucket now enforces by default is
+// at least that. It only ever raises:
+//   - a bucket already enforcing `days` or more is left untouched (a retry is a no-op);
+//   - a bucket with no Object Lock, or in GOVERNANCE mode, is ErrBucketConflict and untouched;
+//   - a missing bucket is ErrBucketConflict, because a tenant recorded as provisioned must
+//     have one and that mismatch needs a person.
+//
+// What this changes: the DEFAULT retention, which applies to objects written from now on.
+// Objects already in the bucket keep the retain-until date they were stamped with; extending
+// them is a separate, per-object operation this does not perform.
+func (p *TenantBucketProvisioner) ExtendTenantRetention(ctx context.Context, tenantID uuid.UUID, days uint) (uint, error) {
+	name, err := TenantWarehouseName(tenantID)
+	if err != nil {
+		return 0, err
+	}
+	if days == 0 {
+		return 0, errors.New("tenant bucket: retention days is required")
+	}
+	exists, err := p.api.BucketExists(ctx, name)
+	if err != nil {
+		return 0, fmt.Errorf("tenant bucket: check %s: %w", name, err)
+	}
+	if !exists {
+		return 0, fmt.Errorf("%w: %s does not exist but the tenant is recorded as provisioned", ErrBucketConflict, name)
+	}
+
+	enabled, mode, validity, unit, err := p.api.GetObjectLockConfig(ctx, name)
+	if err != nil {
+		return 0, fmt.Errorf("tenant bucket: read object lock on %s: %w", name, err)
+	}
+	if enabled != "Enabled" {
+		return 0, fmt.Errorf("%w: %s has no Object Lock", ErrBucketConflict, name)
+	}
+	if mode != nil && *mode != minio.Compliance {
+		return 0, fmt.Errorf("%w: %s has %s retention, want COMPLIANCE; refusing to change it", ErrBucketConflict, name, *mode)
+	}
+	if mode != nil && retentionDays(validity, unit) >= days {
+		return days, nil // already enforces at least this much
+	}
+
+	m, d, u := minio.Compliance, days, minio.Days
+	if err := p.api.SetObjectLockConfig(ctx, name, &m, &d, &u); err != nil {
+		return 0, fmt.Errorf("tenant bucket: extend retention on %s: %w", name, err)
+	}
+	// Do not trust the write: read it back, so the registry never records what the bucket
+	// does not enforce.
+	_, mode, validity, unit, err = p.api.GetObjectLockConfig(ctx, name)
+	if err != nil {
+		return 0, fmt.Errorf("tenant bucket: verify retention on %s: %w", name, err)
+	}
+	if mode == nil || *mode != minio.Compliance || retentionDays(validity, unit) < days {
+		return 0, fmt.Errorf("tenant bucket: %s did not accept %d days of retention", name, days)
+	}
+	return days, nil
+}
+
 func (p *TenantBucketProvisioner) ensureObjectLock(ctx context.Context, name string, wantDays uint) error {
 	enabled, mode, validity, unit, err := p.api.GetObjectLockConfig(ctx, name)
 	if err != nil {

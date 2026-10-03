@@ -289,7 +289,7 @@ func TestMarkProvisioned(t *testing.T) {
 
 	t.Run("refuses a tenant that was never configured", func(t *testing.T) {
 		id := newTenant(t, db, "Unconfigured")
-		require.ErrorIs(t, s.MarkProvisioned(ctx, id, wh, "key-"+id.String(), actor), registry.ErrNotConfigured)
+		require.ErrorIs(t, s.MarkProvisioned(ctx, id, wh, "key-"+id.String(), 365, actor), registry.ErrNotConfigured)
 	})
 
 	t.Run("binds the warehouse, goes active, and audits it", func(t *testing.T) {
@@ -299,17 +299,19 @@ func TestMarkProvisioned(t *testing.T) {
 		before, err := s.Get(ctx, id)
 		require.NoError(t, err)
 
-		require.NoError(t, s.MarkProvisioned(ctx, id, uuid.New(), "key-"+id.String(), actor))
+		require.NoError(t, s.MarkProvisioned(ctx, id, uuid.New(), "key-"+id.String(), 2555, actor))
 		got, err := s.Get(ctx, id)
 		require.NoError(t, err)
 		require.True(t, got.Provisioned)
+		require.Equal(t, 2555, *got.RetentionAppliedDays, "the bucket was created with the retention the registry wanted")
+		require.False(t, got.RetentionPending)
 		require.Equal(t, "active", got.LifecycleState)
 		require.Equal(t, before.Version+1, got.Version)
 		require.Equal(t, []string{"configured", "provisioned"}, actions(t, s, id))
 
 		entries, err := s.Audit(ctx, id, 10)
 		require.NoError(t, err)
-		require.JSONEq(t, `{"audit_retention_days":2555,"bucket":"`+got.Bucket+`","warehouse_id":"`+
+		require.JSONEq(t, `{"audit_retention_days":2555,"retention_applied_days":2555,"bucket":"`+got.Bucket+`","warehouse_id":"`+
 			extractWarehouse(t, entries[0].After)+`"}`, string(entries[0].After))
 		broken, err := s.VerifyAudit(ctx, id)
 		require.NoError(t, err)
@@ -321,11 +323,11 @@ func TestMarkProvisioned(t *testing.T) {
 		_, err := s.SetRetention(ctx, id, 365, actor)
 		require.NoError(t, err)
 		same, key := uuid.New(), "key-"+id.String()
-		require.NoError(t, s.MarkProvisioned(ctx, id, same, key, actor))
-		require.NoError(t, s.MarkProvisioned(ctx, id, same, key, actor), "a retry of the same binding is a no-op")
+		require.NoError(t, s.MarkProvisioned(ctx, id, same, key, 365, actor))
+		require.NoError(t, s.MarkProvisioned(ctx, id, same, key, 365, actor), "a retry of the same binding is a no-op")
 		require.Equal(t, []string{"configured", "provisioned"}, actions(t, s, id), "and writes no second audit entry")
 
-		require.ErrorIs(t, s.MarkProvisioned(ctx, id, uuid.New(), key, actor), registry.ErrWarehouseMismatch,
+		require.ErrorIs(t, s.MarkProvisioned(ctx, id, uuid.New(), key, 365, actor), registry.ErrWarehouseMismatch,
 			"a tenant's one warehouse is never silently replaced")
 		got, err := s.Get(ctx, id)
 		require.NoError(t, err)
@@ -340,7 +342,7 @@ func TestMarkProvisioned(t *testing.T) {
 			_, e := tx.Exec(`UPDATE public.tenant_lakehouse SET lifecycle_state = 'suspended' WHERE tenant_id = $1`, id)
 			return e
 		}))
-		require.ErrorIs(t, s.MarkProvisioned(ctx, id, uuid.New(), "key-"+id.String(), actor), registry.ErrInvalidState)
+		require.ErrorIs(t, s.MarkProvisioned(ctx, id, uuid.New(), "key-"+id.String(), 365, actor), registry.ErrInvalidState)
 	})
 
 	t.Run("two tenants can never share a warehouse", func(t *testing.T) {
@@ -350,8 +352,8 @@ func TestMarkProvisioned(t *testing.T) {
 			require.NoError(t, err)
 		}
 		shared := uuid.New()
-		require.NoError(t, s.MarkProvisioned(ctx, a, shared, "key-"+a.String(), actor))
-		require.Error(t, s.MarkProvisioned(ctx, b, shared, "key-"+b.String(), actor), "the unique index must refuse it")
+		require.NoError(t, s.MarkProvisioned(ctx, a, shared, "key-"+a.String(), 365, actor))
+		require.Error(t, s.MarkProvisioned(ctx, b, shared, "key-"+b.String(), 365, actor), "the unique index must refuse it")
 		got, err := s.Get(ctx, b)
 		require.NoError(t, err)
 		require.False(t, got.Provisioned, "and the failed attempt must leave tenant B untouched")
@@ -361,8 +363,8 @@ func TestMarkProvisioned(t *testing.T) {
 		id := newTenant(t, db, "Blank")
 		_, err := s.SetRetention(ctx, id, 365, actor)
 		require.NoError(t, err)
-		require.Error(t, s.MarkProvisioned(ctx, id, uuid.Nil, "k", actor))
-		require.Error(t, s.MarkProvisioned(ctx, id, uuid.New(), "", actor))
+		require.Error(t, s.MarkProvisioned(ctx, id, uuid.Nil, "k", 365, actor))
+		require.Error(t, s.MarkProvisioned(ctx, id, uuid.New(), "", 365, actor))
 	})
 }
 
@@ -441,5 +443,104 @@ func TestMarkCredentialIssued(t *testing.T) {
 		got, err := s.Get(ctx, b)
 		require.NoError(t, err)
 		require.False(t, got.CredentialIssued)
+	})
+}
+
+func TestRetentionApplied(t *testing.T) {
+	db := openDB(t)
+	s := registry.NewStore(db)
+	ctx := context.Background()
+
+	provisioned := func(t *testing.T, name string, days int) uuid.UUID {
+		t.Helper()
+		id := newTenant(t, db, name)
+		_, err := s.SetRetention(ctx, id, days, actor)
+		require.NoError(t, err)
+		require.NoError(t, s.MarkProvisioned(ctx, id, uuid.New(), "key-"+id.String(), days, actor))
+		return id
+	}
+
+	t.Run("an extension after provisioning leaves the registry ahead of the bucket, visibly", func(t *testing.T) {
+		id := provisioned(t, "Pending", 365)
+		_, err := s.SetRetention(ctx, id, 2555, actor)
+		require.NoError(t, err)
+
+		got, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		require.Equal(t, 2555, *got.AuditRetentionDays)
+		require.Equal(t, 365, *got.RetentionAppliedDays, "the bucket still enforces what it was created with")
+		require.True(t, got.RetentionPending, "and the gap is reported, not hidden")
+	})
+
+	t.Run("reconcile records it, audits it, and is idempotent", func(t *testing.T) {
+		id := provisioned(t, "Reconcile", 365)
+		_, err := s.SetRetention(ctx, id, 2555, actor)
+		require.NoError(t, err)
+
+		require.NoError(t, s.MarkRetentionApplied(ctx, id, 2555, actor))
+		got, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		require.Equal(t, 2555, *got.RetentionAppliedDays)
+		require.False(t, got.RetentionPending)
+		require.Equal(t, []string{"configured", "provisioned", "retention_extended", "retention_applied"}, actions(t, s, id))
+
+		entries, err := s.Audit(ctx, id, 10)
+		require.NoError(t, err)
+		require.JSONEq(t, `{"retention_applied_days":365}`, string(entries[0].Before))
+		require.JSONEq(t, `{"retention_applied_days":2555}`, string(entries[0].After))
+
+		v := got.Version
+		require.NoError(t, s.MarkRetentionApplied(ctx, id, 2555, actor), "a retry is a no-op")
+		require.NoError(t, s.MarkRetentionApplied(ctx, id, 100, actor), "a lower value is a no-op, never a decrease")
+		again, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		require.Equal(t, 2555, *again.RetentionAppliedDays)
+		require.Equal(t, v, again.Version)
+		require.Len(t, actions(t, s, id), 4, "and writes no further audit")
+		broken, err := s.VerifyAudit(ctx, id)
+		require.NoError(t, err)
+		require.Nil(t, broken)
+	})
+
+	t.Run("cannot apply more than the registry wants", func(t *testing.T) {
+		id := provisioned(t, "Overshoot", 365)
+		require.ErrorIs(t, s.MarkRetentionApplied(ctx, id, 366, actor), registry.ErrInvalidRetention)
+		got, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		require.Equal(t, 365, *got.RetentionAppliedDays)
+	})
+
+	t.Run("needs a provisioned tenant", func(t *testing.T) {
+		id := newTenant(t, db, "NotProvisioned")
+		require.ErrorIs(t, s.MarkRetentionApplied(ctx, id, 365, actor), registry.ErrNotConfigured)
+		_, err := s.SetRetention(ctx, id, 365, actor)
+		require.NoError(t, err)
+		require.ErrorIs(t, s.MarkRetentionApplied(ctx, id, 365, actor), registry.ErrInvalidState)
+		for _, bad := range []int{0, -1, registry.MaxRetentionDays + 1} {
+			require.ErrorIs(t, s.MarkRetentionApplied(ctx, id, bad, actor), registry.ErrInvalidRetention)
+		}
+	})
+
+	t.Run("the database itself refuses to lower or overshoot the applied retention", func(t *testing.T) {
+		id := provisioned(t, "DBGuard", 730)
+		exec := func(q string, args ...any) error {
+			return dbpkg.WithTenantTransaction(ctx, db, id.String(), func(tx *sql.Tx) error {
+				_, e := tx.Exec(q, args...)
+				return e
+			})
+		}
+		require.Error(t, exec(`UPDATE public.tenant_lakehouse SET retention_applied_days = 100 WHERE tenant_id = $1`, id), "lowering")
+		require.Error(t, exec(`UPDATE public.tenant_lakehouse SET retention_applied_days = NULL WHERE tenant_id = $1`, id), "clearing")
+		require.Error(t, exec(`UPDATE public.tenant_lakehouse SET retention_applied_days = 731 WHERE tenant_id = $1`, id), "exceeding what the registry wants")
+		got, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		require.Equal(t, 730, *got.RetentionAppliedDays)
+	})
+
+	t.Run("a bucket cannot be created with more than the registry wants", func(t *testing.T) {
+		id := newTenant(t, db, "TooMuch")
+		_, err := s.SetRetention(ctx, id, 365, actor)
+		require.NoError(t, err)
+		require.Error(t, s.MarkProvisioned(ctx, id, uuid.New(), "key-"+id.String(), 366, actor))
 	})
 }

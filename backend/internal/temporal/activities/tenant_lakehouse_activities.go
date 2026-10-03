@@ -31,7 +31,10 @@ import (
 // LakehouseRegistry is the part of registry.Store these activities use.
 type LakehouseRegistry interface {
 	Get(ctx context.Context, tenantID uuid.UUID) (*registry.Config, error)
-	MarkProvisioned(ctx context.Context, tenantID, warehouseID uuid.UUID, kmsKeyID string, actor registry.Actor) error
+	MarkProvisioned(ctx context.Context, tenantID, warehouseID uuid.UUID, kmsKeyID string, appliedDays int, actor registry.Actor) error
+	// MarkRetentionApplied records that the bucket now enforces at least days by default.
+	MarkRetentionApplied(ctx context.Context, tenantID uuid.UUID, days int, actor registry.Actor) error
+	RecordRetentionSyncFailure(ctx context.Context, tenantID uuid.UUID, actor registry.Actor, step, reason string) error
 	RecordProvisionFailure(ctx context.Context, tenantID uuid.UUID, actor registry.Actor, step, reason string) error
 	// MarkCredentialIssued records, transactionally, that the storage credential now exists.
 	MarkCredentialIssued(ctx context.Context, tenantID uuid.UUID) error
@@ -43,9 +46,11 @@ type LakehouseKeys interface {
 	EnsureKey(ctx context.Context, name string) error
 }
 
-// LakehouseBuckets creates the tenant's WORM, encrypted bucket.
+// LakehouseBuckets creates the tenant's WORM, encrypted bucket and raises its retention.
 type LakehouseBuckets interface {
 	EnsureTenantBucket(ctx context.Context, spec iceberg.TenantBucketSpec) (*iceberg.TenantBucket, error)
+	// ExtendTenantRetention raises the default retention to at least days; it never lowers.
+	ExtendTenantRetention(ctx context.Context, tenantID uuid.UUID, days uint) (uint, error)
 }
 
 // LakehouseCredentials issues and reads the tenant's bucket-scoped storage credential.
@@ -256,8 +261,9 @@ func (a *TenantLakehouseActivities) EnsureLakehouseWarehouse(ctx context.Context
 	return wh.ID, nil
 }
 
-// MarkLakehouseProvisioned records the warehouse and key in the registry and audits it.
-func (a *TenantLakehouseActivities) MarkLakehouseProvisioned(ctx context.Context, in LakehouseProvisionInput, warehouseID, kmsKeyID string) error {
+// MarkLakehouseProvisioned records the warehouse, the key and the retention the bucket was
+// created with in the registry, and audits it.
+func (a *TenantLakehouseActivities) MarkLakehouseProvisioned(ctx context.Context, in LakehouseProvisionInput, warehouseID, kmsKeyID string, appliedDays int) error {
 	id, err := in.tenant()
 	if err != nil {
 		return err
@@ -266,7 +272,7 @@ func (a *TenantLakehouseActivities) MarkLakehouseProvisioned(ctx context.Context
 	if err != nil {
 		return nonRetryable(errTypeInvalidInput, fmt.Errorf("warehouse id %q is not a UUID", warehouseID))
 	}
-	err = a.Registry.MarkProvisioned(ctx, id, wh, kmsKeyID, in.actor())
+	err = a.Registry.MarkProvisioned(ctx, id, wh, kmsKeyID, appliedDays, in.actor())
 	switch {
 	case errors.Is(err, registry.ErrWarehouseMismatch):
 		return nonRetryable(errTypeConflict, err)
@@ -276,6 +282,83 @@ func (a *TenantLakehouseActivities) MarkLakehouseProvisioned(ctx context.Context
 		return fmt.Errorf("record provisioning: %w", err)
 	}
 	return nil
+}
+
+// RetentionTarget is what a retention reconcile needs from the registry.
+type RetentionTarget struct {
+	DesiredDays int
+	// Pending is false when the bucket already enforces what the registry wants.
+	Pending bool
+}
+
+// LoadRetentionTarget reads what the registry wants and whether the bucket already enforces
+// it. Only a provisioned tenant has a bucket to reconcile.
+func (a *TenantLakehouseActivities) LoadRetentionTarget(ctx context.Context, in LakehouseProvisionInput) (RetentionTarget, error) {
+	id, err := in.tenant()
+	if err != nil {
+		return RetentionTarget{}, err
+	}
+	cfg, err := a.Registry.Get(ctx, id)
+	if errors.Is(err, registry.ErrTenantNotFound) {
+		return RetentionTarget{}, nonRetryable(errTypeInvalidInput, err)
+	}
+	if err != nil {
+		return RetentionTarget{}, fmt.Errorf("read lakehouse registry: %w", err)
+	}
+	if !cfg.Provisioned {
+		return RetentionTarget{}, nonRetryable(errTypeNotReady,
+			fmt.Errorf("%w: nothing is provisioned to apply retention to", registry.ErrInvalidState))
+	}
+	if cfg.AuditRetentionDays == nil {
+		return RetentionTarget{}, nonRetryable(errTypeNotReady, registry.ErrNotConfigured)
+	}
+	return RetentionTarget{DesiredDays: *cfg.AuditRetentionDays, Pending: cfg.RetentionPending}, nil
+}
+
+// ExtendBucketRetention raises the tenant bucket's default retention to at least days. It never
+// lowers; a bucket that is not compliance-locked is a conflict that needs a person.
+func (a *TenantLakehouseActivities) ExtendBucketRetention(ctx context.Context, in LakehouseProvisionInput, days int) (int, error) {
+	id, err := in.tenant()
+	if err != nil {
+		return 0, err
+	}
+	if days < registry.MinRetentionDays {
+		return 0, nonRetryable(errTypeInvalidInput, registry.ErrInvalidRetention)
+	}
+	got, err := a.Buckets.ExtendTenantRetention(ctx, id, uint(days))
+	if errors.Is(err, iceberg.ErrBucketConflict) {
+		return 0, nonRetryable(errTypeConflict, err)
+	}
+	if err != nil {
+		return 0, infraErr("extend bucket retention", err)
+	}
+	return int(got), nil
+}
+
+// MarkRetentionApplied records in the registry, with an audit entry, that the bucket enforces
+// days. The registry only raises it and never lets it exceed what is wanted.
+func (a *TenantLakehouseActivities) MarkRetentionApplied(ctx context.Context, in LakehouseProvisionInput, days int) error {
+	id, err := in.tenant()
+	if err != nil {
+		return err
+	}
+	err = a.Registry.MarkRetentionApplied(ctx, id, days, in.actor())
+	switch {
+	case errors.Is(err, registry.ErrNotConfigured), errors.Is(err, registry.ErrInvalidState), errors.Is(err, registry.ErrInvalidRetention):
+		return nonRetryable(errTypeNotReady, err)
+	case err != nil:
+		return fmt.Errorf("record applied retention: %w", err)
+	}
+	return nil
+}
+
+// RecordRetentionSyncFailure writes the reason a reconcile stopped into the audit trail.
+func (a *TenantLakehouseActivities) RecordRetentionSyncFailure(ctx context.Context, in LakehouseProvisionInput, step, reason string) error {
+	id, err := in.tenant()
+	if err != nil {
+		return err
+	}
+	return a.Registry.RecordRetentionSyncFailure(ctx, id, in.actor(), step, reason)
 }
 
 // RecordLakehouseFailure writes the reason a run stopped into the audit trail.

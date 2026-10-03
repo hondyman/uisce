@@ -53,6 +53,15 @@ CREATE TABLE IF NOT EXISTS public.tenant_lakehouse (
     audit_retention_days  INTEGER
         CHECK (audit_retention_days IS NULL OR audit_retention_days > 0),
 
+    -- What the tenant's bucket actually enforces by default, in days. audit_retention_days
+    -- is what the registry WANTS; this is what the bucket HAS. They differ between an
+    -- extension and its reconcile, and that gap is visible, not hidden. It can never exceed
+    -- the desired value and, like it, can only rise. (Object Lock's default retention applies
+    -- to objects written from then on; objects already written keep their own retain-until.)
+    retention_applied_days INTEGER
+        CHECK (retention_applied_days IS NULL OR
+               (retention_applied_days > 0 AND retention_applied_days <= audit_retention_days)),
+
     lifecycle_state       TEXT NOT NULL DEFAULT 'provisioning'
         CHECK (lifecycle_state IN
             ('provisioning', 'active', 'suspended', 'offboarding', 'offboarded')),
@@ -85,6 +94,11 @@ BEGIN
            AND (NEW.audit_retention_days IS NULL OR NEW.audit_retention_days < OLD.audit_retention_days) THEN
             RAISE EXCEPTION 'tenant_lakehouse: audit retention can only be extended (% -> %)',
                 OLD.audit_retention_days, NEW.audit_retention_days;
+        END IF;
+        IF OLD.retention_applied_days IS NOT NULL
+           AND (NEW.retention_applied_days IS NULL OR NEW.retention_applied_days < OLD.retention_applied_days) THEN
+            RAISE EXCEPTION 'tenant_lakehouse: applied retention can only rise (% -> %)',
+                OLD.retention_applied_days, NEW.retention_applied_days;
         END IF;
         RETURN NEW;
     END IF;

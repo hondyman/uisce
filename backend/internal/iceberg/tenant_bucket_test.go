@@ -22,6 +22,7 @@ type fakeBuckets struct {
 	made       []minio.MakeBucketOptions
 	madeNames  []string
 	setLock    int
+	ignoreSet  bool
 	setSSE     int
 	lastSSEKey string
 }
@@ -44,6 +45,9 @@ func (f *fakeBuckets) GetObjectLockConfig(context.Context, string) (string, *min
 
 func (f *fakeBuckets) SetObjectLockConfig(_ context.Context, _ string, m *minio.RetentionMode, v *uint, u *minio.ValidityUnit) error {
 	f.setLock++
+	if f.ignoreSet {
+		return nil
+	}
 	f.mode, f.validity, f.unit = m, v, u
 	return nil
 }
@@ -193,4 +197,70 @@ func TestEnsureTenantBucket_RequiresKeyAndRetention(t *testing.T) {
 	if len(f.made) != 0 {
 		t.Fatalf("an invalid spec must not create anything; made %d", len(f.made))
 	}
+}
+
+func TestExtendTenantRetention(t *testing.T) {
+	ctx := context.Background()
+	id := uuid.New()
+	compliance := func(days uint) *fakeBuckets {
+		return &fakeBuckets{exists: true, lockOn: true, mode: ptr(minio.Compliance), validity: ptr(days), unit: ptr(minio.Days), kmsKey: "k"}
+	}
+
+	t.Run("raises the default retention and verifies it", func(t *testing.T) {
+		f := compliance(365)
+		got, err := prov(f).ExtendTenantRetention(ctx, id, 2555)
+		require.NoError(t, err)
+		require.EqualValues(t, 2555, got)
+		require.Equal(t, 1, f.setLock)
+		require.Equal(t, minio.Compliance, *f.mode)
+		require.EqualValues(t, 2555, *f.validity)
+		require.Equal(t, minio.Days, *f.unit)
+	})
+
+	t.Run("a bucket already enforcing at least that much is untouched", func(t *testing.T) {
+		for name, have := range map[string]uint{"equal": 2555, "stricter": 9999} {
+			f := compliance(have)
+			got, err := prov(f).ExtendTenantRetention(ctx, id, 2555)
+			require.NoError(t, err, name)
+			require.EqualValues(t, 2555, got, name+": reports that it enforces at least what was asked")
+			require.Zero(t, f.setLock, name+": a retry or a stricter bucket is never rewritten, and never lowered")
+			require.EqualValues(t, have, *f.validity, name)
+		}
+	})
+
+	t.Run("counts years as 365 days when comparing", func(t *testing.T) {
+		f := &fakeBuckets{exists: true, lockOn: true, mode: ptr(minio.Compliance), validity: ptr(uint(10)), unit: ptr(minio.Years)}
+		_, err := prov(f).ExtendTenantRetention(ctx, id, 3000)
+		require.NoError(t, err)
+		require.Zero(t, f.setLock, "10 years is 3650 days, already more than 3000")
+	})
+
+	t.Run("refuses, and touches nothing, when the bucket is not a compliance-locked one", func(t *testing.T) {
+		cases := map[string]*fakeBuckets{
+			"no object lock":  {exists: true, lockOn: false},
+			"governance mode": {exists: true, lockOn: true, mode: ptr(minio.Governance), validity: ptr(uint(9999)), unit: ptr(minio.Days)},
+			"missing bucket":  {exists: false},
+		}
+		for name, f := range cases {
+			_, err := prov(f).ExtendTenantRetention(ctx, id, 2555)
+			require.ErrorIs(t, err, ErrBucketConflict, name)
+			require.Zero(t, f.setLock, name)
+		}
+	})
+
+	t.Run("does not trust a write the bucket did not accept", func(t *testing.T) {
+		f := compliance(365)
+		f.ignoreSet = true // the server acknowledges but keeps the old value
+		_, err := prov(f).ExtendTenantRetention(ctx, id, 2555)
+		require.ErrorContains(t, err, "did not accept")
+	})
+
+	t.Run("rejects bad input before touching the bucket", func(t *testing.T) {
+		f := compliance(365)
+		_, err := prov(f).ExtendTenantRetention(ctx, id, 0)
+		require.Error(t, err)
+		_, err = prov(f).ExtendTenantRetention(ctx, uuid.Nil, 10)
+		require.Error(t, err)
+		require.Zero(t, f.setLock)
+	})
 }

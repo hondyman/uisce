@@ -55,13 +55,17 @@ func (c *recordingConverter) ToPayloads(v ...interface{}) (*commonpb.Payloads, e
 }
 
 type lhFakes struct {
-	mu     sync.Mutex
-	order  []string
-	failAt map[string]int // step -> number of times it fails before succeeding (-1 = always)
-	calls  map[string]int
-	cfg    *registry.Config
-	marked []uuid.UUID
-	fails  []string // "step: reason"
+	mu                 sync.Mutex
+	order              []string
+	failAt             map[string]int // step -> number of times it fails before succeeding (-1 = always)
+	calls              map[string]int
+	cfg                *registry.Config
+	marked             []uuid.UUID
+	fails              []string // "step: reason"
+	appliedAtProvision int
+	appliedDays        []int
+	extendedTo         []uint
+	syncFails          []string
 	// errors injected per step
 	errFor        map[string]error
 	failRecordErr error
@@ -87,12 +91,33 @@ func (f *lhFakes) Get(context.Context, uuid.UUID) (*registry.Config, error) {
 	}
 	return f.cfg, nil
 }
-func (f *lhFakes) MarkProvisioned(_ context.Context, t, _ uuid.UUID, _ string, _ registry.Actor) error {
+func (f *lhFakes) MarkProvisioned(_ context.Context, t, _ uuid.UUID, _ string, applied int, _ registry.Actor) error {
 	if err := f.hit("MarkProvisioned"); err != nil {
 		return err
 	}
 	f.marked = append(f.marked, t)
+	f.appliedAtProvision = applied
 	return nil
+}
+func (f *lhFakes) MarkRetentionApplied(_ context.Context, _ uuid.UUID, days int, _ registry.Actor) error {
+	if err := f.hit("MarkRetentionApplied"); err != nil {
+		return err
+	}
+	f.appliedDays = append(f.appliedDays, days)
+	return nil
+}
+func (f *lhFakes) RecordRetentionSyncFailure(_ context.Context, _ uuid.UUID, _ registry.Actor, step, reason string) error {
+	f.mu.Lock()
+	f.syncFails = append(f.syncFails, step+": "+reason)
+	f.mu.Unlock()
+	return f.failRecordErr
+}
+func (f *lhFakes) ExtendTenantRetention(_ context.Context, _ uuid.UUID, days uint) (uint, error) {
+	if err := f.hit("ExtendTenantRetention"); err != nil {
+		return 0, err
+	}
+	f.extendedTo = append(f.extendedTo, days)
+	return days, nil
 }
 func (f *lhFakes) RecordProvisionFailure(_ context.Context, _ uuid.UUID, _ registry.Actor, step, reason string) error {
 	f.mu.Lock()
@@ -165,6 +190,7 @@ func TestLakehouse_HappyPath(t *testing.T) {
 	require.Equal(t, []string{"Get", "EnsureKey", "EnsureTenantBucket", "Get", "EnsureBucketCredential", "MarkCredentialIssued", "ReadCredential", "EnsureTenantWarehouse", "MarkProvisioned"}, f.order,
 		"key, then bucket, then credential, then warehouse, then the registry")
 	require.Equal(t, []uuid.UUID{id}, f.marked)
+	require.Equal(t, 2555, f.appliedAtProvision, "the registry records the retention the bucket was created with")
 	require.Equal(t, warehouseID, r.result.WarehouseID)
 	require.False(t, r.result.AlreadyProvisioned)
 	require.Empty(t, f.fails)
@@ -293,4 +319,94 @@ func TestLakehouse_LostCredentialStopsTheRunAndNeverReachesTheWarehouse(t *testi
 	require.Empty(t, f.marked)
 	require.Len(t, f.fails, 1)
 	require.True(t, strings.HasPrefix(f.fails[0], "EnsureLakehouseCredential: "), f.fails[0])
+}
+
+// ---- retention reconcile ----
+
+func runRetention(t *testing.T, f *lhFakes, id uuid.UUID) (error, workflows.LakehouseRetentionResult) {
+	t.Helper()
+	env := (&testsuite.WorkflowTestSuite{}).NewTestWorkflowEnvironment()
+	acts := &activities.TenantLakehouseActivities{
+		Registry: f, Keys: f, Buckets: f, Credentials: f, Warehouses: f, S3Endpoint: "http://minio:9000", S3Region: "us-east-1",
+	}
+	env.RegisterActivity(acts)
+	env.ExecuteWorkflow(workflows.TenantLakehouseRetentionWorkflow, activities.LakehouseProvisionInput{TenantID: id.String(), ActorID: "alice", ActorRole: "global_admin"})
+	require.True(t, env.IsWorkflowCompleted())
+	var res workflows.LakehouseRetentionResult
+	if err := env.GetWorkflowError(); err != nil {
+		return err, res
+	}
+	require.NoError(t, env.GetWorkflowResult(&res))
+	return nil, res
+}
+
+func pendingTenant(desired int) (*lhFakes, uuid.UUID) {
+	f, id := newLH()
+	f.cfg.Provisioned, f.cfg.RetentionPending = true, true
+	f.cfg.AuditRetentionDays = &desired
+	return f, id
+}
+
+func TestRetention_RaisesTheBucketThenRecordsIt(t *testing.T) {
+	f, id := pendingTenant(3650)
+	err, res := runRetention(t, f, id)
+	require.NoError(t, err)
+	require.Equal(t, []string{"Get", "ExtendTenantRetention", "MarkRetentionApplied"}, f.order, "raise the bucket first, record it only after it is raised")
+	require.Equal(t, []uint{3650}, f.extendedTo)
+	require.Equal(t, []int{3650}, f.appliedDays)
+	require.Equal(t, 3650, res.AppliedDays)
+	require.False(t, res.AlreadyCurrent)
+	require.Empty(t, f.syncFails)
+}
+
+func TestRetention_AlreadyCurrentTouchesNothing(t *testing.T) {
+	f, id := pendingTenant(3650)
+	f.cfg.RetentionPending = false
+	err, res := runRetention(t, f, id)
+	require.NoError(t, err)
+	require.True(t, res.AlreadyCurrent)
+	require.Equal(t, []string{"Get"}, f.order)
+}
+
+func TestRetention_NotProvisionedFailsFastAndIsRecorded(t *testing.T) {
+	f, id := pendingTenant(365)
+	f.cfg.Provisioned = false
+	err, _ := runRetention(t, f, id)
+	require.Error(t, err)
+	require.Equal(t, []string{"Get"}, f.order, "no bucket call for a tenant with no bucket")
+	require.Len(t, f.syncFails, 1)
+	require.True(t, strings.HasPrefix(f.syncFails[0], "LoadRetentionTarget: "), f.syncFails[0])
+	require.Empty(t, f.fails, "a retention failure is not recorded as a provisioning failure")
+}
+
+func TestRetention_BucketConflictIsNotRetriedAndTheRegistryIsNotTold(t *testing.T) {
+	f, id := pendingTenant(3650)
+	f.errFor["ExtendTenantRetention"], f.failAt["ExtendTenantRetention"] = errors.Join(errors.New("governance mode"), iceberg.ErrBucketConflict), -1
+	err, _ := runRetention(t, f, id)
+	require.Error(t, err)
+	require.Equal(t, 1, f.calls["ExtendTenantRetention"])
+	require.Zero(t, f.calls["MarkRetentionApplied"], "the registry must never record what the bucket does not enforce")
+	require.Empty(t, f.appliedDays)
+	require.Len(t, f.syncFails, 1)
+	require.True(t, strings.HasPrefix(f.syncFails[0], "ExtendBucketRetention: "), f.syncFails[0])
+}
+
+func TestRetention_TransientFailureThenSuccessCompletes(t *testing.T) {
+	f, id := pendingTenant(3650)
+	f.errFor["ExtendTenantRetention"], f.failAt["ExtendTenantRetention"] = errors.New("minio timeout"), 2
+	err, res := runRetention(t, f, id)
+	require.NoError(t, err)
+	require.Equal(t, 3, f.calls["ExtendTenantRetention"])
+	require.Equal(t, 3650, res.AppliedDays)
+	require.Empty(t, f.syncFails)
+}
+
+func TestRetention_FailingToRecordTheRegistryIsRetriedAndSafe(t *testing.T) {
+	f, id := pendingTenant(3650)
+	f.errFor["MarkRetentionApplied"], f.failAt["MarkRetentionApplied"] = errors.New("db blip"), 1
+	err, res := runRetention(t, f, id)
+	require.NoError(t, err)
+	require.Equal(t, 2, f.calls["MarkRetentionApplied"])
+	require.Equal(t, []uint{3650}, f.extendedTo, "the bucket was raised once; the retry only re-recorded it")
+	require.Equal(t, 3650, res.AppliedDays)
 }
