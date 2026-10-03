@@ -66,7 +66,15 @@ func (h *ProvisioningHandler) ProvisionTenant(w http.ResponseWriter, r *http.Req
 		if existingCode := h.checkExistingTenantCode(tenantCode); existingCode != "" {
 			tenantCode = tenantCode + "_" + strings.ToLower(uuid.New().String()[:8])
 		}
+		if err := ValidateTenantCode(tenantCode); err != nil {
+			http.Error(w, "could not derive a valid tenant_code from tenant_name; supply tenant_code explicitly: "+err.Error(), http.StatusBadRequest)
+			return
+		}
 	} else {
+		if err := ValidateTenantCode(tenantCode); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		if existingCode := h.checkExistingTenantCode(tenantCode); existingCode != "" {
 			http.Error(w, fmt.Sprintf("tenant with code %s already exists", tenantCode), http.StatusConflict)
 			return
@@ -85,7 +93,11 @@ func (h *ProvisioningHandler) ProvisionTenant(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	databaseName := fmt.Sprintf("tenant_%s", strings.ToLower(tenantCode))
+	databaseName, err := TenantDatabaseName(tenantCode)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	namespace := tenantCode
 	tenantID := uuid.New().String()
 	instanceID := uuid.New().String()
@@ -220,7 +232,12 @@ func (h *ProvisioningHandler) ProvisionInstance(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	databaseName := fmt.Sprintf("tenant_%s", strings.ToLower(tenant.Code))
+	databaseName, err := TenantDatabaseName(tenant.Code)
+	if err != nil {
+		h.logger.Errorf("Tenant %s has an invalid stored code: %v", tenantID, err)
+		http.Error(w, "tenant has an invalid code; refusing to provision", http.StatusUnprocessableEntity)
+		return
+	}
 	namespace := tenant.Code
 
 	workflowID := fmt.Sprintf("%s-%s-%s", h.workflowIDBase, tenant.Code, uuid.New().String()[:8])
