@@ -244,6 +244,11 @@ jobs:
     name: Security Scan
     runs-on: ubuntu-latest
     needs: [ build-backend, build-frontend ]
+    # Repo default token is read-only; uploading SARIF to code scanning needs this.
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
 
     steps:
     - name: Checkout
@@ -289,6 +294,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ build-backend, build-frontend, security-scan ]
     if: github.event_name != 'pull_request'
+    # Push images to GHCR and upload their Trivy results to code scanning.
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
 
     strategy:
       matrix:
