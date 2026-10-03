@@ -392,3 +392,89 @@ dump. Check its targets against Q1/Q2's answers while there.
 
 ---
 
+## Entry 2026-10-03 — `docker-build` has never built an image; main red since the initial commit
+
+### The finding
+
+`.github/workflows/ci-cd.yml` `docker-build` builds
+`./backend/Dockerfile.${{ matrix.service }}`. **Not one of the five matrix
+entries resolves:**
+
+| Matrix entry | Workflow looks for | Actually exists |
+|---|---|---|
+| `api-gateway` | `backend/Dockerfile.api-gateway` | nothing — no Dockerfile, no service directory, anywhere in the repo |
+| `semantic-engine` | `backend/Dockerfile.semantic-engine` | `docker-builders/Dockerfile.semantic-engine` |
+| `governance-engine` | `backend/Dockerfile.governance-engine` | `docker-builders/Dockerfile.governance` — wrong dir *and* wrong name |
+| `ai-builder` | `backend/Dockerfile.ai-builder` | `docker-builders/Dockerfile.ai-builder` |
+| `compliance-engine` | `backend/Dockerfile.compliance-engine` | `docker-builders/Dockerfile.compliance-engine` |
+
+`backend/` holds 14 Dockerfiles — `audit-worker`, `catalog-sync`,
+`catalog-worker`, `cdc`, `event-router`, `kafka-connect-iceberg`, `loader`,
+`notifications`, `outbox-processor`, `policy`, `search`, `snapshot-worker`,
+`sync-worker` — and **none of them are in the matrix**. The matrix has been
+wrong since `b9fc5e129`, the initial commit.
+
+Observed error: `failed to read dockerfile: open Dockerfile.ai-builder: no
+such file or directory`.
+
+**Only one of the five jobs reports `failure`.** The other four report
+`cancelled`, because the matrix aborted on the first leg. Reading job
+conclusions without distinguishing `failure` from `cancelled` yields "1 of 5
+broken", which is wrong; the honest summary is *none of the five has ever
+built*.
+
+**Why nobody noticed:** the job is gated `github.event_name != 'pull_request'`,
+so it only ever ran on main pushes. It never appeared in any PR's checks and
+never blocked a merge — it only guaranteed main stayed red.
+
+### Decision: quarantined, not deleted
+
+The job is retained so the intent stays auditable, gated on
+`vars.DOCKER_BUILD_ENABLED == 'true'`. Unset means skipped, and a skipped job
+does not fail the run. Re-enable by setting that repository variable.
+
+A repository variable rather than `workflow_dispatch`, because the workflow has
+no `workflow_dispatch` trigger: gating on one would make the job permanently
+unreachable while the comment claimed it could be run by hand, and adding the
+trigger would widen the manual-run surface of the entire pipeline. The variable
+is reversible from repo settings without a code change.
+
+This job carries `push: true` and `packages: write`. Running it is a
+**registry-publishing decision, not a path fix** — four services that have
+never been built would begin pushing to GHCR on every main push. That is why
+the paths were not simply corrected: the matrix is also factually wrong about
+what exists (`api-gateway` has no Dockerfile and no service), so what *should*
+be published is an open question, not a path edit.
+
+### Correction: "main is green" was wrong, reported twice
+
+I stated twice that the 12-of-12 red window had ended and that main was green
+at `8bb7b60be`. **It was not.** I verified by reading one job —
+`Build Backend: completed/success` — and generalised that to the whole run. The
+run's actual conclusion was `failure`, from this job.
+
+#360 (`8bb7b60be`) fixed a real and separate defect: `TestEveryDatabaseOpenerIsClassified`,
+tripped by #358 and caught by #355's guard. That fixed the Go test. It did not
+touch `docker-build`. I read the fix as the end of the window because the check
+I sampled had gone green, and reported it without ever reading the run's
+conclusion.
+
+The rule this adds: **a run's health is the run's conclusion, not any sample of
+its jobs.** `gh run view <id> --json jobs -q '.jobs[] | select(.conclusion=="failure") | .name'`
+lists what failed; it does not tell you the run passed. Read the conclusion, and
+distinguish `failure` from `cancelled` when counting matrix legs.
+
+This is the second time the base-rate rule's family caught me in one session
+(after the sampler that could not fire, the longest-job-vs-chain inversion, the
+diffstat-vs-commit-list trap). The pattern is consistent: **I substitute a
+cheaper proxy for the actual measurement and report it as the measurement.**
+
+### Structural notes
+
+| Note | File | Status |
+|---|---|---|
+| **A run's health is its conclusion, not a sample of its jobs** — sampling one job that passed and reporting the run green is how "main is green" was reported twice while main was red. Read the conclusion; and when counting matrix legs, `cancelled` is not `passed`. | this ledger | Live |
+| **A CI job gated off PRs cannot be caught by PR CI** — `docker-build` has been broken since the initial commit and appeared in no PR's checks, because it only runs on main. A permanently-red main check is invisible to everyone reviewing pull requests. | this ledger | Live |
+
+---
+

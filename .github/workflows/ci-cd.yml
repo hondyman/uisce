@@ -312,7 +312,34 @@ jobs:
     name: Build Docker Images
     runs-on: ubuntu-latest
     needs: [ build-backend, build-frontend, security-scan ]
-    if: github.event_name != 'pull_request'
+    # QUARANTINED 2026-10-03 - this job has never built an image.
+    #
+    # The matrix below resolves every entry to ./backend/Dockerfile.<service>,
+    # and not one of the five resolves:
+    #   ai-builder         -> docker-builders/Dockerfile.ai-builder
+    #   semantic-engine    -> docker-builders/Dockerfile.semantic-engine
+    #   compliance-engine  -> docker-builders/Dockerfile.compliance-engine
+    #   governance-engine  -> docker-builders/Dockerfile.governance
+    #                          (right directory, different name)
+    #   api-gateway        -> no Dockerfile and no service directory anywhere
+    #                          in the repository
+    # Meanwhile backend/ holds 14 Dockerfiles (audit-worker, catalog-sync,
+    # catalog-worker, cdc, event-router, kafka-connect-iceberg, loader,
+    # notifications, outbox-processor, policy, search, snapshot-worker,
+    # sync-worker) and NONE of them appear in the matrix.
+    #
+    # The matrix has been wrong since b9fc5e129, the initial commit. Because
+    # the job is gated `!= 'pull_request'`, it only ever ran on main pushes,
+    # so it never appeared in any PR's checks and never blocked a merge - it
+    # only guaranteed that main stayed red. It has `push: true` and
+    # `packages: write`, so running it is a registry-publishing decision, not
+    # a path fix, and is not something to re-enable without deciding what
+    # should actually be published to GHCR.
+    #
+    # The job is retained rather than deleted so the intent stays auditable.
+    # To re-enable: set the repository variable DOCKER_BUILD_ENABLED=true.
+    # A skipped job does not fail the run. See docs/FAILURES_LEDGER.md.
+    if: vars.DOCKER_BUILD_ENABLED == 'true' && github.event_name != 'pull_request'
     # Push images to GHCR and upload their Trivy results to code scanning.
     permissions:
       contents: read
