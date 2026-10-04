@@ -17,6 +17,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/dscreds"
 	"github.com/hondyman/uisce/backend/internal/migrations"
+	"github.com/hondyman/uisce/backend/internal/tenantschema"
 	"github.com/hondyman/uisce/backend/internal/provisioning"
 	"github.com/hondyman/uisce/backend/internal/secrets"
 	"github.com/hondyman/uisce/backend/internal/security"
@@ -573,6 +574,8 @@ func (a *TenantProvisioningActivities) RegisterTenantDatabaseActivities(w Activi
 	w.RegisterActivity(a.BindTenantDatabase)
 	w.RegisterActivity(a.ProvisionTenantDatabaseAccess)
 	w.RegisterActivity(a.ApplyTenantMigrations)
+	w.RegisterActivity(a.PlanTenantStructure)
+	w.RegisterActivity(a.ApplyTenantStructure)
 	w.RegisterActivity(a.ProbeTenantDatabase)
 	w.RegisterActivity(a.ActivateTenantDatabase)
 	w.RegisterActivity(a.RollbackTenantDatabase)
@@ -593,4 +596,7 @@ func (a *TenantProvisioningActivities) ConfigureTenantDatabaseFromEnv() {
 		a.Secrets = p
 	}
 	a.Creds = dscreds.Default()
+	if a.ControlDB != nil {
+		a.Templates = &tenantschema.Loader{Store: &tenantschema.AlphaStore{DB: a.ControlDB.DB, Resolver: security.NewDBDatasourceResolver(a.ControlDB)}}
+	}
 }

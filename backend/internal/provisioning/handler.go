@@ -96,6 +96,16 @@ func (h *ProvisioningHandler) ProvisionTenant(w http.ResponseWriter, r *http.Req
 			return
 		}
 	}
+	if req.TemplateDatasourceID != "" {
+		if req.App == "" {
+			http.Error(w, "template_datasource_id requires app", http.StatusBadRequest)
+			return
+		}
+		if _, err := uuid.Parse(req.TemplateDatasourceID); err != nil {
+			http.Error(w, "invalid template_datasource_id: must be a uuid", http.StatusBadRequest)
+			return
+		}
+	}
 	if req.TenantCode != "" && !codePattern.MatchString(req.TenantCode) {
 		http.Error(w, "invalid tenant_code: must match ^[a-z][a-z0-9_]{0,40}$", http.StatusBadRequest)
 		return
@@ -165,6 +175,7 @@ func (h *ProvisioningHandler) ProvisionTenant(w http.ResponseWriter, r *http.Req
 		LakekeeperNS:      namespace,
 		RequesterID:        caller.UserID,
 		App:                req.App,
+		TemplateDatasourceID: req.TemplateDatasourceID,
 	}
 
 	h.logger.Infof("Starting tenant provisioning workflow: %s", workflowID)

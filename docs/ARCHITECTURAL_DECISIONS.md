@@ -1449,6 +1449,26 @@ database, equals the source column by column, constraint by constraint, index by
 trigger. The first run against a real server found a defect the mocked tests could not: an index that is a partition of a
 partitioned index also has `relispartition` set and no bound, so the partitioning query is restricted to tables.
 
+**Onboarding uses it (the saga).** `ProvisionTenantRequest` and `ProvisioningWorkflowInput` take a
+`template_datasource_id` (with `app`; an admin-only request, a uuid, validated before a workflow starts). With it, behind
+`workflow.GetVersion("saga-tenant-structure-v1")`, the saga changes in three places and in no other:
+
+1. **`PlanTenantStructure` runs before anything is created.** It loads the template from `alpha` (the datasource's owner
+   must be the gold-copy tenant, checked before any metadata is read), compiles it, and returns a hash, a table count and a
+   statement count (never the SQL, which belongs in no workflow history). A template that cannot be deployed (incomplete or
+   unsupported scan, not the gold copy's) refuses the run with only the tenant and instance rows to undo.
+2. **No `CloneSchemaFromGoldCopy`.** The gold copy's database is never read.
+3. **`ApplyTenantStructure` replaces `ApplyTenantMigrations`.** It recompiles and refuses (`TenantStructureChanged`,
+   non-retryable) if the template no longer compiles to the planned hash, so a rescan during a run cannot slip through.
+   It applies the plan in one transaction through the same `TenantRunner` as every tenant migration (advisory lock, log,
+   drift): the plan is one generated migration, `0001_structure.up.sql`, under the target `tenant:<id>:structure`, whose
+   sha256 is the plan hash, so a tenant built from a different compilation is drift and is refused, never mixed. It then
+   grants the tenant's role usage, DML and sequence use on **each schema of the template** and default privileges for what
+   is created later: the role was created before the structure existed and had been granted on `public` only, and the
+   structure lives in `orm`, `mdm`, `cash_flow`. The role gets no DDL.
+
+A request without a template, or a template without an app, takes exactly the path it took before.
+
 **Current.** Not decided here, and not yet enforced: a deploy must refuse unless the gold copy's scan is fresh against its
 source. `scripts/tenant-ddl-scan-coverage.py` is the prototype of that check (on 2026-10-04 the scan of 2026-09-26 was 16
 tables and 238 columns behind). The generator that dumps the source directly stays as a **fidelity oracle** the compiled

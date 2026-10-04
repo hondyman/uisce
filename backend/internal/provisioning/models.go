@@ -15,6 +15,10 @@ type ProvisionTenantRequest struct {
 	// App names the application whose datasource the new tenant database serves (e.g. "orm").
 	// When set, the tenant also gets its own role, binding, migrations and a probe (ADR-030).
 	App string `json:"app,omitempty"`
+	// TemplateDatasourceID, with App, builds the tenant's structure from what alpha holds for this datasource after its
+	// scan, instead of cloning the gold copy's database (ADR-048). It must be the gold-copy tenant's datasource; the
+	// saga checks that before it creates anything. Empty keeps the clone.
+	TemplateDatasourceID string `json:"template_datasource_id,omitempty"`
 }
 
 type ProvisionTenantResponse struct {
@@ -59,6 +63,8 @@ type ProvisioningWorkflowInput struct {
 	// BaselineThrough, when set, is the last tenant-migration file already contained in the
 	// gold-copy schema this database was cloned from; it is recorded, not run.
 	BaselineThrough string `json:"baseline_through,omitempty"`
+	// TemplateDatasourceID: see ProvisionTenantRequest. Requires App.
+	TemplateDatasourceID string `json:"template_datasource_id,omitempty"`
 }
 
 type ProvisioningWorkflowResult struct {
@@ -164,6 +170,19 @@ type TenantDatabaseInput struct {
 	// DatasourceID is set from BindTenantDatabase's result for every later step.
 	DatasourceID    string
 	BaselineThrough string
+	// TemplateDatasourceID and StructureHash drive the structure steps (ADR-048). The hash is what the planning step
+	// compiled; applying refuses if the template compiles to something else by then.
+	TemplateDatasourceID string
+	StructureHash        string
+}
+
+// StructurePlan is what planning a tenant's structure found. It carries a summary, never the SQL: the script is large
+// and belongs in no workflow history.
+type StructurePlan struct {
+	Hash       string
+	Tables     int
+	Statements int
+	Schemas    []string
 }
 
 // TenantDatabaseBinding is what BindTenantDatabase decided; no secret is in it.

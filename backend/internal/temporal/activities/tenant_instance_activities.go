@@ -12,6 +12,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/dscreds"
 	"github.com/hondyman/uisce/backend/internal/migrations"
+	"github.com/hondyman/uisce/backend/internal/tenantschema"
 	"github.com/hondyman/uisce/backend/internal/secrets"
 	"github.com/hondyman/uisce/backend/internal/iceberg"
 	"github.com/hondyman/uisce/backend/internal/provisioning"
@@ -33,6 +34,9 @@ type TenantProvisioningActivities struct {
 	TenantDB   TenantDatabaseAdmin
 	Migrations *migrations.TenantRunner
 	Creds      *dscreds.Resolver
+	// Templates loads the gold copy's scan for the structure steps (tenant_structure_activities.go, ADR-048). Unset, those
+	// steps fail closed.
+	Templates *tenantschema.Loader
 }
 
 func NewTenantProvisioningActivities(db *sql.DB, controlDB *sql.DB, logger *zap.SugaredLogger) *TenantProvisioningActivities {

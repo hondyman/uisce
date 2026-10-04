@@ -2,7 +2,9 @@ package migrations
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -117,6 +119,17 @@ type Report struct {
 type TenantRunner struct {
 	// Root holds one directory per app: <Root>/<app>/*.up.sql.
 	Root string
+	// Generated, when set, supplies the migrations of an app that has no directory because they are compiled
+	// from alpha's catalog scan (ADR-048). It returns (files, true, nil) for an app it owns, and (nil, false, nil) for
+	// any other, which then comes from Root as before. A generated file is recorded in the same migration log by name
+	// and sha256, so a database built from a different compilation is drift exactly as a changed file is.
+	Generated func(Target) ([]GeneratedFile, bool, error)
+}
+
+// GeneratedFile is one migration that exists only in memory.
+type GeneratedFile struct {
+	Filename string // e.g. 0001_structure.up.sql; must end in .up.sql and sort in apply order
+	SQL      string
 }
 
 // DefaultTenantRoot resolves backend/db/tenant_migrations from the repo root or backend/.
@@ -138,24 +151,58 @@ CREATE TABLE IF NOT EXISTS ivy_meta.migration_log (
 )`
 
 func (r *TenantRunner) files(t Target) (names []string, shas map[string]string, err error) {
+	names, shas, _, err = r.source(t)
+	return names, shas, err
+}
+
+// source lists an app's migrations, their sha256 and a way to read each one, from memory for a generated app and from
+// its directory otherwise.
+func (r *TenantRunner) source(t Target) (names []string, shas map[string]string, read func(string) (string, error), err error) {
 	if err := t.Validate(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	if r.Generated != nil {
+		gen, ok, gerr := r.Generated(t)
+		if gerr != nil {
+			return nil, nil, nil, gerr
+		}
+		if ok {
+			bodies := make(map[string]string, len(gen))
+			shas = make(map[string]string, len(gen))
+			for _, g := range gen {
+				if !strings.HasSuffix(g.Filename, ".up.sql") || strings.ContainsAny(g.Filename, `/\`) {
+					return nil, nil, nil, fmt.Errorf("migrations: generated file name %q must be a plain *.up.sql name", g.Filename)
+				}
+				if _, dup := bodies[g.Filename]; dup {
+					return nil, nil, nil, fmt.Errorf("migrations: generated file %q appears twice", g.Filename)
+				}
+				sum := sha256.Sum256([]byte(g.SQL))
+				bodies[g.Filename], shas[g.Filename] = g.SQL, hex.EncodeToString(sum[:])
+				names = append(names, g.Filename)
+			}
+			sort.Strings(names)
+			return names, shas, func(n string) (string, error) { return bodies[n], nil }, nil
+		}
 	}
 	dir := filepath.Join(r.Root, t.App)
 	if st, serr := os.Stat(dir); serr != nil || !st.IsDir() {
-		return nil, nil, fmt.Errorf("%w: %s", ErrNoApp, t.App)
+		return nil, nil, nil, fmt.Errorf("%w: %s", ErrNoApp, t.App)
 	}
 	names, err = listUpFiles(dir)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	shas = make(map[string]string, len(names))
 	for _, n := range names {
 		if shas[n], err = fileSHA256(dir, n); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
-	return names, shas, nil
+	read = func(n string) (string, error) {
+		b, err := os.ReadFile(filepath.Join(dir, n))
+		return string(b), err
+	}
+	return names, shas, read, nil
 }
 
 type queryer interface {
@@ -241,7 +288,7 @@ func (r *TenantRunner) Inspect(ctx context.Context, db *sql.DB, t Target) (Repor
 // that fails rolls back whole and stops the run; files before it stay applied, and a later Apply
 // resumes from the failed one.
 func (r *TenantRunner) Apply(ctx context.Context, db *sql.DB, t Target) (Report, error) {
-	names, shas, err := r.files(t)
+	names, shas, read, err := r.source(t)
 	if err != nil {
 		return Report{Target: t.String(), Error: err.Error()}, err
 	}
@@ -279,13 +326,12 @@ func (r *TenantRunner) Apply(ctx context.Context, db *sql.DB, t Target) (Report,
 		return rep, ErrDrift
 	}
 
-	dir := filepath.Join(r.Root, t.App)
 	for _, name := range append([]string(nil), rep.Pending...) {
 		if err := ctx.Err(); err != nil {
 			rep.Error = err.Error()
 			return rep, err
 		}
-		if err := applyOne(ctx, conn, dir, name, shas[name]); err != nil {
+		if err := applyOne(ctx, conn, read, name, shas[name]); err != nil {
 			rep.Error = err.Error()
 			return rep, err
 		}
@@ -297,12 +343,11 @@ func (r *TenantRunner) Apply(ctx context.Context, db *sql.DB, t Target) (Report,
 	return rep, nil
 }
 
-func applyOne(ctx context.Context, conn *sql.Conn, dir, name, sha string) error {
-	body, err := os.ReadFile(filepath.Join(dir, name))
+func applyOne(ctx context.Context, conn *sql.Conn, read func(string) (string, error), name, sha string) error {
+	content, err := read(name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
-	content := string(body)
 	if hasTransactionControl(content) {
 		return fmt.Errorf("migration %s contains transaction-control statements (COMMIT/ROLLBACK); the runner owns the transaction", name)
 	}
