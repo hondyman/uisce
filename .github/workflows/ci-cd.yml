@@ -78,18 +78,6 @@ jobs:
         # couldn't evaluate) this pipeline exists to prevent.
         go run ./cmd/check-drift
 
-    - name: Run Tests
-      working-directory: backend
-      run: |
-        go test -short -v -race -coverprofile=coverage.out ./...
-        go tool cover -func=coverage.out
-
-    - name: Upload Coverage
-      uses: codecov/codecov-action@v4
-      with:
-        files: backend/coverage.out
-        flags: backend
-
     - name: Build Binaries
       working-directory: backend
       # The backend entry points the image builds (backend/Dockerfile). The earlier
@@ -107,11 +95,95 @@ jobs:
         path: backend/bin/
 
   # ==========================================================================
+  # Hermetic backend tests, sharded
+  # ==========================================================================
+  # This was one step inside build-backend: `go test -short -v -race
+  # -coverprofile=coverage.out ./...` over 498 packages, measured at 7.6m of
+  # a 13.4m job. It was the single largest item on the pipeline's critical
+  # path, and it grew linearly with the package count while the rest of the
+  # suite was already parallel.
+  #
+  # Splitting it across a 4-way matrix takes it to ~1.9m per shard. The two
+  # properties that make this safe, both verified rather than assumed:
+  #
+  #   1. The shards PARTITION the package set. `go list ./... | awk NR % 4`
+  #      assigns every package to exactly one shard - verified as a bijection
+  #      (498 in, 498 assigned, 498 unique, none in two shards). A package
+  #      tested by no shard would be a silent coverage hole, which is why
+  #      this was checked before the workflow was touched.
+  #   2. Coverage profiles from disjoint package sets concatenate into a
+  #      valid single profile - one `mode:` header plus every data line.
+  #      Verified by generating two real profiles and running
+  #      `go tool cover -func` on the concatenation. Each shard uploads its
+  #      own profile under the same `backend` flag and codecov merges them
+  #      server-side, which avoids a merge job on the critical path.
+  #
+  # No test is removed and none is skipped: the union of the four shards is
+  # exactly `go test ./...`. The change is only that they run concurrently.
+  #
+  # Deliberately NOT gated on build-backend. Compiling is what proves the
+  # tree builds, and this job compiles too, so a build failure fails both -
+  # adding `needs: build-backend` would serialise ~6m of build work ahead of
+  # ~4m of test work and give back most of what sharding bought.
+  backend-tests:
+    name: Backend Tests (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: backend/go.mod
+        cache: true
+        cache-dependency-path: backend/go.sum
+
+    - name: Select shard
+      id: shard
+      working-directory: backend
+      run: |
+        # 1-based shard ids, so the expression must be (NR-1)%n+1 and not
+        # NR%n: with NR%n, shard 4 matches nothing, silently leaves ~a
+        # quarter of the packages untested, and reports success. Verified
+        # both forms against the real package list - 125/125/124/124 = 498.
+        go list ./... | awk -v n=4 -v i=${{ matrix.shard }} '(NR-1) % n + 1 == i' > shard.txt
+        count=$(wc -l < shard.txt | tr -d ' ')
+        echo "shard ${{ matrix.shard }}/4: $count packages"
+        # Belt and braces: a shard that selected nothing would otherwise
+        # pass having tested nothing, which is the worst way for a gate to
+        # fail. 498 packages / 4 shards, so anything under 100 means the
+        # partition is wrong, not that the tree shrank.
+        if [ "$count" -lt 100 ]; then
+          echo "::error::shard ${{ matrix.shard }} selected only $count packages; expected ~125 of 498"
+          exit 1
+        fi
+
+    - name: Run Tests
+      working-directory: backend
+      run: |
+        go test -short -race -coverprofile=coverage.out $(tr '\n' ' ' < shard.txt)
+        go tool cover -func=coverage.out | tail -1
+
+    - name: Upload Coverage
+      uses: codecov/codecov-action@v4
+      with:
+        files: backend/coverage.out
+        flags: backend
+        name: backend-shard-${{ matrix.shard }}
+
+  # ==========================================================================
   # Backend integration tests (real service dependencies)
   # ==========================================================================
-  # build-backend above is the hermetic tier: `go test ./...` with no -tags,
-  # no service containers, must always be green - that's the gate that can
-  # say no. Files needing a real external dependency (Postgres, a real
+  # The hermetic tier is the `backend-tests` matrix above: `go test` with no
+  # -tags, no service containers, must always be green - that's the gate
+  # that can say no. Files needing a real external dependency (Postgres, a
+  # real
   # websocket round trip that's flaky/failing in CI for reasons still under
   # investigation - see docs/unified-rule-engine-handoff.md item 59) declare
   # `//go:build integration` so they're excluded from that tier by

@@ -1169,6 +1169,48 @@ the cache on, each process follows it within `AuthTTL`, so the cutover procedure
 wait at least `AuthTTL` (or invalidate in-process), verify, resume. Writes must not resume before every
 process has converged.
 
+### ADR-041: The Hermetic Backend Suite Is Sharded, Not Shortened
+
+**Decision.** `go test -short -race -coverprofile=... ./...` leaves `build-backend` and becomes a
+4-way `backend-tests` matrix, partitioned by `go list ./... | awk '(NR-1)%n+1 == i'`.
+
+**Why this and not something else.** The suite was measured at **7.6m of a 13.4m job** — the single
+largest item on the pipeline's critical path, and the only part still growing linearly with the
+package count (498 today, `backend/` only). Everything else in the job was build-shaped work that
+does not parallelise: `Build & Vet` 2.4m, `Build Binaries` 1.4m, `Checkout` 1.1m, the ASL drift gate
+0.1m. Sharding takes the suite to ~1.9m per shard and the critical path to roughly the build tier,
+~6m. Caching was already on (`setup-go` `cache: true`, `setup-node` `cache-dependency-path`), so it
+was not a lever.
+
+**No test is removed or skipped.** The union of the four shards is exactly `go test ./...`; the only
+change is that they run concurrently. `-race` and `-short` are kept on every shard — dropping
+`-race` to non-default branches was considered and rejected here, because it trades a real defect
+class (the `WithOptimizer` race this engagement already found) for wall-clock, and the sharding gets
+most of that wall-clock back without the trade.
+
+**Two properties were verified, not assumed, before the workflow was touched.**
+
+1. The shards *partition* the package set — checked as a bijection: 498 in, 498 assigned, 498
+   unique, none in two shards. A package that fell through every shard would be a silent coverage
+   hole, which is the failure mode that makes a green gate meaningless.
+2. Coverage profiles from disjoint package sets *concatenate* into one valid profile — checked by
+   generating two real profiles and running `go tool cover -func` on the concatenation. Each shard
+   uploads under the same `backend` flag and codecov merges server-side, which keeps a merge job off
+   the critical path.
+
+**Not gated on `build-backend`.** This job compiles too, so a build failure fails both; adding
+`needs: build-backend` would serialise ~6m of build ahead of ~4m of test and surrender most of the
+gain.
+
+**The first draft of this shard selection was wrong, and the way it was wrong is the point.** The
+matrix was `[1,2,3,4]` and the expression was `NR % n == i`. Because `NR % 4` only ever yields
+0–3, **shard 4 selected zero packages, reported success, and left 124 of 498 packages untested.**
+The local verification had passed because the throwaway script used 0-based shard ids while the
+workflow used 1-based — two different expressions, one of which was never the thing that shipped.
+It was caught by running *the workflow's exact expression* against the real package list before
+pushing, not by review. The step now carries a count guard (`< 100` packages fails loudly) so a
+broken partition cannot report green again.
+
 ## Open items
 
 - **C1 (9.1) ported metric primitives into the rule VM.**
