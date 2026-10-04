@@ -1536,6 +1536,12 @@ tailnet), and how to verify it from `pg_hba_file_rules` after `pg_reload_conf()`
   write that tenant's data. Not another tenant's (its role cannot connect to any other database; the saga's probe proves it), not the schema
   (no DDL), and it is not a superuser. The blast radius is one tenant. Response: rotate as above, or drop the database and role and
   re-provision. Narrowing the `pg_hba` rule to specific hosts is what keeps a leaked password from being usable from everywhere.
+- *What protects the connection today, and what does not.* The `hostssl` rule makes the **server** refuse a plaintext attempt from the
+  tenant group. The **client** side is weaker: `tenantdb` builds its pool from `pgxpool.ParseConfig("")` and never reads the datasource's `sslmode`
+  (the gold copy's own config says `disable`, which is kept when cloning but has no effect), so it uses the library default, `prefer`: TLS
+  **without checking the server's certificate**, falling back to plaintext if TLS is unavailable. Scram keeps the password off the wire, but a
+  machine in the middle could read and alter the data. This is an open hardening item, not fixed here: the router should take explicit TLS
+  settings (`require`, or `verify-full` with the cluster's CA) per cluster, and refuse a plaintext fallback.
 - *The alternative, and why not now.* A client certificate per tenant role (`verify-full`) needs no shared secret, but buys a certificate
   lifecycle (issuance from a CA whose key custody is itself an open item, rotation, revocation, and different handling in each driver). Not worth
   it now; it is the answer if the password ever has to be treated as a lower-assurance credential.
