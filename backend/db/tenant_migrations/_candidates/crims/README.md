@@ -22,6 +22,24 @@ edit them: change the generator and regenerate (`REPORT.txt` lists everything th
 | `05_orm` | 80 | 78 tables (5 of them partitions) and 2 partitioned parents |
 | `06_mdm` | 441 | Also adds the one reference from `orm` back into `mdm` |
 
+## Source of truth: alpha metadata wins (owner direction, 2026-10-04)
+A tenant structure is built from what **alpha** holds for the gold copy's datasource, **after the gold copy's scan is
+synced**; never straight from the source database. The files in this directory are therefore a **fidelity oracle**
+(`pg_dump` of `crims`), not the deploy source. `scripts/tenant-ddl-scan-coverage.py` compares alpha's scan with the
+live source, read-only, and is the prototype of the "sync first" gate. Against the dev host on 2026-10-04 (scan of
+2026-09-26):
+
+| | Result |
+|---|---|
+| **Stale** (a rescan fixes it) | 16 tables and 238 columns in the source that the scan lacks (all `mdm`, 19 tables); 13 columns in the scan that no longer exist (`mdm.rating_scale`) |
+| **Fidelity** where both have the column | **no mismatch** on 7,798 columns: data type, nullability, length, precision, scale, default |
+| **Foreign keys / unique keys** | Recorded richly: composite columns, `ON DELETE`/`ON UPDATE`, deferrability, constraint names; unique groups with names and columns |
+| **Not recorded at all** (a rescan does *not* add these) | 312 check constraints, 1,604 non-primary-key indexes, 2 partitioned tables (and their partitions), 7 functions, 2 triggers |
+
+So a deploy built only from today's scan would create the tables, columns, keys and foreign keys, and **would lose every
+check constraint, every secondary index, the partitioning, the functions and the triggers**. Until the scanner records
+those too, they need a source; that is a decision, not a default.
+
 ## What the generator changes, and why
 | Change | Count | Reason |
 |---|---|---|
