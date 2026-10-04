@@ -10196,13 +10196,8 @@
     },
     "MaterializationConfig": {
       "properties": {
-        "IncrementalColumn": {
-          "type": "string"
-        },
-        "IncrementalWindowDays": {
-          "type": "number"
-        },
         "PartitionBy": {
+          "description": "IncrementalColumn and IncrementalWindowDays were removed: the API\naccepted them, the wizard collected them, and no code ever read them, so\na configured \"incremental\" pre-aggregation behaved exactly like an\ninterval one. Removed rather than left dormant - see #394. Stored values\nare dropped on the next upsert, which is a no-op because nothing read them.\n\nPartitionBy is retained but REFUSED by the service, not honoured: the\ncorrect PARTITION BY construct has to be validated against real StarRocks\nbefore GenerateDDL emits one, and accepting the field and discarding it\nsilently is what produced the original defect. See #394.",
           "type": "string"
         },
         "TargetName": {
@@ -10215,8 +10210,6 @@
       "required": [
         "Type",
         "TargetName",
-        "IncrementalColumn",
-        "IncrementalWindowDays",
         "PartitionBy"
       ],
       "type": "object"

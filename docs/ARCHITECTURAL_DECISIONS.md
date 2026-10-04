@@ -2063,3 +2063,39 @@ Two habits earned here, and they are cheap:
 **What this does not establish.** The snapshot is itself unverified against a live database —
 that is half B, and the snapshot has already been shown once to misrepresent reality. A clean
 comparison against an unverified reference is evidence about the two *files*, not about alpha.
+
+### ADR-048: `partition_by` Is Validated Now; It Is Generated Behind DDL Staging
+
+`MaterializationConfig.PartitionBy` was accepted by the API, stored in `catalog_node.config`,
+and read by no code on any path. An operator could set it, watch it persist, and receive
+unpartitioned DDL with no warning anywhere. That silent acceptance was the defect — not the
+absence of `PARTITION BY` in the generator.
+
+**Decision: the field is validated at the API boundary now, and honoured in the DDL generator
+later.** A request carrying `partition_by` is refused with `400` and an error naming the
+silent-ignore it prevents. The field stays on the type, so the refusal is reachable today and
+honouring it later is a change to `GenerateDDL` rather than an API change.
+
+The two halves are split because they need different kinds of evidence:
+
+| Half | What it needs | Where it lands |
+|---|---|---|
+| **Refuse the request** | nothing beyond the API boundary | **here, now** |
+| Emit correct `PARTITION BY` | a real StarRocks to validate against | alpha DDL staging |
+
+Emitting `PARTITION BY RANGE (col)`, expression partitioning, or `date_trunc` are different
+constructs with different validity across StarRocks versions. Choosing one without executing it
+is code whose failure mode is guessed — the same error as the DR playbook, committed in reverse.
+The full-replace for `table` targets (#394 item 2) is deferred on exactly this reasoning and
+belongs to the same staging session.
+
+**Why the field is not simply removed.** Removal would close the hole, but it would also make the
+half-implemented state invisible: a future reader would find no trace of partitioning, and the
+next person to add it would start from a blank type with no record of why it stalled. Refusing
+keeps the capability *registered* — visible in the API, visible in the refusal message, and
+pointing at the staging item that will complete it.
+
+**Related.** The same reasoning governs the `table` full-replace and is why neither is built
+speculatively. Both are alpha DDL staging work. The incremental-refresh controls were removed
+outright rather than refused, because that capability has no validated design to point at
+(watermark-bounded population), so there was nothing to register.

@@ -50,6 +50,10 @@ func (h *PreAggregationHandler) handleUpsert(w http.ResponseWriter, r *http.Requ
 	req.TenantID = tenantID.String()
 
 	desc, err := h.svc.UpsertPreAggregation(r.Context(), req)
+	if errors.Is(err, analytics.ErrPreAggNotSupported) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("preaggregation: upsert failed: %v", err)
 		http.Error(w, "failed to upsert pre-aggregation", http.StatusInternalServerError)
@@ -118,6 +122,10 @@ func (h *PreAggregationHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 	desc, err := h.svc.Update(r.Context(), id, req)
 	if errors.Is(err, analytics.ErrPreAggNotFound) {
 		http.Error(w, "pre-aggregation not found", http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, analytics.ErrPreAggNotSupported) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if err != nil {

@@ -48,8 +48,20 @@ jobs:
     name: Detect changed paths
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
+      # Both producing steps are read, because on a push only the second one
+      # runs. Before this, the output read ONLY steps.filter, which is skipped on
+      # a push -- so both flags were empty on every merge and every gated job
+      # was skipped. `||` falls through to the push step, and `!= ''` keeps a
+      # legitimate `false` from the filter step instead of overriding it.
+      backend: ${{ steps.filter.outputs.backend || steps.push_all.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend || steps.push_all.outputs.frontend }}
+      # `workspace` gates the per-module build. It is deliberately broad: a Go
+      # file in ANY module can break that module, and a narrow filter here
+      # would be a gate that silently stops running -- the same failure as the
+      # filter this job originally had. backend/internal/archguard/derivable
+      # _workspace_build_test.go re-derives the module set from go.work and
+      # fails if any module directory is not covered here.
+      workspace: ${{ steps.filter.outputs.workspace || steps.push_all.outputs.workspace }}
 
     steps:
     - name: Checkout
@@ -61,6 +73,27 @@ jobs:
       uses: dorny/paths-filter@v3
       with:
         filters: |
+          workspace:
+            # Every module directory in go.work, plus the workspace files
+            # themselves. `**/*.go` and `**/go.mod` are the backstop for a
+            # module added without updating this list; the archguard test
+            # proves the coverage rather than trusting it.
+            - '**/*.go'
+            - '**/go.mod'
+            - '**/go.sum'
+            - 'go.work'
+            - 'go.work.sum'
+            - '.github/workflows/ci-cd.yml'
+            - 'apps/**'
+            - 'backend/**'
+            - 'calc-engine/**'
+            - 'libs/**'
+            - 'portfolio-management/**'
+            - 'rebalancing/**'
+            - 'internal/**'
+            - 'pkg/**'
+            - 'scripts/**'
+            - 'temporal/**'
           backend:
             - 'backend/**'
             - 'libs/**'
@@ -78,14 +111,77 @@ jobs:
             - 'pnpm-lock.yaml'
 
     - name: Verify everything (push to main)
+      # The `id` is load-bearing: the job's outputs read this step, and without
+      # one its writes to $GITHUB_OUTPUT are discarded.
+      id: push_all
       if: github.event_name != 'pull_request'
       run: |
         echo "backend=true"  >> "$GITHUB_OUTPUT"
         echo "frontend=true" >> "$GITHUB_OUTPUT"
+        echo "workspace=true" >> "$GITHUB_OUTPUT"
 
   # ==========================================================================
   # Build and Test
   # ==========================================================================
+  # `go build ./...` at the repository root is NOT a workspace build. Each
+  # module in go.work has its own go.mod, and Go excludes nested modules from a
+  # parent module's `./...`. The root build compiles 19 packages and zero from
+  # backend/, calc-engine/, apps/*, portfolio-management/ or rebalancing/* --
+  # it exits 0 while the whole workspace is broken. It is worse than no check,
+  # because it is believed.
+  #
+  # This job therefore iterates go.work and builds each module in its own
+  # directory. portfolio-management/backend and rebalancing/worker were both
+  # uncompilable for weeks before this existed; nothing in CI built them.
+  workspace-modules:
+    name: Build Workspace Modules
+    needs: [changes]
+    if: needs.changes.outputs.workspace == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.work
+
+    - name: Build every module in go.work
+      run: |
+        # No `set -e`: one broken module must not hide the next one. Every
+        # failure is collected and reported in a single run, so a branch
+        # carrying three broken modules is told about all three.
+        set -uo pipefail
+
+        failures=""
+        count=0
+        while read -r dir; do
+          dir="${dir#./}"
+          [ -z "$dir" ] && continue
+          if [ ! -f "$dir/go.mod" ]; then
+            echo "::warning::go.work lists '$dir' but it has no go.mod -- skipped"
+            continue
+          fi
+          count=$((count + 1))
+          echo "::group::go build ./... in $dir"
+          if ! (cd "$dir" && go build ./...); then
+            failures="$failures $dir"
+          fi
+          echo "::endgroup::"
+        done < <(go work edit -json | jq -r '.Use[].DiskPath')
+
+        echo "built $count modules"
+        if [ "$count" -eq 0 ]; then
+          # A zero here means the derivation found nothing, which is a broken
+          # check rather than a clean run. Fail rather than report success.
+          echo "::error::no modules were built - the go.work derivation returned nothing"
+          exit 1
+        fi
+        if [ -n "$failures" ]; then
+          echo "::error::modules that do not build:$failures"
+          exit 1
+        fi
+
   build-backend:
     name: Build Backend
     needs: [changes]
