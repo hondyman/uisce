@@ -43,7 +43,6 @@ var openerInventory = map[string]opener{
 	"cmd/outbox-processor/main.go":                               {Kind: kindControlPlane, Max: 1, Reason: "a served command: opens alpha from DATABASE_URL-style configuration"},
 	"cmd/populate_bo_fields/main.go":                             {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/preaggregation/main.go":                                 {Kind: kindControlPlane, Max: 1, Reason: "a served command: opens alpha from DATABASE_URL-style configuration"},
-	"cmd/profiler/main.go":                                       {Kind: kindTenantDatasource, Max: 2, Reason: "opens alpha (alphaPool) and the source DSN of a datasource", Until: "4a follow-up with the scanner"},
 	"cmd/register_oms_preagg/main.go":                            {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/report-smoke-test/main.go":                              {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/run_quick_migration/main.go":                            {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
