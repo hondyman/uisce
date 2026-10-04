@@ -15,7 +15,7 @@ type fixture struct{ nodes []*models.CatalogNode }
 func js(v interface{}) json.RawMessage { b, _ := json.Marshal(v); return b }
 
 func (f *fixture) schema(name string, extra map[string]interface{}) {
-	p := map[string]interface{}{"definitions_captured": true, "definitions_version": scanner.DefinitionsVersion}
+	p := map[string]interface{}{"definitions_captured": true, "definitions_version": scanner.DefinitionsVersion, "scan_id": "scan-2"}
 	for k, v := range extra {
 		p[k] = v
 	}
@@ -23,7 +23,7 @@ func (f *fixture) schema(name string, extra map[string]interface{}) {
 }
 
 func (f *fixture) table(schema, name string, extra map[string]interface{}) {
-	p := map[string]interface{}{"schema": schema}
+	p := map[string]interface{}{"schema": schema, "scan_id": "scan-2"}
 	for k, v := range extra {
 		p[k] = v
 	}
@@ -31,7 +31,7 @@ func (f *fixture) table(schema, name string, extra map[string]interface{}) {
 }
 
 func (f *fixture) col(schema, table, name, ft string, ord int, extra map[string]interface{}) {
-	p := map[string]interface{}{"is_physical_column": true, "format_type": ft, "ordinal_position": ord, "is_nullable": false}
+	p := map[string]interface{}{"is_physical_column": true, "format_type": ft, "ordinal_position": ord, "is_nullable": false, "scan_id": "scan-2"}
 	for k, v := range extra {
 		p[k] = v
 	}
@@ -123,6 +123,41 @@ func TestCompile_RefusesAScanThatDidNotRecordEverything(t *testing.T) {
 	})
 }
 
+// The merge of a scan into alpha never deletes, so a column that vanished from the source stays active with an older scan's id.
+func TestCompile_OnlyUsesNodesFromTheSchemasCurrentScan(t *testing.T) {
+	f := good()
+	// a column that vanished (an older scan, and no type recorded as the old scanner wrote it), and one whose old scan DID
+	// record a type: neither may be deployed
+	f.col("a", "order", "gone", "", 9, map[string]interface{}{"scan_id": "scan-1"})
+	f.col("a", "order", "gone_typed", "text", 8, map[string]interface{}{"scan_id": "scan-1"})
+	f.col("a", "order", "no_scan_id", "text", 7, map[string]interface{}{"scan_id": ""})
+	// a whole table that vanished
+	f.table("a", "dropped", map[string]interface{}{"scan_id": "scan-1"})
+	f.col("a", "dropped", "id", "uuid", 1, map[string]interface{}{"scan_id": "scan-1"})
+	p, err := compile(t, f)
+	require.NoError(t, err, "stale nodes are ignored, not an error")
+	sql := p.SQL()
+	for _, never := range []string{"gone", "gone_typed", "no_scan_id", "dropped"} {
+		require.NotContains(t, sql, never)
+	}
+	require.Equal(t, 2, p.Tables)
+	require.Contains(t, sql, `"x" integer`)
+}
+
+func TestCompile_ASchemaWithoutAScanIdIsNotComplete(t *testing.T) {
+	f := good()
+	f.nodes[0].Properties = js(map[string]interface{}{"definitions_captured": true, "definitions_version": scanner.DefinitionsVersion})
+	_, err := compile(t, f)
+	require.ErrorIs(t, err, ErrScanNotComplete)
+}
+
+func TestCompile_AnOlderDefinitionsVersionIsRefused(t *testing.T) {
+	f := good()
+	f.nodes[1].Properties = js(map[string]interface{}{"definitions_captured": true, "definitions_version": 2, "scan_id": "scan-2"})
+	_, err := compile(t, f)
+	require.ErrorIs(t, err, ErrScanNotComplete)
+}
+
 func TestCompile_RefusesWhatItCannotReproduce(t *testing.T) {
 	for name, tc := range map[string]struct {
 		mutate func(*fixture)
@@ -169,7 +204,7 @@ func TestCompile_PartitionsFollowTheirParent_AndTheParentsIndexCoversThem(t *tes
 func TestCompile_AnOrdinaryTablesIndexIsLeftAsRecorded(t *testing.T) {
 	f := good()
 	f.nodes = append(f.nodes, &models.CatalogNode{NodeTypeID: scanner.NODE_TYPE_TABLE, NodeName: "w", QualifiedPath: "/a/w", Properties: js(map[string]interface{}{
-		"schema": "a", "indexes": []interface{}{map[string]interface{}{"name": "iw", "definition": "CREATE INDEX iw ON ONLY a.w USING btree (x)"}}})})
+		"schema": "a", "scan_id": "scan-2", "indexes": []interface{}{map[string]interface{}{"name": "iw", "definition": "CREATE INDEX iw ON ONLY a.w USING btree (x)"}}})})
 	f.col("a", "w", "x", "integer", 1, nil)
 	p, err := compile(t, f)
 	require.NoError(t, err)
