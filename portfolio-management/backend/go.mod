@@ -5,6 +5,7 @@ go 1.23.0
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/google/uuid v1.6.0
+	github.com/hondyman/uisce/libs/jwt-middleware v0.0.0-00010101000000-000000000000
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
 	github.com/twilio/twilio-go v1.28.5
@@ -29,3 +30,5 @@ require (
 )
 
 replace github.com/hondyman/uisce/libs/db/queries => ../../libs/db/queries
+
+replace github.com/hondyman/uisce/libs/jwt-middleware => ../../libs/jwt-middleware
