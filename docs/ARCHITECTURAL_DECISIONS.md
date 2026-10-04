@@ -1493,6 +1493,15 @@ partitioned index also has `relispartition` set and no bound, so the partitionin
 
 A request without a template, or a template without an app, takes exactly the path it took before.
 
+**How fast, measured** (`TestStructure_OnboardingTimingOnARealTemplate`, real 522-table template scanned from the gold-copy source, the real saga
+activities on a PostgreSQL 16 laptop cluster): plan 118 ms (8,564 nodes loaded and compiled), apply 1.28 s (one transaction,
+3,526 statements, plus the grants on six schemas), probe 19 ms, a resumed re-apply 142 ms: **about 1.4 s for the tenant's whole
+structure**. Cloning a prebuilt template database was measured at 0.6 s against applying the compiled plan at 1.3 s, so a
+template-database clone would save about 0.7 s per tenant at the price of a template lifecycle (build per plan hash, no
+sessions on it while cloning, serialised clones, invalidation on rescan). **Not built, on purpose:** the structure is no longer
+what makes onboarding slow, and the other saga steps (the Lakekeeper namespace, cloning the gold copy's products, the
+tenant's role) have not been timed. Revisit only if they are measured and the structure is still the largest part.
+
 **Current.** Not decided here, and not yet enforced: a deploy must refuse unless the gold copy's scan is fresh against its
 source. `scripts/tenant-ddl-scan-coverage.py` is the prototype of that check (on 2026-10-04 the scan of 2026-09-26 was 16
 tables and 238 columns behind). The generator that dumps the source directly stays as a **fidelity oracle** the compiled
