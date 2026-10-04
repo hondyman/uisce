@@ -3506,8 +3506,16 @@ export interface LoadWorker {
 }
 
 export interface MaterializationConfig {
-  IncrementalColumn: string;
-  IncrementalWindowDays: number;
+  /** IncrementalColumn and IncrementalWindowDays were removed: the API
+accepted them, the wizard collected them, and no code ever read them, so
+a configured "incremental" pre-aggregation behaved exactly like an
+interval one. Removed rather than left dormant - see #394. Stored values
+are dropped on the next upsert, which is a no-op because nothing read them.
+
+PartitionBy is retained but REFUSED by the service, not honoured: the
+correct PARTITION BY construct has to be validated against real StarRocks
+before GenerateDDL emits one, and accepting the field and discarding it
+silently is what produced the original defect. See #394. */
   PartitionBy: string;
   TargetName: string;
   Type: string;

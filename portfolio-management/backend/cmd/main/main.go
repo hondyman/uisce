@@ -12,6 +12,7 @@ import (
 	"portfolio-management/internal/backtest"
 	"portfolio-management/internal/hierarchy"
 
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
