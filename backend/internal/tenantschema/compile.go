@@ -147,27 +147,35 @@ func Compile(nodes []*models.CatalogNode, opts Options) (*Plan, error) {
 		allowExt[e] = true
 	}
 
+	// Two passes: a table or column is trusted only if it came from the same scan as its schema node. The merge of a scan into
+	// alpha never deletes, so a column that has since vanished from the source is still there, still active, and carries the id
+	// of an older scan; it is ignored here, not deployed.
 	schemaProps := map[string]map[string]interface{}{}
+	for _, n := range nodes {
+		if n.NodeTypeID != scanner.NODE_TYPE_SCHEMA {
+			continue
+		}
+		if _, ok := inTemplate[n.NodeName]; !ok {
+			continue
+		}
+		p, err := propsOf(n)
+		if err != nil {
+			return nil, err
+		}
+		schemaProps[n.NodeName] = p
+	}
 	tables := map[string]*table{}
 	colsByTable := map[string][]*models.CatalogNode{}
 	for _, n := range nodes {
 		switch n.NodeTypeID {
-		case scanner.NODE_TYPE_SCHEMA:
-			if _, ok := inTemplate[n.NodeName]; !ok {
-				continue
-			}
-			p, err := propsOf(n)
-			if err != nil {
-				return nil, err
-			}
-			schemaProps[n.NodeName] = p
 		case scanner.NODE_TYPE_TABLE:
 			p, err := propsOf(n)
 			if err != nil {
 				return nil, err
 			}
 			sc := str(p, "schema")
-			if _, ok := inTemplate[sc]; !ok {
+			sp, ok := schemaProps[sc]
+			if !ok || str(p, "scan_id") == "" || str(p, "scan_id") != str(sp, "scan_id") {
 				continue
 			}
 			tables[sc+"."+n.NodeName] = &table{schema: sc, name: n.NodeName, props: p}
@@ -176,7 +184,15 @@ func Compile(nodes []*models.CatalogNode, opts Options) (*Plan, error) {
 			if len(parts) != 3 {
 				continue
 			}
-			if _, ok := inTemplate[parts[0]]; !ok {
+			sp, ok := schemaProps[parts[0]]
+			if !ok {
+				continue
+			}
+			p, err := propsOf(n)
+			if err != nil {
+				return nil, err
+			}
+			if str(p, "scan_id") == "" || str(p, "scan_id") != str(sp, "scan_id") {
 				continue
 			}
 			colsByTable[parts[0]+"."+parts[1]] = append(colsByTable[parts[0]+"."+parts[1]], n)
@@ -191,7 +207,7 @@ func Compile(nodes []*models.CatalogNode, opts Options) (*Plan, error) {
 			incomplete = append(incomplete, s+" (not in the scan)")
 			continue
 		}
-		if p["definitions_captured"] != true || p["definitions_version"] != float64(scanner.DefinitionsVersion) {
+		if p["definitions_captured"] != true || p["definitions_version"] != float64(scanner.DefinitionsVersion) || str(p, "scan_id") == "" {
 			incomplete = append(incomplete, s)
 		}
 	}

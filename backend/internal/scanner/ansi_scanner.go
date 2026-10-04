@@ -34,6 +34,10 @@ type AnsiScanner struct {
 	goldCopyNodes      map[string]db.GoldCopyNodeInfo
 	isGoldCopy         bool
 	schemaWhitelist    []string
+	// scanID identifies this scan. Every schema, table and column node it writes carries it, so a consumer can tell the
+	// nodes of the latest scan from nodes a later scan no longer found: the merge into alpha is incremental and never
+	// deletes (so semantic terms and manual mappings persist), which leaves a vanished column active forever.
+	scanID uuid.UUID
 
 	// progress reporting (see scan_progress.go); all optional
 	progress    func(models.ScanProgress)
@@ -58,6 +62,7 @@ func NewAnsiScanner(db *sql.DB, tenantId, tenantDatasourceId uuid.UUID, sourceSy
 		isGoldCopy:         isGoldCopy,
 		edges:              []models.CatalogEdge{}, // Initialize edges slice
 		schemaWhitelist:    schemaWhitelist,
+		scanID:             uuid.New(),
 	}, nil
 }
 
@@ -75,7 +80,7 @@ func (s *AnsiScanner) getCoreNode(nodeTypeID uuid.UUID, qualifiedPath string) (d
 	return db.GoldCopyNodeInfo{}, false
 }
 
-// isSameProperty compares two JSON property blobs, ignoring "is_core" and "source_system"
+// isSameProperty compares two JSON property blobs, ignoring "is_core", "source_system" and "scan_id" (which differs on every scan)
 func (s *AnsiScanner) isSameProperty(p1, p2 json.RawMessage) bool {
 	var m1, m2 map[string]interface{}
 	if err := json.Unmarshal(p1, &m1); err != nil {
@@ -86,7 +91,7 @@ func (s *AnsiScanner) isSameProperty(p1, p2 json.RawMessage) bool {
 	}
 
 	// Remove keys that should be ignored in comparison
-	ignoreKeys := []string{"is_core", "source_system", "created_at", "updated_at"}
+	ignoreKeys := []string{"is_core", "source_system", "created_at", "updated_at", "scan_id"}
 	for _, key := range ignoreKeys {
 		delete(m1, key)
 		delete(m2, key)
@@ -605,6 +610,7 @@ func (s *AnsiScanner) processSchema(schemaName string) error {
 	props := map[string]interface{}{
 		"is_core":       isCore,
 		"source_system": s.sourceSystem,
+		"scan_id":       s.scanID.String(),
 	}
 	propsJSON, _ := json.Marshal(props)
 
@@ -662,6 +668,7 @@ func (s *AnsiScanner) processTables(schemaName string, schemaID uuid.UUID) error
 			"schema":        schemaName,
 			"is_core":       isCore,
 			"source_system": s.sourceSystem,
+			"scan_id":       s.scanID.String(),
 		}
 		propsJSON, _ := json.Marshal(tableProps)
 
@@ -746,7 +753,11 @@ func (s *AnsiScanner) processColumns(schemaName, tableName string, tableID uuid.
 			coreID = uuid.NullUUID{UUID: coreNode.ID, Valid: true}
 		}
 
-		props := map[string]interface{}{"data_type": dataType, "is_nullable": isNullable}
+		// The structural keys are ALWAYS written, null when the source has none. The merge into alpha keeps keys the new
+		// scan does not mention, so a default, length or precision that was dropped in the source would otherwise live on
+		// in alpha and be deployed to every new tenant.
+		props := map[string]interface{}{"data_type": dataType, "is_nullable": isNullable, "scan_id": s.scanID.String(),
+			"default_value": nil, "column_comment": nil, "max_length": nil, "precision": nil, "scale": nil}
 		if columnDefault.Valid {
 			props["default_value"] = columnDefault.String
 		}

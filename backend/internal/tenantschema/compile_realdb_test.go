@@ -3,6 +3,7 @@ package tenantschema
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/url"
@@ -173,6 +174,30 @@ func TestCompile_TheTargetEqualsTheSource_FromTheScanAlone(t *testing.T) {
 	want := fingerprint(t, src, schemas)
 	require.NotEmpty(t, want["tables"])
 	nodes := scanOf(t, src, schemas) // the compiler gets nothing but these
+
+	// What a real alpha holds after rescans: nodes of an older scan for things that have since vanished from the source.
+	// A column that is gone, and a whole table that is gone, both still "active". They must not reach the target.
+	first := schemas[0]
+	var tbl string
+	for _, n := range nodes {
+		if n.NodeTypeID == scanner.NODE_TYPE_TABLE {
+			var m map[string]interface{}
+			require.NoError(t, json.Unmarshal(n.Properties, &m))
+			if m["schema"] == first {
+				tbl = n.NodeName
+				break
+			}
+		}
+	}
+	require.NotEmpty(t, tbl)
+	stale := func(typ uuid.UUID, name, path string, p map[string]interface{}) {
+		p["scan_id"] = "an-older-scan"
+		b, _ := json.Marshal(p)
+		nodes = append(nodes, &models.CatalogNode{NodeTypeID: typ, NodeName: name, QualifiedPath: path, Properties: b})
+	}
+	stale(scanner.NODE_TYPE_COLUMN, "vanished", "/"+first+"/"+tbl+"/vanished", map[string]interface{}{"is_physical_column": true, "format_type": "text", "ordinal_position": 99, "is_nullable": true})
+	stale(scanner.NODE_TYPE_TABLE, "ghost_table", "/"+first+"/ghost_table", map[string]interface{}{"schema": first})
+	stale(scanner.NODE_TYPE_COLUMN, "id", "/"+first+"/ghost_table/id", map[string]interface{}{"is_physical_column": true, "format_type": "uuid", "ordinal_position": 1})
 
 	plan, err := Compile(nodes, Options{Schemas: schemas})
 	require.NoError(t, err)
