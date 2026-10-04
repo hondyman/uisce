@@ -1434,12 +1434,28 @@ silently lost or guessed all of that. The scanner now also records, on the nodes
 - column node: `format_type` (as `format_type()` prints it, e.g. `character varying(4)[]`), and `generated`, `identity`,
   `collation` only when set, so a compiler that does not model them can refuse instead of guess;
 - schema node: `routines` (functions and procedures, not extension-owned), `extensions` (what the source has installed),
-  `definitions_captured`, `definitions_version` (2) and `definitions_error` when a query failed.
+  `definitions_captured`, `definitions_version` (3) and `definitions_error` (null when the scan was clean).
 
 Definitions are PostgreSQL's own deparse (`pg_get_constraintdef`, `pg_get_indexdef`, `pg_get_triggerdef`,
 `pg_get_functiondef`, `pg_get_partkeydef`, `pg_get_expr`), the text `pg_dump` emits, so a compiler reproduces them
 exactly. **A scan that could not read them says so (`definitions_captured = false`) instead of recording nothing,** so a
 deploy built from it must refuse.
+
+**A scan identifies itself, and always writes what may have vanished.** The merge of a scan into `alpha` is incremental and
+deliberately never deletes (so semantic terms and manual mappings persist), and it merges properties with `||`, which keeps
+every key the new scan does not mention. Run against the real gold-copy datasource after a rescan, that left two defects a
+deploy cannot tolerate: **13 columns that no longer exist in the source were still active** (`mdm.rating_scale`, and four
+on `orm.execution` last touched in August), and any index, constraint, default or length dropped in the source would
+have lived on in `alpha` and been deployed to every new tenant. Both are fixed without changing the merge:
+
+- every schema, table and column node a scan writes carries that scan's `scan_id`; a consumer builds a schema only from the
+  nodes whose `scan_id` equals its schema node's, so nodes a later scan did not find are ignored, not deleted;
+- every structural key is **always written**, an empty list or null when the source has none (`constraints`, `indexes`,
+  `triggers`, `partition`, `persistence`, `options`; a column's `default_value`, `max_length`, `precision`, `scale`,
+  `generated`, `identity`, `collation`; a schema's `routines`, `extensions`, `definitions_error`). A key present as `[]` or
+  `null` overwrites a stale value under `||`; a missing key would not. Keys only a person set (titles, mappings) are untouched.
+
+`scan_id` is ignored when comparing a tenant's nodes to the gold copy's, or no tenant node would ever inherit again.
 
 **Verified** against a real server on the six schemas of the gold copy's template (80 + 441 + 1 tables): the recorded
 counts equal what the server has, to the object: 1,401 indexes (plus 3 partition copies, deliberately not recorded), 309

@@ -37,7 +37,7 @@ import (
 // deploy built from it can refuse.
 
 // DefinitionsVersion is the shape of the properties above.
-const DefinitionsVersion = 2
+const DefinitionsVersion = 3
 
 type tableDefs struct {
 	constraints []map[string]interface{}
@@ -274,7 +274,8 @@ func (s *AnsiScanner) processDefinitions() error {
 				if n == nil {
 					continue
 				}
-				set := map[string]interface{}{"format_type": ft}
+				// null when unset, so a column that stopped being generated, identity or collated is not still flagged in alpha
+				set := map[string]interface{}{"format_type": ft, "generated": nil, "identity": nil, "collation": nil}
 				if gen != "" {
 					set["generated"] = gen
 				}
@@ -346,41 +347,33 @@ func (s *AnsiScanner) processDefinitions() error {
 		rows.Close()
 	}
 
-	for k, d := range defs {
-		n := tableNodes[k]
-		if n == nil {
-			continue // a table the scan did not store (it matches the gold copy) has nothing to attach to
+	// Every table node gets every structural key, empty or null when it has none of that kind. The merge into alpha keeps
+	// keys a new scan does not mention, so an index, constraint, trigger or partition that was dropped in the source would
+	// otherwise stay recorded in alpha and be deployed to every new tenant.
+	for key, n := range tableNodes {
+		d := defs[key]
+		if d == nil {
+			d = &tableDefs{}
 		}
-		set := map[string]interface{}{}
-		if len(d.constraints) > 0 {
-			set["constraints"] = d.constraints
-		}
-		if len(d.indexes) > 0 {
-			set["indexes"] = d.indexes
-		}
-		if len(d.triggers) > 0 {
-			set["triggers"] = d.triggers
+		set := map[string]interface{}{
+			"constraints": nonNilList(d.constraints), "indexes": nonNilList(d.indexes), "triggers": nonNilList(d.triggers),
+			"partition": nil, "persistence": nil, "options": nil,
 		}
 		if d.partition != nil {
 			set["partition"] = d.partition
 		}
+		if o := opts[key]; o != nil {
+			for k, v := range o {
+				set[k] = v
+			}
+		}
 		mergeProps(n, set)
 	}
-	for k, o := range opts {
-		if n := tableNodes[k]; n != nil {
-			mergeProps(n, o)
-		}
-	}
 	for name, n := range schemaNodes {
-		set := map[string]interface{}{"definitions_version": DefinitionsVersion, "definitions_captured": firstErr == nil}
+		set := map[string]interface{}{"definitions_version": DefinitionsVersion, "definitions_captured": firstErr == nil,
+			"definitions_error": nil, "extensions": nonNilList(extensions), "routines": nonNilList(routines[name])}
 		if firstErr != nil {
 			set["definitions_error"] = firstErr.Error()
-		}
-		if len(extensions) > 0 {
-			set["extensions"] = extensions
-		}
-		if r := routines[name]; len(r) > 0 {
-			set["routines"] = r
 		}
 		mergeProps(n, set)
 	}
@@ -411,4 +404,13 @@ func mergeProps(n *models.CatalogNode, add map[string]interface{}) {
 		return
 	}
 	n.Properties = b
+}
+
+// nonNilList is l, or an empty list: an empty list is JSON [], which replaces a stale list in alpha, where a missing key
+// would not.
+func nonNilList(l []map[string]interface{}) []map[string]interface{} {
+	if l == nil {
+		return []map[string]interface{}{}
+	}
+	return l
 }
