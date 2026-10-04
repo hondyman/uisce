@@ -4,7 +4,7 @@
 
 This ledger differs from `AGENTS.md` rules: rules are policy (what not to do); this ledger is history with lessons attached. A ledger that only records failures teaches avoidance. One that records what the countermeasures *produced* teaches the behavior worth repeating.
 
-**Eight standing rules about artifacts, gates and procedures, because each has cost real
+**Nine standing rules about artifacts, gates and procedures, because each has cost real
 time here.**
 
 **Every procedure has exactly one authoritative home, and every other mention is a link.** A
@@ -155,6 +155,35 @@ reason to write the finding.
 Contrast, from the same investigation: the *build* claim about the same module survived scrutiny
 because it was measured (`go build -a`, exit 0). Name-based inference failed; executed evidence
 held. Retracting a dramatic finding of your own is cheap next to shipping it.
+
+**A required check's review surface and its merge surface can be different checks.** `Build Frontend`
+is in the required set. On PR #400 — which touched only `rebalancing/worker/*` and `go.work` — the
+frontend path filter excluded it, so it reported **SKIPPED**, the PR went green with zero red, and
+merge authority was granted on that green. The **merge push** sets `frontend=true` unconditionally,
+so the job actually ran, and failed. Branch protection had been verifying a frontend run that never
+happened.
+
+The lesson is not "green PRs lie". It is that **the PR's appearance is evidence about the review
+surface only**, and the merge is what lands on main. Read the job conclusions on the merge push
+before treating a merge as verified — the required-check set answers "does this block a PR", never
+"was the thing that landed tested the way its reviewer saw it".
+
+This is the third position in one family, and the three were only separated by watching each check
+actually fire:
+
+| Position | Symptom | Found by |
+|---|---|---|
+| **absent everywhere** | a required check that never runs on any trigger | #390 — the sentinel reporting success for a suite that did not run |
+| **present but broken** | a job wired to publish something it cannot build | `docker-build`, quarantined rather than deleted |
+| **present only where it passes** | a check skipped on the review surface, forced on the merge surface | #400's merge push |
+
+The unifying question behind all three is the one from ADR-022: **has this check been observed
+running, and on the surface that matters?** Coverage is not the property. Firing is.
+
+And the corollary for reading a red main: a red merge push is not automatically evidence that the
+merge was wrong. It is evidence that *something* is red, and attributing it requires the
+intermittency table, not a plausible story — the story is how the underlying issue got two wrong
+diagnoses before it was measured.
 
 ---
 
