@@ -372,7 +372,7 @@ func TestCredentialsFromEnv_IsBuiltOnFirstUseNotAtBoot(t *testing.T) {
 	require.Equal(t, 2, builds, "a successful build is cached")
 }
 
-// ADR-045: the platform credential has its own path and account, is scoped to ivy-control alone, and keeps
+// ADR-047: the platform credential has its own path and account, is scoped to ivy-control alone, and keeps
 // every property of a tenant's: stored before created, never minted once issued.
 func TestPlatformCredential_OwnPathOwnAccountScopedToIvyControl(t *testing.T) {
 	ctx := context.Background()
