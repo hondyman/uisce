@@ -245,21 +245,37 @@ immutable by rule; a late row into it is a finding, not something to absorb).
 7. **Resolved by the owner's statement:** the repo is right and the deployment is wrong. The connector must read
    `crims`, not `alpha`.
 
-## Immediate host actions (not performed; each needs the owner's explicit go)
-These are about the dev host as it is today and are independent of the design. I changed nothing there.
-1. **Cap WAL retention:** set `max_slot_wal_keep_size` (a reload, not a restart). With 15 GB free and 13 GB of WAL,
-   this is the one with a clock on it.
-2. **Name the stale slots.** Eight slots are inactive: `debezium_alpha_orders`, `debezium_alpha`,
-   `dbz_northwinds_customers`, `debezium` and `northwinds_cdc_slot` (all four `northwinds`/older alpha),
-   `semlayer_lookups_sub_slot`, `semlayer_cdc_slot`, and `orm_oms_slot`. Dropping a slot is irreversible and
-   forces any consumer to re-snapshot, so I will not decide which are dead from names alone: someone who knows
-   which consumers exist has to say.
-3. **Repoint the ORM connector at `crims`:** a new slot and publication on `crims` (`CREATE PUBLICATION
-   orm_cdc_publication FOR TABLES IN SCHEMA orm`, as the repo's connector note says), the connector's
-   `database.dbname` corrected, then the failed task restarted. `snapshot.mode = initial` will re-snapshot the five
-   tables from `crims` (92 MB database). The old `orm_oms_slot` on `alpha`, 4 GB retained, is then orphaned and
-   is the first slot to drop. Check `pg_hba` line 121 first: the Docker network is asked for a password before
-   the cert rule, and whether the connector's `database.password` is right is unknown.
+## Immediate host actions (state as of 2026-10-04 ~13:20 UTC)
+1. **WAL retention cap: done.** `max_slot_wal_keep_size = '10GB'` (a reload) and a `CHECKPOINT`. WAL fell from
+   13.7 GB to 4.2 GB. Seven slots, all more than 10 GB behind and inactive for weeks, went to `wal_status = lost`
+   (unusable and unrecoverable; their consumers would have to re-snapshot): `debezium`, `debezium_alpha`,
+   `debezium_alpha_orders`, `dbz_northwinds_customers`, `northwinds_cdc_slot`, `semlayer_cdc_slot`,
+   `semlayer_lookups_sub_slot`. A pre-change record of all eight slots is in the session scratchpad
+   (`pre_state.txt`: names, restart LSNs, retained bytes). `orm_oms_slot` (4.1 GB) was inside the cap and is intact.
+2. **Dropping the seven lost slots: not done.** The attempt was denied by the session's permission classifier
+   (shared resource), and was not retried. They are dead entries, but they still occupy 7 of the 10
+   `max_replication_slots`. Someone with authority over the host runs
+   `select pg_drop_replication_slot(slot_name) from pg_replication_slots where wal_status = 'lost'`.
+3. **Repointing the ORM connector at `crims`: not done, because the data contradicts the premise.** On this host:
+   - **`alpha.orm` holds the data:** 34 tables, 187 orders, 99 executions, 86 placements, 91 order allocations, 3
+     execution allocations. This is the schema `0001_orm_schema.up.sql` was derived from.
+   - **`crims.orm` is empty:** 80 tables, **0 rows** in all five captured tables, and the publication
+     `orm_cdc_publication` already exists there with those five tables and no slot.
+   - **`crims` holds `mdm`:** 441 tables there, with data (`calendar_day` 7,671 rows and others), plus `wlth`,
+     `ref`, `streaming`, `staging`, `migration`, `cash_flow`, `vend`.
+   So the deployed connector's `alpha` is where the ORM data is written *in this environment*, whatever the intended
+   design, and repointing it at `crims` would capture an empty schema and strand the only real data. The owner
+   states that `crims` is the tenants' OLTP data plane; either that is the target and the ORM data has not been
+   put there yet (then there is nothing to capture until it is), or `alpha.orm` is where the working ORM
+   lives and the statement describes the intended end state. **This needs the owner's answer before any
+   connector change.** The failed task could be restarted unchanged (it would resume `orm_oms_slot` on `alpha`),
+   but that decision was not made either.
+
+**Onboarding, as the owner describes it:** a new tenant's metadata is added to `alpha`, and the tenant's structure
+is created from the `crims` database's `orm` and `mdm` schemas. The tenant migrations in the tree cover **only
+`orm`** (`db/tenant_migrations/orm`, derived from `alpha`'s 34-table `orm`, not `crims`'s 80); there is **no `mdm`
+tenant migration**, and `crims.mdm` is 441 tables. Which schema is the template (`alpha.orm` 34 tables or
+`crims.orm` 80), and how `mdm` is carved into a tenant migration, are open and decide what per-tenant CDC captures.
 
 ## What is still unverified
 - Why the deployed connector's task fails (its certificate files under `/tmp` and the post-hardening `pg_hba` are
