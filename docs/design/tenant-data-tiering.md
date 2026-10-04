@@ -46,8 +46,25 @@ Classified by whether they grow without bound and are written once:
   `uisce-stream-loader-*` containers, one per topic.
 - **There is no Spark anywhere on the host.** StarRocks 3.3 (FE and BE), Lakekeeper (and a gold-copy
   Lakekeeper), Redis, Temporal and Redpanda are there.
-- I could not read Postgres settings (`max_replication_slots`, `max_wal_senders`, `max_slot_wal_keep_size`) or
-  the slot list: the host's Postgres needs a password and I did not guess one.
+- **Postgres (read with the `postgres` client certificate, read-only queries):**
+  - `max_replication_slots = 10` and **8 are in use**, all of them **inactive**; `max_wal_senders = 10`;
+    `wal_level = logical`; **`max_slot_wal_keep_size = -1` (unlimited)**.
+  - The inactive slots retain **29 to 36 GB** each (overlapping, so the WAL directory is **13 GB**), including
+    `orm_oms_slot` at 4.1 GB since its task failed. The host's disk is **90% full, 15 GB free**. Another 15 GB of
+    retained WAL stops Postgres, and with it Keycloak, Temporal and everything else on this instance. This is the
+    failure mode of decision 2 below, and it is already live.
+  - **No tenant has moved and Phase 4a is not deployed here:** there is no `tenant_datasource_binding` or
+    `tenant_lakehouse` table in `alpha`, no `ivy_t_*` role, and no tenant database. The ORM is `alpha.orm` (plus a
+    separate `crims` and an `orm` database). So the `oms.*` gap from #376 is latent, not live; the connector's
+    failure is not caused by it.
+  - **`pg_hba` has no rule for a tenant role** (`ivy_t_*`). Today a role outside the cert-authenticated list can
+    only connect from the Docker network (`host all all 172.20.0.0 scram-sha-256`); from the dev Mac or the
+    Tailscale range there is no matching rule. The tenant roles use a password from `dscreds`, so a tenant
+    database hosted on this instance would refuse them from anywhere but Docker. I do not know where tenant
+    databases will be hosted; if here, this needs a rule (a group role with one `hostssl ... scram-sha-256`
+    line, or per-tenant client certificates mapped by `pg_ident`) before provisioning can work.
+  - The live `pg_hba` also differs from the hardening handoff: `temporal` is `host ... scram-sha-256` (not cert),
+    and the replication rule for `172.16.0.0` is `scram-sha-256` (the handoff says `trust`).
 
 ## The finding that shapes this
 
@@ -153,8 +170,9 @@ immutable by rule; a late row into it is a finding, not something to absorb).
 2. **Replication slot failure mode: still needs a yes.** One slot per tenant database makes a slot loss one
    tenant, not the fleet. I propose a lag alarm on every slot and `max_slot_wal_keep_size` set so a stalled slot
    is dropped before it fills a shared cluster's disk; a dropped slot means a re-snapshot, which the idempotent
-   `MERGE` tolerates. Do you accept slot loss and re-snapshot as the failure mode? I could not read the
-   cluster's current limits.
+   `MERGE` tolerates. Do you accept slot loss and re-snapshot as the failure mode? **The cluster is at
+   8 of 10 slots with unlimited WAL retention and 15 GB of disk headroom, so this is not hypothetical:** a
+   per-tenant slot design cannot start until the slot limit is raised (a restart) and a retention cap is set.
 3. **Order and trade tables (`order_event`, `execution`, ...): needs the business owner.** Books-and-records
    retention, and whether a copy in object storage may be the record once the OLTP row is gone.
 4. **Pilot table:** `quote`, unless it is itself under a best-execution retention rule, in which case it moves to
@@ -165,7 +183,8 @@ immutable by rule; a late row into it is a finding, not something to absorb).
    storage a change log rather than a copy. Which do you want?
 
 ## What is still unverified
-- Why the deployed connector's task fails (and whether any tenant has actually moved off `alpha.orm`).
-- Postgres limits and slot state on the host.
+- Why the deployed connector's task fails (its certificate files under `/tmp` and the post-hardening `pg_hba` are
+  the places to look; I did not open the container).
+- Where tenant databases will be hosted, which decides the `pg_hba` question above.
 - Whether Spark's Iceberg `MERGE` against Lakekeeper with the tenant's credential works in this environment; no
   Spark here to try it on.
