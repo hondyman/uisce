@@ -17,5 +17,4 @@ use (
 	./libs/validation-sdk
 	./portfolio-management/backend
 	./rebalancing/api
-	./rebalancing/worker
 )
