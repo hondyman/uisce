@@ -1457,6 +1457,14 @@ have lived on in `alpha` and been deployed to every new tenant. Both are fixed w
 
 `scan_id` is ignored when comparing a tenant's nodes to the gold copy's, or no tenant node would ever inherit again.
 
+**Profiling the data is optional.** A scan also profiles the data of every column (counts, sample values): the catalog's
+data-quality hints. It reads every table, and against a large source it is by far the slowest step (a structure-only scan of
+the real 522-table gold-copy source takes about ten seconds; the profiling scan did not finish in ten minutes). Whether a scan
+profiles is decided, most specific first: the request (`"profile_data": false` in the body or the Hasura `input`, or
+`?profile_data=false`, on both `POST /api/catalog/scan` and the progress stream; a value that is not a boolean is a 400 before
+anything is scanned), then the datasource (`"profile_data": false` in its connection config), then the default, **unchanged: profile**.
+A structure-only scan records exactly the same structure, which is all a gold-copy template needs.
+
 **Verified** against a real server on the six schemas of the gold copy's template (80 + 441 + 1 tables): the recorded
 counts equal what the server has, to the object: 1,401 indexes (plus 3 partition copies, deliberately not recorded), 309
 local check constraints (plus 3 inherited by partitions), 2 triggers, 7 routines, 2 partitioned parents and their 2
