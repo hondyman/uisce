@@ -442,8 +442,8 @@ func (a *TenantProvisioningActivities) verifyRoleIsIsolated(ctx context.Context,
 			reachable = append(reachable, name)
 			continue
 		}
-		var pgErr *pgconn.PgError
-		if errors.As(cerr, &pgErr) && pgErr.Code == "42501" { // insufficient_privilege: CONNECT is denied
+		switch classifyConnectError(cerr) {
+		case connectDenied, connectGone:
 			continue
 		}
 		return fmt.Errorf("cannot verify isolation: connecting to %q as the tenant role failed for a reason other than a denied privilege: %w", name, redact(cerr, creds[dscreds.KeyPassword]))
@@ -458,6 +458,34 @@ func (a *TenantProvisioningActivities) verifyRoleIsIsolated(ctx context.Context,
 			ErrTenantRoleNotIsolated, role, len(reachable), strings.Join(reachable, ", "), strings.Join(fixes, " ")))
 	}
 	return nil
+}
+
+type connectOutcome int
+
+const (
+	connectUnknown connectOutcome = iota // says nothing about isolation: fail, retryably
+	connectDenied                        // CONNECT was refused: isolated
+	connectGone                          // the database no longer exists: nothing left to reach
+)
+
+// classifyConnectError reads the failure of a connection attempt made as the tenant role.
+//
+// A database that vanishes between being listed and being connected to (another tenant's
+// provisioning was rolled back, or an offboarding dropped it) is not an isolation failure: there is
+// nothing there to reach. Reading it as "cannot verify" made one tenant's probe fail whenever another
+// tenant's rollback ran at the same moment.
+func classifyConnectError(err error) connectOutcome {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return connectUnknown
+	}
+	switch pgErr.Code {
+	case "42501": // insufficient_privilege: CONNECT is denied
+		return connectDenied
+	case "3D000": // invalid_catalog_name: the database does not exist
+		return connectGone
+	}
+	return connectUnknown
 }
 
 func pgQuoteIdent(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }

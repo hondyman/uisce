@@ -162,7 +162,8 @@ func (a *TenantProvisioningActivities) CreateTenantDatabase(ctx context.Context,
 	}
 	defer db.Close()
 
-	_, err = db.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE %s", databaseName))
+	stmts := createTenantDatabaseStatements(databaseName)
+	_, err = db.ExecContext(ctx, stmts.create)
 	if err != nil {
 		// Match the SQLSTATE (duplicate_database), not the message: the driver's message now
 		// carries a "(42P04)" suffix, and a text comparison made a retry after a partial failure
@@ -176,12 +177,19 @@ func (a *TenantProvisioningActivities) CreateTenantDatabase(ctx context.Context,
 		a.Logger.Infof("Created database: %s", databaseName)
 	}
 
-	// A new database is connectable by every role on the cluster (PUBLIC's default CONNECT). Close
-	// that now, in both the created and the already-existed case so a retry after a failure here
-	// still closes it, instead of leaving a window until the tenant's role is provisioned in which
-	// another tenant's role could connect. The name is validated above, so quoting it is enough.
-	if _, err := db.ExecContext(ctx, fmt.Sprintf(`REVOKE CONNECT ON DATABASE "%s" FROM PUBLIC`, databaseName)); err != nil {
+	// A new database is connectable by every role on the cluster (PUBLIC's default CONNECT), and the
+	// isolation check of ANOTHER tenant's provisioning tries every database that accepts connections.
+	// So the database is created with connections disabled (stmts.create), closed to PUBLIC, and only
+	// then opened for connections: there is no instant, and no crash point, at which it is both
+	// connectable and open to PUBLIC. Without this, an activity that is slow or dies between CREATE
+	// and REVOKE leaves an open database that makes every concurrent tenant's probe fail, and that
+	// failure is not retryable. All three steps are idempotent, and they run in the already-existed
+	// case too, so a retry after a failure anywhere in here finishes the job.
+	if _, err := db.ExecContext(ctx, stmts.closePublic); err != nil {
 		return fmt.Errorf("failed to revoke PUBLIC connect on %s: %w", databaseName, err)
+	}
+	if _, err := db.ExecContext(ctx, stmts.allowConnections); err != nil {
+		return fmt.Errorf("failed to enable connections to %s: %w", databaseName, err)
 	}
 	return nil
 }
@@ -449,4 +457,16 @@ func (a *TenantProvisioningActivities) HealthCheck(ctx context.Context) error {
 		return nil
 	}
 	return a.LakekeeperProvisioner.HealthCheck(ctx)
+}
+
+// createTenantDatabaseStatements are the three statements that create a tenant database safely, in
+// the order they must run. The name must already be validated as an identifier.
+type tenantDatabaseStatements struct{ create, closePublic, allowConnections string }
+
+func createTenantDatabaseStatements(name string) tenantDatabaseStatements {
+	return tenantDatabaseStatements{
+		create:           fmt.Sprintf(`CREATE DATABASE "%s" WITH ALLOW_CONNECTIONS false`, name),
+		closePublic:      fmt.Sprintf(`REVOKE CONNECT ON DATABASE "%s" FROM PUBLIC`, name),
+		allowConnections: fmt.Sprintf(`ALTER DATABASE "%s" WITH ALLOW_CONNECTIONS true`, name),
+	}
 }
