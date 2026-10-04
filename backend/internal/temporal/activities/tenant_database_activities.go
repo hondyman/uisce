@@ -454,7 +454,7 @@ func (a *TenantProvisioningActivities) verifyRoleIsIsolated(ctx context.Context,
 			fixes = append(fixes, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM PUBLIC;", pgQuoteIdent(n)))
 		}
 		return nonRetryable(errTypeTenantDBIsolation, fmt.Errorf(
-			"%w: role %s can connect to %d other database(s): %s. Revoke the default PUBLIC grant (and grant CONNECT only to the roles that need it): %s",
+			"%w: role %s can connect to %d other database(s): %s. Revoke the default PUBLIC grant (and grant CONNECT only to the roles that need it) with scripts/harden-tenant-cluster.sh (see docs/runbooks/tenant-cluster-hardening.md), or by hand: %s",
 			ErrTenantRoleNotIsolated, role, len(reachable), strings.Join(reachable, ", "), strings.Join(fixes, " ")))
 	}
 	return nil
