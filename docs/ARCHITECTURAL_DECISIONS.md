@@ -1413,6 +1413,48 @@ finding is empty, `audit_verified_through_id` covers the partition's last entry,
 here. The StarRocks read (`AuditRange`) is written against the documented 3.3 interface like the rest of
 ADR-036 and has not been run against a live instance.
 
+### ADR-048: A Tenant Structure Is Built From What `alpha` Holds After The Gold Copy's Scan; The Scan Records Everything A Deploy Needs
+
+**Decision (owner direction, 2026-10-04).** `alpha` metadata always wins. A new tenant's structure is built from the
+catalog nodes and edges that the gold-copy tenant's datasource scan left in `alpha`, after that scan has been synced,
+and never straight from the source database. For this to be sound the scan must be both current and complete.
+
+**Complete.** Until now the scan recorded tables, columns (type, length, precision, scale, nullability, default),
+primary keys, unique keys and foreign keys (with cascade rules, deferrability and composite columns). Measured against
+the gold copy's CRIMS datasource, that left out 312 check constraints, 1,404 secondary indexes, 2 partitioned tables with
+their partitions, 7 functions and 2 triggers: a deploy from it would have silently lost all of them. The scanner now also
+records, on the same nodes it already writes:
+
+- table node: `check_constraints`, `indexes` (everything that is not a primary key or unique constraint, and not the
+  copy of a partitioned index a partition carries), `partition` (`key` on a partitioned parent; `parent` and `bound` on a
+  partition), `triggers` (user-created, not clones on partitions);
+- schema node: `routines` (functions and procedures, not extension-owned), `definitions_captured`,
+  `definitions_version`, and `definitions_error` when a query failed.
+
+Definitions are PostgreSQL's own deparse (`pg_get_constraintdef`, `pg_get_indexdef`, `pg_get_triggerdef`,
+`pg_get_functiondef`, `pg_get_partkeydef`, `pg_get_expr`), the text `pg_dump` emits, so a compiler reproduces them
+exactly. **A scan that could not read them says so (`definitions_captured = false`) instead of recording nothing,** so a
+deploy built from it must refuse.
+
+**Verified** against a real server on the six schemas of the gold copy's template (80 + 441 + 1 tables): the recorded
+counts equal what the server has, to the object: 309 check constraints (plus 3 copies inherited by partitions, deliberately
+not recorded), 1,401 indexes (plus 3 partition copies), 2 triggers, 7 routines, 2 partitioned parents and their 2
+partitions. The first run against a real server found a defect the mocked tests could not: an index that is a partition of a
+partitioned index also has `relispartition` set and no bound, so the partitioning query is restricted to tables.
+
+**Current.** Not decided here, and not yet enforced: a deploy must refuse unless the gold copy's scan is fresh against its
+source. `scripts/tenant-ddl-scan-coverage.py` is the prototype of that check (on 2026-10-04 the scan of 2026-09-26 was 16
+tables and 238 columns behind). The generator that dumps the source directly stays as a **fidelity oracle** the compiled
+output is tested against, not as the deploy source.
+
+**Consequence.** Table nodes for the gold copy gain properties, so a tenant's own scan of an identical database no longer
+equals the gold copy's older nodes and stores them locally rather than inheriting, until the gold copy is rescanned. That is
+the same order the rule already requires: rescan the gold copy first.
+
+**Not covered.** Sequences and identity (the tenant ORM schema has none), generated columns, views, enum types and domains
+(none in the six schemas); each needs recording before a schema that uses it can be deployed from alpha. Grants and
+ownership are deliberately not part of a structure.
+
 ## Open items
 
 - **C1 (9.1) ported metric primitives into the rule VM.**

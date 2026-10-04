@@ -1,0 +1,301 @@
+package scanner
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/backend/models"
+)
+
+// A scan has to record enough to rebuild the structure it scanned, because a tenant structure is built from what
+// alpha holds after the gold copy's scan is synced, never straight from the source (ADR-048). Columns, primary and
+// unique keys and foreign keys were already recorded. This records the rest, so nothing a deploy needs lives only in
+// the source database:
+//
+//	table node   check_constraints  [{name, definition}]
+//	             indexes            [{name, definition, unique, method}]   every index that is not a primary key or a
+//	                                unique constraint (those are the key properties) and not a copy of a partitioned index
+//	             partition          {key}            for a partitioned parent  (e.g. "RANGE (quote_time)")
+//	                                {parent, bound}  for a partition           (e.g. "FOR VALUES FROM (...) TO (...)")
+//	             triggers           [{name, definition, function}]         only triggers the user created, not clones on partitions
+//	schema node  routines           [{name, arguments, kind, language, definition}]   functions and procedures, not extension-owned
+//	             definitions_captured  true only if every query below succeeded; false (with definitions_error) otherwise
+//	             definitions_version   the shape of the above
+//
+// Definitions are PostgreSQL's own deparse (pg_get_constraintdef, pg_get_indexdef, pg_get_triggerdef, pg_get_functiondef,
+// pg_get_partkeydef, pg_get_expr), the same text pg_dump emits, so a compiler can reproduce them exactly.
+//
+// A scan that could not record them says so (definitions_captured = false) rather than recording nothing silently, so a
+// deploy built from it can refuse.
+
+// DefinitionsVersion is the shape of the properties above.
+const DefinitionsVersion = 1
+
+type tableDefs struct {
+	checks    []map[string]interface{}
+	indexes   []map[string]interface{}
+	triggers  []map[string]interface{}
+	partition map[string]interface{}
+}
+
+func (s *AnsiScanner) schemaFilter(col string, args *[]interface{}) string {
+	if len(s.schemaWhitelist) > 0 {
+		ph := make([]string, len(s.schemaWhitelist))
+		for i, v := range s.schemaWhitelist {
+			*args = append(*args, v)
+			ph[i] = fmt.Sprintf("$%d", len(*args))
+		}
+		return fmt.Sprintf("%s IN (%s)", col, strings.Join(ph, ", "))
+	}
+	return fmt.Sprintf("%s NOT IN ('pg_catalog', 'information_schema', 'pg_toast')", col)
+}
+
+// processDefinitions records check constraints, indexes, partitioning, triggers and routines.
+func (s *AnsiScanner) processDefinitions() error {
+	schemaNodes := map[string]*models.CatalogNode{}
+	tableNodes := map[string]*models.CatalogNode{}
+	for _, n := range s.nodes {
+		switch n.NodeTypeID {
+		case NODE_TYPE_SCHEMA:
+			schemaNodes[n.NodeName] = n
+		case NODE_TYPE_TABLE:
+			tableNodes[strings.TrimPrefix(n.QualifiedPath, "/")] = n
+		}
+	}
+	defs := map[string]*tableDefs{}
+	get := func(schema, table string) *tableDefs {
+		k := schema + "/" + table
+		if defs[k] == nil {
+			defs[k] = &tableDefs{}
+		}
+		return defs[k]
+	}
+	var firstErr error
+	fail := func(what string, err error) {
+		logging.GetLogger().Sugar().Warnf("Error recording %s: %v", what, err)
+		if firstErr == nil {
+			firstErr = fmt.Errorf("%s: %w", what, err)
+		}
+	}
+
+	// check constraints. conislocal excludes the copies a partition inherits from its parent.
+	{
+		var args []interface{}
+		q := `SELECT n.nspname, c.relname, k.conname, pg_get_constraintdef(k.oid)
+		        FROM pg_constraint k
+		        JOIN pg_class c ON c.oid = k.conrelid
+		        JOIN pg_namespace n ON n.oid = c.relnamespace
+		       WHERE k.contype = 'c' AND k.conislocal AND ` + s.schemaFilter("n.nspname", &args) + `
+		       ORDER BY n.nspname, c.relname, k.conname`
+		if rows, err := s.sourceDB.Query(q, args...); err != nil {
+			fail("check constraints", err)
+		} else {
+			for rows.Next() {
+				var sc, tb, name, def string
+				if err := rows.Scan(&sc, &tb, &name, &def); err != nil {
+					fail("check constraints", err)
+					continue
+				}
+				d := get(sc, tb)
+				d.checks = append(d.checks, map[string]interface{}{"name": name, "definition": def})
+			}
+			if err := rows.Err(); err != nil {
+				fail("check constraints", err)
+			}
+			rows.Close()
+		}
+	}
+
+	// indexes that are not a key: not behind a primary key, unique or exclusion constraint, and not the copy of a
+	// partitioned index that a partition carries (that one is attached through pg_inherits).
+	{
+		var args []interface{}
+		q := `SELECT n.nspname, t.relname, ic.relname, pg_get_indexdef(i.indexrelid), i.indisunique, am.amname
+		        FROM pg_index i
+		        JOIN pg_class ic ON ic.oid = i.indexrelid
+		        JOIN pg_class t ON t.oid = i.indrelid
+		        JOIN pg_namespace n ON n.oid = t.relnamespace
+		        JOIN pg_am am ON am.oid = ic.relam
+		       WHERE t.relkind IN ('r', 'p') AND ` + s.schemaFilter("n.nspname", &args) + `
+		         AND NOT EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = i.indexrelid AND k.contype IN ('p', 'u', 'x'))
+		         AND NOT EXISTS (SELECT 1 FROM pg_inherits h WHERE h.inhrelid = i.indexrelid)
+		       ORDER BY n.nspname, t.relname, ic.relname`
+		if rows, err := s.sourceDB.Query(q, args...); err != nil {
+			fail("indexes", err)
+		} else {
+			for rows.Next() {
+				var sc, tb, name, def, method string
+				var unique bool
+				if err := rows.Scan(&sc, &tb, &name, &def, &unique, &method); err != nil {
+					fail("indexes", err)
+					continue
+				}
+				d := get(sc, tb)
+				d.indexes = append(d.indexes, map[string]interface{}{"name": name, "definition": def, "unique": unique, "method": method})
+			}
+			if err := rows.Err(); err != nil {
+				fail("indexes", err)
+			}
+			rows.Close()
+		}
+	}
+
+	// partitioning: a partitioned parent has a key, a partition has a parent and a bound. relkind is restricted to tables
+	// because an index that is a partition of a partitioned index also has relispartition set, with no bound.
+	{
+		var args []interface{}
+		q := `SELECT n.nspname, c.relname,
+		             CASE WHEN c.relkind = 'p' THEN pg_get_partkeydef(c.oid) ELSE '' END,
+		             CASE WHEN c.relispartition THEN COALESCE(pg_get_expr(c.relpartbound, c.oid), '') ELSE '' END,
+		             CASE WHEN c.relispartition THEN
+		                  (SELECT pn.nspname || '.' || pc.relname FROM pg_inherits h
+		                     JOIN pg_class pc ON pc.oid = h.inhparent JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+		                    WHERE h.inhrelid = c.oid) ELSE '' END
+		        FROM pg_class c
+		        JOIN pg_namespace n ON n.oid = c.relnamespace
+		       WHERE c.relkind IN ('r', 'p') AND (c.relkind = 'p' OR c.relispartition) AND ` + s.schemaFilter("n.nspname", &args) + `
+		       ORDER BY n.nspname, c.relname`
+		if rows, err := s.sourceDB.Query(q, args...); err != nil {
+			fail("partitioning", err)
+		} else {
+			for rows.Next() {
+				var sc, tb, key, bound, parent string
+				if err := rows.Scan(&sc, &tb, &key, &bound, &parent); err != nil {
+					fail("partitioning", err)
+					continue
+				}
+				p := map[string]interface{}{}
+				if key != "" {
+					p["key"] = key
+				}
+				if parent != "" {
+					p["parent"], p["bound"] = parent, bound
+				}
+				get(sc, tb).partition = p
+			}
+			if err := rows.Err(); err != nil {
+				fail("partitioning", err)
+			}
+			rows.Close()
+		}
+	}
+
+	// triggers a person created. tgparentid <> 0 is a clone made on a partition.
+	{
+		var args []interface{}
+		q := `SELECT n.nspname, c.relname, t.tgname, pg_get_triggerdef(t.oid), fn.nspname || '.' || p.proname
+		        FROM pg_trigger t
+		        JOIN pg_class c ON c.oid = t.tgrelid
+		        JOIN pg_namespace n ON n.oid = c.relnamespace
+		        JOIN pg_proc p ON p.oid = t.tgfoid
+		        JOIN pg_namespace fn ON fn.oid = p.pronamespace
+		       WHERE NOT t.tgisinternal AND t.tgparentid = 0 AND ` + s.schemaFilter("n.nspname", &args) + `
+		       ORDER BY n.nspname, c.relname, t.tgname`
+		if rows, err := s.sourceDB.Query(q, args...); err != nil {
+			fail("triggers", err)
+		} else {
+			for rows.Next() {
+				var sc, tb, name, def, fn string
+				if err := rows.Scan(&sc, &tb, &name, &def, &fn); err != nil {
+					fail("triggers", err)
+					continue
+				}
+				d := get(sc, tb)
+				d.triggers = append(d.triggers, map[string]interface{}{"name": name, "definition": def, "function": fn})
+			}
+			if err := rows.Err(); err != nil {
+				fail("triggers", err)
+			}
+			rows.Close()
+		}
+	}
+
+	// routines, per schema; extension-owned ones are the extension's, not the schema's.
+	routines := map[string][]map[string]interface{}{}
+	{
+		var args []interface{}
+		q := `SELECT n.nspname, p.proname, pg_get_function_identity_arguments(p.oid), p.prokind::text, l.lanname, pg_get_functiondef(p.oid)
+		        FROM pg_proc p
+		        JOIN pg_namespace n ON n.oid = p.pronamespace
+		        JOIN pg_language l ON l.oid = p.prolang
+		       WHERE p.prokind IN ('f', 'p') AND ` + s.schemaFilter("n.nspname", &args) + `
+		         AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.classid = 'pg_proc'::regclass AND d.deptype = 'e')
+		       ORDER BY n.nspname, p.proname, pg_get_function_identity_arguments(p.oid)`
+		if rows, err := s.sourceDB.Query(q, args...); err != nil {
+			fail("routines", err)
+		} else {
+			for rows.Next() {
+				var sc, name, argsText, kind, lang, def string
+				if err := rows.Scan(&sc, &name, &argsText, &kind, &lang, &def); err != nil {
+					fail("routines", err)
+					continue
+				}
+				routines[sc] = append(routines[sc], map[string]interface{}{"name": name, "arguments": argsText, "kind": kind, "language": lang, "definition": def})
+			}
+			if err := rows.Err(); err != nil {
+				fail("routines", err)
+			}
+			rows.Close()
+		}
+	}
+
+	for k, d := range defs {
+		n := tableNodes[k]
+		if n == nil {
+			continue // a table the scan did not store (it matches the gold copy) has nothing to attach to
+		}
+		set := map[string]interface{}{}
+		if len(d.checks) > 0 {
+			set["check_constraints"] = d.checks
+		}
+		if len(d.indexes) > 0 {
+			set["indexes"] = d.indexes
+		}
+		if len(d.triggers) > 0 {
+			set["triggers"] = d.triggers
+		}
+		if d.partition != nil {
+			set["partition"] = d.partition
+		}
+		mergeProps(n, set)
+	}
+	for name, n := range schemaNodes {
+		set := map[string]interface{}{"definitions_version": DefinitionsVersion, "definitions_captured": firstErr == nil}
+		if firstErr != nil {
+			set["definitions_error"] = firstErr.Error()
+		}
+		if r := routines[name]; len(r) > 0 {
+			set["routines"] = r
+		}
+		mergeProps(n, set)
+	}
+	return firstErr
+}
+
+// mergeProps adds keys to a node's properties, keeping every key already there.
+func mergeProps(n *models.CatalogNode, add map[string]interface{}) {
+	if len(add) == 0 {
+		return
+	}
+	var m map[string]interface{}
+	if len(n.Properties) > 0 {
+		if err := json.Unmarshal(n.Properties, &m); err != nil {
+			logging.GetLogger().Sugar().Warnf("Error unmarshaling properties for %s: %v", n.QualifiedPath, err)
+			return
+		}
+	}
+	if m == nil {
+		m = map[string]interface{}{}
+	}
+	for k, v := range add {
+		m[k] = v
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		logging.GetLogger().Sugar().Warnf("Error marshaling properties for %s: %v", n.QualifiedPath, err)
+		return
+	}
+	n.Properties = b
+}

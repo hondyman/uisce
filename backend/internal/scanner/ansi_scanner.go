@@ -919,6 +919,10 @@ func (s *AnsiScanner) ExtractMetadata() ([]*models.CatalogNode, []models.Catalog
 	if err := s.processForeignKeys(); err != nil {
 		logging.GetLogger().Sugar().Warnf("Error processing foreign keys: %v", err)
 	}
+	s.report(true, 62, "", "Reading check constraints, indexes, partitioning, triggers and routines...", s.tablesDone, s.tablesTotal)
+	if err := s.processDefinitions(); err != nil {
+		logging.GetLogger().Sugar().Warnf("Error recording definitions (the scan is marked as not capturing them): %v", err)
+	}
 
 	// Process data profiling (unique counts, sample values)
 	s.report(true, 65, "", fmt.Sprintf("Profiling %d columns (row counts and samples)...", len(s.columnMap)), 0, len(s.columnMap))

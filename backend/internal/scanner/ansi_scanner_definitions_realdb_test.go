@@ -1,0 +1,128 @@
+package scanner
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"net/url"
+	"os"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/models"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/stretchr/testify/require"
+)
+
+// Against a real PostgreSQL: every class of definition is recorded, exactly as the server deparses it, and nothing
+// that belongs to something else is. SCANNER_TEST_ADMIN_DSN is a postgres:// URL with CREATEDB; the test creates and
+// drops its own database.
+func TestProcessDefinitions_AgainstARealServer(t *testing.T) {
+	adminDSN := os.Getenv("SCANNER_TEST_ADMIN_DSN")
+	if adminDSN == "" {
+		t.Skip("SCANNER_TEST_ADMIN_DSN not set")
+	}
+	ctx := context.Background()
+	admin, err := sql.Open("pgx", adminDSN)
+	require.NoError(t, err)
+	name := "scanner_defs_test"
+	_, _ = admin.ExecContext(ctx, `DROP DATABASE IF EXISTS `+name)
+	_, err = admin.ExecContext(ctx, `CREATE DATABASE `+name)
+	require.NoError(t, err)
+	// Cleanups run last-in first-out, so the connection to the new database (registered later) closes first.
+	t.Cleanup(func() {
+		_, _ = admin.Exec(`DROP DATABASE IF EXISTS ` + name)
+		admin.Close()
+	})
+	u, err := url.Parse(adminDSN)
+	require.NoError(t, err)
+	u.Path = "/" + name
+	db, err := sql.Open("pgx", u.String())
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `
+		CREATE SCHEMA scan_defs;
+		CREATE EXTENSION pg_trgm WITH SCHEMA scan_defs;
+		CREATE FUNCTION scan_defs.touch() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.note := 'x'; RETURN NEW; END $$;
+		CREATE FUNCTION scan_defs.double(i int) RETURNS int LANGUAGE sql IMMUTABLE AS $$ SELECT i * 2 $$;
+		CREATE TABLE scan_defs.quote (
+			id uuid NOT NULL, quote_time timestamptz NOT NULL, bid numeric(18,9), note text,
+			CONSTRAINT quote_pkey PRIMARY KEY (id, quote_time),
+			CONSTRAINT chk_quote_bid CHECK (bid >= 0),
+			CONSTRAINT quote_note_uq UNIQUE (id, quote_time, note)
+		) PARTITION BY RANGE (quote_time);
+		CREATE TABLE scan_defs.quote_default PARTITION OF scan_defs.quote DEFAULT;
+		CREATE TABLE scan_defs.quote_2026 PARTITION OF scan_defs.quote FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');
+		CREATE INDEX idx_quote_time ON scan_defs.quote (quote_time DESC);
+		CREATE TRIGGER trg_quote_touch BEFORE INSERT ON scan_defs.quote FOR EACH ROW EXECUTE FUNCTION scan_defs.touch();
+		CREATE TABLE scan_defs.plain (id uuid PRIMARY KEY, label text, UNIQUE (label));
+		CREATE INDEX idx_plain_lower ON scan_defs.plain (lower(label));
+		CREATE INDEX idx_plain_trgm ON scan_defs.plain USING gin (label scan_defs.gin_trgm_ops);
+		CREATE UNIQUE INDEX uq_plain_partial ON scan_defs.plain (label) WHERE label IS NOT NULL;
+		CREATE TABLE scan_defs.bare (id uuid PRIMARY KEY);`)
+	require.NoError(t, err)
+
+	s, err := NewAnsiScanner(db, uuid.New(), uuid.New(), "src", nil, true, []string{"scan_defs"})
+	require.NoError(t, err)
+	nodes, _, err := s.ExtractMetadata()
+	require.NoError(t, err)
+	by := map[string]*models.CatalogNode{}
+	for _, n := range nodes {
+		by[n.QualifiedPath] = n
+	}
+	p := func(path string) map[string]interface{} {
+		require.Contains(t, by, path)
+		var m map[string]interface{}
+		require.NoError(t, json.Unmarshal(by[path].Properties, &m))
+		return m
+	}
+	names := func(v interface{}) []string {
+		var out []string
+		for _, e := range v.([]interface{}) {
+			out = append(out, e.(map[string]interface{})["name"].(string))
+		}
+		return out
+	}
+
+	q := p("/scan_defs/quote")
+	require.Equal(t, []interface{}{map[string]interface{}{"name": "chk_quote_bid", "definition": "CHECK ((bid >= (0)::numeric))"}}, q["check_constraints"])
+	require.Equal(t, []string{"idx_quote_time"}, names(q["indexes"]), "not the primary key, not the unique constraint")
+	require.Equal(t, map[string]interface{}{"key": "RANGE (quote_time)"}, q["partition"])
+	require.Equal(t, []string{"trg_quote_touch"}, names(q["triggers"]))
+
+	// A partition records what ties it to its parent, and neither the inherited check, nor the cloned trigger, nor the index copy.
+	for path, bound := range map[string]string{
+		"/scan_defs/quote_default": "DEFAULT",
+		"/scan_defs/quote_2026":    "FOR VALUES FROM ('2026-01-01 00:00:00+00') TO ('2027-01-01 00:00:00+00')",
+	} {
+		c := p(path)
+		require.Equal(t, "scan_defs.quote", c["partition"].(map[string]interface{})["parent"], path)
+		require.Contains(t, c["partition"].(map[string]interface{})["bound"], bound[:7], path)
+		require.NotContains(t, c, "check_constraints", path+": inherited from the parent")
+		require.NotContains(t, c, "triggers", path+": a clone of the parent's trigger")
+		require.NotContains(t, c, "indexes", path+": a copy of the parent's index")
+	}
+
+	pl := p("/scan_defs/plain")
+	require.ElementsMatch(t, []string{"idx_plain_lower", "idx_plain_trgm", "uq_plain_partial"}, names(pl["indexes"]),
+		"expression, gin and partial unique indexes are recorded; the unique CONSTRAINT's index is not")
+	for _, e := range pl["indexes"].([]interface{}) {
+		m := e.(map[string]interface{})
+		if m["name"] == "uq_plain_partial" {
+			require.Equal(t, true, m["unique"])
+			require.Contains(t, m["definition"], "WHERE")
+		}
+		if m["name"] == "idx_plain_trgm" {
+			require.Equal(t, "gin", m["method"])
+		}
+	}
+	require.NotContains(t, p("/scan_defs/bare"), "indexes")
+
+	sc := p("/scan_defs")
+	require.Equal(t, true, sc["definitions_captured"])
+	var rn []string
+	for _, r := range sc["routines"].([]interface{}) {
+		rn = append(rn, r.(map[string]interface{})["name"].(string))
+	}
+	require.ElementsMatch(t, []string{"touch", "double"}, rn, "the extension's own functions (pg_trgm) are not the schema's")
+}
