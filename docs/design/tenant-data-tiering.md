@@ -205,9 +205,9 @@ source of truth.** Three things have to be decided and documented:
    ORM schema has none:** every primary key is a `uuid` with `gen_random_uuid()`, and the one name that looks
    like a sequence (`sequence_number`) is an ordinary `int4` column. The step still belongs in the restore
    runbook for any schema that is added later.
-3. **Rollback semantics: "as of now" or "as of time T".** Silver gives "restore as of now". "As of T" (a bad
-   migration, silent corruption found a day later) is bronze with a retention window. That window is the same
-   decision as the order and trade tables' retention (decision 3), so it is not set here.
+3. **Rollback semantics: both (decision 6).** Silver gives "restore as of now", the default runbook. "As of T" (a bad
+   migration, silent corruption found a day later) is the incident runbook, rebuilt from bronze; its window is the bronze
+   retention, which is the same open decision as the order and trade tables' retention (decision 3), not a second one.
 
 ### 4. The drop job
 Reads `hot_window_days` and `legal_hold` from the binding (ADR-038). Detaches a partition, and drops it in a
@@ -228,21 +228,30 @@ immutable by rule; a late row into it is a finding, not something to absorb).
 ## Decisions
 
 1. **Resolved by owner direction:** Debezium Server per tenant database, with the revisit trigger above.
-2. **Replication slot failure mode: approved by the owner (2026-10-04).** One slot per tenant database, so a slot loss
-   is one tenant, not the fleet. Policy: a lag alarm on every slot, `max_slot_wal_keep_size` set so a stalled slot
-   is dropped before it fills a shared cluster's disk, and a re-snapshot as the recovery, which append-only bronze
-   plus the silver dedupe tolerates (re-emitted events are ranked by LSN). **Preconditions that are not yet met on
-   the dev host:** it has 8 of 10 slots in use, unlimited retention, and 15 GB of free disk, so per-tenant slots
-   cannot start until the slot limit is raised (a restart) and the cap is set.
-3. **Order and trade tables (`order_event`, `execution`, ...): needs the business owner.** Books-and-records
-   retention, and whether a copy in object storage may be the record once the OLTP row is gone.
+2. **Slot policy (accepted by the owner, 2026-10-04): this is policy, not an open question.**
+   - **One replication slot per tenant database**, so losing a slot costs one tenant, never the fleet.
+   - **A lag alarm on every slot**, so a stalled consumer is seen long before it matters.
+   - **A WAL retention cap** (`max_slot_wal_keep_size`) set so a stalled slot is **dropped before it fills a shared cluster's
+     disk**. The recovery for a dropped slot is a **re-snapshot**, which append-only bronze plus the silver dedupe tolerates
+     (re-emitted events are ranked by LSN, so a replay cannot resurrect a stale value).
+   - **Preconditions not yet met on the dev host:** it had 8 of 10 slots in use, unlimited retention and 15 GB of free disk. Per-tenant
+     slots cannot start until `max_replication_slots` is raised (a restart) and the cap is a standing setting. (The cap was set to
+     10 GB on 2026-10-04 and seven dead slots went `lost`; see "Immediate host actions".)
+3. **Order and trade tables (`order_event`, `execution`, ...): needs the business owner. This is the one open item left.** It decides
+   three things at once: books-and-records retention, whether a copy in object storage may be the record once the OLTP row is gone, and
+   how long bronze is kept (which is the point-in-time restore window of decision 6).
 4. **Pilot table:** `quote`, unless it is itself under a best-execution retention rule, in which case it moves to
    decision 3.
 5. **Resolved by owner direction:** no Spark. The write side is the Iceberg Kafka Connect sink in append mode, with
    bronze, silver and gold. Two checks remain before the ADR: the sink's capabilities in the target version and,
    if Kafka Connect is to be avoided entirely, whether the community Debezium Server Iceberg sink is maintained.
-6. **Rollback semantics (now-only, or point-in-time with a bronze window)** is decision 3's retention answer, not a
-   separate one.
+6. **Rollback semantics: decided, point-in-time as well as now (owner, 2026-10-04).** Two runbooks, not one:
+   - **Restore as of now** (the default runbook): a fresh tenant database, the migrations replayed, `COPY` from **silver**.
+   - **Restore as of time T** (the incident runbook: a bad migration, silent corruption found a day later): rebuilt from the **bronze log**
+     up to T. **Its window is the bronze retention**, nothing else: a T older than the oldest retained bronze partition cannot be restored.
+   The bronze retention is **not set here and is not a second open item**: it is the same answer as decision 3. Until the business owner
+   answers for `order_event`, `execution` and the other order and trade tables, those tables get the `tenant_id` invariant, read-side
+   `tenant_id` partitioning, **no drop policy, and no defined bronze retention.**
 7. **Resolved by the owner's statement:** the repo is right and the deployment is wrong. The connector must read
    `crims`, not `alpha`.
 
