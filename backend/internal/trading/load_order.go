@@ -9,23 +9,21 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// LoadOrder loads one CRIMS orm."order" row fenced by id + tenant_id.
+// LoadOrder loads one orm."order" row from the CALLING TENANT's own database,
+// fenced by id + tenant_id.
 //
-// Unifies MCP omsLoadCRIMSOrder and handlers.OMSFIXCommandHandler.loadOrder
-// (SL commit 5/5). Pre-flight diff:
-//
-//	SQL WHERE: identical (id=$1::uuid AND tenant_id=$2::uuid)
-//	SELECT:    identical columns
-//	qty/leaves / symbol-default: equivalent (NullString empty → "AAPL")
-//	DELTA:     none on the fence — chose HTTP GetContext/struct scan shape
-//	           as the single implementation (clearer, not a richer predicate).
+// The tenant is the argument, as it always was, but it is no longer a row filter
+// over one shared database: it is placed in the context as the caller tenant, so
+// the router resolves that tenant's own orm datasource and the fence becomes a
+// statement about which database was opened, not which rows came back. A
+// datasource belonging to another tenant is refused outright (ADR-030).
 func LoadOrder(ctx context.Context, tenantID uuid.UUID, orderID string) (*Order, error) {
-	db, err := OpenCRIMS(ctx)
+	conn, err := ormDB(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return LoadOrderDB(ctx, sqlx.NewDb(db, "postgres"), tenantID, orderID)
+	defer conn.Close()
+	return LoadOrderDB(ctx, sqlx.NewDb(conn, "postgres"), tenantID, orderID)
 }
 
 // LoadOrderDB is the testable core (same predicate as LoadOrder).

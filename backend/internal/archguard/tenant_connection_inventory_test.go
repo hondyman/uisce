@@ -108,8 +108,12 @@ var openerInventory = map[string]opener{
 	"internal/temporal/activities/tenant_instance_activities.go": {Kind: kindProvisioning, Max: 2, Reason: "administrator connection to the shared cluster to CREATE and DROP tenant databases (the saga)"},
 	"internal/tenantauto/provisioner.go":                         {Kind: kindControlPlane, Max: 1, Reason: "opens alpha or another platform database from the process's own configuration"},
 	"internal/tenantauto/reconciler.go":                          {Kind: kindControlPlane, Max: 1, Reason: "opens alpha or another platform database from the process's own configuration"},
-	"internal/tenantdb/tenantdb.go":                              {Kind: kindTenantDB, Max: 1, Reason: "the router: the only package allowed to open a tenant database for data access"},
-	"internal/trading/persist.go":                                {Kind: kindTenantDatasource, Max: 1, Reason: "the ORM (crims) database, opened ONLY from CRIMS_ORM_DSN (never guessed from DATABASE_URL): ONE shared database, not one per tenant", Until: "4b: ORM data move, then behind tenantdb"},
-	"migrations/cmd/migrate.go":                                  {Kind: kindTool, Max: 1, Reason: "migration command for alpha"},
-	"services/uma-rebalance/main.go":                             {Kind: kindControlPlane, Max: 1, Reason: "standalone service that opens DATABASE_URL"},
+	// internal/trading/persist.go was the last kindTenantDatasource entry ("Until: 4b"). It
+	// resolves the caller's own orm database through tenantdb now and opens nothing itself
+	// (ADR-030, ADR-043), so its entry is gone rather than reclassified: kindTenantDB is
+	// reserved for internal/tenantdb/, and an entry for a file that opens no connection would
+	// only be an exemption nobody reads.
+	"internal/tenantdb/tenantdb.go":  {Kind: kindTenantDB, Max: 1, Reason: "the router: the only package allowed to open a tenant database for data access"},
+	"migrations/cmd/migrate.go":      {Kind: kindTool, Max: 1, Reason: "migration command for alpha"},
+	"services/uma-rebalance/main.go": {Kind: kindControlPlane, Max: 1, Reason: "standalone service that opens DATABASE_URL"},
 }
