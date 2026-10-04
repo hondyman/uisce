@@ -18,7 +18,7 @@ type PlatformLakehouseProvisionResult struct {
 	AlreadyProvisioned bool
 }
 
-// PlatformLakehouseProvisioningWorkflow provisions the platform warehouse ivy-control (ADR-047): KMS key, WORM
+// PlatformLakehouseProvisioningWorkflow provisions the platform warehouse ivy-control (ADR-049): KMS key, WORM
 // bucket, bucket-scoped credential, Lakekeeper warehouse, then the registry row. Like a tenant's, there is no
 // compensation: the bucket holds write-once audit and a failed run must never delete it. Every step is idempotent,
 // so the next run resumes where this one stopped.

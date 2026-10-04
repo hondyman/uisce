@@ -1413,7 +1413,7 @@ finding is empty, `audit_verified_through_id` covers the partition's last entry,
 here. The StarRocks read (`AuditRange`) is written against the documented 3.3 interface like the rest of
 ADR-036 and has not been run against a live instance.
 
-### ADR-047: The Platform Warehouse `ivy-control` Is Built By The Same Code As A Tenant's
+### ADR-049: The Platform Warehouse `ivy-control` Is Built By The Same Code As A Tenant's
 
 **Decision.** `ivy-control` (ADR-032) is created by `EnsureControlBucket` and `EnsureControlWarehouse`,
 which call the same `ensureBucket` and `ensureWarehouse` the tenant versions call. So the platform's

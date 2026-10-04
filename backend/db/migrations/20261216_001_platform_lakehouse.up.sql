@@ -1,6 +1,6 @@
 -- 20261216_001_platform_lakehouse.up.sql
 --
--- ADR-047. The platform's own warehouse, ivy-control (ADR-032): exactly ONE row, because there is exactly one.
+-- ADR-049. The platform's own warehouse, ivy-control (ADR-032): exactly ONE row, because there is exactly one.
 -- It belongs to no tenant, so there is no tenant_id and no row-level security: it holds no tenant data, only
 -- the platform bucket's own provisioning state. Its job is the same as tenant_lakehouse's for a tenant:
 --
@@ -71,4 +71,4 @@ BEFORE UPDATE OR DELETE ON public.platform_lakehouse
 FOR EACH ROW EXECUTE FUNCTION public.platform_lakehouse_guard();
 
 COMMENT ON TABLE public.platform_lakehouse IS
-    'The platform warehouse ivy-control (ADR-032, ADR-047): one row, no tenant. Provisioning state only.';
+    'The platform warehouse ivy-control (ADR-032, ADR-049): one row, no tenant. Provisioning state only.';

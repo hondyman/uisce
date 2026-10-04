@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// The platform warehouse ivy-control (ADR-047) has exactly one registry row, in public.platform_lakehouse. It is
+// The platform warehouse ivy-control (ADR-049) has exactly one registry row, in public.platform_lakehouse. It is
 // not a tenant, so it has no tenant transaction and no row-level security.
 
 // PlatformConfig is the platform warehouse's provisioning state. It carries no secret.

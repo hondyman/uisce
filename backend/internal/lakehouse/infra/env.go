@@ -183,7 +183,7 @@ func (u unconfiguredBuckets) EnsureTenantBucket(context.Context, iceberg.TenantB
 	return nil, u.err
 }
 
-// PlatformCredentials issues and reads the platform warehouse's bucket-scoped credential (ADR-047).
+// PlatformCredentials issues and reads the platform warehouse's bucket-scoped credential (ADR-049).
 type PlatformCredentials interface {
 	// EnsurePlatformCredential makes sure the credential exists. mayMint says whether one has never been
 	// issued (the platform registry row records that); when false and none can be read it must return

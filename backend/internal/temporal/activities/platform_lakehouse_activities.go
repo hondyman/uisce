@@ -11,7 +11,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/lakehouse/registry"
 )
 
-// Activities that provision the platform warehouse, ivy-control (ADR-032, ADR-047). The same steps as a tenant's, in
+// Activities that provision the platform warehouse, ivy-control (ADR-032, ADR-049). The same steps as a tenant's, in
 // the same order and with the same rules, over the platform's own registry row and credential path. There is no
 // tenant here, so there is no tenant id, no tenant transaction, and nothing that reuses a tenant's credential space.
 

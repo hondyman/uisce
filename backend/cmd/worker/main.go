@@ -423,7 +423,7 @@ func main() {
 	w.RegisterWorkflowWithOptions(provisioningworkflows.TenantLakehouseAuditCopyAllWorkflow, temporalworkflow.RegisterOptions{
 		Name: provisioningworkflows.TenantLakehouseAuditCopyAllWorkflowName,
 	})
-	// ADR-047: the platform warehouse, ivy-control. Started by an operator with an explicit retention; never at boot.
+	// ADR-049: the platform warehouse, ivy-control. Started by an operator with an explicit retention; never at boot.
 	platformLakehouseActivities := &temporalactivities.PlatformLakehouseActivities{
 		Registry:    lakehouseregistry.NewPlatformStore(db),
 		Keys:        lakehouseinfra.KeysFromEnv(),
