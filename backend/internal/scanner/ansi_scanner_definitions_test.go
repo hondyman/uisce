@@ -16,6 +16,7 @@ func defsScanner(t *testing.T, whitelist ...string) (*AnsiScanner, sqlmock.Sqlmo
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { db.Close() })
+	mock.MatchExpectationsInOrder(false)
 	s := &AnsiScanner{sourceDB: db, tenantDatasourceId: uuid.New(), sourceSystem: "crims", schemaWhitelist: whitelist}
 	nodes := map[string]*models.CatalogNode{}
 	add := func(path, name string, typ uuid.UUID, props string) {
@@ -39,6 +40,16 @@ func props(t *testing.T, n *models.CatalogNode) map[string]interface{} {
 	var m map[string]interface{}
 	require.NoError(t, json.Unmarshal(n.Properties, &m))
 	return m
+}
+
+// nq expects one definition query the way the scanner runs it: in a read-only transaction whose search_path is empty (see
+// neutralQuery), so that PostgreSQL's deparse qualifies every name whoever the scanning session is. Expectations are matched
+// in any order, since the transaction statements repeat for every query.
+func nq(mock sqlmock.Sqlmock, re string) *sqlmock.ExpectedQuery {
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET LOCAL search_path = ''`).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectRollback()
+	return mock.ExpectQuery(re)
 }
 
 // The queries run in this order; a test that expects them says so once.
@@ -71,29 +82,29 @@ func expectEmpty(mock sqlmock.Sqlmock, from int) {
 	}{{qConstraints, colsConstraints}, {qIndexes, colsIndexes}, {qPartitions, colsPartitions}, {qTriggers, colsTriggers},
 		{qRoutines, colsRoutines}, {qColumns, colsColumns}, {qOptions, colsOptions}, {qExtensions, colsExtensions}}
 	for _, e := range all[from:] {
-		mock.ExpectQuery(e.q).WillReturnRows(sqlmock.NewRows(e.cols))
+		nq(mock, e.q).WillReturnRows(sqlmock.NewRows(e.cols))
 	}
 }
 
 func expectAll(mock sqlmock.Sqlmock) {
-	mock.ExpectQuery(qConstraints).WillReturnRows(sqlmock.NewRows(colsConstraints).
+	nq(mock, qConstraints).WillReturnRows(sqlmock.NewRows(colsConstraints).
 		AddRow("orm", "quote", "quote_pkey", "p", "PRIMARY KEY (id, quote_time)").
 		AddRow("orm", "quote", "chk_quote_price", "c", "CHECK ((bid_price >= (0)::numeric))").
 		AddRow("orm", "ghost", "chk_ghost", "c", "CHECK (true)")) // a table the scan did not store: ignored, not an error
-	mock.ExpectQuery(qIndexes).WillReturnRows(sqlmock.NewRows(colsIndexes).
+	nq(mock, qIndexes).WillReturnRows(sqlmock.NewRows(colsIndexes).
 		AddRow("orm", "quote", "idx_quote_sec_time", "CREATE INDEX idx_quote_sec_time ON ONLY orm.quote USING btree (security_id, quote_time DESC)", false, "btree"))
-	mock.ExpectQuery(qPartitions).WillReturnRows(sqlmock.NewRows(colsPartitions).
+	nq(mock, qPartitions).WillReturnRows(sqlmock.NewRows(colsPartitions).
 		AddRow("orm", "quote", "RANGE (quote_time)", "", "").
 		AddRow("orm", "quote_default", "", "DEFAULT", "orm.quote"))
-	mock.ExpectQuery(qTriggers).WillReturnRows(sqlmock.NewRows(colsTriggers).
+	nq(mock, qTriggers).WillReturnRows(sqlmock.NewRows(colsTriggers).
 		AddRow("orm", "plain", "trg_plain", "CREATE TRIGGER trg_plain AFTER INSERT ON orm.plain FOR EACH ROW EXECUTE FUNCTION orm.f()", "orm.f"))
-	mock.ExpectQuery(qRoutines).WillReturnRows(sqlmock.NewRows(colsRoutines).
+	nq(mock, qRoutines).WillReturnRows(sqlmock.NewRows(colsRoutines).
 		AddRow("orm", "f", "", "f", "plpgsql", "CREATE OR REPLACE FUNCTION orm.f() RETURNS trigger LANGUAGE plpgsql AS $$ begin return new; end $$"))
-	mock.ExpectQuery(qColumns).WillReturnRows(sqlmock.NewRows(colsColumns).
+	nq(mock, qColumns).WillReturnRows(sqlmock.NewRows(colsColumns).
 		AddRow("orm", "quote", "bid", "numeric(18,9)", "", "", "").
 		AddRow("orm", "quote", "ghost", "text", "", "", "")) // a column the scan did not store: ignored
-	mock.ExpectQuery(qOptions).WillReturnRows(sqlmock.NewRows(colsOptions).AddRow("orm", "plain", "u", "fillfactor=70"))
-	mock.ExpectQuery(qExtensions).WillReturnRows(sqlmock.NewRows(colsExtensions).AddRow("uuid-ossp", "1.1", "public"))
+	nq(mock, qOptions).WillReturnRows(sqlmock.NewRows(colsOptions).AddRow("orm", "plain", "u", "fillfactor=70"))
+	nq(mock, qExtensions).WillReturnRows(sqlmock.NewRows(colsExtensions).AddRow("uuid-ossp", "1.1", "public"))
 }
 
 func TestProcessDefinitions_RecordsEachClassOnTheRightNode(t *testing.T) {
@@ -151,8 +162,8 @@ func TestProcessDefinitions_RecordsEachClassOnTheRightNode(t *testing.T) {
 // A scan that could not read them must say so, not record nothing silently: a deploy built from it has to refuse.
 func TestProcessDefinitions_AFailedQueryMarksTheScanAsNotCapturing(t *testing.T) {
 	s, mock, n := defsScanner(t)
-	mock.ExpectQuery(qConstraints).WillReturnRows(sqlmock.NewRows(colsConstraints))
-	mock.ExpectQuery(qIndexes).WillReturnError(errors.New("permission denied for relation pg_index"))
+	nq(mock, qConstraints).WillReturnRows(sqlmock.NewRows(colsConstraints))
+	nq(mock, qIndexes).WillReturnError(errors.New("permission denied for relation pg_index"))
 	expectEmpty(mock, 2)
 	err := s.processDefinitions()
 	require.Error(t, err)
@@ -164,7 +175,7 @@ func TestProcessDefinitions_AFailedQueryMarksTheScanAsNotCapturing(t *testing.T)
 
 func TestProcessDefinitions_ARowThatCannotBeReadIsAFailureNotASkip(t *testing.T) {
 	s, mock, n := defsScanner(t)
-	mock.ExpectQuery(qConstraints).WillReturnRows(sqlmock.NewRows(colsConstraints).AddRow("orm", "quote", "c", "c", nil))
+	nq(mock, qConstraints).WillReturnRows(sqlmock.NewRows(colsConstraints).AddRow("orm", "quote", "c", "c", nil))
 	expectEmpty(mock, 1)
 	require.Error(t, s.processDefinitions())
 	require.Equal(t, false, props(t, n["/orm"])["definitions_captured"])
@@ -176,16 +187,17 @@ func TestProcessDefinitions_QueriesExcludeWhatIsInheritedClonedOrOwnedByAnExtens
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
 	require.NoError(t, err)
 	defer db.Close()
+	mock.MatchExpectationsInOrder(false)
 	s := &AnsiScanner{sourceDB: db, schemaWhitelist: []string{"orm", "mdm"}}
 	empty := func(cols []string) *sqlmock.Rows { return sqlmock.NewRows(cols) }
-	mock.ExpectQuery(`k\.contype IN \('p', 'u', 'c', 'f', 'x'\) AND k\.conislocal AND k\.conparentid = 0 AND c\.relkind IN \('r', 'p'\) AND n\.nspname IN \(\$1, \$2\)`).WithArgs("orm", "mdm").WillReturnRows(empty(colsConstraints))
-	mock.ExpectQuery(`NOT EXISTS \(SELECT 1 FROM pg_constraint k WHERE k\.conindid = i\.indexrelid AND k\.contype IN \('p', 'u', 'x'\)\)\s+AND NOT EXISTS \(SELECT 1 FROM pg_inherits h WHERE h\.inhrelid = i\.indexrelid\)`).WithArgs("orm", "mdm").WillReturnRows(empty(colsIndexes))
-	mock.ExpectQuery(`c\.relkind IN \('r', 'p'\) AND \(c\.relkind = 'p' OR c\.relispartition\)`).WithArgs("orm", "mdm").WillReturnRows(empty(colsPartitions))
-	mock.ExpectQuery(`NOT t\.tgisinternal AND t\.tgparentid = 0`).WithArgs("orm", "mdm").WillReturnRows(empty(colsTriggers))
-	mock.ExpectQuery(`p\.prokind IN \('f', 'p'\).*d\.deptype = 'e'`).WithArgs("orm", "mdm").WillReturnRows(empty(colsRoutines))
-	mock.ExpectQuery(`a\.attnum > 0 AND NOT a\.attisdropped AND c\.relkind IN \('r', 'p'\) AND n\.nspname IN \(\$1, \$2\)`).WithArgs("orm", "mdm").WillReturnRows(empty(colsColumns))
-	mock.ExpectQuery(`c\.relkind IN \('r', 'p'\) AND \(c\.relpersistence <> 'p' OR c\.reloptions IS NOT NULL\)`).WithArgs("orm", "mdm").WillReturnRows(empty(colsOptions))
-	mock.ExpectQuery(`e\.extname <> 'plpgsql'`).WillReturnRows(empty(colsExtensions))
+	nq(mock, `k\.contype IN \('p', 'u', 'c', 'f', 'x'\) AND k\.conislocal AND k\.conparentid = 0 AND c\.relkind IN \('r', 'p'\) AND n\.nspname IN \(\$1, \$2\)`).WithArgs("orm", "mdm").WillReturnRows(empty(colsConstraints))
+	nq(mock, `NOT EXISTS \(SELECT 1 FROM pg_constraint k WHERE k\.conindid = i\.indexrelid AND k\.contype IN \('p', 'u', 'x'\)\)\s+AND NOT EXISTS \(SELECT 1 FROM pg_inherits h WHERE h\.inhrelid = i\.indexrelid\)`).WithArgs("orm", "mdm").WillReturnRows(empty(colsIndexes))
+	nq(mock, `c\.relkind IN \('r', 'p'\) AND \(c\.relkind = 'p' OR c\.relispartition\)`).WithArgs("orm", "mdm").WillReturnRows(empty(colsPartitions))
+	nq(mock, `NOT t\.tgisinternal AND t\.tgparentid = 0`).WithArgs("orm", "mdm").WillReturnRows(empty(colsTriggers))
+	nq(mock, `p\.prokind IN \('f', 'p'\).*d\.deptype = 'e'`).WithArgs("orm", "mdm").WillReturnRows(empty(colsRoutines))
+	nq(mock, `a\.attnum > 0 AND NOT a\.attisdropped AND c\.relkind IN \('r', 'p'\) AND n\.nspname IN \(\$1, \$2\)`).WithArgs("orm", "mdm").WillReturnRows(empty(colsColumns))
+	nq(mock, `c\.relkind IN \('r', 'p'\) AND \(c\.relpersistence <> 'p' OR c\.reloptions IS NOT NULL\)`).WithArgs("orm", "mdm").WillReturnRows(empty(colsOptions))
+	nq(mock, `e\.extname <> 'plpgsql'`).WillReturnRows(empty(colsExtensions))
 	require.NoError(t, s.processDefinitions())
 	require.NoError(t, mock.ExpectationsWereMet())
 }

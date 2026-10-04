@@ -731,7 +731,9 @@ func (s *AnsiScanner) processColumns(schemaName, tableName string, tableID uuid.
         WHERE c.table_schema = $1 AND c.table_name = $2
         ORDER BY c.ordinal_position
     `
-	rows, err := s.sourceDB.Query(query, schemaName, tableName)
+	// neutral search_path: the column default is a deparsed expression, and an unqualified function or sequence in it
+	// could not be applied to a tenant database (see neutralQuery)
+	rows, err := s.neutralQuery(query, schemaName, tableName)
 	if err != nil {
 		return fmt.Errorf("failed to query columns for table %s.%s: %w", schemaName, tableName, err)
 	}

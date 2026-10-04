@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/models"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -253,4 +255,96 @@ func TestSkipDataProfile_KeepsTheStructureAndReadsNoData(t *testing.T) {
 		require.Equal(t, full[k] != nil, lean[k] != nil, k)
 		require.NotNil(t, lean[k], k)
 	}
+}
+
+// The definitions a scan records must not depend on who scanned. PostgreSQL's deparse leaves a name unqualified when its schema
+// is on the scanning session's search_path, so a scan by a session that could see the schema recorded `REFERENCES party(id)`,
+// which cannot be applied to a tenant's database. Scan the same database from a session with an empty-ish path and from
+// one that can see every schema, and require identical, fully qualified definitions.
+func TestDefinitions_DoNotDependOnTheScanningSessionsSearchPath(t *testing.T) {
+	adminDSN := os.Getenv("SCANNER_TEST_ADMIN_DSN")
+	if adminDSN == "" {
+		t.Skip("SCANNER_TEST_ADMIN_DSN not set")
+	}
+	ctx := context.Background()
+	admin, err := sql.Open("pgx", adminDSN)
+	require.NoError(t, err)
+	name := "scanner_path_test"
+	_, _ = admin.ExecContext(ctx, `DROP DATABASE IF EXISTS `+name)
+	_, err = admin.ExecContext(ctx, `CREATE DATABASE `+name)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = admin.Exec(`DROP DATABASE IF EXISTS ` + name)
+		admin.Close()
+	})
+	u, err := url.Parse(adminDSN)
+	require.NoError(t, err)
+	u.Path = "/" + name
+	open := func(searchPath string) *sql.DB {
+		v := *u
+		q := v.Query()
+		if searchPath != "" {
+			q.Set("search_path", searchPath)
+		}
+		v.RawQuery = q.Encode()
+		d, err := sql.Open("pgx", v.String())
+		require.NoError(t, err)
+		return d
+	}
+	seed := open("")
+	_, err = seed.ExecContext(ctx, `
+		CREATE SCHEMA pa; CREATE SCHEMA pb;
+		CREATE FUNCTION pa.label_ok(t text) RETURNS bool LANGUAGE sql IMMUTABLE AS $$ SELECT t IS NULL OR length(t) < 50 $$;
+		CREATE FUNCTION pa.new_id() RETURNS uuid LANGUAGE sql AS $$ SELECT gen_random_uuid() $$;
+		CREATE FUNCTION pa.stamp() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.label := upper(NEW.label); RETURN NEW; END $$;
+		CREATE TABLE pa.party (id uuid PRIMARY KEY DEFAULT pa.new_id(), label text, CONSTRAINT chk_label CHECK (pa.label_ok(label)));
+		CREATE TABLE pb.party (id uuid PRIMARY KEY, label text);
+		CREATE TABLE pb.account (id uuid PRIMARY KEY DEFAULT pa.new_id(), party_id uuid, other_id uuid,
+			CONSTRAINT fk_party FOREIGN KEY (party_id) REFERENCES pa.party(id) ON DELETE CASCADE,
+			CONSTRAINT fk_other FOREIGN KEY (other_id) REFERENCES pb.party(id));
+		CREATE INDEX idx_party_lower ON pa.party (lower(label)) WHERE label IS NOT NULL;
+		CREATE TRIGGER trg_stamp BEFORE INSERT ON pa.party FOR EACH ROW EXECUTE FUNCTION pa.stamp();`)
+	require.NoError(t, err)
+	seed.Close()
+
+	tenant, datasource := uuid.New(), uuid.New() // the same for both scans: node ids are derived from them
+	scan := func(searchPath string) map[string]map[string]interface{} {
+		s, err := NewAnsiScanner(open(searchPath), tenant, datasource, "src", nil, true, []string{"pa", "pb"})
+		require.NoError(t, err)
+		s.SkipDataProfile()
+		nodes, _, err := s.ExtractMetadata()
+		require.NoError(t, err)
+		out := map[string]map[string]interface{}{}
+		for _, n := range nodes {
+			var m map[string]interface{}
+			require.NoError(t, json.Unmarshal(n.Properties, &m))
+			delete(m, "scan_id") // differs on every scan, by design
+			out[n.QualifiedPath] = m
+		}
+		return out
+	}
+	plain := scan("")
+	sees := scan("pb,pa,public") // a session that can see every schema, `pb` first
+	same := true
+	for path, want := range plain {
+		for k, v := range want {
+			if !assert.Equal(t, v, sees[path][k], "%s .%s differs between a scan from a plain session and one that sees every schema", path, k) {
+				same = false
+			}
+		}
+	}
+	require.True(t, same, "the same database scanned from sessions with different search paths must record the same definitions")
+	require.Len(t, sees, len(plain))
+
+	// and the recorded text is the qualified one
+	fk := plain["/pb/account"]["constraints"].([]interface{})
+	var defs []string
+	for _, c := range fk {
+		defs = append(defs, c.(map[string]interface{})["definition"].(string))
+	}
+	require.Contains(t, strings.Join(defs, "\n"), "REFERENCES pa.party(id)", "a foreign key names its target's schema")
+	require.Contains(t, strings.Join(defs, "\n"), "REFERENCES pb.party(id)", "even when it is the schema first on the path")
+	require.Equal(t, "pa.new_id()", plain["/pb/account/id"]["default_value"], "a column default names its function's schema")
+	require.Contains(t, plain["/pa/party"]["triggers"].([]interface{})[0].(map[string]interface{})["definition"], "EXECUTE FUNCTION pa.stamp()")
+	require.Contains(t, plain["/pa/party"]["indexes"].([]interface{})[0].(map[string]interface{})["definition"], "ON pa.party")
 }
