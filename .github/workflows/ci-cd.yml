@@ -65,6 +65,7 @@ jobs:
             - 'backend/**'
             - 'libs/**'
             - 'cmd/**'
+            - 'calc-engine/**'
             - 'migrations/**'
             - 'go.work'
             - 'go.work.sum'

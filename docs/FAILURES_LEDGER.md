@@ -600,4 +600,29 @@ shape of the change (pure addition) as well as its validity.
 This is the same shape as the shard off-by-one: a check that reports green while measuring nothing
 or the wrong thing. Twice now in one session, in two different layers.
 
+### The filter I wrote was wrong, and reviewing it by eye did not catch it
+
+The first version of this filter omitted `calc-engine/**`. Three files under `backend/` import it —
+`internal/calc-engine/worker/init.go`, `internal/api/calc-engine_handlers.go`,
+`internal/analytics/semantic_calculation_service.go` — and `build-backend` runs `go build ./...` in
+`backend`. A PR touching only `calc-engine/` would have skipped the build that would have caught a
+broken API, and reported green. The shards run `go test` with `working-directory: backend`, so the
+suite was not affected; the *build* gate was the one that would have been silently lost.
+
+The fix is one line. The part that matters is how the gap is now found: the check re-derives the set
+of `go.work` modules that `backend/` and `cmd/` actually import, and fails if any is not covered by
+the declared filter. It is not a test of the line I edited — it is a test of the *property*, so the
+next module added to `go.work` is caught here rather than in a PR that quietly stops building. It
+also had to be corrected once itself: the first version compared module directories to filter entries
+by string equality and so reported `libs/db/queries` as uncovered by `libs/**`, inventing five gaps
+that did not exist. It now asks whether a real file inside the module (`go.mod`) matches the pattern,
+which is the question the filter actually answers.
+
+**Reviewing a filter by reading it is not verification, because the failure is an absence.** Every
+path you can see listed looks right; the defect is the one you did not think of. Derive the set
+mechanically and intersect it with the claim.
+
+**A merged PR deserves the same suspicion as unmerged code.** This gap was introduced by me, in this
+PR, and survived a review that had already caught two failed script attempts in the same file.
+
 ---
