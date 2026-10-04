@@ -541,6 +541,14 @@ func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds Dataso
 		return nil, fmt.Errorf("failed to create scanner for %s: %w", ds.Name, err)
 	}
 
+	// Profiling the data is optional (scan_options.go). A scanner that cannot skip it is simply asked nothing.
+	if !profileData(ctx, ds) {
+		if sk, ok := ansiScanner.(interface{ SkipDataProfile() }); ok {
+			sk.SkipDataProfile()
+			logging.GetLogger().Sugar().Infof("Scanning %s without profiling its data (structure only)", ds.Name)
+		}
+	}
+
 	if progress != nil {
 		progress <- models.ScanProgress{Phase: "scanning", Percent: 0, Message: "Extracting metadata (tables, columns, keys)..."}
 		// The extraction is the long part: let the scanner report tables read, key steps and column profiling.

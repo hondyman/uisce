@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -53,8 +55,10 @@ func (h *CatalogScanHandler) HandleCatalogScan(w http.ResponseWriter, r *http.Re
 	// Hasura Action payload wraps args in "input" object
 	var requestBody struct {
 		DatasourceID *string `json:"datasource_id,omitempty"`
+		ProfileData  *bool   `json:"profile_data,omitempty"`
 		Input        struct {
 			DatasourceID *string `json:"datasource_id,omitempty"`
+			ProfileData  *bool   `json:"profile_data,omitempty"`
 		} `json:"input,omitempty"`
 	}
 
@@ -74,6 +78,15 @@ func (h *CatalogScanHandler) HandleCatalogScan(w http.ResponseWriter, r *http.Re
 	} else if requestBody.DatasourceID != nil {
 		datasourceIDParam = *requestBody.DatasourceID
 	}
+
+	// Profiling the data is optional: "profile_data": false in the body (or ?profile_data=false) scans structure only.
+	profile, perr := profileDataParam(r, requestBody.Input.ProfileData, requestBody.ProfileData)
+	if perr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": perr.Error()})
+		return
+	}
+	ctx = metadata.WithScanOptions(ctx, metadata.ScanOptions{ProfileData: profile})
 
 	var tenantDatasourceID *uuid.UUID
 	if datasourceIDParam != "" {
@@ -181,4 +194,20 @@ func (h *DebugHandler) DebugChart(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"message": "Debug output written to logs"})
+}
+
+// profileDataParam resolves the optional profile_data choice: the query parameter, else the Hasura "input" field, else the
+// body field. nil means the caller expressed no preference, and the datasource's own setting (or the default) applies.
+func profileDataParam(r *http.Request, fromInput, fromBody *bool) (*bool, error) {
+	if q := r.URL.Query().Get("profile_data"); q != "" {
+		v, err := strconv.ParseBool(q)
+		if err != nil {
+			return nil, fmt.Errorf("profile_data must be true or false")
+		}
+		return &v, nil
+	}
+	if fromInput != nil {
+		return fromInput, nil
+	}
+	return fromBody, nil
 }

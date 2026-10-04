@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/backend/internal/metadata"
 	"github.com/hondyman/uisce/backend/models"
 )
 
@@ -27,6 +28,16 @@ func (h *CatalogScanHandler) HandleScanStream(w http.ResponseWriter, r *http.Req
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid or missing datasource_id"})
+		return
+	}
+
+	// Profiling the data is optional: ?profile_data=false scans structure only. Checked before the stream opens, so a bad
+	// value is an ordinary 400 and not a half-opened event stream.
+	profile, perr := profileDataParam(r, nil, nil)
+	if perr != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": perr.Error()})
 		return
 	}
 
@@ -54,6 +65,7 @@ func (h *CatalogScanHandler) HandleScanStream(w http.ResponseWriter, r *http.Req
 	// Create context that cancels when client disconnects
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
+	ctx = metadata.WithScanOptions(ctx, metadata.ScanOptions{ProfileData: profile})
 
 	// Start scan in goroutine, passing progress channel
 	go func() {
