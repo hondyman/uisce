@@ -46,9 +46,12 @@ Classified by whether they grow without bound and are written once:
   `pg_hba` line 121 admits the Docker network (`172.20.0.0`) with `scram-sha-256` *before* the `postgres` cert
   rule, so a connection from the container may be asked for a password, and whether the connector's
   `database.password` is still right is unknown.
-- **It points at `alpha`, not `crims`** (`database.dbname = alpha`, `schema.include.list = orm`), unlike
-  `debezium/orm-oms-connector.json` in the repo. The repo file and the deployed config have drifted, and the
-  five tables it captures are `execution`, `order`, `placement`, `order_allocation`, `execution_allocation`.
+- **It points at `alpha`, which is the wrong database.** `database.dbname = alpha`, `schema.include.list = orm`,
+  where `debezium/orm-oms-connector.json` in the repo says `crims`, and `crims` is the tenants' OLTP data plane
+  (owner statement). The repo file is right and the deployment has drifted. A connector on `alpha` captures a
+  schema that is not where tenant orders are written, so even a healthy task would not have fed `oms.*` from the
+  real data. The five tables it lists are `execution`, `order`, `placement`, `order_allocation`,
+  `execution_allocation`.
 - Redpanda holds exactly those five `orm_oms.orm.*` topics (1 partition, 1 replica each), and there are five
   `uisce-stream-loader-*` containers, one per topic.
 - **The Connect image has no Iceberg sink.** `uisce-debezium` is `debezium/connect:2.3`; `/kafka/connect` holds the
@@ -63,9 +66,10 @@ Classified by whether they grow without bound and are written once:
     retained WAL stops Postgres, and with it Keycloak, Temporal and everything else on this instance. This is the
     failure mode of decision 2 below, and it is already live.
   - **No tenant has moved and Phase 4a is not deployed here:** there is no `tenant_datasource_binding` or
-    `tenant_lakehouse` table in `alpha`, no `ivy_t_*` role, and no tenant database. The ORM is `alpha.orm` (plus a
-    separate `crims` and an `orm` database). So the `oms.*` gap from #376 is latent, not live; the connector's
-    failure is not caused by it.
+    `tenant_lakehouse` table in `alpha`, no `ivy_t_*` role, and no tenant database. By the owner's statement,
+    **`crims` is the OLTP data plane for tenants (today one shared database) and `alpha` is the multi-tenant control
+    plane for all tenants.** So the `oms.*` gap from #376 is latent, not live; the connector's failure is not
+    caused by it.
   - **`pg_hba` has no rule for a tenant role** (`ivy_t_*`). Today a role outside the cert-authenticated list can
     only connect from the Docker network (`host all all 172.20.0.0 scram-sha-256`); from the dev Mac or the
     Tailscale range there is no matching rule. The tenant roles use a password from `dscreds`, so a tenant
@@ -223,12 +227,12 @@ immutable by rule; a late row into it is a finding, not something to absorb).
 ## Decisions
 
 1. **Resolved by owner direction:** Debezium Server per tenant database, with the revisit trigger above.
-2. **Replication slot failure mode: still needs a yes.** One slot per tenant database makes a slot loss one
-   tenant, not the fleet. I propose a lag alarm on every slot and `max_slot_wal_keep_size` set so a stalled slot
-   is dropped before it fills a shared cluster's disk; a dropped slot means a re-snapshot, which the idempotent
-   `MERGE` tolerates. Do you accept slot loss and re-snapshot as the failure mode? **The cluster is at
-   8 of 10 slots with unlimited WAL retention and 15 GB of disk headroom, so this is not hypothetical:** a
-   per-tenant slot design cannot start until the slot limit is raised (a restart) and a retention cap is set.
+2. **Replication slot failure mode: approved by the owner (2026-10-04).** One slot per tenant database, so a slot loss
+   is one tenant, not the fleet. Policy: a lag alarm on every slot, `max_slot_wal_keep_size` set so a stalled slot
+   is dropped before it fills a shared cluster's disk, and a re-snapshot as the recovery, which append-only bronze
+   plus the silver dedupe tolerates (re-emitted events are ranked by LSN). **Preconditions that are not yet met on
+   the dev host:** it has 8 of 10 slots in use, unlimited retention, and 15 GB of free disk, so per-tenant slots
+   cannot start until the slot limit is raised (a restart) and the cap is set.
 3. **Order and trade tables (`order_event`, `execution`, ...): needs the business owner.** Books-and-records
    retention, and whether a copy in object storage may be the record once the OLTP row is gone.
 4. **Pilot table:** `quote`, unless it is itself under a best-execution retention rule, in which case it moves to
@@ -238,8 +242,24 @@ immutable by rule; a late row into it is a finding, not something to absorb).
    if Kafka Connect is to be avoided entirely, whether the community Debezium Server Iceberg sink is maintained.
 6. **Rollback semantics (now-only, or point-in-time with a bronze window)** is decision 3's retention answer, not a
    separate one.
-7. **Reconcile the repo with the deployment,** whatever else is decided: `debezium/orm-oms-connector.json` says
-   `crims`, the running connector says `alpha` and lists five tables.
+7. **Resolved by the owner's statement:** the repo is right and the deployment is wrong. The connector must read
+   `crims`, not `alpha`.
+
+## Immediate host actions (not performed; each needs the owner's explicit go)
+These are about the dev host as it is today and are independent of the design. I changed nothing there.
+1. **Cap WAL retention:** set `max_slot_wal_keep_size` (a reload, not a restart). With 15 GB free and 13 GB of WAL,
+   this is the one with a clock on it.
+2. **Name the stale slots.** Eight slots are inactive: `debezium_alpha_orders`, `debezium_alpha`,
+   `dbz_northwinds_customers`, `debezium` and `northwinds_cdc_slot` (all four `northwinds`/older alpha),
+   `semlayer_lookups_sub_slot`, `semlayer_cdc_slot`, and `orm_oms_slot`. Dropping a slot is irreversible and
+   forces any consumer to re-snapshot, so I will not decide which are dead from names alone: someone who knows
+   which consumers exist has to say.
+3. **Repoint the ORM connector at `crims`:** a new slot and publication on `crims` (`CREATE PUBLICATION
+   orm_cdc_publication FOR TABLES IN SCHEMA orm`, as the repo's connector note says), the connector's
+   `database.dbname` corrected, then the failed task restarted. `snapshot.mode = initial` will re-snapshot the five
+   tables from `crims` (92 MB database). The old `orm_oms_slot` on `alpha`, 4 GB retained, is then orphaned and
+   is the first slot to drop. Check `pg_hba` line 121 first: the Docker network is asked for a password before
+   the cert rule, and whether the connector's `database.password` is right is unknown.
 
 ## What is still unverified
 - Why the deployed connector's task fails (its certificate files under `/tmp` and the post-hardening `pg_hba` are
