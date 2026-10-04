@@ -4,7 +4,7 @@
 
 This ledger differs from `AGENTS.md` rules: rules are policy (what not to do); this ledger is history with lessons attached. A ledger that only records failures teaches avoidance. One that records what the countermeasures *produced* teaches the behavior worth repeating.
 
-**Six standing rules about artifacts, gates and procedures, because each has cost real
+**Eight standing rules about artifacts, gates and procedures, because each has cost real
 time here.**
 
 **Every procedure has exactly one authoritative home, and every other mention is a link.** A
@@ -107,6 +107,54 @@ PR diffstat taken from the wrong side.
 So: when the claim is about a commit's content, verify it from the index or from blobs —
 `git diff --cached <ref>`, `git cat-file blob :<path>`, `git diff <commit> <commit>`. Reserve
 working-tree comparisons for the question they actually answer.
+
+**A build's coverage is the set of modules it visits, not the set of files that exist.** `go build
+`./...`` at the repository root of this repo exits 0 and compiles **19** packages. It compiles zero
+from `backend/`, `calc-engine/`, `apps/*`, `portfolio-management/` or `rebalancing/*`, because every
+module in `go.work` carries its own `go.mod` and Go excludes nested modules from a parent module's
+`./...`. The root build is not a weaker workspace build; it is a different, much smaller one that
+looks identical on the command line.
+
+It is worse than having no check, because it is believed. `portfolio-management/backend` and
+`rebalancing/worker` were both uncompilable from 2026-08-05 — the same commit, `235d26db6` — and
+nothing in CI built either one. The obvious repair, "add a repo-root `go build ./...`", would have
+been green for the entire two months and would have caught neither.
+
+So: **coverage of a workspace is defined by `go.work`, and it must be derived from `go.work` at run
+time — never inferred from the directory you happen to be standing in.** Iterate the `use`
+directives (`go work edit -json | jq -r '.Use[].DiskPath'`) and build each one in its own
+directory. `backend/internal/archguard/workspace_build_test.go` re-derives the module set and fails
+if the workflow's filter omits one, or if the build stops deriving from `go.work` and reverts to a
+root-level `./...`.
+
+This is the same shape as the `backend` path filter, and the same shape as the sentinel that
+reported success for a suite that did not run: **a gate whose defect is a missing entry cannot be
+reviewed by reading it**, because every entry that is present looks correct. The only check that
+works is one that re-derives the required set from the artifact and compares.
+
+A corollary, from the same work: a check that builds a *set* must report **every** member that
+fails, not the first. The job collects failures and lists them in one run, so a branch carrying
+three broken modules is told about all three rather than discovering them across three pushes.
+
+**A symbol's risk profile is a property of its call sites, not of its name.** `GetClaimsFromContext`
+is a genuinely dangerous accessor — it returns claims that may be nil, and code that dereferences
+them without checking panics. That danger is real, and it is also exactly why the inference was
+tempting: security-flavoured names attract security-flavoured conclusions.
+
+I reported that `portfolio-management/backend` "carries the same unguarded-claims shape" that
+`bf9cb7bcc` deleted 14 handlers over. I had read the import list, not the call sites. There is
+exactly one call to `GetClaimsFromContext` in that module, it **is** nil-checked before either field
+read, and the mux **is** wrapped by `jwtMw.Handler` — the safe pattern, the opposite of the deleted
+handlers. No finding existed, and no issue was filed.
+
+The general form: **a name is a claim about intent; only a call site is a claim about behaviour.**
+This is the same rule as "measure the property, don't infer it", and it cuts hardest where the
+inference is most tempting. A dangerous-sounding name is a reason to *read the call sites*, not a
+reason to write the finding.
+
+Contrast, from the same investigation: the *build* claim about the same module survived scrutiny
+because it was measured (`go build -a`, exit 0). Name-based inference failed; executed evidence
+held. Retracting a dramatic finding of your own is cheap next to shipping it.
 
 ---
 
@@ -349,7 +397,7 @@ a pre-existing condition on `main`. Merged as #347 (`353c0b0bf`).
 | **CI latency: verified — the security scan now costs zero wall-clock.** `security-scan` declared `needs: [build-backend, build-frontend]` while consuming no artifact from either, so a full 8–11m scan was serialized behind 10–13m of builds and added to every PR. Removing the `needs:` (#357) was measured, not assumed, on the PR's own runs. Run 37154691858: Security Scan starts +0.1m and ends +10.3m; Build Backend ends +13.4m; the **run ends at 13.4m — exactly when the build finished, with the scan already done 3.1m earlier.** The old serialized chain predicts ~23.7m, so the saving is **10.3m, precisely the scan's own duration**. A second run (37155016045) came in at 17.0m, but its Build Backend did not start until +4.0m from runner queueing on the second push; the scan still ended at +10.3m and the run still ended when the build did. The critical path is now `Build Backend` alone, and this is why the three-tier security redesign was **declined** rather than built. | this ledger | Live |
 | **Zero-found vs couldn't-look** — *any tool that reports a count must distinguish "found none" from "could not look."* This is now the fourth instance of one pattern: a `coverageManifest` counter that compared a constant to itself, an EXPLAIN-plan parser that returned an empty plan instead of an error, cache-key helpers that hashed nothing, and a CI poll loop that counted failures with a regex that could not match job names containing spaces. A helper that cannot fail loudly is worse than no helper, because its zero is indistinguishable from a real zero. | this ledger | Live |
 | **A test passes vacuously if its fixture never reaches the condition under test** — verify the fixture *traverses* the predicate, not merely that the assertion holds. The C2 PII-gate equivalence case was built from an **untagged** term; an untagged field returns before the tier check is ever consulted, so the test passed even against a gate that treated "tagged" as "forbidden". It asserted its own existence rather than the behaviour it was named for. This is the fourth variant of "a test proves only what it executes", and the first about **fixture design** rather than execution. The fix was to build the case from a *tagged* term at passthrough tier and assert both directions. | this ledger | Live |
-| **One mutation per run, and a marker check before reading any result** — mutation evidence is worthless if the analyst's own process contaminates it. Two mutations applied at once produced failures I misread as a real regression; a no-op mutation produced a "pass" that looked like the guard not biting. Both were caught only by grepping for the marker before interpreting output. Pair with the base-rate rule: **both are ways the analyst's own tooling manufactures the evidence it is then read against.** | this ledger | Live |
+| **One mutation per run, and a marker check before reading any result** — mutation evidence is worthless if the analyst's own process contaminates it. Two mutations applied at once produced failures I misread as a real regression; a no-op mutation produced a "pass" that looked like the guard not biting. Both were caught only by grepping for the marker before interpreting output. Pair with the base-rate rule: **both are ways the analyst's own tooling manufactures the evidence it is then read against.** **And the mutation must be the subject, not a neighbour of it:** the guard on the workspace-build job asserted the script contained `count` and `exit 1`, both of which *survived* the deletion of the zero-module check because a different branch carried its own `exit 1` — so the test passed with its own subject removed, and only the third mutation run exposed it. An assertion passes if *any* code path satisfies it, so a mutation test on a guard must fail when *that guard* is removed; that requires naming the guard's distinguishing behaviour rather than a property it shares with other paths. | this ledger | Live |
 | **All-tests-passed means infrastructure** — a red check whose summary shows every test passing is a worker/RPC/timeout/OOM fault. Read the `Errors`/`Unhandled` section, not the totals. | this ledger | Live |
 | **Silent result suppression is the worst failure class a test runner has** — the `onTaskUpdate` timeout failed the suite with `Test Files 113 passed (114)` and `Tests 662 passed (668)`: green-looking output hiding six tests that never ran. This is materially worse than a flaky timeout, because a missing test is invisible: there is no red to investigate, and the coverage it provided is simply absent. Any "all tests passed" conclusion should be read as "all *reported* tests passed" until the file and test totals are checked against what should have run. | this ledger | Live |
 | **archguard: CI-status helper self-test** | `backend/internal/archguard` | Queued, with a caveat found while filing it: the helper that returned the false zero was a **throwaway polling loop, not committed code** — `scripts/*.sh` contain no CI-status parser. A guard that scans the repo for the bad pattern would therefore have no target and would be decorative. The constructive form is a single committed, tested status parser that future work calls instead of re-typing a regex into an ad-hoc loop. Decide which before implementing. |
