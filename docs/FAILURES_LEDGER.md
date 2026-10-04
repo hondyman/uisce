@@ -688,3 +688,44 @@ script for this change now refuses any filter path that matches no tracked
 file, verified by re-adding the path and watching it refuse.
 
 ---
+
+#### Follow-up: skipped satisfies a required check; absent does not
+
+The entry above rejected four candidates. Checking each rejection against a live pull
+request showed that one of the reasons given was wrong, and the distinction it turned up
+decides the whole question.
+
+**A check that reports `SKIPPED` satisfies a required check. A check that is never reported
+blocks the pull request forever.** Those are opposite failure modes and they are easy to
+conflate, because from the pull request both look like "not merged".
+
+Measured, not assumed. #386 touches only documents, so `Build Backend` and `Build Frontend`
+are `SKIPPED` there. `Build Backend` was added to the required set while it was skipped, and
+the pull request reported it — present, `SKIPPED`, and **not outstanding**. So:
+
+| Candidate | Rejection reason | Verdict |
+|---|---|---|
+| `Lint (react-hooks)`, `Lint (jsx-a11y)` | workflow has a trigger-level `paths:` filter | **holds** — the workflow never starts, so no check is reported |
+| `Frontend Typecheck & Build` | same | **holds** — same |
+| `Backend Tests (1/4)`…`(4/4)` | skipped runs report the unrendered `Backend Tests (${{ matrix.shard }}/4)` | **holds** — the rendered name is absent on a filtered PR and the unrendered one is absent on a full one |
+| `Build Backend`, `Build Frontend` | *(previously given as "skipped")* | **wrong reason** — they report, and skipped satisfies. Both are now required |
+
+So the rule to carry forward is not "never require a check that can be skipped". It is:
+**before requiring a check, confirm it is reported on every pull request**, and read the
+workflow file rather than the pull request to confirm it. A job with a trigger-level
+`paths:` filter produces no check at all; a job with an `if:` produces a skipped one, which
+is fine.
+
+**What is still missing, and the shape of the fix.** The backend test matrix — the gate that
+caught the archguard inventory failure on three consecutive merges, and the one most likely
+to catch a #376-class regression — still cannot be required, because its name is not stable:
+`Backend Tests (1/4)` on a full run and `Backend Tests (${{ matrix.shard }}/4)` on a skipped
+one. The fix is the same sentinel already used in `ci-cd.yml`: an aggregate job with
+`needs: backend-tests` and `if: always()` that fails if any leg failed. One stable name, it
+always reports, and it carries the whole matrix. That is the change to make before the
+matrix can join the required set, and it is worth making — the current required set does not
+include the test suite.
+
+`Build Docker Images` remains excluded on the original reasoning and was not re-tested: it is
+gated on `github.event_name != 'pull_request'`, so it can never report on a pull request at
+all, which is the absent case.
