@@ -37,21 +37,21 @@ func js(v interface{}) json.RawMessage { b, _ := json.Marshal(v); return b }
 func structureNodes() []*models.CatalogNode {
 	var n []*models.CatalogNode
 	schema := func(name string, p map[string]interface{}) {
-		m := map[string]interface{}{"definitions_captured": true, "definitions_version": scanner.DefinitionsVersion}
+		m := map[string]interface{}{"definitions_captured": true, "definitions_version": scanner.DefinitionsVersion, "scan_id": "scan-7"}
 		for k, v := range p {
 			m[k] = v
 		}
 		n = append(n, &models.CatalogNode{NodeTypeID: scanner.NODE_TYPE_SCHEMA, NodeName: name, QualifiedPath: "/" + name, Properties: js(m)})
 	}
 	table := func(sc, name string, p map[string]interface{}) {
-		m := map[string]interface{}{"schema": sc}
+		m := map[string]interface{}{"schema": sc, "scan_id": "scan-7"}
 		for k, v := range p {
 			m[k] = v
 		}
 		n = append(n, &models.CatalogNode{NodeTypeID: scanner.NODE_TYPE_TABLE, NodeName: name, QualifiedPath: "/" + sc + "/" + name, Properties: js(m)})
 	}
 	col := func(sc, tb, name, ft string, ord int, nullable bool, def string) {
-		m := map[string]interface{}{"is_physical_column": true, "format_type": ft, "ordinal_position": ord, "is_nullable": nullable}
+		m := map[string]interface{}{"is_physical_column": true, "format_type": ft, "ordinal_position": ord, "is_nullable": nullable, "scan_id": "scan-7"}
 		if def != "" {
 			m["default_value"] = def
 		}
@@ -140,7 +140,7 @@ func TestStructure_PlanRefusesWhatCannotBeDeployedBeforeAnythingIsCreated(t *tes
 	t.Run("a scan that did not record everything", func(t *testing.T) {
 		r := newSagaRig(t)
 		s := goldStore()
-		s.nodes[0].Properties = js(map[string]interface{}{"definitions_captured": false})
+		s.nodes[0].Properties = js(map[string]interface{}{"definitions_captured": false, "scan_id": "scan-7"})
 		r.withTemplate(s)
 		in := r.in()
 		in.TemplateDatasourceID = uuid.NewString()
@@ -258,7 +258,7 @@ func TestStructure_ApplyIsIdempotentAndRefusesAChangedTemplate(t *testing.T) {
 
 	// The gold copy is rescanned between planning and applying: the run is refused, not silently applied.
 	store.nodes = append(store.nodes, &models.CatalogNode{NodeTypeID: scanner.NODE_TYPE_COLUMN, NodeName: "extra", QualifiedPath: "/st_core/account/extra",
-		Properties: js(map[string]interface{}{"is_physical_column": true, "format_type": "integer", "ordinal_position": 3, "is_nullable": true})})
+		Properties: js(map[string]interface{}{"is_physical_column": true, "format_type": "integer", "ordinal_position": 3, "is_nullable": true, "scan_id": "scan-7"})})
 	_, err = r.acts.ApplyTenantStructure(context.Background(), in)
 	require.True(t, isNonRetryableOf(err, "TenantStructureChanged"), "%v", err)
 

@@ -25,6 +25,8 @@ import (
 // TENANTSCHEMA_TEST_ADMIN_DSN is a postgres:// URL with CREATEDB (the test creates and drops its own databases).
 // Optionally TENANTSCHEMA_TEST_DDL_DIR (a directory of *.up.sql applied in name order) and TENANTSCHEMA_TEST_SCHEMAS
 // (comma separated, in template order) replace the built-in fixture, to run the same proof on a real template.
+// Or TENANTSCHEMA_TEST_SOURCE_DSN (a postgres:// URL) with TENANTSCHEMA_TEST_SCHEMAS scans an EXISTING database, read only,
+// and compares the structure built from its scan with it: the proof on the real source.
 
 const fixtureDDL = `
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
@@ -169,8 +171,18 @@ func scanOf(t *testing.T, db *sql.DB, schemas []string) []*models.CatalogNode {
 
 func TestCompile_TheTargetEqualsTheSource_FromTheScanAlone(t *testing.T) {
 	admin, u := openAdmin(t)
-	src := freshDB(t, admin, u, "tenantschema_src")
-	schemas := sourceAndSchemas(t, src)
+	var src *sql.DB
+	var schemas []string
+	if dsn := os.Getenv("TENANTSCHEMA_TEST_SOURCE_DSN"); dsn != "" {
+		var err error
+		src, err = sql.Open("pgx", dsn)
+		require.NoError(t, err)
+		schemas = strings.Split(os.Getenv("TENANTSCHEMA_TEST_SCHEMAS"), ",")
+		require.NotEmpty(t, schemas[0], "TENANTSCHEMA_TEST_SCHEMAS names the schemas to scan")
+	} else {
+		src = freshDB(t, admin, u, "tenantschema_src")
+		schemas = sourceAndSchemas(t, src)
+	}
 	want := fingerprint(t, src, schemas)
 	require.NotEmpty(t, want["tables"])
 	nodes := scanOf(t, src, schemas) // the compiler gets nothing but these

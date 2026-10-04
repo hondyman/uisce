@@ -138,7 +138,7 @@ func (s *AlphaStore) IsGoldCopy(ctx context.Context, tenantID string) (bool, err
 }
 
 // Read runs as the owning (gold-copy) tenant, so row-level security applies to everything it reads. Column nodes are
-// projected to the keys the compiler uses: the rest of a column's properties (sample values, titles, suggested
+// projected to the keys the compiler uses (including scan_id, without which it ignores the column as stale): the rest of a column's properties (sample values, titles, suggested
 // validation rules) are catalog content a structure does not need.
 func (s *AlphaStore) Read(ctx context.Context, tenantID, datasourceID string) (string, []*models.CatalogNode, error) {
 	var schemas string
@@ -158,7 +158,7 @@ func (s *AlphaStore) Read(ctx context.Context, tenantID, datasourceID string) (s
 			              'is_physical_column', properties->'is_physical_column', 'format_type', properties->'format_type',
 			              'default_value', properties->'default_value', 'is_nullable', properties->'is_nullable',
 			              'ordinal_position', properties->'ordinal_position', 'generated', properties->'generated',
-			              'identity', properties->'identity', 'collation', properties->'collation'))
+			              'identity', properties->'identity', 'collation', properties->'collation', 'scan_id', properties->'scan_id'))
 			            ELSE properties END
 			  FROM public.catalog_node
 			 WHERE tenant_datasource_id = $1 AND is_active AND node_type_id IN ($2, $3, $4)`,
