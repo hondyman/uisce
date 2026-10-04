@@ -1,6 +1,6 @@
 # Tenant data tiering: design for review
 
-**Status: proposed. Nothing here is built. Revised after owner direction on `tenant_id`, Debezium Server and Spark, and after checking the deployed environment; the decisions still open are listed at the end.** It follows ADR-035
+**Status: proposed. Nothing here is built. Revised after owner direction on `tenant_id`, Debezium Server, a Spark-free write path and restore semantics, and after checking the deployed environment; the decisions still open are listed at the end.** It follows ADR-035
 (hot is the tenant's Postgres, warm is StarRocks, cold is Iceberg; `alpha` is never tiered) and is
 written after reading what is actually in the tree, because the tree differs from the ADR in one way
 that matters.
@@ -34,16 +34,25 @@ Classified by whether they grow without bound and are written once:
 - **No Debezium Server is running.** The only CDC container is `uisce-debezium`, image `debezium/connect:2.3`,
   which is **Kafka Connect**. `docker-compose.debezium.yml` (Debezium Server) exists in the repo and is not
   deployed.
-- **The one deployed connector, `orm-oms-connector`, is `RUNNING` with its task `FAILED`**: `Couldn't obtain
-  encoding for database alpha` at start. So the OMS CDC feed is **already down**, independent of #376. I did not
-  investigate the cause (it is a connection or permission failure reading the database's encoding; the
-  connector's certificate paths are under `/tmp` inside the container, which does not survive a recreate) and
-  did not touch the environment.
+- **The one deployed connector, `orm-oms-connector`, is `RUNNING` with its task `FAILED`**, so the OMS CDC feed is
+  **already down**, independent of #376. Cause, read from the task's trace and the host (nothing restarted or
+  changed): the trace is `PSQLException: Connection to 100.84.50.65:5432 refused` / `java.net.ConnectException:
+  Connection refused`, not an authentication error. Postgres was last started **2026-09-14 12:46 UTC**, after the
+  connector's certificate files were placed (2026-09-10 and 09-13), so the most likely story is that the task
+  started while Postgres was restarting for the mTLS hardening and Kafka Connect, which never restarts a
+  `FAILED` task by itself, left it down. Port 5432 is reachable from inside the container now. Ruled out: the
+  certificates are fine (`/tmp/orm_ca.crt` is byte-identical to the current CA, and `orm_client.crt` is
+  `CN=postgres` issued by it, valid to 2028-12-01). **Not ruled out, and the thing to check before restarting:**
+  `pg_hba` line 121 admits the Docker network (`172.20.0.0`) with `scram-sha-256` *before* the `postgres` cert
+  rule, so a connection from the container may be asked for a password, and whether the connector's
+  `database.password` is still right is unknown.
 - **It points at `alpha`, not `crims`** (`database.dbname = alpha`, `schema.include.list = orm`), unlike
   `debezium/orm-oms-connector.json` in the repo. The repo file and the deployed config have drifted, and the
   five tables it captures are `execution`, `order`, `placement`, `order_allocation`, `execution_allocation`.
 - Redpanda holds exactly those five `orm_oms.orm.*` topics (1 partition, 1 replica each), and there are five
   `uisce-stream-loader-*` containers, one per topic.
+- **The Connect image has no Iceberg sink.** `uisce-debezium` is `debezium/connect:2.3`; `/kafka/connect` holds the
+  Debezium source connectors (Postgres, MySQL, Oracle, ...) and the JDBC sink, and no Iceberg plugin.
 - **There is no Spark anywhere on the host.** StarRocks 3.3 (FE and BE), Lakekeeper (and a gold-copy
   Lakekeeper), Redis, Temporal and Redpanda are there.
 - **Postgres (read with the `postgres` client certificate, read-only queries):**
@@ -124,29 +133,76 @@ one-database-per-tenant provisioning.
   construction today) and the cutover runbook's silence on CDC. And, new from the host: the deployed connector is
   failing today.
 
-### 2. Cold: Spark microbatch to Iceberg (a new component, see decision 5)
-Debezium Server has no Iceberg sink, so a consumer between Redpanda and Iceberg is required. This design uses
-**Spark Structured Streaming**, not StarRocks, for this path: CDC carries updates and deletes, StarRocks 3.3's
-Iceberg write path is append-style, and a correct cold copy needs `MERGE`. (ADR-036's audit copy stays on
-StarRocks: it is append-only by construction.)
+### 2. Cold: Redpanda to Iceberg in append mode, three layers, no Spark
+Debezium Server has no first-party Iceberg sink, so the hop from Redpanda to Iceberg is the **Apache Iceberg Kafka
+Connect sink** (REST catalog, so Lakekeeper). It runs on the Kafka Connect fleet already operated for
+`uisce-debezium`, which then has only a sink role. The Connect image deployed today has no Iceberg plugin and
+would need it added. The alternative with no Kafka Connect at all is a community Debezium Server Iceberg sink;
+it is community-maintained, so its activity must be checked before the ADR depends on it. **Both need a version
+check against current documentation; this section is written from knowledge that may be dated.**
 
-- Trigger every 5 to 15 minutes; that is the cold tier's freshness, which is acceptable for cold.
-- Per microbatch: collapse to the latest state per key ordered by source LSN, then `MERGE` into an Iceberg v2
-  table; `op = d` becomes a row-level delete. Guard the match with `source_lsn > target_lsn` so a re-emitted or
-  out-of-order event cannot resurrect an old value. Scheduled compaction.
-- Bulk backfills do not go through the WAL: Spark JDBC reads the source and writes Iceberg directly, recording
-  the source LSN, then Debezium starts from there. The verifier is told a window was batch-loaded.
-- One writer per tenant and table (a Temporal-owned job id), per ADR-036's reason.
-- Tenant credential: Spark is given the tenant's own bucket-scoped credential for its own warehouse, never a
-  shared one, so the isolation of ADR-032 holds on this path.
+The sink writes **append only**, never `MERGE`: ordering is per Kafka partition keyed by primary key, and current
+state is derived from the log by LSN rank, so a re-emitted or out-of-order event cannot resurrect a stale value
+and there is no merge window.
+
+| Layer | Contents | Built by |
+|---|---|---|
+| `bronze.<table>__log` | exact Postgres columns plus `_lsn`, `_op`, `_ts`, `_tenant`; a delete is a row with `_op = 'd'`; `PARTITIONED BY (tenant_id, month)` | the sink, append only. Rollback and replay source |
+| `silver.<table>` | exact Postgres schema, current state per primary key | a scheduled dedupe over bronze, `row_number() OVER (PARTITION BY pk ORDER BY _lsn DESC) = 1` and `_op <> 'd'`, written by StarRocks (`INSERT OVERWRITE`, or a materialized view). Restore source |
+| `gold.<table>_flat` | the flattened, joined BI layer | StarRocks materialized views, or dbt, off silver |
+
+(Written as a subquery with `row_number()`, not `QUALIFY`, because `QUALIFY` support in StarRocks 3.3 is a version
+check; likewise `INSERT OVERWRITE` and async materialized views over an Iceberg REST catalog.)
+
+**The isolation cost to record.** ADR-032 puts every tenant in its own warehouse with its own bucket-scoped
+credential. A sink connector holds one catalog and one credential, so the cold path is **one sink connector per
+tenant**. The reasoning that moved capture to one Debezium Server per tenant applies here too: Connect absorbs
+connector management, at the price of a connector per tenant on a shared worker. The same revisit trigger
+applies (25 tenants, or a need for shared transforms), and a Connect worker is now a place holding many tenants'
+storage credentials, which the sink's secret handling (config providers reading `dscreds`, never inline
+secrets) has to justify.
+
+**Bulk moves are not the WAL path.** Two options, both Spark-free: a **Debezium incremental snapshot** (signal-table
+chunks; consistent, and arrives as ordinary events into the same bronze log), or a **StarRocks JDBC external
+table `INSERT INTO` Iceberg** for a one-shot backfill of a very large table. Either way the verifier is told a
+window was batch-loaded rather than CDC'd.
 
 ### 3. Verification before any drop
-A per-tenant, per-table, per-closed-partition verifier shaped like the audit-copy one (#377): page by page with a
-cursor; **row count and an order-independent checksum** (sum or XOR of per-row hashes) computed on both sides
+A per-tenant, per-table, per-closed-partition verifier shaped like the audit-copy one (#377), comparing Postgres
+against **silver, not the log**: page by page with a cursor; **row count and an order-independent checksum** (sum or XOR of per-row hashes) computed on both sides
 **with the tenant predicate**, compared at an **Iceberg snapshot pinned to a watermark offset** so delivery lag
 is not read as a failure. Findings name a partition and a kind, never a value. The outcome is recorded
 non-monotonically per `(tenant, table, partition)`. There is no seal chain on these tables, so the checksum is
 the evidence (ADR-035: "where present").
+
+### 3b. Restore: what "exact schema for rollback" actually requires
+Keeping the column shape is necessary, not sufficient. Restore is: **a fresh tenant database, the tenant migrations
+replayed, then `COPY` from silver.** Iceberg holds data parity, not DDL; **the migration repository is the schema
+source of truth.** Three things have to be decided and documented:
+
+1. **A type-mapping table.** Checked against `0001_orm_schema.up.sql` (the types the tenant ORM schema actually
+   uses, with column counts):
+
+   | Postgres | Columns | Iceberg | Round trip |
+   |---|---|---|---|
+   | `uuid` | 107 | `uuid` | exact |
+   | `numeric(p,s)` | 87 | `decimal(p,s)` (precision up to 38) | exact while `p <= 38`; the widest here is `numeric(24,6)` and none is unconstrained; a wider or unconstrained `numeric` would not be representable |
+   | `varchar(n)` / `text` | 81 / 4 | `string` | exact; the length limit is not enforced in Iceberg, only by the restored DDL |
+   | `timestamptz` | 37 | `timestamptz` (microseconds) | exact; Postgres' microsecond resolution matches |
+   | `jsonb` | 28 | `string` (JSON text) | **lossy**: key order and duplicate keys are normalised by `jsonb` already; whitespace is not preserved |
+   | `bool` / `date` / `int4` / `time` | 21 / 19 / 5 / 2 | `boolean` / `date` / `int` / `time` | exact |
+   | `text[]` | 1 (`order_history.changed_columns`) | `list<string>` | exact |
+
+   There are no enum types in the schema. **Each new table or type needs a row here before it is tiered;** a
+   verifier that compares row count and checksum on the Postgres side must hash the same canonical text it
+   will restore from, or a lossy column makes every partition look different.
+2. **Sequences and identity.** Restore writes explicit ids, then `setval` per sequence from `max(id)`. **The tenant
+   ORM schema has none:** every primary key is a `uuid` with `gen_random_uuid()`, and the one name that looks
+   like a sequence (`sequence_number`) is an ordinary `int4` column. The step still belongs in the restore
+   runbook for any schema that is added later.
+3. **Rollback semantics: "as of now" or "as of time T".** Silver gives "restore as of now". "As of T" (a bad
+   migration, silent corruption found a day later) is bronze with a retention window. That window is the same
+   decision as the order and trade tables' retention (decision 3), so it is not set here.
 
 ### 4. The drop job
 Reads `hot_window_days` and `legal_hold` from the binding (ADR-038). Detaches a partition, and drops it in a
@@ -160,7 +216,7 @@ immutable by rule; a late row into it is a finding, not something to absorb).
 2. **Per-tenant CDC** (section 1) in the provisioning saga, with the `tenant_id` CHECK (section 0).
 3. **Time partitioning:** give `quote` real partitions; partition `pnl_intraday` and the snapshot tables. Only
    `quote` needs no key change.
-4. Spark cold sink (2), then the verifier (3), then the drop job (4).
+4. The Iceberg sink and the three layers (2), then the verifier (3), the restore runbook (3b), then the drop job (4).
 5. **The books-and-records tables last, and not without decision 3.** Until it is answered they get the
    `tenant_id` invariant and no drop policy.
 
@@ -177,14 +233,17 @@ immutable by rule; a late row into it is a finding, not something to absorb).
    retention, and whether a copy in object storage may be the record once the OLTP row is gone.
 4. **Pilot table:** `quote`, unless it is itself under a best-execution retention rule, in which case it moves to
    decision 3.
-5. **Spark is not deployed and is a new component.** The `MERGE` argument above is why I prefer it for CDC;
-   the cost is one more engine to run, size and secure per the isolation rules. Alternatives: StarRocks with
-   append-only history tables and a view that resolves the latest row, which needs no new engine but makes cold
-   storage a change log rather than a copy. Which do you want?
+5. **Resolved by owner direction:** no Spark. The write side is the Iceberg Kafka Connect sink in append mode, with
+   bronze, silver and gold. Two checks remain before the ADR: the sink's capabilities in the target version and,
+   if Kafka Connect is to be avoided entirely, whether the community Debezium Server Iceberg sink is maintained.
+6. **Rollback semantics (now-only, or point-in-time with a bronze window)** is decision 3's retention answer, not a
+   separate one.
+7. **Reconcile the repo with the deployment,** whatever else is decided: `debezium/orm-oms-connector.json` says
+   `crims`, the running connector says `alpha` and lists five tables.
 
 ## What is still unverified
 - Why the deployed connector's task fails (its certificate files under `/tmp` and the post-hardening `pg_hba` are
   the places to look; I did not open the container).
 - Where tenant databases will be hosted, which decides the `pg_hba` question above.
-- Whether Spark's Iceberg `MERGE` against Lakekeeper with the tenant's credential works in this environment; no
-  Spark here to try it on.
+- The Iceberg Kafka Connect sink against Lakekeeper with a tenant's credential, and StarRocks 3.3's `INSERT
+  OVERWRITE` and async materialized views over that catalog. Nothing here has run them.
