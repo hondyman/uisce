@@ -329,6 +329,39 @@ jobs:
         POLICY_DB_URL: postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
       run: go test -tags=integration -v ./internal/bundles/... ./internal/handlers/... ./internal/audit/... ./internal/api/...
 
+  # The matrix above cannot itself be a required status check: its legs report
+  # `Backend Tests (1/4)` .. `(4/4)` on a full run and the literal, unrendered
+  # `Backend Tests (${{ matrix.shard }}/4)` when this workflow's path filter
+  # skips the job. Requiring either name strands a class of pull requests.
+  #
+  # This job is the stable name the required set can point at. It has no path
+  # condition of its own, so it always reports, and it reads the matrix's
+  # aggregate result rather than its per-leg names.
+  backend-tests-summary:
+    name: Backend Tests Summary
+    runs-on: ubuntu-latest
+    needs: [backend-tests]
+    if: always()
+    steps:
+    - name: Verify every shard passed
+      env:
+        # Aggregate over the whole matrix: success | failure | cancelled | skipped.
+        MATRIX_RESULT: ${{ needs.backend-tests.result }}
+      run: |
+        echo "backend-tests matrix result: $MATRIX_RESULT"
+        # `skipped` is passed through deliberately. A path-filtered pull request
+        # skips the matrix, and a required check that went red here would make
+        # every such pull request fail -- the same silence, inverted. Measured:
+        # a check reporting SKIPPED satisfies a required check; only a check that
+        # is never reported blocks the pull request.
+        if [ "$MATRIX_RESULT" != "success" ] && [ "$MATRIX_RESULT" != "skipped" ]; then
+          echo "::error::one or more backend test shards did not pass (result: $MATRIX_RESULT)"
+          exit 1
+        fi
+        if [ "$MATRIX_RESULT" = "skipped" ]; then
+          echo "matrix skipped by the path filter; nothing to summarise"
+        fi
+
   build-frontend:
     name: Build Frontend
     needs: [changes]
