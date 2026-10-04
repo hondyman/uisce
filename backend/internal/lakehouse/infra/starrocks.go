@@ -63,6 +63,9 @@ type AuditDestination interface {
 	// AppendAudit adds the rows in ONE statement, so it is one Iceberg commit. Rows must be in
 	// strictly increasing id order.
 	AppendAudit(ctx context.Context, tenantID uuid.UUID, rows []AuditRow) error
+	// AuditRange returns up to limit copied rows with an id greater than afterID, in id order. It
+	// exists so the copy can be verified against alpha (ADR-035); nothing is ever shipped from it.
+	AuditRange(ctx context.Context, tenantID uuid.UUID, afterID int64, limit int) ([]AuditRow, error)
 }
 
 // MaxAppendRows bounds one append. One statement is one Iceberg commit, and under Object Lock
@@ -264,6 +267,63 @@ func (s *StarRocks) AppendAudit(ctx context.Context, tenantID uuid.UUID, rows []
 	return nil
 }
 
+func (s *StarRocks) AuditRange(ctx context.Context, tenantID uuid.UUID, afterID int64, limit int) ([]AuditRow, error) {
+	if limit < 1 || limit > MaxAppendRows {
+		return nil, fmt.Errorf("limit must be between 1 and %d", MaxAppendRows)
+	}
+	t, err := s.table(tenantID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, "SELECT `id`, `at`, `actor_id`, `actor_role`, `action`, `before_json`, `after_json`, `prev_hash`, `hash` FROM "+
+		t+" WHERE `id` > ? ORDER BY `id` ASC LIMIT ?", afterID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("read audit rows after %d from the copy: %w", afterID, err)
+	}
+	defer rows.Close()
+	var out []AuditRow
+	for rows.Next() {
+		var r AuditRow
+		var at any
+		var before, after sql.NullString
+		if err := rows.Scan(&r.ID, &at, &r.ActorID, &r.ActorRole, &r.Action, &before, &after, &r.PrevHash, &r.Hash); err != nil {
+			return nil, fmt.Errorf("read an audit row from the copy: %w", err)
+		}
+		if r.At, err = parseCopyTime(at); err != nil {
+			return nil, fmt.Errorf("audit entry %d in the copy: %w", r.ID, err)
+		}
+		r.BeforeJSON, r.AfterJSON = before.String, after.String
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read audit rows from the copy: %w", err)
+	}
+	return out, nil
+}
+
+// parseCopyTime reads the `at` column whether the driver returns a time or its text. Anything else is
+// an error: a verifier that guessed a timestamp could call a changed row unchanged.
+func parseCopyTime(v any) (time.Time, error) {
+	switch x := v.(type) {
+	case time.Time:
+		return x.UTC(), nil
+	case []byte:
+		return parseCopyTimeText(string(x))
+	case string:
+		return parseCopyTimeText(x)
+	}
+	return time.Time{}, fmt.Errorf("unexpected timestamp type %T", v)
+}
+
+func parseCopyTimeText(s string) (time.Time, error) {
+	for _, layout := range []string{"2006-01-02 15:04:05.999999", "2006-01-02 15:04:05", time.RFC3339Nano} {
+		if t, err := time.ParseInLocation(layout, s, time.UTC); err == nil {
+			return t.UTC(), nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unreadable timestamp %q", s)
+}
+
 // ---- configuration from the environment ----
 
 // AuditDestinationFromEnv returns the StarRocks-backed destination, or one that reports
@@ -345,4 +405,12 @@ func (l *lazyDestination) AppendAudit(ctx context.Context, tenantID uuid.UUID, r
 		return err
 	}
 	return d.AppendAudit(ctx, tenantID, rows)
+}
+
+func (l *lazyDestination) AuditRange(ctx context.Context, tenantID uuid.UUID, afterID int64, limit int) ([]AuditRow, error) {
+	d, err := l.get()
+	if err != nil {
+		return nil, err
+	}
+	return d.AuditRange(ctx, tenantID, afterID, limit)
 }

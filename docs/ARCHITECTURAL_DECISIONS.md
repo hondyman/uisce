@@ -1303,6 +1303,46 @@ verification window; dropping it is a separate, reversible step.
 **The rollback is the status quo.** Until the shared database is dropped, reverting is a
 binding flip back. That is why this decision does not delete anything.
 
+### ADR-044: The Iceberg Audit Copy Is Verified Against `alpha` By A Read-Only Workflow; A Finding Is A Result, Not An Error
+
+**Decision.** `TenantLakehouseAuditVerifyWorkflow` proves a tenant's Iceberg audit copy (ADR-036)
+matches `alpha`, and is the gate ADR-035 requires before anything depends on the copy (a hot
+partition detach, a retention drop). It reports and never repairs, copies, or marks anything.
+
+- **`alpha` first.** Its own chain is recomputed once (`tenant_lakehouse_audit_verify`). A copy that
+  faithfully matches a record that no longer recomputes proves nothing, so that is reported as
+  `alpha_chain_broken` before any comparison starts.
+- **Lag is not a finding; a hole is.** The copy runs every 15 minutes, so entries `alpha` holds beyond the
+  copy's highest id are *pending*. The report says how far the proof reaches (`ThroughID`). An entry `alpha`
+  has *below* that id and the copy lacks is `missing_in_copy`, because the copy only appends in order.
+- **Every field is compared**, not just the hash: timestamp at the microsecond the database keeps, actor,
+  role, action, before/after as JSON data (key order is not meaning), and `prev_hash`/`hash`. The copy's
+  own `prev_hash` linkage is checked separately, so two records that agree and are both mislinked are
+  still caught (`chain_break`). Unreadable JSON on either side is a difference, never a pass.
+- **A finding is returned, not raised.** Retrying cannot change it, so it is a result with a nil error;
+  only an outage is retried. A finding names the entry and the field and never a value, because audit
+  payloads can hold personal data and the report is logged.
+- **Bounded history.** One run is 50 pages of 1000; a longer chain continues as a new run from its cursor
+  (`AfterID`, the previous hash, rows so far), so the link is carried across the seam and `alpha` is not
+  re-checked from the start.
+
+- **The outcome is recorded, and is not monotonic.** Each run replaces `tenant_lakehouse`'s
+  `audit_verified_through_id`, `audit_verified_at` and finding kind/entry in one statement
+  (`20261215_001`), so a later bad run takes back an earlier pass. This is the opposite of
+  `audit_copied_through_id`, which only rises. Only the final run of a continued chain records, since
+  only it knows the outcome. A run that cannot record fails, so silence is never read as a pass; a run
+  that cannot finish records nothing, and the earlier outcome stands with its age showing. The finding
+  kind is a `CHECK`-constrained enumeration, so a value from a payload cannot be stored there.
+- **Scheduled nightly** (`TenantLakehouseAuditVerifyAllWorkflow`), a few tenants at a time; a finding or
+  failure for one tenant is in the result and never fails the run. It only reads, so it adds nothing
+  under Object Lock.
+
+**For the tiering job.** A hot partition may be detached or dropped only when the tenant's recorded
+finding is empty, `audit_verified_through_id` covers the partition's last entry, and
+`audit_verified_at` is recent enough for the job's own tolerance. The gate itself is not implemented
+here. The StarRocks read (`AuditRange`) is written against the documented 3.3 interface like the rest of
+ADR-036 and has not been run against a live instance.
+
 ## Open items
 
 - **C1 (9.1) ported metric primitives into the rule VM.**

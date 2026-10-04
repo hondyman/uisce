@@ -68,6 +68,13 @@ type Config struct {
 	// AuditCopiedThroughID is the last audit entry known to be copied to the tenant's Iceberg
 	// audit table. A status marker only: the copy resumes from the destination's own max(id).
 	AuditCopiedThroughID *int64 `json:"audit_copied_through_id"`
+	// The latest verification of the Iceberg copy against alpha (ADR-044). Reliable only when
+	// AuditVerifyFindingKind is nil, AuditVerifiedThroughID covers what is needed, and
+	// AuditVerifiedAt is recent.
+	AuditVerifiedThroughID *int64     `json:"audit_verified_through_id"`
+	AuditVerifiedAt        *time.Time `json:"audit_verified_at"`
+	AuditVerifyFindingKind *string    `json:"audit_verify_finding_kind"`
+	AuditVerifyFindingID   *int64     `json:"audit_verify_finding_id"`
 	// CredentialIssued is true once the tenant's storage credential has been issued. After
 	// that, a credential the secrets store cannot find is an error, never a reason to mint a
 	// new one.
@@ -119,7 +126,8 @@ func (s *Store) tenantRow(ctx context.Context, tenantID uuid.UUID) (name, code s
 
 const selectConfig = `
 	SELECT warehouse_name, bucket, audit_retention_days, retention_applied_days, lifecycle_state,
-	       lakekeeper_warehouse_id IS NOT NULL, credential_issued_at IS NOT NULL, audit_copied_through_id, version, updated_at
+	       lakekeeper_warehouse_id IS NOT NULL, credential_issued_at IS NOT NULL, audit_copied_through_id, version, updated_at,
+	       audit_verified_through_id, audit_verified_at, audit_verify_finding_kind, audit_verify_finding_id
 	  FROM public.tenant_lakehouse
 	 WHERE tenant_id = $1`
 
@@ -127,8 +135,24 @@ func scanConfig(row *sql.Row, c *Config) error {
 	var days, applied sql.NullInt32
 	var copied sql.NullInt64
 	var updated time.Time
-	if err := row.Scan(&c.WarehouseName, &c.Bucket, &days, &applied, &c.LifecycleState, &c.Provisioned, &c.CredentialIssued, &copied, &c.Version, &updated); err != nil {
+	var vThrough, vFindID sql.NullInt64
+	var vAt sql.NullTime
+	var vKind sql.NullString
+	if err := row.Scan(&c.WarehouseName, &c.Bucket, &days, &applied, &c.LifecycleState, &c.Provisioned, &c.CredentialIssued, &copied, &c.Version, &updated,
+		&vThrough, &vAt, &vKind, &vFindID); err != nil {
 		return err
+	}
+	if vThrough.Valid {
+		c.AuditVerifiedThroughID = &vThrough.Int64
+	}
+	if vAt.Valid {
+		c.AuditVerifiedAt = &vAt.Time
+	}
+	if vKind.Valid {
+		c.AuditVerifyFindingKind = &vKind.String
+	}
+	if vFindID.Valid {
+		c.AuditVerifyFindingID = &vFindID.Int64
 	}
 	if copied.Valid {
 		c.AuditCopiedThroughID = &copied.Int64
@@ -363,6 +387,51 @@ func (s *Store) AuditAfter(ctx context.Context, tenantID uuid.UUID, afterID int6
 		return nil, fmt.Errorf("read audit after %d: %w", afterID, err)
 	}
 	return out, nil
+}
+
+// AuditVerification is one verification run's outcome. Finding is empty when nothing was found.
+type AuditVerification struct {
+	ThroughID   int64
+	FindingKind string
+	FindingID   int64
+}
+
+// RecordAuditVerification replaces the tenant's recorded verification outcome. It is NOT monotonic: a
+// run that finds a problem must take back an earlier pass. It records a kind and an id, never a value.
+func (s *Store) RecordAuditVerification(ctx context.Context, tenantID uuid.UUID, v AuditVerification) error {
+	if v.ThroughID < 0 {
+		return errors.New("verified-through id cannot be negative")
+	}
+	if (v.FindingKind == "") != (v.FindingID == 0) {
+		return errors.New("a finding needs both a kind and an entry id")
+	}
+	var kind sql.NullString
+	var fid sql.NullInt64
+	if v.FindingKind != "" {
+		kind, fid = sql.NullString{String: v.FindingKind, Valid: true}, sql.NullInt64{Int64: v.FindingID, Valid: true}
+	}
+	var found bool
+	err := dbpkg.WithTenantTransaction(ctx, s.db, tenantID.String(), func(tx *sql.Tx) error {
+		if e := tx.QueryRowContext(ctx, `SELECT true FROM public.tenant_lakehouse WHERE tenant_id = $1 FOR UPDATE`, tenantID).Scan(&found); e != nil {
+			if errors.Is(e, sql.ErrNoRows) {
+				return ErrNotConfigured
+			}
+			return e
+		}
+		_, e := tx.ExecContext(ctx, `
+			UPDATE public.tenant_lakehouse
+			   SET audit_verified_through_id = $2, audit_verified_at = now(),
+			       audit_verify_finding_kind = $3, audit_verify_finding_id = $4
+			 WHERE tenant_id = $1`, tenantID, v.ThroughID, kind, fid)
+		return e
+	})
+	if err != nil {
+		if errors.Is(err, ErrNotConfigured) {
+			return err
+		}
+		return fmt.Errorf("record audit verification: %w", err)
+	}
+	return nil
 }
 
 // MarkAuditCopied records that the audit entries up to throughID are in the Iceberg copy. It only
