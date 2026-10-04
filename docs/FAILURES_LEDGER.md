@@ -4,7 +4,7 @@
 
 This ledger differs from `AGENTS.md` rules: rules are policy (what not to do); this ledger is history with lessons attached. A ledger that only records failures teaches avoidance. One that records what the countermeasures *produced* teaches the behavior worth repeating.
 
-**Three standing rules about artifacts, gates and procedures, because each has cost real
+**Four standing rules about artifacts, gates and procedures, because each has cost real
 time here.**
 
 **Every procedure has exactly one authoritative home, and every other mention is a link.** A
@@ -56,6 +56,24 @@ first question is not "does it include every input?" but "has it been observed r
 that proves a filter is complete is not evidence that the filter was consulted, and no amount of
 mutation testing on the filter's contents can tell you. The only evidence is a check rollup from a
 real run, read from the run rather than from the workflow file.
+
+**An unscoped repository grep reads abandoned worktrees and answers with a dead branch's
+history.** `.claude/worktrees/` holds roughly twenty-five stale checkouts, each a complete copy
+of the tree. They are not excluded from a plain `grep -r`, so a search for a symbol returns the
+current branch *and* every branch that ever contained it. During the #394 investigation a search
+for `ApplyMaterialization` returned the two real call sites buried among thirty-plus hits from
+dead worktrees — including a `pre_aggregation_handler.go` with a `POST /{id}/materialize` route
+that **this branch does not have**, which read for several minutes as a live capability that had
+been dropped. It had not: `bf9cb7bcc` removed that file deliberately, as one of 14 dead handlers
+not registered in `SetupRouter`. The worktrees did not just add noise, they produced a confident
+wrong answer about the present.
+
+This is the same failure as a stale schema dump: a tree that looks like the repository and is not.
+The general form is that **a search result is only evidence about the thing you asked about if the
+search was scoped to it.** Scope every repository-wide search to a specific module
+(`backend/`, `frontend/src/`) and read the paths that come back before believing them. When a hit
+describes code the current branch does not contain, the first question is which tree it came from,
+not how it got deleted.
 
 ---
 
