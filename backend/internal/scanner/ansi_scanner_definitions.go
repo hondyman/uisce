@@ -14,13 +14,19 @@ import (
 // unique keys and foreign keys were already recorded. This records the rest, so nothing a deploy needs lives only in
 // the source database:
 //
-//	table node   check_constraints  [{name, definition}]
+//	table node   constraints        [{name, type, definition}]   every local primary key (p), unique (u), check (c),
+//	                                foreign key (f) and exclusion (x) constraint, in PostgreSQL's own words, so nothing about
+//	                                key order, cascade rules, deferrability or NULLS NOT DISTINCT has to be inferred
 //	             indexes            [{name, definition, unique, method}]   every index that is not a primary key or a
 //	                                unique constraint (those are the key properties) and not a copy of a partitioned index
 //	             partition          {key}            for a partitioned parent  (e.g. "RANGE (quote_time)")
 //	                                {parent, bound}  for a partition           (e.g. "FOR VALUES FROM (...) TO (...)")
 //	             triggers           [{name, definition, function}]         only triggers the user created, not clones on partitions
-//	schema node  routines           [{name, arguments, kind, language, definition}]   functions and procedures, not extension-owned
+//	             persistence, options   only when not the default (an unlogged table; storage options like fillfactor)
+//	column node  format_type        the exact type as pg_catalog.format_type prints it ("character varying(150)", "uuid[]")
+//	             generated, identity, collation   only when set; a compiler that does not model them must refuse
+//	schema node  extensions         [{name, version, schema}]   what the source database has installed (not plpgsql)
+//	             routines           [{name, arguments, kind, language, definition}]   functions and procedures, not extension-owned
 //	             definitions_captured  true only if every query below succeeded; false (with definitions_error) otherwise
 //	             definitions_version   the shape of the above
 //
@@ -31,13 +37,13 @@ import (
 // deploy built from it can refuse.
 
 // DefinitionsVersion is the shape of the properties above.
-const DefinitionsVersion = 1
+const DefinitionsVersion = 2
 
 type tableDefs struct {
-	checks    []map[string]interface{}
-	indexes   []map[string]interface{}
-	triggers  []map[string]interface{}
-	partition map[string]interface{}
+	constraints []map[string]interface{}
+	indexes     []map[string]interface{}
+	triggers    []map[string]interface{}
+	partition   map[string]interface{}
 }
 
 func (s *AnsiScanner) schemaFilter(col string, args *[]interface{}) string {
@@ -80,29 +86,30 @@ func (s *AnsiScanner) processDefinitions() error {
 		}
 	}
 
-	// check constraints. conislocal excludes the copies a partition inherits from its parent.
+	// constraints. conislocal leaves out a check a partition inherits from its parent, and conparentid = 0 leaves out the
+	// primary key, unique or foreign key a partition carries as a clone of its parent's.
 	{
 		var args []interface{}
-		q := `SELECT n.nspname, c.relname, k.conname, pg_get_constraintdef(k.oid)
+		q := `SELECT n.nspname, c.relname, k.conname, k.contype::text, pg_get_constraintdef(k.oid)
 		        FROM pg_constraint k
 		        JOIN pg_class c ON c.oid = k.conrelid
 		        JOIN pg_namespace n ON n.oid = c.relnamespace
-		       WHERE k.contype = 'c' AND k.conislocal AND ` + s.schemaFilter("n.nspname", &args) + `
+		       WHERE k.contype IN ('p', 'u', 'c', 'f', 'x') AND k.conislocal AND k.conparentid = 0 AND c.relkind IN ('r', 'p') AND ` + s.schemaFilter("n.nspname", &args) + `
 		       ORDER BY n.nspname, c.relname, k.conname`
 		if rows, err := s.sourceDB.Query(q, args...); err != nil {
-			fail("check constraints", err)
+			fail("constraints", err)
 		} else {
 			for rows.Next() {
-				var sc, tb, name, def string
-				if err := rows.Scan(&sc, &tb, &name, &def); err != nil {
-					fail("check constraints", err)
+				var sc, tb, name, typ, def string
+				if err := rows.Scan(&sc, &tb, &name, &typ, &def); err != nil {
+					fail("constraints", err)
 					continue
 				}
 				d := get(sc, tb)
-				d.checks = append(d.checks, map[string]interface{}{"name": name, "definition": def})
+				d.constraints = append(d.constraints, map[string]interface{}{"name": name, "type": typ, "definition": def})
 			}
 			if err := rows.Err(); err != nil {
-				fail("check constraints", err)
+				fail("constraints", err)
 			}
 			rows.Close()
 		}
@@ -241,14 +248,112 @@ func (s *AnsiScanner) processDefinitions() error {
 		}
 	}
 
+	// exact column types. information_schema.data_type says "ARRAY" or "USER-DEFINED" and loses precision on
+	// time and interval types; format_type is what DDL needs. generated, identity and collation are recorded only
+	// when set, so a compiler that does not model them can refuse rather than guess.
+	{
+		var args []interface{}
+		q := `SELECT n.nspname, c.relname, a.attname, format_type(a.atttypid, a.atttypmod),
+		             a.attgenerated::text, a.attidentity::text,
+		             CASE WHEN a.attcollation <> 0 AND a.attcollation <> (SELECT typcollation FROM pg_type WHERE oid = a.atttypid)
+		                  THEN (SELECT collname FROM pg_collation WHERE oid = a.attcollation) ELSE '' END
+		        FROM pg_attribute a
+		        JOIN pg_class c ON c.oid = a.attrelid
+		        JOIN pg_namespace n ON n.oid = c.relnamespace
+		       WHERE a.attnum > 0 AND NOT a.attisdropped AND c.relkind IN ('r', 'p') AND ` + s.schemaFilter("n.nspname", &args)
+		if rows, err := s.sourceDB.Query(q, args...); err != nil {
+			fail("column types", err)
+		} else {
+			for rows.Next() {
+				var sc, tb, col, ft, gen, ident, coll string
+				if err := rows.Scan(&sc, &tb, &col, &ft, &gen, &ident, &coll); err != nil {
+					fail("column types", err)
+					continue
+				}
+				n := s.columnMap[generateID(s.tenantDatasourceId.String(), s.sourceSystem, NODE_TYPE_COLUMN.String(), fmt.Sprintf("/%s/%s/%s", sc, tb, col))]
+				if n == nil {
+					continue
+				}
+				set := map[string]interface{}{"format_type": ft}
+				if gen != "" {
+					set["generated"] = gen
+				}
+				if ident != "" {
+					set["identity"] = ident
+				}
+				if coll != "" {
+					set["collation"] = coll
+				}
+				mergeProps(n, set)
+			}
+			if err := rows.Err(); err != nil {
+				fail("column types", err)
+			}
+			rows.Close()
+		}
+	}
+
+	// table options that are not the default: recorded so a compiler that does not model them can refuse.
+	opts := map[string]map[string]interface{}{}
+	{
+		var args []interface{}
+		q := `SELECT n.nspname, c.relname, c.relpersistence::text, COALESCE(array_to_string(c.reloptions, ','), '')
+		        FROM pg_class c
+		        JOIN pg_namespace n ON n.oid = c.relnamespace
+		       WHERE c.relkind IN ('r', 'p') AND (c.relpersistence <> 'p' OR c.reloptions IS NOT NULL) AND ` + s.schemaFilter("n.nspname", &args)
+		if rows, err := s.sourceDB.Query(q, args...); err != nil {
+			fail("table options", err)
+		} else {
+			for rows.Next() {
+				var sc, tb, persistence, options string
+				if err := rows.Scan(&sc, &tb, &persistence, &options); err != nil {
+					fail("table options", err)
+					continue
+				}
+				m := map[string]interface{}{}
+				if persistence != "p" {
+					m["persistence"] = persistence
+				}
+				if options != "" {
+					m["options"] = options
+				}
+				opts[sc+"/"+tb] = m
+			}
+			if err := rows.Err(); err != nil {
+				fail("table options", err)
+			}
+			rows.Close()
+		}
+	}
+
+	// extensions the source has installed. A tenant structure creates the ones its definitions need, so the scan has to say
+	// which exist and where; plpgsql is always there.
+	var extensions []map[string]interface{}
+	if rows, err := s.sourceDB.Query(`SELECT e.extname, e.extversion, n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace WHERE e.extname <> 'plpgsql' ORDER BY e.extname`); err != nil {
+		fail("extensions", err)
+	} else {
+		for rows.Next() {
+			var name, version, schema string
+			if err := rows.Scan(&name, &version, &schema); err != nil {
+				fail("extensions", err)
+				continue
+			}
+			extensions = append(extensions, map[string]interface{}{"name": name, "version": version, "schema": schema})
+		}
+		if err := rows.Err(); err != nil {
+			fail("extensions", err)
+		}
+		rows.Close()
+	}
+
 	for k, d := range defs {
 		n := tableNodes[k]
 		if n == nil {
 			continue // a table the scan did not store (it matches the gold copy) has nothing to attach to
 		}
 		set := map[string]interface{}{}
-		if len(d.checks) > 0 {
-			set["check_constraints"] = d.checks
+		if len(d.constraints) > 0 {
+			set["constraints"] = d.constraints
 		}
 		if len(d.indexes) > 0 {
 			set["indexes"] = d.indexes
@@ -261,10 +366,18 @@ func (s *AnsiScanner) processDefinitions() error {
 		}
 		mergeProps(n, set)
 	}
+	for k, o := range opts {
+		if n := tableNodes[k]; n != nil {
+			mergeProps(n, o)
+		}
+	}
 	for name, n := range schemaNodes {
 		set := map[string]interface{}{"definitions_version": DefinitionsVersion, "definitions_captured": firstErr == nil}
 		if firstErr != nil {
 			set["definitions_error"] = firstErr.Error()
+		}
+		if len(extensions) > 0 {
+			set["extensions"] = extensions
 		}
 		if r := routines[name]; len(r) > 0 {
 			set["routines"] = r

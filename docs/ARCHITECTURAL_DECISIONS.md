@@ -1422,14 +1422,19 @@ and never straight from the source database. For this to be sound the scan must 
 **Complete.** Until now the scan recorded tables, columns (type, length, precision, scale, nullability, default),
 primary keys, unique keys and foreign keys (with cascade rules, deferrability and composite columns). Measured against
 the gold copy's CRIMS datasource, that left out 312 check constraints, 1,404 secondary indexes, 2 partitioned tables with
-their partitions, 7 functions and 2 triggers: a deploy from it would have silently lost all of them. The scanner now also
-records, on the same nodes it already writes:
+their partitions, 7 functions and 2 triggers, and it recorded neither the exact type of a column (`information_schema`
+says `ARRAY`, and the datasource has about 32 array columns) nor the order of a composite key. A deploy from it would have
+silently lost or guessed all of that. The scanner now also records, on the nodes it already writes:
 
-- table node: `check_constraints`, `indexes` (everything that is not a primary key or unique constraint, and not the
-  copy of a partitioned index a partition carries), `partition` (`key` on a partitioned parent; `parent` and `bound` on a
-  partition), `triggers` (user-created, not clones on partitions);
-- schema node: `routines` (functions and procedures, not extension-owned), `definitions_captured`,
-  `definitions_version`, and `definitions_error` when a query failed.
+- table node: `constraints` (every local primary key, unique, check, foreign key and exclusion constraint as
+  `{name, type, definition}`: PostgreSQL's own text, so key order, cascade rules and deferrability are never inferred),
+  `indexes` (everything that is not a key constraint, and not the copy of a partitioned index a partition carries),
+  `partition` (`key` on a parent; `parent` and `bound` on a partition), `triggers` (user-created, not clones on
+  partitions), and `persistence`/`options` only when not the default (an unlogged table, storage options);
+- column node: `format_type` (as `format_type()` prints it, e.g. `character varying(4)[]`), and `generated`, `identity`,
+  `collation` only when set, so a compiler that does not model them can refuse instead of guess;
+- schema node: `routines` (functions and procedures, not extension-owned), `extensions` (what the source has installed),
+  `definitions_captured`, `definitions_version` (2) and `definitions_error` when a query failed.
 
 Definitions are PostgreSQL's own deparse (`pg_get_constraintdef`, `pg_get_indexdef`, `pg_get_triggerdef`,
 `pg_get_functiondef`, `pg_get_partkeydef`, `pg_get_expr`), the text `pg_dump` emits, so a compiler reproduces them
@@ -1437,9 +1442,11 @@ exactly. **A scan that could not read them says so (`definitions_captured = fals
 deploy built from it must refuse.
 
 **Verified** against a real server on the six schemas of the gold copy's template (80 + 441 + 1 tables): the recorded
-counts equal what the server has, to the object: 309 check constraints (plus 3 copies inherited by partitions, deliberately
-not recorded), 1,401 indexes (plus 3 partition copies), 2 triggers, 7 routines, 2 partitioned parents and their 2
-partitions. The first run against a real server found a defect the mocked tests could not: an index that is a partition of a
+counts equal what the server has, to the object: 1,401 indexes (plus 3 partition copies, deliberately not recorded), 309
+local check constraints (plus 3 inherited by partitions), 2 triggers, 7 routines, 2 partitioned parents and their 2
+partitions. And the proof that matters, in `internal/tenantschema`: a plan compiled from the scan alone, applied to an empty
+database, equals the source column by column, constraint by constraint, index by index, routine by routine and trigger by
+trigger. The first run against a real server found a defect the mocked tests could not: an index that is a partition of a
 partitioned index also has `relispartition` set and no bound, so the partitioning query is restricted to tables.
 
 **Current.** Not decided here, and not yet enforced: a deploy must refuse unless the gold copy's scan is fresh against its
