@@ -67,6 +67,9 @@ func newStarRocksDB() *sql.DB {
 
 // UpsertPreAggregation creates or updates a pre-aggregation node in the catalog.
 func (s *PreAggregationService) UpsertPreAggregation(ctx context.Context, req models.UpsertPreAggRequest) (*models.PreAggDescriptor, error) {
+	if err := normaliseMaterializationRequest(&req); err != nil {
+		return nil, err
+	}
 	// Build properties JSON
 	props := models.PreAggProperties{
 		BOName:                 req.BOName,
@@ -423,9 +426,23 @@ func (s *PreAggregationService) Refresh(ctx context.Context, preAggID uuid.UUID)
 	}
 
 	if cfg.Materialization.Type != "materialized_view" {
-		// Plain tables have no REFRESH concept; ApplyMaterialization would
-		// need to be re-run (CREATE TABLE ... AS SELECT) to pick up new data.
-		return fmt.Errorf("refresh is only supported for materialized_view targets, got %q", cfg.Materialization.Type)
+		// This used to read "ApplyMaterialization would need to be re-run
+		// (CREATE TABLE ... AS SELECT) to pick up new data". That was false:
+		// the generated DDL is CREATE TABLE IF NOT EXISTS, so re-applying it
+		// succeeds without replacing a single row, and a table target
+		// therefore had no path that ever refreshed its contents. The error
+		// is now the operator's only signal, so it has to carry the strategy,
+		// the consequence, and the remedy. See #394.
+		return fmt.Errorf(
+			"pre-aggregation %q uses materialization strategy %q, which has no refresh path: "+
+				"its DDL is CREATE TABLE IF NOT EXISTS, so re-applying it succeeds without replacing any rows "+
+				"and the target keeps whatever it was first populated with. "+
+				"Remedy: either switch this pre-aggregation to strategy \"materialized_view\", "+
+				"which REFRESH MATERIALIZED VIEW does replace, or drop the target table and re-create it "+
+				"whenever you need new data. A full-replace for table targets is not implemented; "+
+				"the correct StarRocks construct is still to be validated (see #394)",
+			cfg.Materialization.TargetName, cfg.Materialization.Type,
+		)
 	}
 
 	refreshSQL := fmt.Sprintf("REFRESH MATERIALIZED VIEW %s.%s;", quoteIdent(props.TargetDatabase), quoteIdent(cfg.Materialization.TargetName))
@@ -641,6 +658,9 @@ func (s *PreAggregationService) Update(ctx context.Context, id uuid.UUID, req mo
 	if req.TenantID == "" {
 		return nil, fmt.Errorf("update pre-aggregation: tenant required")
 	}
+	if err := normaliseMaterializationRequest(&req); err != nil {
+		return nil, err
+	}
 	// Build updated properties
 	props := models.PreAggProperties{
 		BOName:                 req.BOName,
@@ -686,6 +706,50 @@ func (s *PreAggregationService) Update(ctx context.Context, id uuid.UUID, req mo
 
 // ErrPreAggNotFound means no pre-aggregation with that id belongs to the tenant.
 var ErrPreAggNotFound = fmt.Errorf("pre-aggregation not found")
+
+// ErrPreAggNotSupported means the request was well-formed but asks for a
+// capability the materialization layer does not have. It is deliberately a
+// distinct sentinel from a generic failure so the handler can answer 400
+// rather than 500: a client that asked for something unsupported did nothing
+// wrong, and telling it "internal server error" sends it looking the wrong way.
+var ErrPreAggNotSupported = fmt.Errorf("pre-aggregation configuration not supported")
+
+// normaliseMaterializationRequest is the single gate every write path runs
+// before persisting a pre-aggregation. Both UpsertPreAggregation and Update
+// build properties/config identically, so validating in only one of them
+// would leave the other accepting exactly the configurations this exists to
+// reject.
+//
+// Two things happen here, both of them removals of a lie rather than additions
+// of behaviour:
+//
+//   - partition_by is REJECTED. The field is accepted by the API, round-trips
+//     through the catalog, and GenerateDDL ignores it entirely, so an operator
+//     could set it and receive unpartitioned DDL with no warning. The correct
+//     PARTITION BY construct has to be validated against real StarRocks before
+//     it is emitted, and until then the honest answer is to refuse the request
+//     instead of accepting it and quietly discarding it (#394).
+//
+//   - refresh_strategy "incremental" is RELABELLED to "interval". The wizard
+//     offered an Incremental radio that behaved identically to interval, since
+//     the only branch anywhere is a check for "manual". Existing configurations
+//     that stored "incremental" are therefore already running the interval
+//     path; relabelling them is a semantic no-op that stops the stored value
+//     from continuing to claim something untrue. The control itself is removed
+//     in the same change so new configurations cannot reintroduce it.
+func normaliseMaterializationRequest(req *models.UpsertPreAggRequest) error {
+	if req.Materialization.PartitionBy != "" {
+		return fmt.Errorf("%w: materialization.partition_by is not implemented - "+
+			"GenerateDDL does not yet emit PARTITION BY, so this setting would be accepted and then "+
+			"silently ignored, producing an unpartitioned table. Partitioned DDL is being validated "+
+			"against real StarRocks before it ships (see #394); until then this field is refused "+
+			"rather than discarded", ErrPreAggNotSupported)
+	}
+	if req.RefreshStrategy == "incremental" {
+		req.RefreshStrategy = "interval"
+	}
+	return nil
+}
 
 // Delete removes a pre-aggregation owned by tenantID from the catalog, with its edges, atomically. A
 // pre-aggregation that is another tenant's is ErrPreAggNotFound and nothing is touched: previously both

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Alert, Box, Button, Card, CardContent, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, FormLabel, Grid, IconButton, InputLabel, List, ListItem, ListItemButton, ListItemIcon, ListItemText, MenuItem, Paper, Radio, RadioGroup, Select, Step, StepLabel, Stepper, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, FormLabel, Grid, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Paper, Radio, RadioGroup, Step, StepLabel, Stepper, TextField, Typography } from '@mui/material';
 import { Close, Bolt, Storage, Schedule, Code, CheckCircle } from '@mui/icons-material';
 import { apiFetch } from '../../lib/apiClient';
 
@@ -23,8 +23,6 @@ interface PreAggFilter {
 interface MaterializationConfig {
   type: 'materialized_view' | 'table';
   target_name: string;
-  incremental_column?: string;
-  incremental_window_days?: number;
 }
 
 interface PreAggRequest {
@@ -37,7 +35,7 @@ interface PreAggRequest {
   group_by: string[];
   filters: PreAggFilter[];
   materialization: MaterializationConfig;
-  refresh_strategy: 'manual' | 'interval' | 'incremental';
+  refresh_strategy: 'manual' | 'interval';
   refresh_interval_minutes: number;
 }
 
@@ -76,9 +74,12 @@ export const PreAggregationWizard: React.FC<PreAggregationWizardProps> = ({
   // Step 3: Materialization
   const [materializationType, setMaterializationType] = useState<'materialized_view' | 'table'>('materialized_view');
   const [targetName, setTargetName] = useState('');
-  const [incrementalColumn, setIncrementalColumn] = useState('');
-  const [incrementalWindow, setIncrementalWindow] = useState(2);
-  const [refreshStrategy, setRefreshStrategy] = useState<'manual' | 'interval' | 'incremental'>('interval');
+  // 'incremental' was offered here and behaved identically to 'interval': the
+  // backend only ever branches on "manual", so nothing consumed the incremental
+  // column or window this wizard used to collect. The control is removed rather
+  // than left dormant, and existing configurations storing "incremental" are
+  // relabelled to "interval" server-side - a semantic no-op. See #394.
+  const [refreshStrategy, setRefreshStrategy] = useState<'manual' | 'interval'>('interval');
   const [refreshInterval, setRefreshInterval] = useState(15);
 
   const [sqlPreview, setSqlPreview] = useState('');
@@ -196,8 +197,6 @@ GROUP BY ${selectedTerms.join(', ')};`;
       materialization: {
         type: materializationType,
         target_name: targetName,
-        incremental_column: incrementalColumn || undefined,
-        incremental_window_days: incrementalWindow,
       },
       refresh_strategy: refreshStrategy,
       refresh_interval_minutes: refreshInterval,
@@ -245,7 +244,6 @@ GROUP BY ${selectedTerms.join(', ')};`;
     setFilterExpression('');
     setMaterializationType('materialized_view');
     setTargetName('');
-    setIncrementalColumn('');
     setRefreshStrategy('interval');
     setRefreshInterval(15);
     setError(null);
@@ -322,10 +320,6 @@ GROUP BY ${selectedTerms.join(', ')};`;
                 targetDatabase={targetDatabase}
                 boTerms={boTerms}
                 selectedTerms={selectedTerms}
-                incrementalColumn={incrementalColumn}
-                setIncrementalColumn={setIncrementalColumn}
-                incrementalWindow={incrementalWindow}
-                setIncrementalWindow={setIncrementalWindow}
                 refreshStrategy={refreshStrategy}
                 setRefreshStrategy={setRefreshStrategy}
                 refreshInterval={refreshInterval}
@@ -348,8 +342,6 @@ GROUP BY ${selectedTerms.join(', ')};`;
                 materializationType={materializationType}
                 refreshStrategy={refreshStrategy}
                 refreshInterval={refreshInterval}
-                incrementalColumn={incrementalColumn}
-                incrementalWindow={incrementalWindow}
                 ddlPreview={ddlPreview}
               />
             )}
@@ -551,12 +543,8 @@ const Step3Materialization: React.FC<{
   targetDatabase: string;
   boTerms: BOTerm[];
   selectedTerms: string[];
-  incrementalColumn: string;
-  setIncrementalColumn: (v: string) => void;
-  incrementalWindow: number;
-  setIncrementalWindow: (v: number) => void;
-  refreshStrategy: 'manual' | 'interval' | 'incremental';
-  setRefreshStrategy: (v: 'manual' | 'interval' | 'incremental') => void;
+  refreshStrategy: 'manual' | 'interval';
+  setRefreshStrategy: (v: 'manual' | 'interval') => void;
   refreshInterval: number;
   setRefreshInterval: (v: number) => void;
 }> = (props) => (
@@ -582,30 +570,17 @@ const Step3Materialization: React.FC<{
         helperText={`Full path: ${props.targetDatabase}.${props.targetName || props.suggestedTargetName}`}
       />
 
-      <FormControl fullWidth sx={{ mt: 2 }}>
-        <InputLabel>Incremental Column</InputLabel>
-        <Select
-          value={props.incrementalColumn}
-          onChange={(e) => props.setIncrementalColumn(e.target.value)}
-          label="Incremental Column"
-        >
-          <MenuItem value="">None</MenuItem>
-          {props.selectedTerms.map((t) => (
-            <MenuItem key={t} value={t}>{t}</MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-
-      {props.incrementalColumn && (
-        <TextField
-          label="Incremental Window (days)"
-          type="number"
-          value={props.incrementalWindow}
-          onChange={(e) => props.setIncrementalWindow(Number(e.target.value))}
-          fullWidth
-          sx={{ mt: 2 }}
-        />
-      )}
+      {/* The "Incremental Column" and "Incremental Window" controls and the
+          "Incremental" refresh strategy were removed here. They were collected,
+          sent and persisted, and no backend code read any of it - an operator
+          could configure an incremental refresh and get an identical full
+          rebuild. The notice replaces them so the absence is explained rather
+          than just missing. See #394. */}
+      <Alert severity="info" sx={{ mt: 2 }}>
+        Incremental refresh is not available yet. Pre-aggregations refresh in full on
+        their interval. If you previously configured an incremental column or window,
+        it had no effect and this pre-aggregation has always refreshed in full.
+      </Alert>
     </Grid>
 
     <Grid   size={{ xs: 12, md: 6 }}>
@@ -617,7 +592,6 @@ const Step3Materialization: React.FC<{
         >
           <FormControlLabel value="manual" control={<Radio />} label="Manual" />
           <FormControlLabel value="interval" control={<Radio />} label="Interval" />
-          <FormControlLabel value="incremental" control={<Radio />} label="Incremental" />
         </RadioGroup>
       </FormControl>
 
@@ -653,8 +627,6 @@ const Step4Review: React.FC<{
   materializationType: string;
   refreshStrategy: string;
   refreshInterval: number;
-  incrementalColumn: string;
-  incrementalWindow: number;
   ddlPreview: string;
 }> = (props) => (
   <Grid container spacing={3}>
@@ -712,7 +684,6 @@ const Step4Review: React.FC<{
             <Typography>
               {props.refreshStrategy}
               {props.refreshStrategy !== 'manual' && ` (every ${props.refreshInterval} min)`}
-              {props.incrementalColumn && `, incremental on ${props.incrementalColumn}`}
             </Typography>
           </Box>
         </CardContent>
