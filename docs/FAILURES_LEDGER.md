@@ -486,3 +486,52 @@ cheaper proxy for the actual measurement and report it as the measurement.**
 
 ---
 
+
+## Entry 2026-10-03 — Path filters in `ci-cd.yml`; and how nearly three of them shipped wrong
+
+Gates `build-backend`, `backend-tests` and `build-frontend` behind a `changes` job. A
+pull request that touches only `docs/` no longer runs the four-shard backend matrix, which
+finished at +7.2m on `99d5fe4d8`. Pushes to `main` emit both flags true and run everything, so
+`main` stays fully verified. `security-scan` is **not** gated: since #357 removed its `needs:` it
+costs ~0 wall-clock, and filtering it would trade the repo's security posture for compute that is
+not the bottleneck.
+
+### A skipped gate is a silent gate
+
+This is the risk that made the filters conservative. A path filter that forgets an input does not
+fail — it stops running, and reports green. So the backend filter carries `libs/`, `cmd/`,
+`migrations/`, `go.work`, `go.work.sum` and the workflow file itself, not just `backend/`.
+`go.work` at the repo root is the one that matters: it is what makes `libs/` and `cmd/` part of a
+backend build, and a filter reading only `backend/` would have skipped the suite for a PR that
+changed a shared library.
+
+**A filter that reduces coverage is not an optimisation, it is a deletion with a green tick.** If
+one of these paths is ever wrong, the fix is to widen the filter, never to trust the result.
+
+### The tooling failure worth recording
+
+This change was attempted three times with a script and the first two produced files that
+**parsed as valid YAML and were still wrong**:
+
+1. A regex over job blocks matched only the job's first line, so the `if:` conditions were applied
+   but `needs: [changes]` silently was not. The workflow would have gated on an expression reading
+   outputs of a job it was never given — permanently false, or empty, depending on the evaluator.
+2. Block-end detection excluded comment lines from terminating a job, so blocks ran past the job
+   boundary and the `if:` lines landed *after the next job's banner comment* — attached to the
+   wrong job entirely.
+
+Both were caught by parsing the result and printing each job's resolved `needs` and `if` **rather
+than by reading the diff**. The third attempt used exact-string edits anchored on
+`  build-backend:\n    name: Build Backend\n    runs-on: ubuntu-latest` and was verified to be a
+**pure addition — 72 lines added, zero removed**, so no existing line could have been mangled.
+
+**A partially-applied edit that still parses is the most dangerous kind**, because every cheap
+check passes. `yaml.safe_load` returning a dict is not evidence the edit did what you meant; it is
+only evidence the file is still YAML. Assert the specific invariant you care about — here, that
+each gated job has `needs: [changes]` *and* an `if` that reads `needs.changes` — and assert the
+shape of the change (pure addition) as well as its validity.
+
+This is the same shape as the shard off-by-one: a check that reports green while measuring nothing
+or the wrong thing. Twice now in one session, in two different layers.
+
+---
