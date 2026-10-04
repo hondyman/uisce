@@ -1306,8 +1306,8 @@ binding flip back. That is why this decision does not delete anything.
 ### ADR-044: The Iceberg Audit Copy Is Verified Against `alpha` By A Read-Only Workflow; A Finding Is A Result, Not An Error
 
 **Decision.** `TenantLakehouseAuditVerifyWorkflow` proves a tenant's Iceberg audit copy (ADR-036)
-matches `alpha`, and is the gate ADR-035 requires before anything depends on the copy (a hot
-partition detach, a retention drop). It reports and never repairs, copies, or marks anything.
+matches `alpha`, so the copy can be relied on as the immutable second record. It reports and never
+repairs or copies anything, and the only thing it writes is its own recorded outcome (below).
 
 - **`alpha` first.** Its own chain is recomputed once (`tenant_lakehouse_audit_verify`). A copy that
   faithfully matches a record that no longer recomputes proves nothing, so that is reported as
@@ -1337,11 +1337,16 @@ partition detach, a retention drop). It reports and never repairs, copies, or ma
   failure for one tenant is in the result and never fails the run. It only reads, so it adds nothing
   under Object Lock.
 
-**For the tiering job.** A hot partition may be detached or dropped only when the tenant's recorded
-finding is empty, `audit_verified_through_id` covers the partition's last entry, and
-`audit_verified_at` is recent enough for the job's own tolerance. The gate itself is not implemented
-here. The StarRocks read (`AuditRange`) is written against the documented 3.3 interface like the rest of
-ADR-036 and has not been run against a live instance.
+**What this is evidence for, and what it is not.** This verifies the copy of `alpha`'s lakehouse audit chain
+(ADR-036). `alpha`'s audit is never detached, archived away or dropped (ADR-029, ADR-035), so this result gates
+nothing: it is evidence for operators and auditors that the immutable copy matches the record. An earlier draft of
+this ADR said the tiering job should read it before dropping a hot partition; that is withdrawn. The partitions
+ADR-035 drops are event tables in a *tenant's own* database, which reach Iceberg by CDC and Kafka. That is a
+different copy, and it needs its own verification (row count and, where present, seal chain, per ADR-035) before a
+partition is detached. Neither that verifier nor the tiering job exists yet; `hot_window_days` and `legal_hold`
+(ADR-038) are recorded on the binding and read by nothing. The tenant-data verifier can reuse this one's shape
+(page by page, a cursor, findings that name an entry and never a value, a non-monotonic recorded outcome), but not
+its result. The StarRocks read (`AuditRange`) was run against a live instance by the smoke test and passed.
 
 ## Open items
 
