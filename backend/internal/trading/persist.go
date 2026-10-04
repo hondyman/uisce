@@ -3,8 +3,8 @@ package trading
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"strings"
 
@@ -155,17 +155,19 @@ type FIXFillPersist struct {
 	OrdStatus string  `json:"ord_status"`
 }
 
+// ErrCRIMSNotConfigured is returned when CRIMS_ORM_DSN is not set.
+var ErrCRIMSNotConfigured = errors.New("CRIMS_ORM_DSN is not set")
+
+// OpenCRIMS opens the shared ORM (crims) database from CRIMS_ORM_DSN, and from nothing else. It used
+// to guess the database by taking DATABASE_URL (or POSTGRES_DSN) and swapping its name to "crims", so
+// an environment that forgot the setting silently pointed these activities at whatever server the
+// control plane was on. The ORM database is never inferred; a missing setting is an error that says
+// what to set. (This is one shared database, not one per tenant; it moves behind tenantdb with the
+// ORM data move, Phase 4b.)
 func OpenCRIMS(ctx context.Context) (*sql.DB, error) {
 	dsn := os.Getenv("CRIMS_ORM_DSN")
 	if dsn == "" {
-		base := os.Getenv("DATABASE_URL")
-		if base == "" {
-			base = os.Getenv("POSTGRES_DSN")
-		}
-		if base == "" {
-			return nil, fmt.Errorf("CRIMS_ORM_DSN and DATABASE_URL are unset")
-		}
-		dsn = swapDBName(base, "crims")
+		return nil, fmt.Errorf("%w: set it to the ORM (crims) database; it is never derived from DATABASE_URL", ErrCRIMSNotConfigured)
 	}
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
@@ -176,35 +178,4 @@ func OpenCRIMS(ctx context.Context) (*sql.DB, error) {
 		return nil, fmt.Errorf("ping crims: %w", err)
 	}
 	return db, nil
-}
-
-func swapDBName(dsn, dbname string) string {
-	u, err := url.Parse(dsn)
-	if err != nil || u.Scheme == "" {
-		// libpq key=value form
-		if strings.Contains(dsn, "dbname=") {
-			return replaceKV(dsn, "dbname", dbname)
-		}
-		return dsn
-	}
-	u.Path = "/" + dbname
-	return u.String()
-}
-
-func replaceKV(dsn, key, val string) string {
-	parts := strings.Fields(dsn)
-	out := make([]string, 0, len(parts))
-	found := false
-	for _, p := range parts {
-		if strings.HasPrefix(p, key+"=") {
-			out = append(out, key+"="+val)
-			found = true
-			continue
-		}
-		out = append(out, p)
-	}
-	if !found {
-		out = append(out, key+"="+val)
-	}
-	return strings.Join(out, " ")
 }

@@ -110,7 +110,7 @@ var openerInventory = map[string]opener{
 	"internal/tenantauto/provisioner.go":                         {Kind: kindControlPlane, Max: 1, Reason: "opens alpha or another platform database from the process's own configuration"},
 	"internal/tenantauto/reconciler.go":                          {Kind: kindControlPlane, Max: 1, Reason: "opens alpha or another platform database from the process's own configuration"},
 	"internal/tenantdb/tenantdb.go":                              {Kind: kindTenantDB, Max: 1, Reason: "the router: the only package allowed to open a tenant database for data access"},
-	"internal/trading/persist.go":                                {Kind: kindTenantDatasource, Max: 1, Reason: "the ORM database, opened from CRIMS_ORM_DSN (or DATABASE_URL with the name swapped to crims): ONE shared database, not one per tenant", Until: "4b: ORM data move, then behind tenantdb"},
+	"internal/trading/persist.go":                                {Kind: kindTenantDatasource, Max: 1, Reason: "the ORM (crims) database, opened ONLY from CRIMS_ORM_DSN (never guessed from DATABASE_URL): ONE shared database, not one per tenant", Until: "4b: ORM data move, then behind tenantdb"},
 	"migrations/cmd/migrate.go":                                  {Kind: kindTool, Max: 1, Reason: "migration command for alpha"},
 	"services/uma-rebalance/main.go":                             {Kind: kindControlPlane, Max: 1, Reason: "standalone service that opens DATABASE_URL"},
 }
