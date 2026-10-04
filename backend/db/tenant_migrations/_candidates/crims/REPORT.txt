@@ -1,11 +1,7 @@
-tables: orm=80 mdm=441
+apply order: 01_ref -> 02_vend -> 03_wlth -> 04_cash_flow -> 05_orm -> 06_mdm
+tables: ref=0 vend=0 wlth=0 cash_flow=1 orm=80 mdm=441
 policies removed: 976
 row-level-security statements removed: 967
 
 removed objects:
--- removed FK orm.fund_order_settlement fk_fos_settlement: references ['cash_flow']
---   
---   ALTER TABLE ONLY orm.fund_order_settlement
---       ADD CONSTRAINT fk_fos_settlement FOREIGN KEY (settlement_id) REFERENCES cash_flow.settlement(id);
---   
---   
+(none)
