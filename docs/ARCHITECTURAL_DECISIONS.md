@@ -1730,3 +1730,5 @@ write is `INSERT … SELECT … WHERE NOT EXISTS`, which races across replicas.
 `TestMetricCatalogReconciler_IdempotentRun` passes only because a
 single-threaded run cannot expose the race. The comment asserts a property the
 code lacks, and the test's name claims coverage it does not provide.
+
+<!-- path-filter probe -->
