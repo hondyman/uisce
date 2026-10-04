@@ -48,8 +48,13 @@ jobs:
     name: Detect changed paths
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
+      # Both producing steps are read, because on a push only the second one
+      # runs. Before this, the output read ONLY steps.filter, which is skipped on
+      # a push -- so both flags were empty on every merge and every gated job
+      # was skipped. `||` falls through to the push step, and `!= ''` keeps a
+      # legitimate `false` from the filter step instead of overriding it.
+      backend: ${{ steps.filter.outputs.backend || steps.push_all.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend || steps.push_all.outputs.frontend }}
 
     steps:
     - name: Checkout
@@ -78,6 +83,9 @@ jobs:
             - 'pnpm-lock.yaml'
 
     - name: Verify everything (push to main)
+      # The `id` is load-bearing: the job's outputs read this step, and without
+      # one its writes to $GITHUB_OUTPUT are discarded.
+      id: push_all
       if: github.event_name != 'pull_request'
       run: |
         echo "backend=true"  >> "$GITHUB_OUTPUT"
