@@ -688,3 +688,92 @@ script for this change now refuses any filter path that matches no tracked
 file, verified by re-adding the path and watching it refuse.
 
 ---
+
+## Entry 2026-10-04 — Required status checks, and why a check that can go absent is worse than one that can go red
+
+`main` now requires five status checks with `enforce_admins` on: `Security Scan`,
+`Integration Tests (Backend)`, `Detect changed paths`, `Unit Tests`,
+`Validate Metadata Package`. Added because #376 was merged by a parallel session past a
+review hold, and because the repository had **no** required checks at all
+(`required_status_checks` absent, `rulesets` empty) — so nothing prevented it, or a repeat.
+
+**The interesting part is the four that were rejected.** The obvious set is `Build Backend`,
+`Build Frontend`, the two lint jobs and `Security Scan`. Three of those four are worse than
+useless as required checks, and for a reason that is specific to this repository's own
+path-filter work:
+
+| Check | Why it cannot be required |
+|---|---|
+| `Lint (react-hooks)`, `Lint (jsx-a11y)` | in a workflow with a trigger-level `paths:` filter |
+| `Frontend Typecheck & Build` | same |
+| `Backend Tests (1/4)`…`(4/4)` | skipped runs report the **unrendered** name `Backend Tests (${{ matrix.shard }}/4)` |
+
+A trigger-level `paths:` filter does not run the workflow and mark its jobs skipped. It never
+starts the workflow, so **no check is reported at all**. A required check that is absent is
+indistinguishable from one that has not run, and a pull request waiting on it waits forever.
+The matrix is a different trap: its skipped name carries the literal template expression, so
+the rendered name a reviewer would copy off a green run never matches a filtered one.
+
+**A required check must report by construction, not by luck.** All five that were chosen sit
+in jobs with no `if` and no `needs` — `changes`, `security-scan`,
+`integration-tests-backend`, and two in `acceptance.yml` — so there is no path by which they
+can be skipped. That is a property of the workflow file, readable without running anything.
+The empirical check was a throwaway pull request touching one line of a document (#382, opened
+and closed for the purpose), which showed all five reporting and the rejected four not
+reporting. **The structural argument is the control; the probe was the confirmation.** A
+single probe shows it worked on that pull request.
+
+`Build Docker Images` is excluded for the same family of reason: it is quarantined behind
+`vars.DOCKER_BUILD_ENABLED` and carries `github.event_name != 'pull_request'`, so it can never
+report on a pull request at all.
+
+**Why this is a structural rule and not a note.** A check that goes **red** blocks loudly —
+someone looks. A check that goes **absent** blocks silently and forever, and the fix is not
+discoverable from the pull request, because nothing on it says a check is missing. Both look
+identical on the pull request: not-merged. Before adding any check to this list, read the job
+in the workflow file and confirm it has no path filter and no conditional.
+
+The same shape as the others in this ledger — a claim about coverage that fails by being
+incomplete, silently. Shards reporting green while covering nothing, a path filter skipping a
+build, a matrix partition that selected zero packages. **Absence never announces itself.**
+
+#### Follow-up: skipped satisfies a required check; absent does not
+
+The entry above rejected four candidates. Checking each rejection against a live pull
+request showed that one of the reasons given was wrong, and the distinction it turned up
+decides the whole question.
+
+**A check that reports `SKIPPED` satisfies a required check. A check that is never reported
+blocks the pull request forever.** Those are opposite failure modes and they are easy to
+conflate, because from the pull request both look like "not merged".
+
+Measured, not assumed. #386 touches only documents, so `Build Backend` and `Build Frontend`
+are `SKIPPED` there. `Build Backend` was added to the required set while it was skipped, and
+the pull request reported it — present, `SKIPPED`, and **not outstanding**. So:
+
+| Candidate | Rejection reason | Verdict |
+|---|---|---|
+| `Lint (react-hooks)`, `Lint (jsx-a11y)` | workflow has a trigger-level `paths:` filter | **holds** — the workflow never starts, so no check is reported |
+| `Frontend Typecheck & Build` | same | **holds** — same |
+| `Backend Tests (1/4)`…`(4/4)` | skipped runs report the unrendered `Backend Tests (${{ matrix.shard }}/4)` | **holds** — the rendered name is absent on a filtered PR and the unrendered one is absent on a full one |
+| `Build Backend`, `Build Frontend` | *(previously given as "skipped")* | **wrong reason** — they report, and skipped satisfies. Both are now required |
+
+So the rule to carry forward is not "never require a check that can be skipped". It is:
+**before requiring a check, confirm it is reported on every pull request**, and read the
+workflow file rather than the pull request to confirm it. A job with a trigger-level
+`paths:` filter produces no check at all; a job with an `if:` produces a skipped one, which
+is fine.
+
+**What is still missing, and the shape of the fix.** The backend test matrix — the gate that
+caught the archguard inventory failure on three consecutive merges, and the one most likely
+to catch a #376-class regression — still cannot be required, because its name is not stable:
+`Backend Tests (1/4)` on a full run and `Backend Tests (${{ matrix.shard }}/4)` on a skipped
+one. The fix is the same sentinel already used in `ci-cd.yml`: an aggregate job with
+`needs: backend-tests` and `if: always()` that fails if any leg failed. One stable name, it
+always reports, and it carries the whole matrix. That is the change to make before the
+matrix can join the required set, and it is worth making — the current required set does not
+include the test suite.
+
+`Build Docker Images` remains excluded on the original reasoning and was not re-tested: it is
+gated on `github.event_name != 'pull_request'`, so it can never report on a pull request at
+all, which is the absent case.
