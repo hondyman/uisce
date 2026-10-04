@@ -4,7 +4,7 @@
 
 This ledger differs from `AGENTS.md` rules: rules are policy (what not to do); this ledger is history with lessons attached. A ledger that only records failures teaches avoidance. One that records what the countermeasures *produced* teaches the behavior worth repeating.
 
-**Four standing rules about artifacts, gates and procedures, because each has cost real
+**Six standing rules about artifacts, gates and procedures, because each has cost real
 time here.**
 
 **Every procedure has exactly one authoritative home, and every other mention is a link.** A
@@ -74,6 +74,39 @@ search was scoped to it.** Scope every repository-wide search to a specific modu
 (`backend/`, `frontend/src/`) and read the paths that come back before believing them. When a hit
 describes code the current branch does not contain, the first question is which tree it came from,
 not how it got deleted.
+
+**A test that asserts on a serialized form is not asserting on the structure.** The
+`MaterializationConfig` guard in #396 checked that `incremental_column` and
+`incremental_window_days` were absent, by marshalling the struct and searching the JSON. It
+**passed with both fields present**, because `omitempty` makes absence indistinguishable from
+emptiness — an all-zero struct serialises identically whether the field exists or not. The guard
+was written, was green, and could not have failed when the defect returned. It was caught only
+because a mutation was run against it.
+
+This is the vacuous-fixture family again, wearing a new mask. A fixture is vacuous when it
+asserts on a value the system produces from its own summary rather than from the thing itself;
+serialisation is such a projection. **Assert on the declared fields — `reflect.TypeOf(T{}).FieldByName`
+— not on `json.Marshal` output, whenever the property being tested is a field's existence.** The
+same applies to a `String()` that omits zero values, a SQL view that hides NULLs, and a status
+enum that renders every state as the same string.
+
+**When the question is "what did this commit change", diff commits to commits — never against the
+working tree.** Building the #396 commit through a temporary `GIT_INDEX_FILE` over a shared
+worktree, the check `git diff --name-only origin/main` reported **twelve files that were never
+staged**: it compares the named tree to the *working tree*, and the working tree belonged to a
+different session's branch. Re-run as `git diff --cached origin/main` it reported the correct
+six, and a blob-level comparison against the scratch tree confirmed all six byte-for-byte.
+
+Git's diff commands answer **"what differs between these two trees"**, which is not the same
+question as **"what did I change"**. In a clean tree they coincide, which is exactly why the
+mistake survives. They diverge the moment there is a second branch, a partial staging, an
+overlay, or an untracked artifact — every condition under which plumbing is worth using in the
+first place. The third git-plumbing trap in this engagement, after the wrong read-tree base and a
+PR diffstat taken from the wrong side.
+
+So: when the claim is about a commit's content, verify it from the index or from blobs —
+`git diff --cached <ref>`, `git cat-file blob :<path>`, `git diff <commit> <commit>`. Reserve
+working-tree comparisons for the question they actually answer.
 
 ---
 
