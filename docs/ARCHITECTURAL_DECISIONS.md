@@ -1309,35 +1309,6 @@ while the summary above it said 33 of 33. **A parser that misses its subject is
 indistinguishable from an absence, so an extraction must print what it saw before its
 output is believed.**
 
-#### Second correction (2026-10-04): the 34 is visible in the snapshot, not hidden from it
-
-The correction above explains the `34` as "the 33 tables plus `orm.quote_default`, which is
-`PARTITION OF orm.quote` rather than a `CREATE TABLE`, so a `CREATE TABLE` scan does not see
-it." **That explanation is wrong about the snapshot.** It describes the *tenant migration*,
-not the dump.
-
-In `backend/db/snapshots/schema-snapshot.sql`, `orm.quote_default` is a plain table and a
-partition at the same time:
-
-```
-26065: CREATE TABLE orm.quote_default (
-61775: ALTER TABLE ONLY orm.quote ATTACH PARTITION orm.quote_default DEFAULT;
-```
-
-`pg_dump` never emits `PARTITION OF` — that is a DDL-construction form, not a dump form. The
-snapshot contains **zero** occurrences of `PARTITION OF`. So a `CREATE TABLE` scan of the
-snapshot sees **34** objects, and the `quote_default` partition is fully visible in it. The
-partition is the thing that is invisible in the *migration*, where it is written as
-`CREATE TABLE IF NOT EXISTS orm.quote_default PARTITION OF orm.quote DEFAULT;`.
-
-**The correction stands; its mechanism was wrong.** The measurement is unaffected — every
-`orm` table in the snapshot carries `tenant_id`, and all 34 objects are tenant-scoped — but a
-reader who took the previous paragraph at face value would look for a 34 that is not there
-and conclude the correction itself was unreliable. The number is 34 in both files, for
-opposite and non-interchangeable reasons.
-
-**The two files are now compared directly, and they agree** (see ADR-047).
-
 ### ADR-043: The ORM Move Is A Fleet Of Per-Tenant Copies, Verified Before The Cutover, And The Cutover Is A Registry Flip
 
 **Decision.** Moving ORM data is a `migrations.MoveFleet` rollout of one idempotent,
@@ -1923,60 +1894,3 @@ data-plane move. Per-PR verbal authority does not survive parallel sessions, and
 mechanical rather than conversational: `main` currently has **no required status checks**
 (`required_status_checks` absent, `rulesets` empty), so nothing at all prevents the next
 merge from repeating this. That is now the standing recommendation.
-
-### ADR-047: The Tenant ORM Migration And The Snapshot Describe The Same 34 Objects
-
-The verification debt left by #376 — *did the migration produce what it claims* — has three
-halves. Only the third needs a live database:
-
-| Half | Comparison | Where it is settled |
-|---|---|---|
-| **A** | tenant migration vs snapshot | **here, in the repository** |
-| B | snapshot vs live alpha | needs a live database |
-| C | live alpha vs a migrated tenant database | needs a migrated tenant |
-
-Separating them is worth more than it looks: half the debt is answerable now, and what remains
-for an alpha session shrinks to something it can actually do.
-
-**Half A result: the two files describe the same 34 `orm` objects, with identical names, and
-every one is tenant-scoped in both — zero tables without a `tenant_id` column.**
-
-| | `CREATE TABLE` | partition expressed as | objects |
-|---|---|---|---|
-| `backend/db/tenant_migrations/orm/0001_orm_schema.up.sql` | 33 | `CREATE TABLE ... PARTITION OF` (1) | 34 |
-| `backend/db/snapshots/schema-snapshot.sql` | 34 | `ALTER TABLE ... ATTACH PARTITION` (1, and the object is *also* one of the 34) | 34 |
-
-The partition is written in two different idioms, and both files are internally consistent.
-A comparison that assumes one idiom silently undercounts the other.
-
-**How this measurement nearly produced a false P0.** An earlier run of the comparison reported
-`orm.restricted_list` as **present in the snapshot and absent from the migration** — which
-would have meant a tenant database is provisioned without a table the source has, and
-`ormmove/mover.go:61` moves data into it. That is a tenant data-plane defect in a merged
-cutover, and it would have been entirely my parser.
-
-It was not true. `restricted_list` is at line 324 of the migration. The cause: `orm.quote` is
-partitioned, so its statement ends `)\nPARTITION BY RANGE (quote_time);` rather than `)\n;`.
-A terminator that requires a bare `)\s*;` runs past the end of `quote`, swallows the following
-`CREATE TABLE`, and reports it as missing. The same pattern, run against the snapshot, had
-undercounted it as 33.
-
-**This is the sixth instance of the same family, and the first one that would have manufactured
-a serious defect in merged work.** Every earlier instance produced an absence; this one
-produced a presence — a false claim that a shipped migration is broken. The family statement
-covers it: an assertion on a count or a summary passes whenever the structure changed in a way
-the summary does not model. Trees, filters, fixtures, statuses, and now DDL.
-
-Two habits earned here, and they are cheap:
-
-- **A non-greedy match with a terminator is a claim about the file's shape.** Verify the
-  terminator against a statement that is unusual — a partitioned table, a quoted name, a
-  statement whose closing paren and semicolon sit on separate lines. This migration does all
-  three: it names a table `"order"`, it ends `)\n;`, and it partitions `orm.quote`.
-- **A finding that would send someone chasing a P0 gets one more look at the raw file.** Five
-  earlier extractions of this same pair all produced confident wrong numbers. The sixth was
-  right, and the fifth had been about to be reported.
-
-**What this does not establish.** The snapshot is itself unverified against a live database —
-that is half B, and the snapshot has already been shown once to misrepresent reality. A clean
-comparison against an unverified reference is evidence about the two *files*, not about alpha.
