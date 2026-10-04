@@ -482,6 +482,7 @@ cheaper proxy for the actual measurement and report it as the measurement.**
 |---|---|---|
 | **A run's health is its conclusion, not a sample of its jobs** — sampling one job that passed and reporting the run green is how "main is green" was reported twice while main was red. Read the conclusion; and when counting matrix legs, `cancelled` is not `passed`. | this ledger | Live |
 | **A CI job gated off PRs cannot be caught by PR CI** — `docker-build` has been broken since the initial commit and appeared in no PR's checks, because it only runs on main. A permanently-red main check is invisible to everyone reviewing pull requests. | this ledger | Live |
+| **Disjoint diffs are not disjoint merge outcomes** — four PRs edited `archguard/tenant_connection_inventory_test.go` on disjoint lines, which I verified before merging them in sequence. One of them had merged `main` *back into its feature branch* (`f48b00255 Merge branch 'main' into chore/remove-dead-openers`) rather than being rebased, and the conflict resolution **resurrected an inventory line that #370 had already deleted**. #370's file deletion landed; its inventory deletion did not. `TestInventoryEntriesAreHonest` then failed for three consecutive merges (`665429514`, `7b9708b25`, `9984af09f`) and was introduced by me. **Check the merged result, not the diffs** — after merging, run the shared-state test on `main` itself, because a per-PR green was computed against a base that no longer exists. | this ledger | Live |
 
 ---
 
