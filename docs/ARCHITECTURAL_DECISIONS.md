@@ -1268,6 +1268,47 @@ gone.
 Nothing edits an applied migration (ADR-024); the reference-row handling and any future
 constraint work are new numbered files.
 
+
+#### Correction (2026-10-04): the snapshot does carry `tenant_id` on every `orm` table
+
+The paragraph above cites "0 of 34" from `backend/db/snapshots/schema-snapshot.sql`.
+**That zero is wrong, and was wrong when written.** Re-measured against the merged
+snapshot:
+
+```
+$ count CREATE TABLE orm.<name> in schema-snapshot.sql
+CREATE TABLE orm.<name> statements parsed: 33
+carrying tenant_id: 33 of 33
+  cross-check: 33 marked yes, 0 marked NO, total 33
+```
+
+`orm.account`, printed verbatim from the file, ends `tenant_id uuid NOT NULL`, and the
+parser's match was re-found independently at line 25370 of the raw file. The `34` in the
+ADR is right and should stay: it is the 33 tables plus `orm.quote_default`, which is
+`PARTITION OF orm.quote` rather than a `CREATE TABLE`, so a `CREATE TABLE` scan does not
+see it. It inherits `tenant_id` from its parent.
+
+**The conclusion is unaffected, and is in fact better supported than the ADR realises:
+every `orm` table is tenant-scoped; none is global.** The reconciliation that produced
+that conclusion — 27 listed by a migration, plus 7 from a later one, less the partition,
+equals 33 — arrived at the right number by way of a false premise. The premise being
+false does not make the answer wrong, and the answer is what the tenant migration is built
+from. Correcting the evidence matters because the arithmetic was only ever *coincidentally*
+sound: it would not have survived a different snapshot, and a reader checking the cited
+number would conclude the ADR had not been checked at all.
+
+The zero came from a regex over `CREATE TABLE` bodies that did not match the file. It was
+already retracted once in conversation; the retraction never reached this document, which
+is the failure worth naming — **a correction that lives only in a transcript is not a
+correction.** Three separate extraction attempts were needed to measure this at all, and
+each failed differently: a schema block bounded by the next `CREATE SCHEMA` (the dump does
+not group tables by schema, so it yields 9 lines and a confident zero), a schema
+declaration matched as `CREATE SCHEMA IF NOT EXISTS orm` when the file says
+`CREATE SCHEMA orm;`, and a display loop whose escaped `\\b` reported "no" for every table
+while the summary above it said 33 of 33. **A parser that misses its subject is
+indistinguishable from an absence, so an extraction must print what it saw before its
+output is believed.**
+
 ### ADR-043: The ORM Move Is A Fleet Of Per-Tenant Copies, Verified Before The Cutover, And The Cutover Is A Registry Flip
 
 **Decision.** Moving ORM data is a `migrations.MoveFleet` rollout of one idempotent,
@@ -1730,3 +1771,119 @@ write is `INSERT … SELECT … WHERE NOT EXISTS`, which races across replicas.
 `TestMetricCatalogReconciler_IdempotentRun` passes only because a
 single-threaded run cannot expose the race. The comment asserts a property the
 code lacks, and the test's name claims coverage it does not provide.
+
+### ADR-045: A Path Filter May Skip A Pull Request; It May Not Skip Main On A Code Push
+
+**Decision.** Two rules, and the difference between them is the whole content of this ADR.
+
+1. A workflow may carry a `pull_request` path filter. A pull request that cannot affect the
+   workflow does not need to run it.
+2. A workflow may also carry a `push` path filter **only** where the reduction is provably confined
+   to pushes that change no code. New filters are added `pull_request`-only. Ten pre-existing
+   workflows filter `push` as well; that is now registered policy rather than an accident, and it
+   is enforced, not assumed (below).
+
+**Why the asymmetry, when `main` is the gate.** A filtered pull request is cheap and loses nothing
+that would have been run anyway. A filtered *push* is not: `main` is the only place the full suite
+is authoritative, so a push filter trades main's verification for wall-clock. That trade is
+defensible when the push genuinely cannot break anything — a docs-only commit — and is
+indefensible in general. Since the filter cannot tell the difference between "a push that changed
+only docs" and "a push that changed a file the filter forgot", the safety of the whole arrangement
+rests on the filter being *complete over code*, not on the filter being *narrow*.
+
+**The ten existing `push` filters were checked, and the claim holds.** Classifying each by the
+shape of its paths — a filter is code-shaped if any entry is not docs-shaped — all ten are:
+
+| Workflow | `push` paths | Code-shaped entries |
+|---|---|---|
+| `auto-deploy-on-main.yml` | 3 | `docker-compose.remote.yml`, `scripts/deploy*`, `backend/migrations/**` |
+| `backend-gated-tests.yml` | 1 | `backend/**` |
+| `commit-service-ci.yml` | 2 | `tools/iceberg-commit-service/**`, `.github/ci/**` |
+| `feature-cicd.yaml` | 1 | `backend/sql/Feature_definitions/**` |
+| `frontend-temporal.yml` | 1 | `frontend-temporal/**` |
+| `mcp-security-ci.yml` | 12 | `backend/internal/mcp/**` and 10 siblings |
+| `temporal-ops.yml` | 1 | `tools/temporal-ops/**` |
+| `ui-playwright.yml` | 1 | `ui/**` |
+| `ui-storybook-ci.yml` | 1 | `ui/**` |
+| `workstation-ci.yml` | 3 | `frontend/**`, `desktop/**` |
+
+So the reduction is real but confined: every one of them still fires on a code change.
+
+**The classification was wrong the first time and the correction is the durable part.** The first
+version judged "code-shaped" by probing twenty hardcoded top-level directories and reported five
+workflows as "matches neither code nor docs". That was the probe list being incomplete, not the
+filters being wrong — those five filter `tools/**`, `backend/internal/**`, `backend/sql/**` and
+`scripts/deploy*`, all real code paths the list did not contain. **A hardcoded probe list reports
+its own incompleteness as a finding about the artifact.** Derive the property from the artifact's
+own shape instead.
+
+**Enforcement.** Two guards, because the property above is not checkable by reading a filter:
+
+- `backend/internal/archguard/workflow_path_filter_test.go` re-derives the set of `go.work`
+  modules that `backend/` and `cmd/` actually import and fails if the `ci-cd.yml` backend filter
+  does not cover them. It exists because the first version of that filter omitted
+  `calc-engine/**` while three files under `backend/` imported it.
+- The push-filter classification is a check over the workflow set, run against the merged tree.
+
+**Standing question for any new gate.** *Where is the guard that checks the guard?* A path filter
+is a claim about which files can affect a job, and the failure mode of a claim about coverage is
+that it is incomplete — which does not fail, it silently stops running and reports green. Three
+guards of this shape now exist (metric-compiler expressions, database openers, path-filter
+coverage); the general form is that **every property CI assumes about the repository should have
+something that re-derives it rather than trusting the configuration that asserts it.**
+
+**Known narrowing, deliberately not fixed here.** `mcp-security-ci.yml` filters on both events to
+twelve specific paths under `backend/internal/`, so a change elsewhere in `backend/` triggers
+neither. That is a narrower question than this ADR and is recorded rather than silently widened.
+### ADR-046: The ORM Cutover Shipped Before Its Verification; The Gap Is Recorded Here, Not Closed
+
+**This is a record of a debt, not a decision.** #376 (`0df51215f`, merged 2026-10-04
+02:09:46Z) put the ORM on per-tenant databases. It carried a pre-merge review hold on three
+items — cutover mechanics, the rollback story, and the `quote` table rationale — and a
+parallel session merged it before those were answered. The hold did not hold.
+
+**What the two surviving items turned out to be, checked against the merged tree rather
+than against the review thread.**
+
+*The rollback story exists, and it is the right shape.* `docs/runbooks/orm-cutover.md`
+§Rollback says **"the rollback is the status quo"** — because the procedure deletes nothing,
+reverting is a binding flip back plus the `AuthTTL` wait. The point of no return is
+dropping the shared ORM database, and that is deliberately a separate, later step gated on
+three preconditions: every tenant reports `Moved`, the shared database has been read-only
+for a full retention window, and a restore path exists.
+
+There is no `.down.sql` for the tenant ORM schema, and that is correct rather than an
+oversight: `backend/db/tenant_migrations/orm/0001_orm_schema.up.sql` provisions a
+*new* database, so there is nothing to un-create. The reverse path is a registry write, and
+that is real — `tenantdb.Binding.Lifecycle` carries `active`/`provisioning` and the flip is
+a value change in `alpha`. `ormmove.FleetReport` carries `Moved`, `Failed` and `Done`, so
+the runbook's "every tenant reports `Moved`" is a field, not a hope.
+
+*Two holes in that story, both real.* The third precondition — "a restore path exists" —
+**names no path.** The restore scripts in `docs/runbooks/dr-playbook.md` are for StarRocks
+(`restore-starrocks.sh`) and for tenants (`restore-tenant.sh`); nothing restores the shared
+ORM database, and nothing verifies that one exists. And the runbook never says **who**
+drops the shared database or **when** — "Owner: platform" is at the top of the document, but
+the drop itself has no procedure, so the point of no return is reachable by omission.
+
+*The `quote` rationale is documented, in the migration rather than the ADR.*
+`0001_orm_schema.up.sql:805-811`: `quote` is `RANGE`-partitioned by `quote_time`, a tenant
+gets the default partition only as the source does, partition management (`pg_partman`) is
+not carried across, and the three indexes that lived on `orm.quote_default` are reattached
+to `orm.quote` where they propagate. That is a considered decision with its reasons
+attached, in the place an operator would look.
+
+**What is still owed, and it is not documentation.** The migration has run on main's tree,
+so the migration-versus-reality diff is no longer a pre-merge blocker — it is a live
+verification with a deadline of the next tenant-facing release. Regenerating the snapshot
+against a live database with a real `orm` schema is the only thing that can confirm the
+migration produced what it claims. Nothing in the repository can answer this, and a
+reasonable reader should not mistake this ADR for having answered it.
+
+**The structural lesson, and it is about the protocol rather than the ORM.** Merge authority
+in this engagement is granted per pull request, in conversation. A parallel session merged
+without it, on the most consequential class of change this repository has — a tenant
+data-plane move. Per-PR verbal authority does not survive parallel sessions, and the fix is
+mechanical rather than conversational: `main` currently has **no required status checks**
+(`required_status_checks` absent, `rulesets` empty), so nothing at all prevents the next
+merge from repeating this. That is now the standing recommendation.
