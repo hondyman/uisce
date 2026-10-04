@@ -15,6 +15,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/scanner"
 	"github.com/hondyman/uisce/backend/models"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -112,7 +113,7 @@ func sourceAndSchemas(t *testing.T, db *sql.DB) []string {
 
 // fingerprint describes a structure in terms that must be identical between source and target. Names the server
 // invents for a partition's copy of something are normalised, because they are not part of the design.
-func fingerprint(t *testing.T, db *sql.DB, schemas []string) map[string][]string {
+func fingerprint(t *testing.T, db *sql.DB, schemas []string, crossVersion bool) map[string][]string {
 	t.Helper()
 	in := "('" + strings.Join(schemas, "','") + "')"
 	nsoid := "(select oid from pg_namespace where nspname in " + in + ")"
@@ -133,6 +134,14 @@ func fingerprint(t *testing.T, db *sql.DB, schemas []string) map[string][]string
 			` and not exists (select 1 from pg_depend d where d.objid=p.oid and d.classid='pg_proc'::regclass and d.deptype='e')`,
 		"triggers": `select c.relnamespace::regnamespace::text||'.'||c.relname||':'||t.tgname||':'||pg_get_triggerdef(t.oid) from pg_trigger t join pg_class c on c.oid=t.tgrelid
 		            where not t.tgisinternal and t.tgparentid=0 and c.relnamespace in ` + nsoid,
+	}
+	if crossVersion {
+		// The deparse of an expression is worded differently by different server versions (an ARRAY cast in a CHECK, a
+		// function body), with the same meaning. Compare those by name only, and everything else exactly.
+		q["constraints"] = `select c.relnamespace::regnamespace::text||'.'||c.relname||':'||k.conname||':'||k.contype::text||':'||case when k.contype = 'c' then '' else pg_get_constraintdef(k.oid) end
+		             from pg_constraint k join pg_class c on c.oid=k.conrelid where k.contype in ('p','u','c','f','x') and k.conislocal and k.conparentid=0 and c.relnamespace in ` + nsoid
+		q["routines"] = `select p.oid::regprocedure::text from pg_proc p where p.prokind in ('f','p') and p.pronamespace in ` + nsoid +
+			` and not exists (select 1 from pg_depend d where d.objid=p.oid and d.classid='pg_proc'::regclass and d.deptype='e')`
 	}
 	out := map[string][]string{}
 	for k, sqlText := range q {
@@ -184,7 +193,14 @@ func TestCompile_TheTargetEqualsTheSource_FromTheScanAlone(t *testing.T) {
 		src = freshDB(t, admin, u, "tenantschema_src")
 		schemas = sourceAndSchemas(t, src)
 	}
-	want := fingerprint(t, src, schemas)
+	var srcVer, dstVer int
+	require.NoError(t, src.QueryRow(`SHOW server_version_num`).Scan(&srcVer))
+	require.NoError(t, admin.QueryRow(`SHOW server_version_num`).Scan(&dstVer))
+	crossVersion := srcVer/10000 != dstVer/10000
+	if crossVersion {
+		t.Logf("source is PostgreSQL %d and the target %d: expression text is compared by name, everything else exactly", srcVer/10000, dstVer/10000)
+	}
+	want := fingerprint(t, src, schemas, crossVersion)
 	require.NotEmpty(t, want["tables"])
 	nodes := scanOf(t, src, schemas) // the compiler gets nothing but these
 
@@ -225,10 +241,14 @@ func TestCompile_TheTargetEqualsTheSource_FromTheScanAlone(t *testing.T) {
 	require.NoError(t, err, "the plan applies to an empty database in one transaction")
 	require.NoError(t, tx.Commit())
 
-	got := fingerprint(t, dst, schemas)
+	got := fingerprint(t, dst, schemas, crossVersion)
+	ok := true
 	for k := range want {
-		require.Equal(t, want[k], got[k], "%s differ between the source and the database built from its scan", k)
+		if !assert.Equal(t, want[k], got[k], "%s differ between the source and the database built from its scan", k) {
+			ok = false
+		}
 	}
+	require.True(t, ok)
 
 	// Deterministic: the same nodes in any order give the same plan.
 	shuffled := append([]*models.CatalogNode(nil), nodes...)
