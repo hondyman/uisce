@@ -178,16 +178,15 @@ func TestCompile_TheTargetEqualsTheSource_FromTheScanAlone(t *testing.T) {
 
 	// What a real alpha holds after rescans: nodes of an older scan for things that have since vanished from the source.
 	// A column that is gone, and a whole table that is gone, both still "active". They must not reach the target.
-	first := schemas[0]
-	var tbl string
+	// (the first schema that has a table: a template may begin with empty schemas)
+	var first, tbl string
 	for _, n := range nodes {
 		if n.NodeTypeID == scanner.NODE_TYPE_TABLE {
 			var m map[string]interface{}
 			require.NoError(t, json.Unmarshal(n.Properties, &m))
-			if m["schema"] == first {
-				tbl = n.NodeName
-				break
-			}
+			first, _ = m["schema"].(string)
+			tbl = n.NodeName
+			break
 		}
 	}
 	require.NotEmpty(t, tbl)
