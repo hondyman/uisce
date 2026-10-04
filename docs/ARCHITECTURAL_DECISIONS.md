@@ -1217,24 +1217,41 @@ tenant migration under `backend/db/tenant_migrations/orm/`. It arrives **without
 security** and **without its three foreign keys into `oms`**, and the shared-reference read
 model is served by a per-tenant copy rather than by a policy.
 
-**How the table set was established, because getting this wrong is expensive.** Two answers
-were available and they disagreed, so the migration set was treated as authoritative
-(ADR-024) and the snapshot used only as a cross-check:
+**How the table set was established, and how it was nearly got wrong.** An earlier draft of this
+ADR claimed the schema snapshot showed **0 of 34** `orm` tables carrying `tenant_id`, and concluded
+from that the snapshot was stale. **That was wrong, and the error was ours, not the snapshot's.**
+The snapshot carries `tenant_id uuid NOT NULL` inline on every one of them
+(`schema-snapshot.sql:25730` for `orm."order"` is the first). The mistake was reading the snapshot
+with a regex over `CREATE TABLE` bodies that did not match the file, and then reporting the
+resulting zero as a finding. A count like that is a measurement, and a measurement whose
+regex has never been shown to match its subject is not evidence.
 
-- `backend/db/snapshots/schema-snapshot.sql` shows **0 of 34** `orm` tables carrying
-  `tenant_id`. Taken alone it says no ORM table is tenant-scoped, and the move looks
-  impossible.
-- The migration set says otherwise. `20261017_001_orm_tenant_order_chain.up.sql` gives
-  `tenant_id uuid NOT NULL` to **7** tables (`account`, `broker`, `"order"`,
-  `order_allocation`, `placement`, `execution`, `execution_allocation`), and
-  `20261026_015_orm_rls_new_tables.up.sql` puts **27 more** under RLS policies keyed to
-  `app.current_tenant`.
+The table set was therefore established, and then **verified against a real database** rather
+than by parsing text:
 
-The two reconcile exactly: 27 listed − `quote_default` (a partition of `quote`, not a table)
-= 26, plus 7 = **33 real tables**, and the snapshot's 34 lines are those 33 plus the
-partition. **Every `orm` table is tenant-scoped; none is global.** The snapshot is stale
-(generated Oct 2 22:28, before `20261017_001`) and is regenerated with its migration log
-as one pair before either is trusted again.
+- `20261017_001_orm_tenant_order_chain.up.sql` gives `tenant_id uuid NOT NULL` to **7** tables
+  (`account`, `broker`, `"order"`, `order_allocation`, `placement`, `execution`,
+  `execution_allocation`), and `20261026_015_orm_rls_new_tables.up.sql` puts **27 more** under
+  RLS policies keyed to `app.current_tenant`.
+- 27 listed − `quote_default` (a partition of `quote`, not a table) = 26, plus 7 = **33 real
+  tables**, and the snapshot's 34 names are those 33 plus the partition. **Every `orm` table is
+  tenant-scoped; none is global.**
+- The migration's `orm` schema and the snapshot's `orm` schema were then loaded into two
+  separate databases and compared through `information_schema`: **476 columns on each side, and
+  zero differences in either direction** — no missing column, no extra column, no type or
+  nullability difference. That is the lineage check this decision needed, and it passed.
+
+**What is still true, and more serious.** The `orm` schema is **not reproducible from the migration
+set the runner reads.** No file under `backend/db/migrations/` creates the `orm` schema: the only
+`CREATE SCHEMA orm` in the repository is in `backend/migrations/20260909_create_local_orm_schema.sql`,
+a directory `internal/migrations/runner.go` never reads (`runner.go:22`). The six core tables
+(`"order"`, `placement`, `order_allocation`, `execution`, `execution_allocation`, `account`) have
+**no** `CREATE TABLE` anywhere under `db/migrations/` either, and the `20261026_*` ORM migrations
+fail outright on a fresh database with `schema "orm" does not exist`. So ADR-024's "the migration
+set is the schema authority" does not currently hold for `orm`: production's shape exists only
+because someone applied the unread directory by hand. This migration sidesteps that by creating
+the schema itself, which is why it applies to an empty database, but **closing the drift is its
+own piece of work and this decision does not close it.**
 
 **What RLS was doing, and why it stops.** The policy pair is not isolation, it is a
 *shared-data* mechanism: read allows the tenant's own rows **or** the shared reference
