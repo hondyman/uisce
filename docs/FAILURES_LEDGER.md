@@ -486,3 +486,69 @@ cheaper proxy for the actual measurement and report it as the measurement.**
 
 ---
 
+
+## Entry 2026-10-03 — Hybrid Stack CI removed: a weaker duplicate of a gate that already exists
+
+Deleted `.github/workflows/hybrid_ci.yml`. It ran on both `push` and `pull_request` and did two
+things:
+
+1. `go test -short ./backend/...` — the **entire hermetic backend suite**, unsharded.
+2. `Dry-run Semantic Diff` — a placeholder that runs `echo` and has its real command commented out.
+
+### Why it could go
+
+The test run is a **strictly weaker duplicate** of the tier in `ci-cd.yml`, which runs the same
+packages with `-race`, coverage, module caching, and — as of #372 — sharded four ways:
+
+| | `hybrid_ci.yml` | `ci-cd.yml` |
+|---|---|---|
+| command | `go test -short ./backend/...` | `go test -short -race -coverprofile=...` |
+| concurrency | one job | 4 shards, partition verified as a bijection |
+| module cache | none (hardcoded `go-version: '1.25'`) | `setup-go` `cache: true` |
+| coverage | none | per-shard, merged under one codecov flag |
+
+Nothing is lost by removing it. This is the same decision as #356, which deleted
+`datasource-rename-backend.yml` for running the same Go suite as `Build Backend`: a duplicate of
+a gate that already exists, kept alive by nobody relying on it.
+
+The second step never tested anything. It has been a no-op that prints a sentence.
+
+### Why this was hiding
+
+**`hybrid_ci.yml` is the workflow that caught my own regression.** The stale archguard inventory
+entry from #368 failed *here* first, not in `CI/CD Pipeline` — and that is how I found it while
+#372's CI was red for an unrelated-looking reason. A duplicate gate is not only wasted compute:
+it is a second opinion that disagrees with the first, and when the two are the same check at
+different strengths, the weaker one is the one that reports.
+
+### The measurement it was distorting
+
+`go test ./...` over 498 packages was measured at 7.6m. Sharding `ci-cd.yml` removed one copy of
+it and I reported the critical path as "~6m" — while this workflow was still paying the other
+copy on every push and every pull request. The sharding was real; the claim built on it was not
+yet earned. Both copies are now a single sharded matrix.
+
+Verified on `main` at `99d5fe4d8` (run `37167722917`), the first run with shards in place:
+
+| Job | Duration | Finished at |
+|---|---|---|
+| `Build Backend` (no longer runs tests) | 5.2m | +5.2m |
+| `Backend Tests (3/4)` | 4.2m | +4.3m |
+| `Build Frontend` | 5.7m | +6.1m |
+| `Backend Tests (4/4)` | 5.1m | +6.7m |
+| `Backend Tests (1/4)` | 5.4m | +7.0m |
+| `Backend Tests (2/4)` | 5.4m | +7.2m |
+
+**Critical path 13.4m → 7.2m.** The prediction was ~6m. The 1.2m gap is runner queueing for four
+concurrent jobs: shard 3/4 started at +0.1m but shard 2/4 did not start until +1.8m, so the
+sharding is staggered by scheduling, not by test time. The honest number is the measured one, and
+it is recorded next to the prediction so neither can be quoted alone.
+
+### Structural notes
+
+| Note | File | Status |
+|---|---|---|
+| **A duplicate gate is not free** — two workflows running the same suite at different strengths double the compute and produce two answers; the weaker one reports first and can look like a different failure. Find and reconcile every copy before quoting a saving. | this ledger | Live |
+| **A speedup is not a speedup until every copy is measured** — sharding one workflow while a second ran the same suite unsharded made a 7.6m saving look complete when it was half. Measure the workflow that actually costs, not the one you edited. | this ledger | Live |
+
+---
