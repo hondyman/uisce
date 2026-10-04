@@ -71,7 +71,7 @@ CREATE TABLE alpha_datasource (id uuid PRIMARY KEY, datasource_code text NOT NUL
 CREATE TABLE tenant_product_datasource (
     id uuid PRIMARY KEY, tenant_product_id uuid NOT NULL REFERENCES tenant_product(id),
     alpha_datasource_id uuid NOT NULL REFERENCES alpha_datasource(id),
-    is_active bool NOT NULL DEFAULT true, config jsonb NOT NULL DEFAULT '{}');
+    is_active bool NOT NULL DEFAULT true, config jsonb NOT NULL DEFAULT '{}', core_id uuid);
 `
 
 const sagaPolicies = `

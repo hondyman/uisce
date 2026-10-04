@@ -59,6 +59,10 @@ func (a *TenantProvisioningActivities) PlanTenantStructure(ctx context.Context, 
 	if in.TemplateDatasourceID == "" {
 		return provisioning.StructurePlan{}, nonRetryable(errTypeTenantDBInput, errors.New("a template datasource is required"))
 	}
+	// Planning runs before anything is created, so this is where a malformed role group refuses the run with nothing to undo.
+	if err := a.checkRoleGroup(); err != nil {
+		return provisioning.StructurePlan{}, err
+	}
 	plan, schemas, err := a.compileStructure(ctx, in.TemplateDatasourceID)
 	if err != nil {
 		return provisioning.StructurePlan{}, err

@@ -19,18 +19,48 @@ so the cluster needs one rule instead of one per tenant.
    CREATE ROLE ivy_tenant_apps NOLOGIN;
    ```
 
-2. **Tell the worker** to use it: `TENANT_DB_ROLE_GROUP=ivy_tenant_apps` in the worker's environment. A name that is not a plain
-   lower-case identifier is ignored. If the variable is set and the group does not exist, `ProvisionTenantDatabaseAccess`
-   fails closed and non-retryably with the statement to run, rather than leaving a tenant whose role cannot connect.
+2. **Tell the worker** to use it: `TENANT_DB_ROLE_GROUP=ivy_tenant_apps` in the worker's environment.
+   - **Unset** is a legitimate no-op, for a cluster whose `pg_hba.conf` already admits every tenant role (cert auth for everyone).
+   - **Set and malformed** (not a plain lower-case identifier: letters, digits, underscores, starting with a letter, 63 characters at
+     most) **refuses the run**, non-retryably, with the offending value in the message, from the planning step (before anything is
+     created) and from every tenant-database step. It never degrades to "no group": a gate that a typo can switch off is not a gate.
+     The worker also logs it at start.
+   - **Set, well formed, and the group does not exist**: `ProvisionTenantDatabaseAccess` fails closed and non-retryably with the
+     statement to run, rather than leaving a tenant whose role cannot connect.
 
-3. **Add the rule** (before any catch-all, after the `local`/loopback lines; first match wins):
+3. **Add the rule, in the right place and as narrowly as the network allows.**
+
+   *Placement.* `pg_hba.conf` is first-match-wins, so read the file before choosing a line. Any earlier rule whose database and role
+   fields match a tenant role decides the connection, and the new line never sees it. A rule for `all` roles from an address is the
+   one to look for. On the dev host (read from `pg_hba_file_rules` on 2026-10-04) there are exactly two kinds: the loopback lines and
+   `host all all 172.20.0.0/16 scram-sha-256` (the Docker network, line 121), which admits tenant roles from Docker over plain `host`
+   (no TLS required) before anything below it. The per-role `cert` lines (125-132) name roles and cannot match a tenant role. So the
+   new line goes anywhere after line 122 and before the first rule that would catch the tenant role from the application's address;
+   directly after the per-role lines (after 133) is the conventional place.
+
+   *Scope.* The password is doing real work here, so keep the rule to the hosts that need it:
 
    ```
-   hostssl  all  +ivy_tenant_apps  <the networks the application connects from>  scram-sha-256
+   hostssl  all  +ivy_tenant_apps  <backend host address>/32  scram-sha-256
    ```
 
-   `hostssl`, not `host`: tenant traffic must be encrypted. Name the networks the API and workers really connect from; do not
-   use `0.0.0.0/0` on a cluster that is reachable from anywhere you do not control. Reload (`SELECT pg_reload_conf()`), no restart.
+   One `/32` line per stable address of an application host (the existing `app_admin_read` rules on the dev host already do this:
+   `100.84.50.65/32`, `100.90.97.15/32`). Do **not** use the whole Tailscale range `100.64.0.0/10`: it admits every device on the
+   tailnet, and then the stored password is the only thing between any of them and a tenant's data. Use a range only for a pool of
+   hosts whose addresses are not stable, and say why in a comment on the line. `hostssl`, not `host`: tenant traffic is encrypted.
+   Never `0.0.0.0/0` on a cluster reachable from anywhere you do not control.
+
+4. **Reload, then read the file as the server parsed it.** A reconnect test proves one connection; it does not prove the rule is
+   loaded, has no error, or sits where you think.
+
+   ```sql
+   SELECT pg_reload_conf();
+   SELECT line_number, type, database, user_name, address, netmask, auth_method, error
+     FROM pg_hba_file_rules ORDER BY line_number;
+   ```
+
+   Check that the new line's `error` is null, that its `line_number` is after the lines you meant it to follow and before any rule
+   that matches `all` roles from the same address, and that nothing earlier matches a tenant role from the application's address.
 
 ## What the rule does and does not grant
 
@@ -46,16 +76,42 @@ the tenant's role and refuses to continue if any accepts it. Group membership ad
 SELECT g.rolname, array_agg(m.rolname) FROM pg_auth_members am
   JOIN pg_roles g ON g.oid = am.roleid JOIN pg_roles m ON m.oid = am.member
  WHERE g.rolname = 'ivy_tenant_apps' GROUP BY 1;
--- the rule is loaded and has no error
-SELECT line_number, type, database, user_name, address, auth_method, error
-  FROM pg_hba_file_rules WHERE 'ivy_tenant_apps' = ANY (user_name) OR '+ivy_tenant_apps' = ANY (user_name);
 ```
 
-From the host that will connect as a tenant: connect with the tenant's role and its stored password and `sslmode=require`; it
-must reach its own database and be refused `FATAL: permission denied` on any other.
+and the `pg_hba_file_rules` read above, **after** `pg_reload_conf()`. Then, from the host that will connect as a tenant: connect with the
+tenant's role and its stored password and `sslmode=require`; it must reach its own database and be refused `FATAL: permission denied`
+on any other (the saga's isolation probe checks the same from the worker).
 
-## The dev host (100.84.50.65), as read on 2026-10-04
+## The tenant password is the credential of record
 
-`pg_hba.conf` there lets non-cert roles in only from the Docker network (`host all all 172.20.0.0 scram-sha-256`). The backend runs
-on a developer's Mac over Tailscale (`100.64.0.0/10`), where no rule admits a tenant role. The line above, scoped to the
-Tailscale range, is what the first tenant on that host needs. It was not applied: it is a change to a shared host.
+Over `hostssl` with scram, each tenant database's access is **one password per tenant role**: where it lives, how it changes and what
+a leak costs are recorded in ADR-048 ("The tenant password is the credential of record"). In short: stored in the secrets store, not in
+the datasource row (which holds only `secret_path`); **rotation is manual**; a leaked one exposes one tenant's data to anyone the
+`pg_hba` rule admits, and nothing else.
+
+## The first request
+
+Look the template up; do not copy an id from a document:
+
+```sql
+-- the gold-copy tenant's datasources that declare a schema list, which is what makes one a template
+SELECT d.id, d.source_name, d.config->>'database' AS database, d.config->>'schema' AS schemas
+  FROM public.tenant_product_datasource d JOIN public.tenants t ON t.id = d.tenant_id
+ WHERE t.gold_copy AND d.config->>'schema' IS NOT NULL ORDER BY d.source_name;
+```
+
+If more than one row declares the same schemas, decide which is canonical. The saga binds the tenant's copy of the one you name; a
+tenant's copy of any other gold datasource is cloned as before but is not bound, and fails closed.
+
+```json
+POST /system/tenants/provision        (global admin; bp_queue)
+{
+  "tenant_name": "<name>",
+  "instance_name": "<instance>",
+  "tenant_code": "<lower-case code>",
+  "app": "<application label, a plain lower-case identifier>",
+  "template_datasource_id": "<the canonical gold-copy template datasource id from the query above>"
+}
+```
+
+`app` no longer chooses the datasource in this mode (the template does); it must still be a plain identifier.

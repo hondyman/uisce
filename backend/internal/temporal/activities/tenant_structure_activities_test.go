@@ -355,3 +355,79 @@ func TestRoleGroup_WithoutOneNothingChanges(t *testing.T) {
 	require.Empty(t, r.acts.RoleGroup)
 	require.NoError(t, r.acts.ProvisionTenantDatabaseAccess(context.Background(), r.bound(t)))
 }
+
+// ---- binding by the template, not by an application code ---------------------------------------------------
+
+// seedClones adds the tenant's copies of gold datasources, the way CloneGoldCopyInstance leaves them: a core_id that names the
+// gold datasource each came from, and no credentials.
+func (r *sagaRig) seedClones(t *testing.T, goldIDs ...string) map[string]string {
+	t.Helper()
+	tx, err := r.app.Begin()
+	require.NoError(t, err)
+	defer tx.Rollback()
+	_, err = tx.Exec(`SELECT set_config('uisce.current_tenant', $1, true)`, r.tenant)
+	require.NoError(t, err)
+	var prod, ods string
+	require.NoError(t, tx.QueryRow(`SELECT id FROM tenant_product WHERE datasource_id = $1`, r.instance).Scan(&prod))
+	require.NoError(t, tx.QueryRow(`SELECT id FROM alpha_datasource WHERE datasource_code = 'orm'`).Scan(&ods))
+	out := map[string]string{}
+	for _, g := range goldIDs {
+		id := uuid.NewString()
+		_, err := tx.Exec(`INSERT INTO tenant_product_datasource (id, tenant_product_id, alpha_datasource_id, config, core_id) VALUES ($1, $2, $3, '{}'::jsonb, $4)`, id, prod, ods, g)
+		require.NoError(t, err)
+		out[g] = id
+	}
+	require.NoError(t, tx.Commit())
+	return out
+}
+
+func TestStructureBind_RepointsTheTenantsCopyOfTheTemplateAndNothingElse(t *testing.T) {
+	r := newSagaRig(t)
+	template, other := uuid.NewString(), uuid.NewString()
+	clones := r.seedClones(t, template, other)
+	in := r.in()
+	in.TemplateDatasourceID = template
+
+	b, err := r.acts.BindTenantDatabase(context.Background(), in)
+	require.NoError(t, err)
+	require.Equal(t, clones[template], b.DatasourceID, "the clone of the template, found by the gold datasource it came from")
+
+	db := func(id string) any {
+		return r.one(t, r.tenant, `SELECT config->>'database' FROM tenant_product_datasource WHERE id = $1`, id)[0]
+	}
+	require.Equal(t, r.database, db(clones[template]), "the template's copy now names the tenant's own database")
+	require.Nil(t, db(clones[other]), "another copy of a gold datasource is not repointed: it keeps no database and fails closed")
+	require.NotEqual(t, r.database, db(r.dsOrm), "the row the application code `orm` would have chosen is NOT repointed")
+	require.Nil(t, db(r.dsOrm), "and because it still named the gold copy's database it loses it, so it fails closed instead of resolving to the gold copy")
+}
+
+func TestStructureBind_RefusesWhenThereIsNotExactlyOneCopyOfTheTemplate(t *testing.T) {
+	t.Run("none", func(t *testing.T) {
+		r := newSagaRig(t)
+		in := r.in()
+		in.TemplateDatasourceID = uuid.NewString()
+		_, err := r.acts.BindTenantDatabase(context.Background(), in)
+		require.True(t, isNonRetryableOf(err, "TenantDatabaseInvalidInput"), "%v", err)
+		require.ErrorContains(t, err, "0 datasource(s)")
+		require.ErrorContains(t, err, in.TemplateDatasourceID)
+		require.Equal(t, r.gold, r.one(t, r.tenant, `SELECT config->>'database' FROM tenant_product_datasource WHERE id = $1`, r.dsOrm)[0], "nothing was repointed")
+	})
+	t.Run("two", func(t *testing.T) {
+		r := newSagaRig(t)
+		template := uuid.NewString()
+		r.seedClones(t, template, template)
+		in := r.in()
+		in.TemplateDatasourceID = template
+		_, err := r.acts.BindTenantDatabase(context.Background(), in)
+		require.True(t, isNonRetryableOf(err, "TenantDatabaseInvalidInput"), "%v", err)
+		require.ErrorContains(t, err, "2 datasource(s)")
+	})
+}
+
+func TestStructureBind_WithoutATemplateTheAppCodeStillChoosesTheDatasource(t *testing.T) {
+	r := newSagaRig(t)
+	r.seedClones(t, uuid.NewString()) // a clone with a core_id must not confuse the app-code path
+	b, err := r.acts.BindTenantDatabase(context.Background(), r.in())
+	require.Error(t, err, "two datasources carry the code orm now, so the app-code path correctly refuses as ambiguous")
+	require.Empty(t, b.DatasourceID)
+}
