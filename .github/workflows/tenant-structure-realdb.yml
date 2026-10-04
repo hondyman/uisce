@@ -1,0 +1,74 @@
+name: Tenant Structure (Real Database)
+
+# The tenant-onboarding gate: scanner, schema compiler, migration runner and the provisioning
+# saga's database steps, run against a real throwaway Postgres. These tests used to skip silently
+# wherever no database was configured, so CI was green without proving any of it (ADR-048).
+#
+# There is no skip path in this job. scripts/ci/realdb-check.py fails it when a database test
+# skipped, failed, or ran fewer tests than scripts/ci/realdb-minimums.txt requires, so "no
+# database reachable" and "zero tests matched" are failures. Lowering a minimum is a visible edit
+# to that file in review.
+#
+# No paths filter: this check is required, and a required check that a path filter leaves
+# unreported blocks every PR it skips. It runs on every PR.
+#
+# Deterministic by construction: pinned Postgres major, fixed setup, no network beyond the
+# service container, one package at a time, generous timeouts.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  realdb:
+    name: Tenant Structure Real-DB Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 60); do pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" && exit 0; sleep 2; done
+          echo "Postgres never became ready: failing, not skipping" >&2
+          exit 1
+
+      - name: Prepare the throwaway cluster
+        run: bash scripts/ci/realdb-setup.sh > "$RUNNER_TEMP/realdb.env"
+
+      - name: Run the real-database tests
+        working-directory: backend
+        run: |
+          set -a; . "$RUNNER_TEMP/realdb.env"; set +a
+          {
+            go test -json -count=1 -p 1 -timeout 20m \
+              -run '^(TestTenantDatabase_|TestIsolation_|TestStructure_|TestStructureBind_|TestRoleGroup_|TestConcurrentProvision_|TestConfigureFromEnv_)' \
+              -skip '^TestStructure_OnboardingTimingOnARealTemplate$' \
+              ./internal/temporal/activities/
+            go test -json -count=1 -p 1 -timeout 20m \
+              ./internal/scanner/ ./internal/tenantschema/ ./internal/migrations/
+          } > "$RUNNER_TEMP/realdb.json" || true
+          # The verdict comes from the checker, which also fails on a go test failure.
+
+      - name: Fail unless every real-database test ran and passed
+        run: python3 scripts/ci/realdb-check.py "$RUNNER_TEMP/realdb.json" scripts/ci/realdb-minimums.txt
