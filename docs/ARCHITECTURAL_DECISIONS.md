@@ -1873,6 +1873,13 @@ not carried across, and the three indexes that lived on `orm.quote_default` are 
 to `orm.quote` where they propagate. That is a considered decision with its reasons
 attached, in the place an operator would look.
 
+That placement is also why this question had to be asked twice. The PR flagged the `quote`
+exclusion as load-bearing, and the reasons lived only in a migration comment — the most
+reasonable place for an operator, and no place at all for a reviewer working from the PR.
+**When a judgement call is flagged as load-bearing, its rationale belongs in both: where the
+code is, and in the registry.** The pointer above is the minimum; the reasoning should be
+summarised here next time rather than delegated entirely to a file offset.
+
 **What is still owed, and it is not documentation.** The migration has run on main's tree,
 so the migration-versus-reality diff is no longer a pre-merge blocker — it is a live
 verification with a deadline of the next tenant-facing release. Regenerating the snapshot
