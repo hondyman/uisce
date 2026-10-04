@@ -1,6 +1,6 @@
 # Tenant data tiering: design for review
 
-**Status: proposed. Nothing here is built, and four decisions below are yours.** It follows ADR-035
+**Status: proposed. Nothing here is built. Revised after owner direction on `tenant_id`, Debezium Server and Spark, and after checking the deployed environment; the decisions still open are listed at the end.** It follows ADR-035
 (hot is the tenant's Postgres, warm is StarRocks, cold is Iceberg; `alpha` is never tiered) and is
 written after reading what is actually in the tree, because the tree differs from the ADR in one way
 that matters.
@@ -29,6 +29,26 @@ Classified by whether they grow without bound and are written once:
   validates, and stream-loads StarRocks `oms.*`.
 - `internal/audit/iceberg_sink.go` is a Kafka-to-Parquet writer for audit events, not tenant data.
 
+## What is actually deployed (read from the Docker host, 2026-10-04, read-only)
+
+- **No Debezium Server is running.** The only CDC container is `uisce-debezium`, image `debezium/connect:2.3`,
+  which is **Kafka Connect**. `docker-compose.debezium.yml` (Debezium Server) exists in the repo and is not
+  deployed.
+- **The one deployed connector, `orm-oms-connector`, is `RUNNING` with its task `FAILED`**: `Couldn't obtain
+  encoding for database alpha` at start. So the OMS CDC feed is **already down**, independent of #376. I did not
+  investigate the cause (it is a connection or permission failure reading the database's encoding; the
+  connector's certificate paths are under `/tmp` inside the container, which does not survive a recreate) and
+  did not touch the environment.
+- **It points at `alpha`, not `crims`** (`database.dbname = alpha`, `schema.include.list = orm`), unlike
+  `debezium/orm-oms-connector.json` in the repo. The repo file and the deployed config have drifted, and the
+  five tables it captures are `execution`, `order`, `placement`, `order_allocation`, `execution_allocation`.
+- Redpanda holds exactly those five `orm_oms.orm.*` topics (1 partition, 1 replica each), and there are five
+  `uisce-stream-loader-*` containers, one per topic.
+- **There is no Spark anywhere on the host.** StarRocks 3.3 (FE and BE), Lakekeeper (and a gold-copy
+  Lakekeeper), Redis, Temporal and Redpanda are there.
+- I could not read Postgres settings (`max_replication_slots`, `max_wal_senders`, `max_slot_wal_keep_size`) or
+  the slot list: the host's Postgres needs a password and I did not guess one.
+
 ## The finding that shapes this
 
 **The existing CDC pipeline reads the shared `crims` database, and #376 moved tenants out of it.** The
@@ -42,74 +62,110 @@ environment; if one has, its `oms.*` feed is already stale.
 
 ## Proposal
 
-### 1. One CDC topology, per tenant database, feeding both warm and cold
-- A Debezium connector per tenant database on **Kafka Connect** (not Debezium Server, which is one
-  connector per instance and would mean hundreds of containers). Slot and publication named for the tenant,
-  `topic.prefix = ivy_t_<tenant id without hyphens>`, so a tenant's topics are namespaced by construction
-  and an ACL can be written per prefix.
-- Provisioned by the existing tenant provisioning saga, as one more step after `ProbeTenantDatabase`, and
-  removed by offboarding. Connection credentials come from `dscreds` by the tenant's own role (a
-  replication-capable role per tenant, never a shared one).
-- Consumers read by topic prefix, so a loader can only be given one tenant's topics. This replaces the
-  hard-coded `AssignedTenantID`/`CDC_TOPIC` pairs.
+### 0. `tenant_id` is an invariant in every store, so a misrouted service fails closed
+If tenant A's service is pointed at tenant B's database and asks `WHERE tenant_id = 'A'`, it gets zero rows, not
+B's books. Partitioning does not give that; the predicate does. Requirements:
 
-### 2. Cold: Kafka to Iceberg per tenant, written by StarRocks
-Same engine and the same reasons as ADR-036 (no mature Go Iceberg writer; StarRocks already holds the
-tenant's catalog and credential): a StarRocks Routine Load or `INSERT ... SELECT` from the tenant's topic
-into `<tenant catalog>.<app>.<table>`. One writer per tenant and table; resume point read from the
-destination, not a counter (ADR-036's rule), because an Iceberg append is not idempotent. Batched, not per
-event, for the Object Lock reason in ADR-036.
+- `tenant_id` on every table in every store: the Postgres source, the Debezium envelope, Iceberg, StarRocks
+  `oms.*`; `NOT NULL`; leading column of every key and index in the stores we design from here.
+- **What the tenant ORM schema has today:** every table already has `tenant_id uuid NOT NULL`, but it is not the
+  leading column of any primary key (`PRIMARY KEY (id)` throughout, `(id, quote_time)` on `quote`). Reshaping
+  keys means a forward migration per table through the fleet runner; `0001` is applied and is not edited. The
+  cheap, additive lock is a per-tenant `CHECK (tenant_id = '<that tenant>')`, generated from the tenant id at
+  provisioning, which rejects a misrouted write outright. I propose adding that first and reshaping keys only
+  where a table is being partitioned anyway.
+- **Postgres partitioning:** with one tenant per database, `LIST (tenant_id)` prunes nothing and competes with a
+  drop job that detaches by age. Take **(a) `RANGE (time)` plus the column and the CHECK**, unless you want a
+  detach-by-tenant lever, in which case **(b) `LIST (tenant_id)` parents with `RANGE (time)` sub-partitions**.
+  Either way the ADR records that tenant partitioning supplements the predicate and never replaces it.
+- **Iceberg:** `PARTITIONED BY (tenant_id, month(event_time))`. Here it prunes, and it gives the verifier and
+  the drop job clean boundaries.
+- **Every read path carries the predicate structurally, not by review discipline:** a view per store or one
+  repository helper that injects it, and the verifier and the drop job go through the same path. A second lock
+  is Postgres RLS keyed on a session setting, which returns nothing if the predicate is missing.
+- **`:tenant` comes from the authenticated session context, never from a connection string or a config
+  default** (the standing no-fallback rule).
 
-### 3. Verification before any drop (the gate ADR-044 pointed at, correctly this time)
-A `TenantTableVerify` shaped like the audit-copy verifier (#377): per tenant and table, per closed
-partition, page by page with a cursor; compare **row count and a per-partition checksum** computed in
-Postgres against the same in Iceberg. Findings name a partition and a kind, never a value. The outcome is
-recorded non-monotonically (a later bad run takes back an earlier pass) per `(tenant, table, partition)`.
-There is no seal chain on these tables, so ADR-035's "where present" applies and the checksum is the
-evidence.
+### 1. CDC: one Debezium Server instance per tenant database
+Per the owner's direction. It runs the same connector code as Kafka Connect, so capture cost per record is the
+same; what differs is the operating model: no Connect cluster to run, and one instance per tenant matches
+one-database-per-tenant provisioning.
+
+- The provisioning saga generates each instance's `application.properties` from a template: `topic.prefix` per
+  tenant, `pgoutput`, one slot and one publication per database, `slot.drop.on.stop=false`, a table include
+  list. Credentials come from `dscreds` for the tenant's own replication-capable role, never a shared one.
+- Offsets and slot state on a volume. Downstream writes are idempotent (section 2), so a lost offset store costs
+  re-emitted events, not wrong data.
+- Kafka sink tuned for volume: larger `linger.ms` and `batch.size`, `compression.type=zstd`.
+- Topics keep the shape `orm_oms.orm.<table>`, tenant-prefixed. Both consumers derive the tenant from the topic
+  name, and Redpanda ACLs are scoped per tenant prefix.
+- Hot path unchanged: `stream_loader` keeps feeding `oms.*`; the cold writer is a second consumer group with its
+  own offsets.
+- **Recorded tradeoff:** no centralized connector management. At tens to hundreds of tenants, fleet operation is
+  the cost Connect would have absorbed. **Revisit trigger: 25 tenants, or a need for shared transforms.**
+- **Still blocking either way:** `stream_loader`'s hard-wired `AssignedTenantID` (it is per tenant by
+  construction today) and the cutover runbook's silence on CDC. And, new from the host: the deployed connector is
+  failing today.
+
+### 2. Cold: Spark microbatch to Iceberg (a new component, see decision 5)
+Debezium Server has no Iceberg sink, so a consumer between Redpanda and Iceberg is required. This design uses
+**Spark Structured Streaming**, not StarRocks, for this path: CDC carries updates and deletes, StarRocks 3.3's
+Iceberg write path is append-style, and a correct cold copy needs `MERGE`. (ADR-036's audit copy stays on
+StarRocks: it is append-only by construction.)
+
+- Trigger every 5 to 15 minutes; that is the cold tier's freshness, which is acceptable for cold.
+- Per microbatch: collapse to the latest state per key ordered by source LSN, then `MERGE` into an Iceberg v2
+  table; `op = d` becomes a row-level delete. Guard the match with `source_lsn > target_lsn` so a re-emitted or
+  out-of-order event cannot resurrect an old value. Scheduled compaction.
+- Bulk backfills do not go through the WAL: Spark JDBC reads the source and writes Iceberg directly, recording
+  the source LSN, then Debezium starts from there. The verifier is told a window was batch-loaded.
+- One writer per tenant and table (a Temporal-owned job id), per ADR-036's reason.
+- Tenant credential: Spark is given the tenant's own bucket-scoped credential for its own warehouse, never a
+  shared one, so the isolation of ADR-032 holds on this path.
+
+### 3. Verification before any drop
+A per-tenant, per-table, per-closed-partition verifier shaped like the audit-copy one (#377): page by page with a
+cursor; **row count and an order-independent checksum** (sum or XOR of per-row hashes) computed on both sides
+**with the tenant predicate**, compared at an **Iceberg snapshot pinned to a watermark offset** so delivery lag
+is not read as a failure. Findings name a partition and a kind, never a value. The outcome is recorded
+non-monotonically per `(tenant, table, partition)`. There is no seal chain on these tables, so the checksum is
+the evidence (ADR-035: "where present").
 
 ### 4. The drop job
-Reads `hot_window_days` and `legal_hold` from the binding (ADR-038). Detaches then drops a partition only if
-**all** hold: the partition is wholly older than the window, `legal_hold` is false, and its recorded
+Reads `hot_window_days` and `legal_hold` from the binding (ADR-038). Detaches a partition, and drops it in a
+later run, only if all hold: it is wholly older than the window, `legal_hold` is false, and its recorded
 verification is clean and newer than the last time the partition could have changed (a closed partition is
-immutable by rule; late-arriving rows into it are a finding, not something to absorb). Detach first and drop
-in a later run, so a mistake is recoverable by re-attaching until the drop.
+immutable by rule; a late row into it is a finding, not something to absorb).
 
-### 5. Order of work, and where it stops
-1. **CDC per tenant database** (section 1), including a statement of what happens to a moved tenant's
-   `oms.*` today. This is the prerequisite and it fixes a live gap.
-2. **Partition `pnl_intraday` and the snapshot tables, and give `quote` real partitions.** Only `quote`
-   needs no key change. Tables whose PK is `(id)` need `(id, <time key>)` and their dependants' foreign keys
-   reviewed; that is a migration per table in the tenant migrations, applied to each tenant database through
-   the existing fleet runner.
-3. Cold sink (section 2), then the verifier (3), then the drop job (4).
-4. **The books-and-records tables last, and not without a decision** (question 3).
+### 5. Order of work
+1. **Repair and re-home the existing CDC.** The deployed connector is failing now. Decide, before moving more
+   tenants, what a moved tenant's `oms.*` feed is, and put it in the cutover runbook.
+2. **Per-tenant CDC** (section 1) in the provisioning saga, with the `tenant_id` CHECK (section 0).
+3. **Time partitioning:** give `quote` real partitions; partition `pnl_intraday` and the snapshot tables. Only
+   `quote` needs no key change.
+4. Spark cold sink (2), then the verifier (3), then the drop job (4).
+5. **The books-and-records tables last, and not without decision 3.** Until it is answered they get the
+   `tenant_id` invariant and no drop policy.
 
-## Decisions I need
+## Decisions
 
-1. **Kafka Connect, not Debezium Server, for per-tenant CDC.** You said Debezium Server is what is deployed;
-   it is, for `alpha`'s `iam` tables, and the ORM connector already runs on Kafka Connect. A connector per
-   tenant on Debezium Server means one server instance per tenant. I recommend Kafka Connect. If you
-   would rather keep Debezium Server for everything, say so and I will design around instances per tenant
-   group, but I expect it to be harder to operate.
-2. **Replication slots are a cluster-wide resource.** One slot per tenant database means `max_replication_slots`
-   and `max_wal_senders` bound tenants per cluster, and **a stalled consumer makes Postgres retain WAL for that
-   slot until the disk fills, on a cluster shared by other tenants.** Mitigation I propose: a lag alarm on every
-   slot, `max_slot_wal_keep_size` set so a stalled slot is dropped before it takes the cluster down (a dropped
-   slot means a re-snapshot, which the Iceberg write must tolerate), and a cap on tenants per cluster derived
-   from slots. Do you accept slot loss and re-snapshot as the failure mode, or do you want a different one?
-3. **Are the order and trade tables to be dropped from Postgres at all?** ADR-035 says event tables move to
-   Iceberg after 90 days. For `order_event`, `order_history`, `execution` and friends that is a books-and-records
-   retention question (what period, and whether the regulator's rules allow a copy in object storage to be the
-   record once the OLTP row is gone). I will not partition or drop them on my own judgment.
-4. **Pilot table.** I recommend `quote` first (already partitioned, needs no key change, highest volume, a
-   market-data table and not a record of your own activity), unless it is itself in scope of a best-execution
-   retention rule, in which case it moves to question 3.
+1. **Resolved by owner direction:** Debezium Server per tenant database, with the revisit trigger above.
+2. **Replication slot failure mode: still needs a yes.** One slot per tenant database makes a slot loss one
+   tenant, not the fleet. I propose a lag alarm on every slot and `max_slot_wal_keep_size` set so a stalled slot
+   is dropped before it fills a shared cluster's disk; a dropped slot means a re-snapshot, which the idempotent
+   `MERGE` tolerates. Do you accept slot loss and re-snapshot as the failure mode? I could not read the
+   cluster's current limits.
+3. **Order and trade tables (`order_event`, `execution`, ...): needs the business owner.** Books-and-records
+   retention, and whether a copy in object storage may be the record once the OLTP row is gone.
+4. **Pilot table:** `quote`, unless it is itself under a best-execution retention rule, in which case it moves to
+   decision 3.
+5. **Spark is not deployed and is a new component.** The `MERGE` argument above is why I prefer it for CDC;
+   the cost is one more engine to run, size and secure per the isolation rules. Alternatives: StarRocks with
+   append-only history tables and a view that resolves the latest row, which needs no new engine but makes cold
+   storage a change log rather than a copy. Which do you want?
 
-## What I did not verify
-- Whether any tenant is already on its own ORM database in a deployed environment (decides how urgent the
-  `oms.*` gap is).
-- Postgres cluster limits in your environment (`max_replication_slots`, WAL headroom).
-- That StarRocks 3.3 can `INSERT ... SELECT` from a Kafka-fed table into an Iceberg REST catalog the way ADR-036
-  already assumes for audit; the audit copy's smoke test passed, which covers the write path but not a
-  Kafka source.
+## What is still unverified
+- Why the deployed connector's task fails (and whether any tenant has actually moved off `alpha.orm`).
+- Postgres limits and slot state on the host.
+- Whether Spark's Iceberg `MERGE` against Lakekeeper with the tenant's credential works in this environment; no
+  Spark here to try it on.
