@@ -553,6 +553,79 @@ it is recorded next to the prediction so neither can be quoted alone.
 
 ---
 
+## Entry 2026-10-03 — Path filters in `ci-cd.yml`; and how nearly three of them shipped wrong
+
+Gates `build-backend`, `backend-tests` and `build-frontend` behind a `changes` job. A
+pull request that touches only `docs/` no longer runs the four-shard backend matrix, which
+finished at +7.2m on `99d5fe4d8`. Pushes to `main` emit both flags true and run everything, so
+`main` stays fully verified. `security-scan` is **not** gated: since #357 removed its `needs:` it
+costs ~0 wall-clock, and filtering it would trade the repo's security posture for compute that is
+not the bottleneck.
+
+### A skipped gate is a silent gate
+
+This is the risk that made the filters conservative. A path filter that forgets an input does not
+fail — it stops running, and reports green. So the backend filter carries `libs/`, `cmd/`,
+`migrations/`, `go.work`, `go.work.sum` and the workflow file itself, not just `backend/`.
+`go.work` at the repo root is the one that matters: it is what makes `libs/` and `cmd/` part of a
+backend build, and a filter reading only `backend/` would have skipped the suite for a PR that
+changed a shared library.
+
+**A filter that reduces coverage is not an optimisation, it is a deletion with a green tick.** If
+one of these paths is ever wrong, the fix is to widen the filter, never to trust the result.
+
+### The tooling failure worth recording
+
+This change was attempted three times with a script and the first two produced files that
+**parsed as valid YAML and were still wrong**:
+
+1. A regex over job blocks matched only the job's first line, so the `if:` conditions were applied
+   but `needs: [changes]` silently was not. The workflow would have gated on an expression reading
+   outputs of a job it was never given — permanently false, or empty, depending on the evaluator.
+2. Block-end detection excluded comment lines from terminating a job, so blocks ran past the job
+   boundary and the `if:` lines landed *after the next job's banner comment* — attached to the
+   wrong job entirely.
+
+Both were caught by parsing the result and printing each job's resolved `needs` and `if` **rather
+than by reading the diff**. The third attempt used exact-string edits anchored on
+`  build-backend:\n    name: Build Backend\n    runs-on: ubuntu-latest` and was verified to be a
+**pure addition — 72 lines added, zero removed**, so no existing line could have been mangled.
+
+**A partially-applied edit that still parses is the most dangerous kind**, because every cheap
+check passes. `yaml.safe_load` returning a dict is not evidence the edit did what you meant; it is
+only evidence the file is still YAML. Assert the specific invariant you care about — here, that
+each gated job has `needs: [changes]` *and* an `if` that reads `needs.changes` — and assert the
+shape of the change (pure addition) as well as its validity.
+
+This is the same shape as the shard off-by-one: a check that reports green while measuring nothing
+or the wrong thing. Twice now in one session, in two different layers.
+
+### The filter I wrote was wrong, and reviewing it by eye did not catch it
+
+The first version of this filter omitted `calc-engine/**`. Three files under `backend/` import it —
+`internal/calc-engine/worker/init.go`, `internal/api/calc-engine_handlers.go`,
+`internal/analytics/semantic_calculation_service.go` — and `build-backend` runs `go build ./...` in
+`backend`. A PR touching only `calc-engine/` would have skipped the build that would have caught a
+broken API, and reported green. The shards run `go test` with `working-directory: backend`, so the
+suite was not affected; the *build* gate was the one that would have been silently lost.
+
+The fix is one line. The part that matters is how the gap is now found: the check re-derives the set
+of `go.work` modules that `backend/` and `cmd/` actually import, and fails if any is not covered by
+the declared filter. It is not a test of the line I edited — it is a test of the *property*, so the
+next module added to `go.work` is caught here rather than in a PR that quietly stops building. It
+also had to be corrected once itself: the first version compared module directories to filter entries
+by string equality and so reported `libs/db/queries` as uncovered by `libs/**`, inventing five gaps
+that did not exist. It now asks whether a real file inside the module (`go.mod`) matches the pattern,
+which is the question the filter actually answers.
+
+**Reviewing a filter by reading it is not verification, because the failure is an absence.** Every
+path you can see listed looks right; the defect is the one you did not think of. Derive the set
+mechanically and intersect it with the claim.
+
+**A merged PR deserves the same suspicion as unmerged code.** This gap was introduced by me, in this
+PR, and survived a review that had already caught two failed script attempts in the same file.
+
+---
 ## Entry 2026-10-03 — Path filters: the sweep was 6 workflows, not 15
 
 Adds `pull_request` path filters to the three most expensive workflows that had

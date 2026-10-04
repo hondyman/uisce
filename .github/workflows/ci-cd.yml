@@ -22,11 +22,77 @@ env:
 
 jobs:
   # ==========================================================================
+  # Which parts of the tree actually changed
+  # ==========================================================================
+  # Every job here used to run on every pull request unconditionally, so a
+  # markdown edit paid the full cost of the backend test matrix - four shards
+  # finishing at +7.2m on 99d5fe4d8. A docs-only change cannot break any of it.
+  #
+  # Two rules, both learned the hard way:
+  #
+  #  1. **A skipped gate is a silent gate.** A filter that forgets a path does
+  #     not fail - it stops running and reports green. So the backend filter
+  #     carries every shared input that can change a Go build, not just
+  #     `backend/`: `go.work` at the repo root puts `libs/` and `cmd/` in the
+  #     build, and this file itself holds the ASL drift gate.
+  #  2. **main is the gate, so main is verified in full.** The filter applies
+  #     only to `pull_request`. A push emits both flags true and runs
+  #     everything, so whatever reaches main is always checked against the
+  #     whole surface regardless of what the filter said on the PR.
+  #
+  # `security-scan` is deliberately NOT gated. It is the repo's security
+  # posture, and since #357 removed its `needs:` it costs approximately zero
+  # wall-clock anyway. Filtering it would trade real coverage for compute that
+  # is not the bottleneck.
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Filter (pull request)
+      id: filter
+      if: github.event_name == 'pull_request'
+      uses: dorny/paths-filter@v3
+      with:
+        filters: |
+          backend:
+            - 'backend/**'
+            - 'libs/**'
+            - 'cmd/**'
+            - 'calc-engine/**'
+            - 'migrations/**'
+            - 'go.work'
+            - 'go.work.sum'
+            - '.github/workflows/ci-cd.yml'
+          frontend:
+            - 'frontend/**'
+            - 'frontend-temporal/**'
+            - 'ui/**'
+            - 'package.json'
+            - 'pnpm-lock.yaml'
+
+    - name: Verify everything (push to main)
+      if: github.event_name != 'pull_request'
+      run: |
+        echo "backend=true"  >> "$GITHUB_OUTPUT"
+        echo "frontend=true" >> "$GITHUB_OUTPUT"
+
+  # ==========================================================================
   # Build and Test
   # ==========================================================================
   build-backend:
     name: Build Backend
+    needs: [changes]
     runs-on: ubuntu-latest
+    # Gated on the backend filter. See `changes` above for why the filter is
+    # deliberately broad and why pushes to main are never filtered.
+    if: needs.changes.outputs.backend == 'true'
     outputs:
       version: ${{ steps.version.outputs.version }}
 
@@ -127,7 +193,11 @@ jobs:
   # ~4m of test work and give back most of what sharding bought.
   backend-tests:
     name: Backend Tests (${{ matrix.shard }}/4)
+    needs: [changes]
     runs-on: ubuntu-latest
+    # Gated on the same filter as build-backend, so the shards can never run
+    # for a tree that build-backend would not have built either.
+    if: needs.changes.outputs.backend == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -261,7 +331,10 @@ jobs:
 
   build-frontend:
     name: Build Frontend
+    needs: [changes]
     runs-on: ubuntu-latest
+    # Gated on the frontend filter.
+    if: needs.changes.outputs.frontend == 'true'
 
     steps:
     - name: Checkout
