@@ -162,6 +162,7 @@ func scanOf(t *testing.T, db *sql.DB, schemas []string) []*models.CatalogNode {
 	t.Helper()
 	s, err := scanner.NewAnsiScanner(db, uuid.New(), uuid.New(), "src", nil, true, schemas)
 	require.NoError(t, err)
+	s.SkipDataProfile() // the structure is the same without reading every column's data, which is what makes a large source slow
 	nodes, _, err := s.ExtractMetadata() // closes db
 	require.NoError(t, err)
 	return nodes
