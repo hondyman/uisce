@@ -17,11 +17,11 @@ import (
 	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/dscreds"
 	"github.com/hondyman/uisce/backend/internal/migrations"
-	"github.com/hondyman/uisce/backend/internal/tenantschema"
 	"github.com/hondyman/uisce/backend/internal/provisioning"
 	"github.com/hondyman/uisce/backend/internal/secrets"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/tenantdb"
+	"github.com/hondyman/uisce/backend/internal/tenantschema"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"time"
@@ -260,6 +260,31 @@ func newPassword() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
+// joinRoleGroup makes the tenant's role a member of the configured role group, if there is one. A group that does not
+// exist is a configuration error that no retry fixes, so the step fails closed and says what to create, rather than
+// leaving a tenant whose role exists and cannot connect.
+func (a *TenantProvisioningActivities) joinRoleGroup(ctx context.Context, conn *sql.DB, role string) error {
+	if a.RoleGroup == "" {
+		return nil
+	}
+	var stmt string
+	var exists bool
+	if err := conn.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1)`, a.RoleGroup).Scan(&exists); err != nil {
+		return fmt.Errorf("look up the role group: %w", err)
+	}
+	if !exists {
+		return nonRetryable(errTypeTenantDBConfig, fmt.Errorf("%w: the role group %q does not exist; create it (CREATE ROLE %s NOLOGIN) and add its pg_hba.conf line, see docs/runbooks/tenant-database-access.md",
+			ErrTenantDatabaseNotConfigured, a.RoleGroup, a.RoleGroup))
+	}
+	if err := conn.QueryRowContext(ctx, `SELECT format('GRANT %I TO %I', $1::text, $2::text)`, a.RoleGroup, role).Scan(&stmt); err != nil {
+		return fmt.Errorf("build group grant: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, stmt); err != nil {
+		return fmt.Errorf("add the role to its group: %w", err)
+	}
+	return nil
+}
+
 // ensureRole creates the role (or resets its password to the stored one) and grants it DML on
 // the tenant's schema. It never gets DDL: migrations run as the administrator.
 func (a *TenantProvisioningActivities) ensureRole(ctx context.Context, database, role, password string) error {
@@ -281,6 +306,10 @@ func (a *TenantProvisioningActivities) ensureRole(ctx context.Context, database,
 	}
 	if _, err := conn.ExecContext(ctx, ddl); err != nil {
 		return fmt.Errorf("create role: %w", redact(err, password))
+	}
+
+	if err := a.joinRoleGroup(ctx, conn, role); err != nil {
+		return err
 	}
 
 	for _, tmpl := range []string{
@@ -596,6 +625,13 @@ func (a *TenantProvisioningActivities) ConfigureTenantDatabaseFromEnv() {
 		a.Secrets = p
 	}
 	a.Creds = dscreds.Default()
+	if g := os.Getenv("TENANT_DB_ROLE_GROUP"); g != "" {
+		if pgIdent.MatchString(g) {
+			a.RoleGroup = g
+		} else {
+			a.Logger.Warnf("TENANT_DB_ROLE_GROUP %q is not a plain identifier; tenant roles will not join a group", g)
+		}
+	}
 	if a.ControlDB != nil {
 		a.Templates = &tenantschema.Loader{Store: &tenantschema.AlphaStore{DB: a.ControlDB.DB, Resolver: security.NewDBDatasourceResolver(a.ControlDB)}}
 	}

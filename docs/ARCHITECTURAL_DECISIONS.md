@@ -1512,6 +1512,13 @@ sessions on it while cloning, serialised clones, invalidation on rescan). **Not 
 what makes onboarding slow, and the other saga steps (the Lakekeeper namespace, cloning the gold copy's products, the
 tenant's role) have not been timed. Revisit only if they are measured and the structure is still the largest part.
 
+**Hosting: a tenant's role has to be admitted by the cluster.** The saga creates `<database>_app` and stores its password, but
+`pg_hba.conf` decides whether it may connect. On a cluster tightened to named roles (the dev host's is) a new tenant role matches no
+rule and is refused wherever no earlier rule happens to admit it. `TENANT_DB_ROLE_GROUP` names a cluster role every tenant role joins
+at provisioning, so one `hostssl all +<group> <networks> scram-sha-256` line admits them all. The group is never created by the saga
+(an administrator decision); if it is configured and missing, the step fails closed, non-retryably, with the statement to run. Membership
+adds no privilege. See `docs/runbooks/tenant-database-access.md`.
+
 **Current.** Not decided here, and not yet enforced: a deploy must refuse unless the gold copy's scan is fresh against its
 source. `scripts/tenant-ddl-scan-coverage.py` is the prototype of that check (on 2026-10-04 the scan of 2026-09-26 was 16
 tables and 238 columns behind). The generator that dumps the source directly stays as a **fidelity oracle** the compiled

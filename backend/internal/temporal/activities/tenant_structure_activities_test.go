@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -293,4 +294,64 @@ func TestStructure_ApplyRequiresThePlanAndRefusesBadInput(t *testing.T) {
 	bad.DatabaseName = `x"; DROP DATABASE postgres; --`
 	_, err = r.acts.ApplyTenantStructure(context.Background(), bad)
 	require.True(t, isNonRetryableOf(err, "TenantDatabaseInvalidInput"), "%v", err)
+}
+
+// ---- the role group: one pg_hba.conf line admits every tenant role ----------------------------------------
+
+func (r *sagaRig) groupMembers(t *testing.T, group string) []string {
+	t.Helper()
+	adm, err := r.cluster.Open("postgres")
+	require.NoError(t, err)
+	defer adm.Close()
+	rows, err := adm.Query(`SELECT m.rolname FROM pg_auth_members am JOIN pg_roles g ON g.oid = am.roleid JOIN pg_roles m ON m.oid = am.member WHERE g.rolname = $1 ORDER BY 1`, group)
+	require.NoError(t, err)
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var n string
+		require.NoError(t, rows.Scan(&n))
+		out = append(out, n)
+	}
+	return out
+}
+
+func TestRoleGroup_ATenantsRoleJoinsTheConfiguredGroupAndNothingElseDoes(t *testing.T) {
+	r := newSagaRig(t)
+	adm, err := r.cluster.Open("postgres")
+	require.NoError(t, err)
+	defer adm.Close()
+	group := "ivy_tenant_apps_t" + strings.ReplaceAll(uuid.NewString()[:8], "-", "")
+	_, err = adm.Exec(`CREATE ROLE ` + group + ` NOLOGIN`)
+	require.NoError(t, err)
+	t.Cleanup(func() { _, _ = adm.Exec(`DROP ROLE IF EXISTS ` + group) })
+
+	r.acts.RoleGroup = group
+	in := r.bound(t)
+	require.NoError(t, r.acts.ProvisionTenantDatabaseAccess(context.Background(), in))
+	require.Equal(t, []string{r.database + "_app"}, r.groupMembers(t, group), "the tenant's role is a member, so a single `+group` pg_hba line admits it")
+
+	// repeatable: a retried step converges and adds nothing
+	require.NoError(t, r.acts.ProvisionTenantDatabaseAccess(context.Background(), in))
+	require.Equal(t, []string{r.database + "_app"}, r.groupMembers(t, group))
+
+	// a group member gets no privilege the tenant role did not already have: it is still not a superuser and has no DDL
+	var super bool
+	require.NoError(t, adm.QueryRow(`SELECT rolsuper OR rolcreaterole OR rolcreatedb OR rolbypassrls FROM pg_roles WHERE rolname = $1`, r.database+"_app").Scan(&super))
+	require.False(t, super)
+}
+
+func TestRoleGroup_AGroupThatDoesNotExistFailsClosedAndSaysWhatToCreate(t *testing.T) {
+	r := newSagaRig(t)
+	r.acts.RoleGroup = "ivy_no_such_group_" + strings.ReplaceAll(uuid.NewString()[:8], "-", "")
+	err := r.acts.ProvisionTenantDatabaseAccess(context.Background(), r.bound(t))
+	require.Error(t, err)
+	require.True(t, isNonRetryableOf(err, "TenantDatabaseNotConfigured"), "a missing group is not fixed by retrying: %v", err)
+	require.ErrorContains(t, err, "CREATE ROLE")
+	require.ErrorContains(t, err, "docs/runbooks/tenant-database-access.md")
+}
+
+func TestRoleGroup_WithoutOneNothingChanges(t *testing.T) {
+	r := newSagaRig(t)
+	require.Empty(t, r.acts.RoleGroup)
+	require.NoError(t, r.acts.ProvisionTenantDatabaseAccess(context.Background(), r.bound(t)))
 }

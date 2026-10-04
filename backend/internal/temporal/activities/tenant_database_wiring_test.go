@@ -75,3 +75,21 @@ func TestDatabaseActivitiesRefuseUnsafeNames(t *testing.T) {
 		require.True(t, isNonRetryableOf(err, "TenantDatabaseInvalidInput"), "%q: %v", bad, err)
 	}
 }
+
+func TestConfigureFromEnv_TheRoleGroupMustBeAPlainIdentifier(t *testing.T) {
+	for name, tc := range map[string]struct{ env, want string }{
+		"unset":              {"", ""},
+		"a plain identifier": {"ivy_tenant_apps", "ivy_tenant_apps"},
+		"upper case":         {"Ivy_Apps", ""},
+		"an injected name":   {`x; DROP ROLE postgres`, ""},
+		"a quoted name":      {`"apps"`, ""},
+		"too long":           {strings.Repeat("a", 64), ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("TENANT_DB_ROLE_GROUP", tc.env)
+			a := &activities.TenantProvisioningActivities{Logger: zap.NewNop().Sugar()}
+			a.ConfigureTenantDatabaseFromEnv()
+			require.Equal(t, tc.want, a.RoleGroup, "a group name that is not a plain identifier is ignored, never used")
+		})
+	}
+}

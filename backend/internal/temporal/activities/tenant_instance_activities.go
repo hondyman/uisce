@@ -37,6 +37,10 @@ type TenantProvisioningActivities struct {
 	// Templates loads the gold copy's scan for the structure steps (tenant_structure_activities.go, ADR-048). Unset, those
 	// steps fail closed.
 	Templates *tenantschema.Loader
+	// RoleGroup, when set, is a cluster role every tenant's role is made a member of, so one pg_hba.conf line
+	// (`hostssl all +<group> <addresses> scram-sha-256`) admits every tenant role without listing them. It must already
+	// exist: creating cluster roles is an administrator's decision, not a side effect of onboarding. Empty means no group.
+	RoleGroup string
 }
 
 func NewTenantProvisioningActivities(db *sql.DB, controlDB *sql.DB, logger *zap.SugaredLogger) *TenantProvisioningActivities {
