@@ -85,6 +85,13 @@ func TestCompile_BuildsTheStructureInDependencyOrder(t *testing.T) {
 	require.Len(t, p.Hash(), 64)
 }
 
+func TestCompile_RunsWithAnEmptySearchPath(t *testing.T) {
+	p, err := compile(t, good())
+	require.NoError(t, err)
+	require.Contains(t, p.Statements[0].SQL, "SET LOCAL search_path = '';", "the first statement: nothing may depend on the path")
+	require.Equal(t, "prelude", p.Statements[0].Phase)
+}
+
 func TestCompile_OnlyAllowListedExtensionsAreCreated(t *testing.T) {
 	p, err := compile(t, good())
 	require.NoError(t, err)

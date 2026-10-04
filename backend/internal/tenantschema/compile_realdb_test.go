@@ -162,7 +162,7 @@ func scanOf(t *testing.T, db *sql.DB, schemas []string) []*models.CatalogNode {
 	t.Helper()
 	s, err := scanner.NewAnsiScanner(db, uuid.New(), uuid.New(), "src", nil, true, schemas)
 	require.NoError(t, err)
-	s.SkipDataProfile() // the structure is the same without reading every column's data, which is what makes a large source slow
+	s.SkipDataProfile()                  // the structure is the same without reading every column's data, which is what makes a large source slow
 	nodes, _, err := s.ExtractMetadata() // closes db
 	require.NoError(t, err)
 	return nodes
@@ -225,4 +225,66 @@ func TestCompile_TheTargetEqualsTheSource_FromTheScanAlone(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, plan.Hash(), again.Hash(), "node order must not change the plan")
 	fmt.Printf("compiled %d tables, %d statements, hash %s\n", plan.Tables, len(plan.Statements), plan.Hash()[:12])
+}
+
+// A scan that recorded a name unqualified (as the first rescan of the real alpha did, for 546 of 548 foreign keys) must FAIL to
+// apply, whole, and never resolve to a table of that name by accident: here `party` exists in TWO schemas.
+func TestCompile_AnUnqualifiedNameInAScanFailsLoudlyAndAppliesNothing(t *testing.T) {
+	admin, u := openAdmin(t)
+	dst := freshDB(t, admin, u, "tenantschema_poison")
+
+	nodes := []*models.CatalogNode{}
+	sc := func(name string) {
+		b, _ := json.Marshal(map[string]interface{}{"definitions_captured": true, "definitions_version": scanner.DefinitionsVersion, "scan_id": "s"})
+		nodes = append(nodes, &models.CatalogNode{NodeTypeID: scanner.NODE_TYPE_SCHEMA, NodeName: name, QualifiedPath: "/" + name, Properties: b})
+	}
+	tb := func(schema, name string, cons []interface{}) {
+		b, _ := json.Marshal(map[string]interface{}{"schema": schema, "scan_id": "s", "constraints": cons})
+		nodes = append(nodes, &models.CatalogNode{NodeTypeID: scanner.NODE_TYPE_TABLE, NodeName: name, QualifiedPath: "/" + schema + "/" + name, Properties: b})
+		c, _ := json.Marshal(map[string]interface{}{"is_physical_column": true, "format_type": "uuid", "ordinal_position": 1, "is_nullable": false, "scan_id": "s"})
+		nodes = append(nodes, &models.CatalogNode{NodeTypeID: scanner.NODE_TYPE_COLUMN, NodeName: "id", QualifiedPath: "/" + schema + "/" + name + "/id", Properties: c})
+	}
+	pk := func(table string) map[string]interface{} {
+		return map[string]interface{}{"name": table + "_pkey", "type": "p", "definition": "PRIMARY KEY (id)"}
+	}
+	sc("orm")
+	sc("mdm")
+	tb("orm", "party", []interface{}{pk("party")})
+	tb("mdm", "party", []interface{}{pk("party")})
+	// the poisoned one: refers to `party`, which a session with mdm on its path would have recorded unqualified
+	tb("orm", "account", []interface{}{pk("account"), map[string]interface{}{"name": "fk", "type": "f", "definition": "FOREIGN KEY (id) REFERENCES party(id)"}})
+
+	plan, err := Compile(nodes, Options{Schemas: []string{"orm", "mdm"}})
+	require.NoError(t, err, "the compiler cannot know; applying is what refuses")
+	require.Equal(t, 3, plan.Tables)
+
+	// Applied by a session whose own search_path DOES include mdm, the case that matters: without the plan's own empty path,
+	// `party` would resolve to mdm.party and the poisoned foreign key would apply, silently.
+	conn, err := dst.Conn(context.Background())
+	require.NoError(t, err)
+	defer conn.Close()
+	_, err = conn.ExecContext(context.Background(), `SET search_path = mdm, orm, public`)
+	require.NoError(t, err)
+	tx, err := conn.BeginTx(context.Background(), nil)
+	require.NoError(t, err)
+	_, err = tx.Exec(plan.SQL())
+	// Rolled back BEFORE asserting: if the plan applied, the open transaction would otherwise block dropping the database and
+	// hang the test instead of failing it.
+	require.NoError(t, tx.Rollback())
+	require.Error(t, err, "an unqualified name must not resolve by accident")
+	require.Contains(t, err.Error(), `"party" does not exist`)
+	var n int
+	require.NoError(t, dst.QueryRow(`SELECT count(*) FROM pg_namespace WHERE nspname IN ('orm','mdm')`).Scan(&n))
+	require.Zero(t, n, "and nothing of it was applied")
+
+	// the same plan with the qualified name is applied
+	nodes[len(nodes)-2].Properties, _ = json.Marshal(map[string]interface{}{"schema": "orm", "scan_id": "s", "constraints": []interface{}{pk("account"),
+		map[string]interface{}{"name": "fk", "type": "f", "definition": "FOREIGN KEY (id) REFERENCES mdm.party(id)"}}})
+	good, err := Compile(nodes, Options{Schemas: []string{"orm", "mdm"}})
+	require.NoError(t, err)
+	tx, err = conn.BeginTx(context.Background(), nil)
+	require.NoError(t, err)
+	_, err = tx.Exec(good.SQL())
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
 }
