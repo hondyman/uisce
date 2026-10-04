@@ -34,6 +34,12 @@ type AnsiScanner struct {
 	goldCopyNodes      map[string]db.GoldCopyNodeInfo
 	isGoldCopy         bool
 	schemaWhitelist    []string
+	// scanID identifies this scan. Every schema, table and column node it writes carries it, so a consumer can tell the
+	// nodes of the latest scan from nodes a later scan no longer found: the merge into alpha is incremental and never
+	// deletes (so semantic terms and manual mappings persist), which leaves a vanished column active forever.
+	scanID uuid.UUID
+	// skipDataProfile leaves out the data profile (counts and sample values), keeping everything about structure.
+	skipDataProfile bool
 
 	// progress reporting (see scan_progress.go); all optional
 	progress    func(models.ScanProgress)
@@ -58,8 +64,13 @@ func NewAnsiScanner(db *sql.DB, tenantId, tenantDatasourceId uuid.UUID, sourceSy
 		isGoldCopy:         isGoldCopy,
 		edges:              []models.CatalogEdge{}, // Initialize edges slice
 		schemaWhitelist:    schemaWhitelist,
+		scanID:             uuid.New(),
 	}, nil
 }
+
+// SkipDataProfile makes ExtractMetadata record structure only: no row counts, unique counts or sample values are read. The
+// structure (columns, keys, constraints, indexes, partitioning, routines, triggers) is identical either way.
+func (s *AnsiScanner) SkipDataProfile() { s.skipDataProfile = true }
 
 // getCoreNode retrieves the gold copy node info if a match is found.
 func (s *AnsiScanner) getCoreNode(nodeTypeID uuid.UUID, qualifiedPath string) (db.GoldCopyNodeInfo, bool) {
@@ -75,7 +86,7 @@ func (s *AnsiScanner) getCoreNode(nodeTypeID uuid.UUID, qualifiedPath string) (d
 	return db.GoldCopyNodeInfo{}, false
 }
 
-// isSameProperty compares two JSON property blobs, ignoring "is_core" and "source_system"
+// isSameProperty compares two JSON property blobs, ignoring "is_core", "source_system" and "scan_id" (which differs on every scan)
 func (s *AnsiScanner) isSameProperty(p1, p2 json.RawMessage) bool {
 	var m1, m2 map[string]interface{}
 	if err := json.Unmarshal(p1, &m1); err != nil {
@@ -86,7 +97,7 @@ func (s *AnsiScanner) isSameProperty(p1, p2 json.RawMessage) bool {
 	}
 
 	// Remove keys that should be ignored in comparison
-	ignoreKeys := []string{"is_core", "source_system", "created_at", "updated_at"}
+	ignoreKeys := []string{"is_core", "source_system", "created_at", "updated_at", "scan_id"}
 	for _, key := range ignoreKeys {
 		delete(m1, key)
 		delete(m2, key)
@@ -605,6 +616,7 @@ func (s *AnsiScanner) processSchema(schemaName string) error {
 	props := map[string]interface{}{
 		"is_core":       isCore,
 		"source_system": s.sourceSystem,
+		"scan_id":       s.scanID.String(),
 	}
 	propsJSON, _ := json.Marshal(props)
 
@@ -662,6 +674,7 @@ func (s *AnsiScanner) processTables(schemaName string, schemaID uuid.UUID) error
 			"schema":        schemaName,
 			"is_core":       isCore,
 			"source_system": s.sourceSystem,
+			"scan_id":       s.scanID.String(),
 		}
 		propsJSON, _ := json.Marshal(tableProps)
 
@@ -718,7 +731,9 @@ func (s *AnsiScanner) processColumns(schemaName, tableName string, tableID uuid.
         WHERE c.table_schema = $1 AND c.table_name = $2
         ORDER BY c.ordinal_position
     `
-	rows, err := s.sourceDB.Query(query, schemaName, tableName)
+	// neutral search_path: the column default is a deparsed expression, and an unqualified function or sequence in it
+	// could not be applied to a tenant database (see neutralQuery)
+	rows, err := s.neutralQuery(query, schemaName, tableName)
 	if err != nil {
 		return fmt.Errorf("failed to query columns for table %s.%s: %w", schemaName, tableName, err)
 	}
@@ -746,7 +761,11 @@ func (s *AnsiScanner) processColumns(schemaName, tableName string, tableID uuid.
 			coreID = uuid.NullUUID{UUID: coreNode.ID, Valid: true}
 		}
 
-		props := map[string]interface{}{"data_type": dataType, "is_nullable": isNullable}
+		// The structural keys are ALWAYS written, null when the source has none. The merge into alpha keeps keys the new
+		// scan does not mention, so a default, length or precision that was dropped in the source would otherwise live on
+		// in alpha and be deployed to every new tenant.
+		props := map[string]interface{}{"data_type": dataType, "is_nullable": isNullable, "scan_id": s.scanID.String(),
+			"default_value": nil, "column_comment": nil, "max_length": nil, "precision": nil, "scale": nil}
 		if columnDefault.Valid {
 			props["default_value"] = columnDefault.String
 		}
@@ -919,11 +938,18 @@ func (s *AnsiScanner) ExtractMetadata() ([]*models.CatalogNode, []models.Catalog
 	if err := s.processForeignKeys(); err != nil {
 		logging.GetLogger().Sugar().Warnf("Error processing foreign keys: %v", err)
 	}
+	s.report(true, 62, "", "Reading check constraints, indexes, partitioning, triggers and routines...", s.tablesDone, s.tablesTotal)
+	if err := s.processDefinitions(); err != nil {
+		logging.GetLogger().Sugar().Warnf("Error recording definitions (the scan is marked as not capturing them): %v", err)
+	}
 
-	// Process data profiling (unique counts, sample values)
-	s.report(true, 65, "", fmt.Sprintf("Profiling %d columns (row counts and samples)...", len(s.columnMap)), 0, len(s.columnMap))
-	if err := s.processDataProfile(); err != nil {
-		logging.GetLogger().Sugar().Warnf("Error processing data profile: %v", err)
+	// Process data profiling (unique counts, sample values). It reads the data of every column, which a structure-only scan
+	// (SkipDataProfile) does not need and, against a large source, is by far the slowest step.
+	if !s.skipDataProfile {
+		s.report(true, 65, "", fmt.Sprintf("Profiling %d columns (row counts and samples)...", len(s.columnMap)), 0, len(s.columnMap))
+		if err := s.processDataProfile(); err != nil {
+			logging.GetLogger().Sugar().Warnf("Error processing data profile: %v", err)
+		}
 	}
 
 	// Add final validation
