@@ -102,9 +102,9 @@ func TestProcessDefinitions_AgainstARealServer(t *testing.T) {
 		c := p(path)
 		require.Equal(t, "scan_defs.quote", c["partition"].(map[string]interface{})["parent"], path)
 		require.Contains(t, c["partition"].(map[string]interface{})["bound"], bound[:7], path)
-		require.NotContains(t, c, "constraints", path+": inherited from the parent")
-		require.NotContains(t, c, "triggers", path+": a clone of the parent's trigger")
-		require.NotContains(t, c, "indexes", path+": a copy of the parent's index")
+		require.Equal(t, []interface{}{}, c["constraints"], path+": inherited from the parent, so none of its own")
+		require.Equal(t, []interface{}{}, c["triggers"], path+": a clone of the parent's trigger, so none of its own")
+		require.Equal(t, []interface{}{}, c["indexes"], path+": a copy of the parent's index, so none of its own")
 	}
 
 	pl := p("/scan_defs/plain")
@@ -120,7 +120,7 @@ func TestProcessDefinitions_AgainstARealServer(t *testing.T) {
 			require.Equal(t, "gin", m["method"])
 		}
 	}
-	require.NotContains(t, p("/scan_defs/bare"), "indexes")
+	require.Equal(t, []interface{}{}, p("/scan_defs/bare")["indexes"])
 
 	// exact types, and the key as the server has it
 	require.Equal(t, "numeric(18,9)", p("/scan_defs/quote/bid")["format_type"])
@@ -129,11 +129,30 @@ func TestProcessDefinitions_AgainstARealServer(t *testing.T) {
 	require.Equal(t, "character varying(4)[]", p("/scan_defs/plain/codes")["format_type"])
 	require.Equal(t, "time(3) without time zone", p("/scan_defs/plain/at")["format_type"], "precision information_schema does not give for time")
 	for _, c := range []string{"/scan_defs/quote_default", "/scan_defs/quote_2026"} {
-		require.NotContains(t, p(c), "constraints", c+": the primary key, unique and check are the parent's")
+		require.Equal(t, []interface{}{}, p(c)["constraints"], c+": the primary key, unique and check are the parent's")
 	}
 	for _, path := range []string{"/scan_defs/quote", "/scan_defs/plain"} {
-		require.NotContains(t, p(path), "persistence", path)
-		require.NotContains(t, p(path), "options", path)
+		require.Nil(t, p(path)["persistence"], path)
+		require.Nil(t, p(path)["options"], path)
+	}
+
+	// Every node the scan wrote carries this scan's id, and every structural key is present.
+	scanID := s.scanID.String()
+	for _, n := range nodes {
+		require.Equal(t, scanID, func() string {
+			var m map[string]interface{}
+			_ = json.Unmarshal(n.Properties, &m)
+			v, _ := m["scan_id"].(string)
+			return v
+		}(), n.QualifiedPath)
+	}
+	for _, path := range []string{"/scan_defs/bare", "/scan_defs/plain", "/scan_defs/quote"} {
+		for _, k := range []string{"constraints", "indexes", "triggers", "partition", "persistence", "options"} {
+			require.Contains(t, p(path), k, "%s must always carry %s", path, k)
+		}
+	}
+	for _, k := range []string{"default_value", "column_comment", "max_length", "precision", "scale", "generated", "identity", "collation"} {
+		require.Contains(t, p("/scan_defs/bare/id"), k, "a column always carries %s, null when it has none", k)
 	}
 
 	sc := p("/scan_defs")
@@ -143,4 +162,37 @@ func TestProcessDefinitions_AgainstARealServer(t *testing.T) {
 		rn = append(rn, r.(map[string]interface{})["name"].(string))
 	}
 	require.ElementsMatch(t, []string{"touch", "double"}, rn, "the extension's own functions (pg_trgm) are not the schema's")
+}
+
+// The merge into alpha is `target.properties || source.properties`, which keeps every key the new scan does not mention.
+// This is why the scan always writes the structural keys: against PostgreSQL itself, an index that is gone from the source
+// is overwritten by an empty list, and a default that is gone by a null; a missing key would leave both in alpha.
+func TestMergeSemantics_ExplicitEmptiesOverwriteWhatWasDropped(t *testing.T) {
+	adminDSN := os.Getenv("SCANNER_TEST_ADMIN_DSN")
+	if adminDSN == "" {
+		t.Skip("SCANNER_TEST_ADMIN_DSN not set")
+	}
+	db, err := sql.Open("pgx", adminDSN)
+	require.NoError(t, err)
+	defer db.Close()
+	old := `{"indexes":[{"name":"ix"}],"constraints":[{"name":"chk"}],"default_value":"now()","max_length":10,"title":"Kept"}`
+	t.Run("a scan that omits the keys leaves the stale values (the hazard)", func(t *testing.T) {
+		var got string
+		require.NoError(t, db.QueryRow(`SELECT ($1::jsonb || '{"data_type":"text"}'::jsonb)::text`, old).Scan(&got))
+		require.Contains(t, got, `"indexes"`)
+		require.Contains(t, got, `"default_value"`)
+	})
+	t.Run("a scan that writes them overwrites them and keeps what a person added", func(t *testing.T) {
+		fresh := `{"indexes":[],"constraints":[],"default_value":null,"max_length":null,"data_type":"text"}`
+		var idx, cons string
+		var def, max sql.NullString
+		var title string
+		require.NoError(t, db.QueryRow(`SELECT (m->'indexes')::text, (m->'constraints')::text, m->>'default_value', m->>'max_length', m->>'title'
+			FROM (SELECT $1::jsonb || $2::jsonb AS m) x`, old, fresh).Scan(&idx, &cons, &def, &max, &title))
+		require.Equal(t, "[]", idx)
+		require.Equal(t, "[]", cons)
+		require.False(t, def.Valid, "a dropped default is null, not still now()")
+		require.False(t, max.Valid)
+		require.Equal(t, "Kept", title, "a key only a person set (a title, a mapping) is untouched")
+	})
 }
