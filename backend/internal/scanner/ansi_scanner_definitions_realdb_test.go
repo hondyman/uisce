@@ -196,3 +196,61 @@ func TestMergeSemantics_ExplicitEmptiesOverwriteWhatWasDropped(t *testing.T) {
 		require.Equal(t, "Kept", title, "a key only a person set (a title, a mapping) is untouched")
 	})
 }
+
+// A structure-only scan records the same structure and reads no data.
+func TestSkipDataProfile_KeepsTheStructureAndReadsNoData(t *testing.T) {
+	adminDSN := os.Getenv("SCANNER_TEST_ADMIN_DSN")
+	if adminDSN == "" {
+		t.Skip("SCANNER_TEST_ADMIN_DSN not set")
+	}
+	ctx := context.Background()
+	admin, err := sql.Open("pgx", adminDSN)
+	require.NoError(t, err)
+	name := "scanner_skip_test"
+	_, _ = admin.ExecContext(ctx, `DROP DATABASE IF EXISTS `+name)
+	_, err = admin.ExecContext(ctx, `CREATE DATABASE `+name)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = admin.Exec(`DROP DATABASE IF EXISTS ` + name)
+		admin.Close()
+	})
+	u, err := url.Parse(adminDSN)
+	require.NoError(t, err)
+	u.Path = "/" + name
+	open := func() *sql.DB {
+		d, err := sql.Open("pgx", u.String())
+		require.NoError(t, err)
+		return d
+	}
+	seed := open()
+	_, err = seed.ExecContext(ctx, `CREATE SCHEMA sk; CREATE TABLE sk.t (id uuid PRIMARY KEY, label text);
+		INSERT INTO sk.t SELECT gen_random_uuid(), 'v' || (i % 3) FROM generate_series(1, 30) i;`)
+	require.NoError(t, err)
+	seed.Close()
+
+	scan := func(skip bool) map[string]interface{} {
+		s, err := NewAnsiScanner(open(), uuid.New(), uuid.New(), "src", nil, true, []string{"sk"})
+		require.NoError(t, err)
+		if skip {
+			s.SkipDataProfile()
+		}
+		nodes, _, err := s.ExtractMetadata()
+		require.NoError(t, err)
+		for _, n := range nodes {
+			if n.QualifiedPath == "/sk/t/label" {
+				var m map[string]interface{}
+				require.NoError(t, json.Unmarshal(n.Properties, &m))
+				return m
+			}
+		}
+		t.Fatal("column node not found")
+		return nil
+	}
+	full, lean := scan(false), scan(true)
+	require.Contains(t, full, "sample_values", "a normal scan profiles the data")
+	require.NotContains(t, lean, "sample_values", "a structure-only scan reads none")
+	for _, k := range []string{"format_type", "data_type", "is_nullable", "scan_id"} {
+		require.Equal(t, full[k] != nil, lean[k] != nil, k)
+		require.NotNil(t, lean[k], k)
+	}
+}
