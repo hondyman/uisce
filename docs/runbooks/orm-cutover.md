@@ -120,6 +120,31 @@ no return for the data. Before dropping it:
 - the shared database has been read-only for a full retention window, not minutes;
 - a restore path exists for it.
 
+### Dropping the shared database is a gated, two-person decision
+
+Until this section existed, the point of no return was reachable **by omission**: nobody had to
+decide to destroy anything, only to not decide not to. That is now closed. Dropping the shared
+ORM database requires all of the following, recorded in the change that does it:
+
+1. **A named role.** The platform owner named in this runbook's header, in the change description.
+2. **A second, separate approver.** It is irreversible; one person must not be both proposer and
+   approver.
+3. **The fleet report attached, showing `Done` for every tenant** — the query output, not a
+   claim. `ormmove.FleetReport` carries `Moved`, `Failed` and `Done`; a non-zero `Failed` blocks
+   the drop outright.
+4. **The retention window with a start and end timestamp**, not "a while".
+5. **A named, executed restore.** "A restore path exists" was previously a precondition that
+   named no path, and so was not checkable by anyone. As of #383 it is not satisfied at all:
+   `docs/runbooks/dr-playbook.md` invokes fifteen scripts, none of which exists, and applies five
+   Kubernetes manifest paths, none of which exists, for a platform deployed with Docker Compose.
+   **Until #383 is closed, this precondition cannot be met and the shared database must not be
+   dropped.** The absence of a restore is the one condition here that is checkable today, and it
+   currently fails.
+
+The first four are procedural. The fifth is a real blocker, and it is deliberately stated as one:
+a read-only window protects against a mistaken drop, and nothing protects against the drop being
+the only copy.
+
 ## If a tenant is stuck
 
 | Symptom | Meaning | Action |

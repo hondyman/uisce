@@ -626,3 +626,65 @@ mechanically and intersect it with the claim.
 PR, and survived a review that had already caught two failed script attempts in the same file.
 
 ---
+## Entry 2026-10-03 — Path filters: the sweep was 6 workflows, not 15
+
+Adds `pull_request` path filters to the three most expensive workflows that had
+none: `ci.yml` (3.8m), `integration.yml` (3.5m) and `lint-react-hooks.yml`
+(3.4m), measured on a pull request that touched neither. Below them:
+`e2e-temporal.yml` 2.6m, `acceptance.yml` 1.3m, `kafka-smoke-test.yml` 0.6m —
+not worth the risk yet.
+
+### The plan was built on a count nobody had checked
+
+I had queued "add path filters to the other 15 PR-triggering workflows".
+Enumerating all 24 workflow files says: 18 trigger on `pull_request`, **11 of
+them already self-gate** through a trigger-level `paths:` filter, and 7 have
+none. So the sweep was 6 workflows, not 15, and one of the 7 was already done.
+Three of the six I had listed as "ambiguous, need reading" turned out to be
+self-gated already.
+
+The inventory script itself was wrong first. It treated a `pull_request:` key
+with a null value as "not triggered", when a present-but-empty key fires on
+*every* pull request. That misreported eight workflows as dormant — including
+two that the check rollup of the very pull request being analysed proves had
+just run. **A key that is present and empty is not an absent key**, and in
+YAML neither is it falsey in the way a reader assumes.
+
+### integration.yml is not the gateway's workflow
+
+I had classified it as `api-gateway`-only, from its `working-directory`. It is
+not. It runs `go build -o bin/backend ./backend/cmd/server`, starts the backend
+and curls `/api/roles`, and applies `init-db.sql` at the repository root.
+Filtering it on `api-gateway/**` — the classification I had written down — would
+have deleted the backend integration test from every backend pull request, and
+reported green while doing it.
+
+**A workflow's `working-directory` is where its *last* steps run, not what it
+reads.** One job in one file builds three things from three different roots.
+Read the steps, or do not classify the workflow.
+
+### Deliberately diverging from the convention in this repository
+
+Nine of the eleven workflows here that self-gate filter `push` as well as
+`pull_request`, so `main` already skips them on a docs-only push. This change
+filters `pull_request` only, and asserts that `push` gained nothing.
+
+Matching the local convention would have been cheaper to review and would have
+quietly reduced what `main` verifies — and `main` is the gate. The divergence is
+recorded here rather than left to look like an oversight. Whether the nine
+existing filters should also stop filtering `push` is a separate question, and
+the one that actually matters: that reduction was already in place before this
+change, and nobody appears to have decided it.
+
+### A filter path that matches nothing is dead configuration
+
+`integration.yml` references `tmp/seed_semantic_roles.sql` behind
+`if [ -f ... ]`, but the file is not tracked, so the step is a no-op in CI. A
+filter naming it could never match. It was in my first draft.
+
+That is the same defect as the `docker-build` matrix naming five paths that do
+not exist — configuration that reads as coverage and can never fire. The build
+script for this change now refuses any filter path that matches no tracked
+file, verified by re-adding the path and watching it refuse.
+
+---

@@ -5,6 +5,10 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - 'package.json'
+      - '.github/workflows/ci.yml'
 
 jobs:
   frontend:
