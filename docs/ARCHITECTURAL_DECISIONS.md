@@ -1465,6 +1465,16 @@ profiles is decided, most specific first: the request (`"profile_data": false` i
 anything is scanned), then the datasource (`"profile_data": false` in its connection config), then the default, **unchanged: profile**.
 A structure-only scan records exactly the same structure, which is all a gold-copy template needs.
 
+**Definitions must not depend on who scanned: a neutral `search_path`.** PostgreSQL's deparse (`pg_get_constraintdef`, `pg_get_indexdef`,
+`pg_get_triggerdef`, `pg_get_functiondef`, `pg_get_expr`, `format_type`, and the column default `information_schema` reports) leaves a name
+unqualified when its schema is on the scanning session's `search_path`. The first rescan in the real `alpha` was scanned by a session that
+could see `mdm`, and 546 of its 548 foreign keys were recorded as `REFERENCES party(id)` instead of `REFERENCES mdm.party(id)`. Compiling that
+scan succeeded; **applying it failed** (`relation "party" does not exist`), and where two schemas share a table name it could have resolved to the
+wrong one. It failed closed only because the plan is one transaction. The scanner now runs every query that returns deparsed text, and the column query, in
+a read-only transaction with `SET LOCAL search_path = ''`, as `pg_dump` reads a database, so every name outside `pg_catalog` is
+qualified whatever the scanning connection is configured with. The compiler applies the plan under the same empty path (see below), so an unqualified
+name fails loudly instead of resolving by accident.
+
 **Verified** against a real server on the six schemas of the gold copy's template (80 + 441 + 1 tables): the recorded
 counts equal what the server has, to the object: 1,401 indexes (plus 3 partition copies, deliberately not recorded), 309
 local check constraints (plus 3 inherited by partitions), 2 triggers, 7 routines, 2 partitioned parents and their 2
