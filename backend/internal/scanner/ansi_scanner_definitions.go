@@ -1,6 +1,8 @@
 package scanner
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -44,6 +46,44 @@ type tableDefs struct {
 	indexes     []map[string]interface{}
 	triggers    []map[string]interface{}
 	partition   map[string]interface{}
+}
+
+// neutralRows is the rows of a query that ran with an empty search_path. Closing it ends the (read-only) transaction.
+type neutralRows struct {
+	*sql.Rows
+	tx *sql.Tx
+}
+
+func (r *neutralRows) Close() error {
+	err := r.Rows.Close()
+	_ = r.tx.Rollback() // read only: nothing to commit
+	return err
+}
+
+// neutralQuery runs a query in a read-only transaction whose search_path is EMPTY, the way pg_dump reads a database.
+//
+// This is not cosmetic. PostgreSQL's own deparse (pg_get_constraintdef, pg_get_indexdef, pg_get_triggerdef,
+// pg_get_functiondef, pg_get_expr, format_type, and the column default information_schema reports) leaves a name
+// unqualified whenever its schema is on the scanning session's search_path. Scanned by a session that could see `mdm`, a foreign key
+// is recorded as `REFERENCES party(id)`; scanned by one that could not, as `REFERENCES mdm.party(id)`. The first cannot be
+// applied to a tenant's database, where `party` resolves to nothing, and the same text could resolve to the WRONG table where two
+// schemas share a name. With an empty path every name outside pg_catalog is qualified, whoever scans and however
+// their connection is configured. (pg_catalog is always searched, so its functions and tables need no qualifying.)
+func (s *AnsiScanner) neutralQuery(query string, args ...interface{}) (*neutralRows, error) {
+	tx, err := s.sourceDB.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(`SET LOCAL search_path = ''`); err != nil {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("set a neutral search_path: %w", err)
+	}
+	rows, err := tx.Query(query, args...)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	return &neutralRows{Rows: rows, tx: tx}, nil
 }
 
 func (s *AnsiScanner) schemaFilter(col string, args *[]interface{}) string {
@@ -96,7 +136,7 @@ func (s *AnsiScanner) processDefinitions() error {
 		        JOIN pg_namespace n ON n.oid = c.relnamespace
 		       WHERE k.contype IN ('p', 'u', 'c', 'f', 'x') AND k.conislocal AND k.conparentid = 0 AND c.relkind IN ('r', 'p') AND ` + s.schemaFilter("n.nspname", &args) + `
 		       ORDER BY n.nspname, c.relname, k.conname`
-		if rows, err := s.sourceDB.Query(q, args...); err != nil {
+		if rows, err := s.neutralQuery(q, args...); err != nil {
 			fail("constraints", err)
 		} else {
 			for rows.Next() {
@@ -129,7 +169,7 @@ func (s *AnsiScanner) processDefinitions() error {
 		         AND NOT EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = i.indexrelid AND k.contype IN ('p', 'u', 'x'))
 		         AND NOT EXISTS (SELECT 1 FROM pg_inherits h WHERE h.inhrelid = i.indexrelid)
 		       ORDER BY n.nspname, t.relname, ic.relname`
-		if rows, err := s.sourceDB.Query(q, args...); err != nil {
+		if rows, err := s.neutralQuery(q, args...); err != nil {
 			fail("indexes", err)
 		} else {
 			for rows.Next() {
@@ -164,7 +204,7 @@ func (s *AnsiScanner) processDefinitions() error {
 		        JOIN pg_namespace n ON n.oid = c.relnamespace
 		       WHERE c.relkind IN ('r', 'p') AND (c.relkind = 'p' OR c.relispartition) AND ` + s.schemaFilter("n.nspname", &args) + `
 		       ORDER BY n.nspname, c.relname`
-		if rows, err := s.sourceDB.Query(q, args...); err != nil {
+		if rows, err := s.neutralQuery(q, args...); err != nil {
 			fail("partitioning", err)
 		} else {
 			for rows.Next() {
@@ -200,7 +240,7 @@ func (s *AnsiScanner) processDefinitions() error {
 		        JOIN pg_namespace fn ON fn.oid = p.pronamespace
 		       WHERE NOT t.tgisinternal AND t.tgparentid = 0 AND ` + s.schemaFilter("n.nspname", &args) + `
 		       ORDER BY n.nspname, c.relname, t.tgname`
-		if rows, err := s.sourceDB.Query(q, args...); err != nil {
+		if rows, err := s.neutralQuery(q, args...); err != nil {
 			fail("triggers", err)
 		} else {
 			for rows.Next() {
@@ -230,7 +270,7 @@ func (s *AnsiScanner) processDefinitions() error {
 		       WHERE p.prokind IN ('f', 'p') AND ` + s.schemaFilter("n.nspname", &args) + `
 		         AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.classid = 'pg_proc'::regclass AND d.deptype = 'e')
 		       ORDER BY n.nspname, p.proname, pg_get_function_identity_arguments(p.oid)`
-		if rows, err := s.sourceDB.Query(q, args...); err != nil {
+		if rows, err := s.neutralQuery(q, args...); err != nil {
 			fail("routines", err)
 		} else {
 			for rows.Next() {
@@ -261,7 +301,7 @@ func (s *AnsiScanner) processDefinitions() error {
 		        JOIN pg_class c ON c.oid = a.attrelid
 		        JOIN pg_namespace n ON n.oid = c.relnamespace
 		       WHERE a.attnum > 0 AND NOT a.attisdropped AND c.relkind IN ('r', 'p') AND ` + s.schemaFilter("n.nspname", &args)
-		if rows, err := s.sourceDB.Query(q, args...); err != nil {
+		if rows, err := s.neutralQuery(q, args...); err != nil {
 			fail("column types", err)
 		} else {
 			for rows.Next() {
@@ -302,7 +342,7 @@ func (s *AnsiScanner) processDefinitions() error {
 		        FROM pg_class c
 		        JOIN pg_namespace n ON n.oid = c.relnamespace
 		       WHERE c.relkind IN ('r', 'p') AND (c.relpersistence <> 'p' OR c.reloptions IS NOT NULL) AND ` + s.schemaFilter("n.nspname", &args)
-		if rows, err := s.sourceDB.Query(q, args...); err != nil {
+		if rows, err := s.neutralQuery(q, args...); err != nil {
 			fail("table options", err)
 		} else {
 			for rows.Next() {
@@ -330,7 +370,7 @@ func (s *AnsiScanner) processDefinitions() error {
 	// extensions the source has installed. A tenant structure creates the ones its definitions need, so the scan has to say
 	// which exist and where; plpgsql is always there.
 	var extensions []map[string]interface{}
-	if rows, err := s.sourceDB.Query(`SELECT e.extname, e.extversion, n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace WHERE e.extname <> 'plpgsql' ORDER BY e.extname`); err != nil {
+	if rows, err := s.neutralQuery(`SELECT e.extname, e.extversion, n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace WHERE e.extname <> 'plpgsql' ORDER BY e.extname`); err != nil {
 		fail("extensions", err)
 	} else {
 		for rows.Next() {
