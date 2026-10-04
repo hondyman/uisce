@@ -5,6 +5,7 @@ package archguard
 // by path. The tenant-datasource entries are the work list for moving tenant data access behind
 // internal/tenantdb.
 var openerInventory = map[string]opener{
+	"internal/sourceconn/sourceconn.go":                          {Kind: kindSourceConnector, Max: 2, Reason: "the audited opener of tenant source databases: a pgxpool per authorized datasource (credentials from the secrets store, ownership under an explicit policy, bounded) and the ad hoc open used to test an unsaved connection"},
 	"cmd/admin_audit_check/main.go":                              {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/admin_http_check/main.go":                               {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/apikeygen/main.go":                                      {Kind: kindControlPlane, Max: 1, Reason: "a served command: opens alpha from DATABASE_URL-style configuration"},

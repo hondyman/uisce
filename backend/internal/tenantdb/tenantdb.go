@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	"golang.org/x/sync/singleflight"
 )
 
 var (
@@ -87,7 +88,22 @@ type Config struct {
 	MaxConnsPerPool int32         // connections per tenant database
 	IdleTTL         time.Duration // a pool unused for this long is closed
 	DialTimeout     time.Duration
+
+	// AuthTTL is how long a SUCCESSFUL authorization (ownership, completeness, active binding, and the
+	// app-to-datasource lookup) is reused without asking alpha again. 0 disables the cache: every
+	// Resolve re-checks alpha (18 statements), which is the strictest and slowest setting.
+	//
+	// This is a deliberate fail-closed latency trade: after a suspension, offboarding or cutover in
+	// alpha, this process keeps resolving the old answer for at most AuthTTL. Refusals are never
+	// cached, so recovery is immediate; call InvalidateDatasource/InvalidateTenant to make an in-process
+	// change take effect at once. Probe never uses the cache.
+	AuthTTL time.Duration
+	// MaxAuthEntries bounds the cache (default 4 x MaxPools).
+	MaxAuthEntries int
 }
+
+// DefaultAuthTTL is what production wiring uses: short enough that a suspension bites within seconds.
+const DefaultAuthTTL = 3 * time.Second
 
 type cacheKey struct {
 	datasourceID string
@@ -116,6 +132,24 @@ type Router struct {
 	now   func() time.Time
 	mu    sync.Mutex
 	pools map[cacheKey]*entry
+
+	// Authorization cache (AuthTTL > 0). Keyed by the VERIFIED caller tenant as well as the
+	// datasource, so one tenant can never be served another's cached authorization.
+	auth   map[authKey]authEntry
+	apps   map[appKey]appEntry
+	flight singleflight.Group
+}
+
+type authKey struct{ tenant, datasourceID string }
+type authEntry struct {
+	ds      Datasource
+	b       Binding
+	expires time.Time
+}
+type appKey struct{ tenant, app string }
+type appEntry struct {
+	datasourceID string
+	expires      time.Time
 }
 
 // New validates the config and returns a Router.
@@ -129,13 +163,19 @@ func New(cfg Config) (*Router, error) {
 		return nil, errors.New("tenantdb: MaxPools and MaxConnsPerPool must be positive")
 	case cfg.IdleTTL <= 0 || cfg.DialTimeout <= 0:
 		return nil, errors.New("tenantdb: IdleTTL and DialTimeout must be positive")
+	case cfg.AuthTTL < 0 || cfg.MaxAuthEntries < 0:
+		return nil, errors.New("tenantdb: AuthTTL and MaxAuthEntries must not be negative")
 	}
-	return &Router{cfg: cfg, now: time.Now, pools: map[cacheKey]*entry{}}, nil
+	if cfg.AuthTTL > 0 && cfg.MaxAuthEntries == 0 {
+		cfg.MaxAuthEntries = 4 * cfg.MaxPools
+	}
+	return &Router{cfg: cfg, now: time.Now, pools: map[cacheKey]*entry{},
+		auth: map[authKey]authEntry{}, apps: map[appKey]appEntry{}}, nil
 }
 
 // Resolve maps a datasource to a pool for the caller's tenant.
 func (r *Router) Resolve(ctx context.Context, datasourceID string) (*Pool, error) {
-	ds, b, err := r.authorize(ctx, datasourceID, false)
+	ds, b, err := r.authorizeCached(ctx, datasourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -155,11 +195,183 @@ func (r *Router) ResolveApp(ctx context.Context, app string) (*Pool, error) {
 	if err != nil || actor == "" {
 		return nil, ErrNoTenant
 	}
-	id, err := r.cfg.Registry.AppDatasource(ctx, actor, app)
+	id, err := r.appDatasource(ctx, actor, app)
 	if err != nil {
-		return nil, fmt.Errorf("tenantdb: find %q datasource: %w", app, err)
+		return nil, err
 	}
 	return r.Resolve(ctx, id)
+}
+
+// appDatasource is the app-to-datasource lookup, cached for AuthTTL like the authorization (and
+// refused results are never cached).
+func (r *Router) appDatasource(ctx context.Context, actor, app string) (string, error) {
+	lookup := func(ctx context.Context) (string, error) {
+		id, err := r.cfg.Registry.AppDatasource(ctx, actor, app)
+		if err != nil {
+			return "", fmt.Errorf("tenantdb: find %q datasource: %w", app, err)
+		}
+		return id, nil
+	}
+	if r.cfg.AuthTTL <= 0 {
+		return lookup(ctx)
+	}
+	key := appKey{actor, app}
+	r.mu.Lock()
+	if e, ok := r.apps[key]; ok && r.now().Before(e.expires) {
+		r.mu.Unlock()
+		return e.datasourceID, nil
+	}
+	r.mu.Unlock()
+	v, err := r.coalesce(ctx, "app\x00"+actor+"\x00"+app, func(ctx context.Context) (any, error) {
+		id, err := lookup(ctx)
+		if err != nil {
+			return nil, err
+		}
+		r.mu.Lock()
+		r.apps[key] = appEntry{datasourceID: id, expires: r.now().Add(r.cfg.AuthTTL)}
+		r.trimAuthLocked()
+		r.mu.Unlock()
+		return id, nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return v.(string), nil
+}
+
+// authorizeCached is authorize with the AuthTTL cache in front of it. Only a successful
+// authorization is stored; a refusal is returned every time it happens.
+func (r *Router) authorizeCached(ctx context.Context, datasourceID string) (Datasource, Binding, error) {
+	if r.cfg.AuthTTL <= 0 {
+		return r.authorize(ctx, datasourceID, false)
+	}
+	actor, err := r.cfg.CallerTenant(ctx)
+	if err != nil || actor == "" {
+		return Datasource{}, Binding{}, ErrNoTenant
+	}
+	key := authKey{actor, datasourceID}
+	r.mu.Lock()
+	if e, ok := r.auth[key]; ok && r.now().Before(e.expires) {
+		r.mu.Unlock()
+		return e.ds, e.b, nil
+	}
+	r.mu.Unlock()
+
+	v, err := r.coalesce(ctx, "auth\x00"+actor+"\x00"+datasourceID, func(ctx context.Context) (any, error) {
+		ds, b, err := r.authorize(ctx, datasourceID, false)
+		if err != nil {
+			return nil, err
+		}
+		r.mu.Lock()
+		r.auth[key] = authEntry{ds: ds, b: b, expires: r.now().Add(r.cfg.AuthTTL)}
+		r.trimAuthLocked()
+		r.mu.Unlock()
+		return authEntry{ds: ds, b: b}, nil
+	})
+	if err != nil {
+		return Datasource{}, Binding{}, err
+	}
+	e := v.(authEntry)
+	return e.ds, e.b, nil
+}
+
+// coalesce runs fn once for all concurrent callers of the same key, so many goroutines finding an
+// expired entry at the same moment cost alpha one round, not one each. The shared call is detached
+// from any single caller's cancellation (bounded by DialTimeout) so one cancelled request cannot fail
+// the others; each caller still honours its own context while waiting.
+func (r *Router) coalesce(ctx context.Context, key string, fn func(context.Context) (any, error)) (any, error) {
+	ch := r.flight.DoChan(key, func() (any, error) {
+		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.cfg.DialTimeout)
+		defer cancel()
+		return fn(cctx)
+	})
+	select {
+	case res := <-ch:
+		return res.Val, res.Err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// trimAuthLocked keeps the authorization caches within MaxAuthEntries: expired entries first, then the
+// ones closest to expiry.
+func (r *Router) trimAuthLocked() {
+	max := r.cfg.MaxAuthEntries
+	if max <= 0 || len(r.auth)+len(r.apps) <= max {
+		return
+	}
+	now := r.now()
+	for k, e := range r.auth {
+		if !now.Before(e.expires) {
+			delete(r.auth, k)
+		}
+	}
+	for k, e := range r.apps {
+		if !now.Before(e.expires) {
+			delete(r.apps, k)
+		}
+	}
+	for len(r.auth)+len(r.apps) > max {
+		var (
+			oldest  time.Time
+			isApp   bool
+			ak      authKey
+			pk      appKey
+			haveOne bool
+		)
+		for k, e := range r.auth {
+			if !haveOne || e.expires.Before(oldest) {
+				oldest, isApp, ak, haveOne = e.expires, false, k, true
+			}
+		}
+		for k, e := range r.apps {
+			if !haveOne || e.expires.Before(oldest) {
+				oldest, isApp, pk, haveOne = e.expires, true, k, true
+			}
+		}
+		if !haveOne {
+			return
+		}
+		if isApp {
+			delete(r.apps, pk)
+		} else {
+			delete(r.auth, ak)
+		}
+	}
+}
+
+// InvalidateDatasource forgets every cached authorization for a datasource (any tenant), and every
+// app lookup that resolved to it, so the next Resolve asks alpha again. Call it where this process
+// itself suspends, offboards or rebinds a datasource; other processes converge within AuthTTL.
+func (r *Router) InvalidateDatasource(datasourceID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for k := range r.auth {
+		if k.datasourceID == datasourceID {
+			delete(r.auth, k)
+		}
+	}
+	for k, e := range r.apps {
+		if e.datasourceID == datasourceID {
+			delete(r.apps, k)
+		}
+	}
+}
+
+// InvalidateTenant forgets every cached authorization for a tenant.
+func (r *Router) InvalidateTenant(tenantID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for k := range r.auth {
+		if k.tenant == tenantID {
+			delete(r.auth, k)
+		}
+	}
+	for k := range r.apps {
+		if k.tenant == tenantID {
+			delete(r.apps, k)
+		}
+	}
 }
 
 // Probe proves a datasource is reachable the way production will reach it (the registered
@@ -336,6 +548,8 @@ func (r *Router) Size() int {
 // Close releases every pool; call it from shutdown.
 func (r *Router) Close() {
 	r.mu.Lock()
+	r.auth = map[authKey]authEntry{}
+	r.apps = map[appKey]appEntry{}
 	var all []*pgxpool.Pool
 	for k, e := range r.pools {
 		all = append(all, e.pool)

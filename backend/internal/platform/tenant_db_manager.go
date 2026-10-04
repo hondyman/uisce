@@ -59,6 +59,9 @@ func NewTenantDBManager(centralDB *sql.DB) *TenantDBManager {
 		MaxConnsPerPool: 10,
 		IdleTTL:         10 * time.Minute,
 		DialTimeout:     10 * time.Second,
+		// A few seconds: a suspension or offboarding in alpha bites within this long, and a warm
+		// connection no longer costs alpha 18 statements per call (see tenantdb.Config.AuthTTL).
+		AuthTTL: tenantdb.DefaultAuthTTL,
 	})
 	if err != nil {
 		return &TenantDBManager{app: CoreApp, timeout: 15 * time.Second, initErr: err}

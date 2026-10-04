@@ -8,7 +8,6 @@ import (
 // ProfileRequest mirrors the request used by the standalone profiler and
 // is reused by the HTTP API profiler endpoints.
 type ProfileRequest struct {
-	DataSource   string   `json:"datasource"`
 	TenantID     string   `json:"tenant_id"`
 	DatasourceID string   `json:"datasource_id"`
 	Schema       string   `json:"schema"`

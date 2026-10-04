@@ -39,6 +39,11 @@ const (
 	// kindTool is a command-line tool or test support that is not served: seeds, one-off
 	// verifiers, demos, migration commands.
 	kindTool openerKind = "tool"
+	// kindSourceConnector is internal/sourceconn: the one audited opener of tenant SOURCE databases
+	// (a customer system, or the backend a business object's records live in). It looks the datasource
+	// up for the verified caller tenant under an explicit policy, takes credentials only from the
+	// secrets store, and pools with a bound. Nothing else may open a tenant source.
+	kindSourceConnector openerKind = "source-connector"
 	// kindTenantDatasource opens a tenant's datasource, or the database an app keeps its data
 	// in, by some path other than tenantdb. Each needs an Until: it has to move behind
 	// tenantdb (or a source-connector sibling for non-Postgres sources), or be retired.
@@ -176,7 +181,7 @@ func TestInventoryEntriesAreHonest(t *testing.T) {
 			if o.Until == "" {
 				t.Errorf("%s: a tenant-datasource opener must name the slice that moves it behind tenantdb", file)
 			}
-		case kindTenantDB, kindControlPlane, kindWarehouse, kindProvisioning, kindTool:
+		case kindTenantDB, kindSourceConnector, kindControlPlane, kindWarehouse, kindProvisioning, kindTool:
 			if o.Until != "" {
 				t.Errorf("%s: only tenant-datasource entries carry an Until", file)
 			}
@@ -191,6 +196,19 @@ func TestInventoryEntriesAreHonest(t *testing.T) {
 
 // Only the router may open a tenant database for data access, so exactly one entry is the
 // router and it lives in internal/tenantdb.
+// Only internal/sourceconn may be the source connector, and everything in it must be classified that
+// way: a source opener elsewhere is a tenant-datasource entry with an Until, never this kind.
+func TestOnlySourceconnIsTheSourceConnector(t *testing.T) {
+	for file, o := range openerInventory {
+		if o.Kind == kindSourceConnector && !strings.HasPrefix(file, "internal/sourceconn/") {
+			t.Errorf("%s is classified as the source connector but is outside internal/sourceconn", file)
+		}
+		if strings.HasPrefix(file, "internal/sourceconn/") && o.Kind != kindSourceConnector {
+			t.Errorf("%s is in internal/sourceconn and must be classified as the source connector", file)
+		}
+	}
+}
+
 func TestOnlyTenantdbIsTheRouter(t *testing.T) {
 	for file, o := range openerInventory {
 		if o.Kind == kindTenantDB && !strings.HasPrefix(file, "internal/tenantdb/") {
