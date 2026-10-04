@@ -4,6 +4,59 @@
 
 This ledger differs from `AGENTS.md` rules: rules are policy (what not to do); this ledger is history with lessons attached. A ledger that only records failures teaches avoidance. One that records what the countermeasures *produced* teaches the behavior worth repeating.
 
+**Three standing rules about artifacts, gates and procedures, because each has cost real
+time here.**
+
+**Every procedure has exactly one authoritative home, and every other mention is a link.** A
+second document describing the same procedure is not redundancy; it is a second copy that will
+drift, and the drift is invisible until the moment someone needs the procedure. The DR playbook
+drifted from the deployment topology until it prescribed a Kubernetes recovery for a platform
+deployed with Docker Compose, referencing fifteen scripts that do not exist (#383). Nothing about
+that was a parsing problem — it was two sources of truth with no stated owner. When a procedure
+is referenced from a new place, link it. Do not restate it. Restating is how
+`docs/alpha-audit-2026-10.md` was kept out of the consolidated session brief: one document, one
+set of queries, one stop-rule.
+
+**A SQL migration file is an adversarial input to any parser. The only reliable parser for one
+is Postgres itself.** A single migration in this repository contains a table named `"order"`,
+statements that close `)` and `;` on separate lines, and a partitioned table whose statement ends
+`PARTITION BY RANGE (...)` rather than a bare `)`. A regex written for the common shape reported
+`orm.restricted_list` as **missing from the tenant ORM migration** — a false P0 that would have
+sent someone hunting a data-plane defect in a shipped tenant cutover, in a file where
+`ormmove/mover.go` moves data into that very table. It was present, at line 324; the terminator had
+run past the end of the preceding partitioned statement and swallowed it.
+
+The general form, and it is the one to reach for: **prefer executing an artifact over parsing
+it.** Loading two schemas into scratch databases and diffing `information_schema` settled a
+question that text comparison had answered with dozens of phantom column differences, and the
+`ormmove` tests were only conclusive because they ran against a real Postgres. When parsing is
+unavoidable — a check that has to run in CI without a database — assert the *structure* rather
+than a count, print what the parser actually saw, and treat a summary that disagrees with its own
+detail as the bug, not as noise. Six instances of this are recorded below; every one is one of
+those three.
+
+**A gate that is switched off passes every test about which files it covers.** The `ci-cd.yml`
+path filter added in #375 was mutation-tested to six cases by an archguard guard that re-derives
+the covered module set from `go.work` and the imports under `backend/` and `cmd/`. The coverage was
+correct. The gate had not run on a merge to `main` even once: the `changes` job's outputs read
+only `steps.filter.outputs.*`, the `Verify everything (push to main)` step had no `id:` so its
+writes to `$GITHUB_OUTPUT` were discarded, and on a push the filter step is skipped — so both flags
+were empty and `build-backend`, the four-shard matrix and `build-frontend` were skipped on every
+merge since 02:17:38Z.
+
+The sharpest symptom was the sentinel added one commit later. `Backend Tests Summary` read the
+matrix result, the matrix was skipped, and the sentinel reported **success**, because treating
+`skipped` as pass is exactly what it was built to do. It behaved perfectly and reported success
+for a suite that did not run — the "green check measuring nothing" failure wearing a different
+hat. Three of the eight required checks were satisfying branch protection by being skipped, which
+is correct behaviour applied to gates that were not running.
+
+So the untested assumption was never coverage. It was **firing**. When a gate is introduced, the
+first question is not "does it include every input?" but "has it been observed running?" A guard
+that proves a filter is complete is not evidence that the filter was consulted, and no amount of
+mutation testing on the filter's contents can tell you. The only evidence is a check rollup from a
+real run, read from the run rather than from the workflow file.
+
 ---
 
 ## Entry 2026-09-11 — Arc 5 (Phase 4 close + monitoring design)
