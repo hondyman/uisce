@@ -184,8 +184,9 @@ Keeping the column shape is necessary, not sufficient. Restore is: **a fresh ten
 replayed, then `COPY` from silver.** Iceberg holds data parity, not DDL; **the migration repository is the schema
 source of truth.** Three things have to be decided and documented:
 
-1. **A type-mapping table.** Checked against `0001_orm_schema.up.sql` (the types the tenant ORM schema actually
-   uses, with column counts):
+1. **A type-mapping table.** Checked against `0001_orm_schema.up.sql` (the types the six-schema template's `orm`, `mdm` and `cash_flow` tables
+   use; the counts below were taken from the tenant `orm/0001` migration only, 34 tables, and **the array row is corrected
+   to the whole template**: 32 array columns, not 1):
 
    | Postgres | Columns | Iceberg | Round trip |
    |---|---|---|---|
@@ -195,7 +196,7 @@ source of truth.** Three things have to be decided and documented:
    | `timestamptz` | 37 | `timestamptz` (microseconds) | exact; Postgres' microsecond resolution matches |
    | `jsonb` | 28 | `string` (JSON text) | **lossy**: key order and duplicate keys are normalised by `jsonb` already; whitespace is not preserved |
    | `bool` / `date` / `int4` / `time` | 21 / 19 / 5 / 2 | `boolean` / `date` / `int` / `time` | exact |
-   | `text[]` | 1 (`order_history.changed_columns`) | `list<string>` | exact |
+   | arrays: `text[]` 18, `uuid[]` 8, `character varying[]` 5 (3 with a length), `integer[]` 1 | 32 | `list<string>`, `list<uuid>`, `list<int>` | exact element by element; the element length limit is not kept |
 
    There are no enum types in the schema. **Each new table or type needs a row here before it is tiered;** a
    verifier that compares row count and checksum on the Postgres side must hash the same canonical text it
