@@ -5,6 +5,17 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'libs/**'
+      - 'cmd/**'
+      - 'calc-engine/**'
+      - 'migrations/**'
+      - 'go.work'
+      - 'go.work.sum'
+      - 'api-gateway/**'
+      - 'init-db.sql'
+      - '.github/workflows/integration.yml'
 
 jobs:
   integration:
