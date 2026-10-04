@@ -45,7 +45,7 @@ returns seven lines, all in shell deploy scripts, and each is looking for a *pre
 
 **3. It is in no deployment topology.** No `docker-compose*.yml`, no `k8s/` manifest, no workflow
 in `.github/workflows/` references it. The three deploy scripts that would have deployed it
-(`NAVIGATOR_DEPLOY.sh`, `REBASE_DEPLOY.sh`, `RISK_ALPHA_DEPLOY.sh`) are themselves referenced by
+(`NAVIGATOR_DEPLOY.sh`, `REBALANCE_DEPLOY.sh`, `RISK_ALPHA_DEPLOY.sh`) are themselves referenced by
 zero CI, compose or k8s files.
 
 **4. Recent commits are automated sweeps, not development.** The 2026-10-02 touch was
