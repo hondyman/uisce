@@ -1343,6 +1343,21 @@ finding is empty, `audit_verified_through_id` covers the partition's last entry,
 here. The StarRocks read (`AuditRange`) is written against the documented 3.3 interface like the rest of
 ADR-036 and has not been run against a live instance.
 
+### ADR-045: The Platform Warehouse `ivy-control` Is Built By The Same Code As A Tenant's
+
+**Decision.** `ivy-control` (ADR-032) is created by `EnsureControlBucket` and `EnsureControlWarehouse`,
+which call the same `ensureBucket` and `ensureWarehouse` the tenant versions call. So the platform's
+storage cannot be weaker than a tenant's: Object Lock at creation, COMPLIANCE for the whole retention,
+default SSE-KMS under its own key, and a warehouse over its own bucket with a credential scoped to that
+bucket. The KMS key and the retention have no default, and an existing bucket is never re-locked or
+re-keyed (`ErrBucketConflict`). Its name cannot fall in the tenant namespace (`ivy-t-`), and a test
+holds that.
+
+**Not decided here.** What issues the credential scoped to `ivy-control`, and what triggers
+provisioning. Tenant credentials are minted per tenant id and stored at a path derived from it
+(`infra.SecretPath`); the platform has no tenant id, and reusing a reserved id would put it in the tenant
+credential space. Until that is decided nothing calls these two functions, which is deliberate.
+
 ## Open items
 
 - **C1 (9.1) ported metric primitives into the rule VM.**
