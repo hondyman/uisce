@@ -38,6 +38,8 @@ type AnsiScanner struct {
 	// nodes of the latest scan from nodes a later scan no longer found: the merge into alpha is incremental and never
 	// deletes (so semantic terms and manual mappings persist), which leaves a vanished column active forever.
 	scanID uuid.UUID
+	// skipDataProfile leaves out the data profile (counts and sample values), keeping everything about structure.
+	skipDataProfile bool
 
 	// progress reporting (see scan_progress.go); all optional
 	progress    func(models.ScanProgress)
@@ -65,6 +67,10 @@ func NewAnsiScanner(db *sql.DB, tenantId, tenantDatasourceId uuid.UUID, sourceSy
 		scanID:             uuid.New(),
 	}, nil
 }
+
+// SkipDataProfile makes ExtractMetadata record structure only: no row counts, unique counts or sample values are read. The
+// structure (columns, keys, constraints, indexes, partitioning, routines, triggers) is identical either way.
+func (s *AnsiScanner) SkipDataProfile() { s.skipDataProfile = true }
 
 // getCoreNode retrieves the gold copy node info if a match is found.
 func (s *AnsiScanner) getCoreNode(nodeTypeID uuid.UUID, qualifiedPath string) (db.GoldCopyNodeInfo, bool) {
@@ -935,10 +941,13 @@ func (s *AnsiScanner) ExtractMetadata() ([]*models.CatalogNode, []models.Catalog
 		logging.GetLogger().Sugar().Warnf("Error recording definitions (the scan is marked as not capturing them): %v", err)
 	}
 
-	// Process data profiling (unique counts, sample values)
-	s.report(true, 65, "", fmt.Sprintf("Profiling %d columns (row counts and samples)...", len(s.columnMap)), 0, len(s.columnMap))
-	if err := s.processDataProfile(); err != nil {
-		logging.GetLogger().Sugar().Warnf("Error processing data profile: %v", err)
+	// Process data profiling (unique counts, sample values). It reads the data of every column, which a structure-only scan
+	// (SkipDataProfile) does not need and, against a large source, is by far the slowest step.
+	if !s.skipDataProfile {
+		s.report(true, 65, "", fmt.Sprintf("Profiling %d columns (row counts and samples)...", len(s.columnMap)), 0, len(s.columnMap))
+		if err := s.processDataProfile(); err != nil {
+			logging.GetLogger().Sugar().Warnf("Error processing data profile: %v", err)
+		}
 	}
 
 	// Add final validation
