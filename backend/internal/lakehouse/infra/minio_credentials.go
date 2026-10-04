@@ -87,8 +87,35 @@ func (c *BucketCredentials) EnsureBucketCredential(ctx context.Context, tenantID
 	if bucket != want {
 		return fmt.Errorf("bucket %q is not tenant %s's bucket", bucket, tenantID)
 	}
+	return c.ensureCredential(ctx, SecretPath(tenantID), accountName(tenantID),
+		"Ivy lakehouse storage credential for tenant "+tenantID.String(), bucket, mayMint)
+}
 
-	access, secret, err := c.storedOrNew(ctx, tenantID, bucket, mayMint)
+// PlatformSecretPath is the one place the platform warehouse's credential lives. It is deliberately NOT a
+// tenant path: tenant paths are "/lakehouse/<uuid>", so this can never be one, and no tenant id (reserved or
+// otherwise) is used to stand in for the platform.
+const PlatformSecretPath = "/lakehouse/platform/" + iceberg.ControlWarehouseName
+
+// platformAccountName is the MinIO service account of the platform credential: at most 32 characters,
+// starting with a letter, and distinct from every tenant's "ivy-lh-<12 hex>".
+const platformAccountName = "ivy-lh-platform-control"
+
+// EnsurePlatformCredential is EnsureBucketCredential for the ivy-control bucket, with the same ordering and
+// the same mayMint rule: the platform's registry row, not the secrets store, says whether one was issued.
+func (c *BucketCredentials) EnsurePlatformCredential(ctx context.Context, mayMint bool) error {
+	return c.ensureCredential(ctx, PlatformSecretPath, platformAccountName,
+		"Ivy lakehouse storage credential for the platform warehouse", iceberg.ControlWarehouseName, mayMint)
+}
+
+// ReadPlatform returns the stored platform credential, under the same rule as Read: only a caller that must
+// hand it straight to a storage client may use it.
+func (c *BucketCredentials) ReadPlatform(ctx context.Context) (string, string, error) {
+	return c.readAt(ctx, PlatformSecretPath, "the platform warehouse")
+}
+
+// ensureCredential holds the ordering that matters, once, for tenants and the platform alike.
+func (c *BucketCredentials) ensureCredential(ctx context.Context, path, account, description, bucket string, mayMint bool) error {
+	access, secret, err := c.storedOrNew(ctx, path, bucket, mayMint)
 	if err != nil {
 		return err
 	}
@@ -98,8 +125,8 @@ func (c *BucketCredentials) EnsureBucketCredential(ctx context.Context, tenantID
 		Policy:      policy,
 		AccessKey:   access,
 		SecretKey:   secret,
-		Name:        accountName(tenantID),
-		Description: "Ivy lakehouse storage credential for tenant " + tenantID.String(),
+		Name:        account,
+		Description: description,
 	})
 	if addErr == nil {
 		return nil
@@ -119,18 +146,22 @@ func (c *BucketCredentials) EnsureBucketCredential(ctx context.Context, tenantID
 // Read returns the stored credential. Only a caller that must hand it straight to a
 // storage client may use it; it must never be returned from an activity.
 func (c *BucketCredentials) Read(ctx context.Context, tenantID uuid.UUID) (string, string, error) {
-	m, err := c.secrets.GetMap(ctx, SecretPath(tenantID))
+	return c.readAt(ctx, SecretPath(tenantID), "tenant "+tenantID.String())
+}
+
+func (c *BucketCredentials) readAt(ctx context.Context, path, who string) (string, string, error) {
+	m, err := c.secrets.GetMap(ctx, path)
 	if err != nil {
 		return "", "", fmt.Errorf("read storage credential: %w", err)
 	}
 	if m[KeyAccessKeyID] == "" || m[KeySecretAccessKey] == "" {
-		return "", "", fmt.Errorf("storage credential for tenant %s is incomplete", tenantID)
+		return "", "", fmt.Errorf("storage credential for %s is incomplete", who)
 	}
 	return m[KeyAccessKeyID], m[KeySecretAccessKey], nil
 }
 
-func (c *BucketCredentials) storedOrNew(ctx context.Context, tenantID uuid.UUID, bucket string, mayMint bool) (access, secret string, err error) {
-	m, err := c.secrets.GetMap(ctx, SecretPath(tenantID))
+func (c *BucketCredentials) storedOrNew(ctx context.Context, path, bucket string, mayMint bool) (access, secret string, err error) {
+	m, err := c.secrets.GetMap(ctx, path)
 	switch {
 	case err == nil && m[KeyAccessKeyID] != "" && m[KeySecretAccessKey] != "":
 		return m[KeyAccessKeyID], m[KeySecretAccessKey], nil
@@ -149,7 +180,7 @@ func (c *BucketCredentials) storedOrNew(ctx context.Context, tenantID uuid.UUID,
 	if secret, err = c.random(40, secretAlphabet, ""); err != nil {
 		return "", "", err
 	}
-	if err = c.secrets.PutMap(ctx, SecretPath(tenantID), map[string]string{
+	if err = c.secrets.PutMap(ctx, path, map[string]string{
 		KeyAccessKeyID: access, KeySecretAccessKey: secret, "BUCKET": bucket,
 	}); err != nil {
 		return "", "", fmt.Errorf("store storage credential: %w", err)

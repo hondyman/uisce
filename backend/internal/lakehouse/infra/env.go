@@ -66,6 +66,10 @@ func readMinioEnv() (minioEnv, error) {
 var credentialsBuilder = buildCredentialsFromEnv
 
 func buildCredentialsFromEnv() (Credentials, error) {
+	return buildBucketCredentialsFromEnv()
+}
+
+func buildBucketCredentialsFromEnv() (*BucketCredentials, error) {
 	e, err := readMinioEnv()
 	if err != nil {
 		return nil, err
@@ -132,18 +136,44 @@ func (l *lazyCredentials) Read(ctx context.Context, tenantID uuid.UUID) (string,
 
 // BucketsFromEnv returns the bucket provisioner, or one that reports ErrNotConfigured.
 func BucketsFromEnv() Buckets {
-	e, err := readMinioEnv()
+	p, err := bucketProvisionerFromEnv()
 	if err != nil {
 		return unconfiguredBuckets{err}
+	}
+	return p
+}
+
+func bucketProvisionerFromEnv() (*iceberg.TenantBucketProvisioner, error) {
+	e, err := readMinioEnv()
+	if err != nil {
+		return nil, err
 	}
 	cl, err := minio.New(e.endpoint, &minio.Options{Creds: credentials.NewStaticV4(e.access, e.secret, ""), Secure: e.secure})
 	if err != nil {
+		return nil, err
+	}
+	return iceberg.NewTenantBucketProvisioner(cl), nil
+}
+
+// PlatformBuckets creates the ivy-control bucket.
+type PlatformBuckets interface {
+	EnsureControlBucket(ctx context.Context, spec iceberg.ControlBucketSpec) (*iceberg.TenantBucket, error)
+}
+
+// PlatformBucketsFromEnv returns the platform bucket provisioner, or one that reports ErrNotConfigured.
+func PlatformBucketsFromEnv() PlatformBuckets {
+	p, err := bucketProvisionerFromEnv()
+	if err != nil {
 		return unconfiguredBuckets{err}
 	}
-	return iceberg.NewTenantBucketProvisioner(cl)
+	return p
 }
 
 type unconfiguredBuckets struct{ err error }
+
+func (u unconfiguredBuckets) EnsureControlBucket(context.Context, iceberg.ControlBucketSpec) (*iceberg.TenantBucket, error) {
+	return nil, u.err
+}
 
 func (u unconfiguredBuckets) ExtendTenantRetention(context.Context, uuid.UUID, uint) (uint, error) {
 	return 0, u.err
@@ -151,4 +181,54 @@ func (u unconfiguredBuckets) ExtendTenantRetention(context.Context, uuid.UUID, u
 
 func (u unconfiguredBuckets) EnsureTenantBucket(context.Context, iceberg.TenantBucketSpec) (*iceberg.TenantBucket, error) {
 	return nil, u.err
+}
+
+// PlatformCredentials issues and reads the platform warehouse's bucket-scoped credential (ADR-045).
+type PlatformCredentials interface {
+	// EnsurePlatformCredential makes sure the credential exists. mayMint says whether one has never been
+	// issued (the platform registry row records that); when false and none can be read it must return
+	// ErrCredentialLost, never mint a new one.
+	EnsurePlatformCredential(ctx context.Context, mayMint bool) error
+	ReadPlatform(ctx context.Context) (accessKeyID, secretAccessKey string, err error)
+}
+
+// PlatformCredentialsFromEnv is CredentialsFromEnv for the platform warehouse: built on first use, a failed
+// build is not cached.
+func PlatformCredentialsFromEnv() PlatformCredentials {
+	return &lazyPlatformCredentials{}
+}
+
+type lazyPlatformCredentials struct {
+	mu    sync.Mutex
+	inner *BucketCredentials
+}
+
+func (l *lazyPlatformCredentials) get() (*BucketCredentials, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.inner != nil {
+		return l.inner, nil
+	}
+	c, err := buildBucketCredentialsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	l.inner = c
+	return c, nil
+}
+
+func (l *lazyPlatformCredentials) EnsurePlatformCredential(ctx context.Context, mayMint bool) error {
+	c, err := l.get()
+	if err != nil {
+		return err
+	}
+	return c.EnsurePlatformCredential(ctx, mayMint)
+}
+
+func (l *lazyPlatformCredentials) ReadPlatform(ctx context.Context) (string, string, error) {
+	c, err := l.get()
+	if err != nil {
+		return "", "", err
+	}
+	return c.ReadPlatform(ctx)
 }

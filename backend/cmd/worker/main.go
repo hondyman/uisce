@@ -423,6 +423,20 @@ func main() {
 	w.RegisterWorkflowWithOptions(provisioningworkflows.TenantLakehouseAuditCopyAllWorkflow, temporalworkflow.RegisterOptions{
 		Name: provisioningworkflows.TenantLakehouseAuditCopyAllWorkflowName,
 	})
+	// ADR-045: the platform warehouse, ivy-control. Started by an operator with an explicit retention; never at boot.
+	platformLakehouseActivities := &temporalactivities.PlatformLakehouseActivities{
+		Registry:    lakehouseregistry.NewPlatformStore(db),
+		Keys:        lakehouseinfra.KeysFromEnv(),
+		Buckets:     lakehouseinfra.PlatformBucketsFromEnv(),
+		Credentials: lakehouseinfra.PlatformCredentialsFromEnv(),
+		Warehouses:  iceberg.NewLakekeeperProvisioner(os.Getenv("LAKEKEEPER_URL"), "", os.Getenv("S3_ENDPOINT")),
+		S3Endpoint:  os.Getenv("S3_ENDPOINT"),
+		S3Region:    lakehouseRegion,
+	}
+	w.RegisterWorkflowWithOptions(provisioningworkflows.PlatformLakehouseProvisioningWorkflow, temporalworkflow.RegisterOptions{
+		Name: provisioningworkflows.PlatformLakehouseProvisioningWorkflowName,
+	})
+	w.RegisterActivity(platformLakehouseActivities)
 	// ADR-035: prove the copy matches alpha before anything depends on it. Read-only.
 	w.RegisterWorkflowWithOptions(provisioningworkflows.TenantLakehouseAuditVerifyWorkflow, temporalworkflow.RegisterOptions{
 		Name: provisioningworkflows.TenantLakehouseAuditVerifyWorkflowName,
