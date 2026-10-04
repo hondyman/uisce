@@ -688,3 +688,51 @@ script for this change now refuses any filter path that matches no tracked
 file, verified by re-adding the path and watching it refuse.
 
 ---
+
+## Entry 2026-10-04 — Required status checks, and why a check that can go absent is worse than one that can go red
+
+`main` now requires five status checks with `enforce_admins` on: `Security Scan`,
+`Integration Tests (Backend)`, `Detect changed paths`, `Unit Tests`,
+`Validate Metadata Package`. Added because #376 was merged by a parallel session past a
+review hold, and because the repository had **no** required checks at all
+(`required_status_checks` absent, `rulesets` empty) — so nothing prevented it, or a repeat.
+
+**The interesting part is the four that were rejected.** The obvious set is `Build Backend`,
+`Build Frontend`, the two lint jobs and `Security Scan`. Three of those four are worse than
+useless as required checks, and for a reason that is specific to this repository's own
+path-filter work:
+
+| Check | Why it cannot be required |
+|---|---|
+| `Lint (react-hooks)`, `Lint (jsx-a11y)` | in a workflow with a trigger-level `paths:` filter |
+| `Frontend Typecheck & Build` | same |
+| `Backend Tests (1/4)`…`(4/4)` | skipped runs report the **unrendered** name `Backend Tests (${{ matrix.shard }}/4)` |
+
+A trigger-level `paths:` filter does not run the workflow and mark its jobs skipped. It never
+starts the workflow, so **no check is reported at all**. A required check that is absent is
+indistinguishable from one that has not run, and a pull request waiting on it waits forever.
+The matrix is a different trap: its skipped name carries the literal template expression, so
+the rendered name a reviewer would copy off a green run never matches a filtered one.
+
+**A required check must report by construction, not by luck.** All five that were chosen sit
+in jobs with no `if` and no `needs` — `changes`, `security-scan`,
+`integration-tests-backend`, and two in `acceptance.yml` — so there is no path by which they
+can be skipped. That is a property of the workflow file, readable without running anything.
+The empirical check was a throwaway pull request touching one line of a document (#382, opened
+and closed for the purpose), which showed all five reporting and the rejected four not
+reporting. **The structural argument is the control; the probe was the confirmation.** A
+single probe shows it worked on that pull request.
+
+`Build Docker Images` is excluded for the same family of reason: it is quarantined behind
+`vars.DOCKER_BUILD_ENABLED` and carries `github.event_name != 'pull_request'`, so it can never
+report on a pull request at all.
+
+**Why this is a structural rule and not a note.** A check that goes **red** blocks loudly —
+someone looks. A check that goes **absent** blocks silently and forever, and the fix is not
+discoverable from the pull request, because nothing on it says a check is missing. Both look
+identical on the pull request: not-merged. Before adding any check to this list, read the job
+in the workflow file and confirm it has no path filter and no conditional.
+
+The same shape as the others in this ledger — a claim about coverage that fails by being
+incomplete, silently. Shards reporting green while covering nothing, a path filter skipping a
+build, a matrix partition that selected zero packages. **Absence never announces itself.**
