@@ -44,11 +44,18 @@ type TenantDBManager struct {
 	initErr error
 }
 
-// NewTenantDBManager builds a manager over alpha with the default router limits. A router that
-// cannot be built is not a reason to fall back: the manager is returned and every GetConnection
-// fails with the reason.
-func NewTenantDBManager(centralDB *sql.DB) *TenantDBManager {
-	r, err := tenantdb.New(tenantdb.Config{
+// NewTenantRouter builds the router every tenant-database caller shares: alpha is
+// the registry, the secrets store holds the credentials, and the caller tenant
+// comes from the context. Callers that want the *sql.DB convenience (a
+// TenantDBManager) use that; callers that want the pool itself — the ORM
+// activities, which resolve by app code — install this one directly.
+//
+// It is exported so there is exactly one construction of this router. Two
+// routers over the same alpha with different limits would be two answers to
+// "which database is this tenant's", which is the question the whole design
+// exists to have one answer to.
+func NewTenantRouter(centralDB *sql.DB) (*tenantdb.Router, error) {
+	return tenantdb.New(tenantdb.Config{
 		Registry: &tenantdb.AlphaRegistry{
 			DB:       centralDB,
 			Resolver: security.NewDBDatasourceResolver(sqlx.NewDb(centralDB, "pgx")),
@@ -63,6 +70,13 @@ func NewTenantDBManager(centralDB *sql.DB) *TenantDBManager {
 		// connection no longer costs alpha 18 statements per call (see tenantdb.Config.AuthTTL).
 		AuthTTL: tenantdb.DefaultAuthTTL,
 	})
+}
+
+// NewTenantDBManager builds a manager over alpha with the default router limits. A router that
+// cannot be built is not a reason to fall back: the manager is returned and every GetConnection
+// fails with the reason.
+func NewTenantDBManager(centralDB *sql.DB) *TenantDBManager {
+	r, err := NewTenantRouter(centralDB)
 	if err != nil {
 		return &TenantDBManager{app: CoreApp, timeout: 15 * time.Second, initErr: err}
 	}

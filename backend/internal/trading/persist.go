@@ -5,21 +5,89 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
+
+	"github.com/hondyman/uisce/backend/internal/db"
+	"github.com/hondyman/uisce/backend/internal/tenantdb"
 )
 
-// PersistFIXRouteActivity writes the outbound placement to crims.orm
-// (the UI spine). Never writes alpha.orm.
+// ORMApp is the app code of a tenant's ORM database. It is NOT CoreApp ("core",
+// the wealth/business-object database): provisioning records App = "orm" for this
+// one, and the router looks the tenant's single datasource up by that code. A
+// wrong code is a runtime refusal (ErrBadApp / ErrUnbound), not a compile error.
+const ORMApp = "orm"
+
+// Resolver is the slice of tenantdb.Router these activities need. It is an
+// interface so the tests can drive the refusal paths without a registry.
+type Resolver interface {
+	ResolveApp(ctx context.Context, app string) (*tenantdb.Pool, error)
+}
+
+// ErrNoResolver is returned when the process never installed one. It is an
+// error, never a fallback: this package used to read CRIMS_ORM_DSN and open one
+// shared database for every tenant, and the whole point of the move is that no
+// code path may reach a tenant's ORM data any other way (ADR-030).
+var ErrNoResolver = errors.New("trading: no tenantdb resolver installed; the ORM is only reachable through tenantdb (ADR-030)")
+
+var (
+	resolverMu sync.RWMutex
+	resolver   Resolver
+)
+
+// SetResolver installs the process's router. Call it once at start-up, before
+// the worker registers activities. There is deliberately no default: an
+// uninstalled resolver fails closed.
+func SetResolver(r Resolver) {
+	resolverMu.Lock()
+	defer resolverMu.Unlock()
+	resolver = r
+}
+
+func currentResolver() (Resolver, error) {
+	resolverMu.RLock()
+	defer resolverMu.RUnlock()
+	if resolver == nil {
+		return nil, ErrNoResolver
+	}
+	return resolver, nil
+}
+
+// ormDB resolves the calling tenant's own ORM database.
+//
+// These are Temporal activities: they have no request context, so the tenant
+// comes from the activity INPUT and is placed in the context as the caller
+// tenant (db.WithTenantContextToCtx). That makes the datasource have to belong
+// to THAT tenant — it is what stops a Fill for tenant A being written into
+// tenant B's database — but the authenticity of input.TenantID remains the
+// caller's responsibility, exactly as TenantDBManager documents.
+func ormDB(ctx context.Context, tenantID uuid.UUID) (*sql.DB, error) {
+	r, err := currentResolver()
+	if err != nil {
+		return nil, err
+	}
+	if tenantID == uuid.Nil {
+		return nil, errors.New("trading: activity input carries no tenant id")
+	}
+	pool, err := r.ResolveApp(db.WithTenantContextToCtx(ctx, tenantID.String()), ORMApp)
+	if err != nil {
+		return nil, fmt.Errorf("resolve the orm database for tenant %s: %w", tenantID, err)
+	}
+	return pool.SQLDB(), nil
+}
+
+// PersistFIXRouteActivity writes the outbound placement to the tenant's own
+// orm.placement (the UI spine). Every write goes to the database the registry
+// binds to the caller's tenant, so a route can no longer land in a shared
+// database next to another tenant's orders.
 func PersistFIXRouteActivity(ctx context.Context, input FIXOrderInput) error {
-	db, err := OpenCRIMS(ctx)
+	conn, err := ormDB(ctx, input.TenantID)
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer conn.Close()
 
 	placementID := input.PlacementID
 	if placementID == "" {
@@ -30,7 +98,7 @@ func PersistFIXRouteActivity(ctx context.Context, input FIXOrderInput) error {
 		broker = "GSCO"
 	}
 	qty := input.Quantity
-	_, err = db.ExecContext(ctx, `
+	_, err = conn.ExecContext(ctx, `
 		INSERT INTO orm.placement (
 			id, order_id, broker_id, venue_id, routed_qty, executed_qty, leaves_qty,
 			status, fix_clordid, tenant_id
@@ -39,7 +107,7 @@ func PersistFIXRouteActivity(ctx context.Context, input FIXOrderInput) error {
 	if err != nil {
 		return fmt.Errorf("insert crims.orm.placement: %w", err)
 	}
-	_, err = db.ExecContext(ctx, `
+	_, err = conn.ExecContext(ctx, `
 		UPDATE orm."order"
 		SET status = CASE WHEN status IN ('NEW','DRAFT') THEN 'ROUTED' ELSE status END,
 		    updated_at = NOW()
@@ -51,15 +119,15 @@ func PersistFIXRouteActivity(ctx context.Context, input FIXOrderInput) error {
 	return nil
 }
 
-// PersistFIXFillActivity applies an ExecutionReport to placement,
-// execution, order, and remaining allocations on crims.orm. Pages never
+// PersistFIXFillActivity applies an ExecutionReport to placement, execution,
+// order, and remaining allocations in the tenant's own orm database. Pages never
 // write fills.
 func PersistFIXFillActivity(ctx context.Context, input FIXFillPersist) error {
-	db, err := OpenCRIMS(ctx)
+	conn, err := ormDB(ctx, input.TenantID)
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer conn.Close()
 
 	qty := input.LastQty
 	if qty <= 0 {
@@ -77,7 +145,7 @@ func PersistFIXFillActivity(ctx context.Context, input FIXFillPersist) error {
 	}
 
 	var placementID string
-	err = db.QueryRowContext(ctx, `
+	err = conn.QueryRowContext(ctx, `
 		SELECT id::text FROM orm.placement
 		WHERE tenant_id = $1::uuid AND fix_clordid = $2
 		ORDER BY id LIMIT 1
@@ -87,7 +155,7 @@ func PersistFIXFillActivity(ctx context.Context, input FIXFillPersist) error {
 	}
 
 	if qty > 0 {
-		_, err = db.ExecContext(ctx, `
+		_, err = conn.ExecContext(ctx, `
 			INSERT INTO orm.execution (
 				id, placement_id, order_id, exec_qty, exec_price, exec_time,
 				broker_exec_id, last_capacity, tenant_id
@@ -102,7 +170,7 @@ func PersistFIXFillActivity(ctx context.Context, input FIXFillPersist) error {
 	if status == "CANCELED" {
 		placeStatus = "CANCELED"
 	}
-	_, err = db.ExecContext(ctx, `
+	_, err = conn.ExecContext(ctx, `
 		UPDATE orm.placement
 		SET executed_qty = executed_qty + $1,
 		    leaves_qty = GREATEST(leaves_qty - $1, 0),
@@ -113,7 +181,7 @@ func PersistFIXFillActivity(ctx context.Context, input FIXFillPersist) error {
 		return fmt.Errorf("update crims.orm.placement fill: %w", err)
 	}
 
-	_, err = db.ExecContext(ctx, `
+	_, err = conn.ExecContext(ctx, `
 		UPDATE orm."order"
 		SET executed_qty = executed_qty + $1,
 		    leaves_qty = GREATEST(leaves_qty - $1, 0),
@@ -133,7 +201,7 @@ func PersistFIXFillActivity(ctx context.Context, input FIXFillPersist) error {
 	}
 
 	if qty > 0 {
-		_, _ = db.ExecContext(ctx, `
+		_, _ = conn.ExecContext(ctx, `
 			UPDATE orm.order_allocation
 			SET allocated_qty = LEAST(target_qty, allocated_qty + $1),
 			    status = CASE WHEN allocated_qty + $1 >= target_qty THEN 'ALLOCATED' ELSE 'PARTIAL' END
@@ -153,29 +221,4 @@ type FIXFillPersist struct {
 	LastPx    float64 `json:"last_px"`
 	ExecID    string  `json:"exec_id"`
 	OrdStatus string  `json:"ord_status"`
-}
-
-// ErrCRIMSNotConfigured is returned when CRIMS_ORM_DSN is not set.
-var ErrCRIMSNotConfigured = errors.New("CRIMS_ORM_DSN is not set")
-
-// OpenCRIMS opens the shared ORM (crims) database from CRIMS_ORM_DSN, and from nothing else. It used
-// to guess the database by taking DATABASE_URL (or POSTGRES_DSN) and swapping its name to "crims", so
-// an environment that forgot the setting silently pointed these activities at whatever server the
-// control plane was on. The ORM database is never inferred; a missing setting is an error that says
-// what to set. (This is one shared database, not one per tenant; it moves behind tenantdb with the
-// ORM data move, Phase 4b.)
-func OpenCRIMS(ctx context.Context) (*sql.DB, error) {
-	dsn := os.Getenv("CRIMS_ORM_DSN")
-	if dsn == "" {
-		return nil, fmt.Errorf("%w: set it to the ORM (crims) database; it is never derived from DATABASE_URL", ErrCRIMSNotConfigured)
-	}
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("open crims: %w", err)
-	}
-	if err := db.PingContext(ctx); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("ping crims: %w", err)
-	}
-	return db, nil
 }

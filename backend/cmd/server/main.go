@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/api"
 	fixpkg "github.com/hondyman/uisce/backend/internal/fix"
+	"github.com/hondyman/uisce/backend/internal/platform"
 	"github.com/hondyman/uisce/backend/internal/trading"
 	temporalclientlib "github.com/hondyman/uisce/libs/temporal-client"
 	"github.com/jmoiron/sqlx"
@@ -73,6 +74,16 @@ func main() {
 	}
 
 	log.Println("Connected to database successfully")
+
+	// The ORM read path (trading.LoadOrder, behind MCP and the OMS FIX handler)
+	// resolves the calling tenant's own orm database through the router
+	// (ADR-030/ADR-043). Uninstalled, those calls fail closed rather than
+	// reaching a shared database.
+	if ormRouter, err := platform.NewTenantRouter(db); err != nil {
+		log.Fatalf("FATAL: tenant orm router: %v", err)
+	} else {
+		trading.SetResolver(ormRouter)
+	}
 
 	sqlxDB := sqlx.NewDb(db, "postgres")
 	_ = sqlxDB

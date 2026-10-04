@@ -1210,6 +1210,98 @@ workflow used 1-based — two different expressions, one of which was never the 
 It was caught by running *the workflow's exact expression* against the real package list before
 pushing, not by review. The step now carries a count guard (`< 100` packages fails loudly) so a
 broken partition cannot report green again.
+### ADR-042: `orm` Reaches A Tenant Database As A Migration, Without RLS, And Without Its Three `oms` Foreign Keys
+
+**Decision.** The ORM (crims) schema is carried into a tenant's own database by a
+tenant migration under `backend/db/tenant_migrations/orm/`. It arrives **without row-level
+security** and **without its three foreign keys into `oms`**, and the shared-reference read
+model is served by a per-tenant copy rather than by a policy.
+
+**How the table set was established, because getting this wrong is expensive.** Two answers
+were available and they disagreed, so the migration set was treated as authoritative
+(ADR-024) and the snapshot used only as a cross-check:
+
+- `backend/db/snapshots/schema-snapshot.sql` shows **0 of 34** `orm` tables carrying
+  `tenant_id`. Taken alone it says no ORM table is tenant-scoped, and the move looks
+  impossible.
+- The migration set says otherwise. `20261017_001_orm_tenant_order_chain.up.sql` gives
+  `tenant_id uuid NOT NULL` to **7** tables (`account`, `broker`, `"order"`,
+  `order_allocation`, `placement`, `execution`, `execution_allocation`), and
+  `20261026_015_orm_rls_new_tables.up.sql` puts **27 more** under RLS policies keyed to
+  `app.current_tenant`.
+
+The two reconcile exactly: 27 listed − `quote_default` (a partition of `quote`, not a table)
+= 26, plus 7 = **33 real tables**, and the snapshot's 34 lines are those 33 plus the
+partition. **Every `orm` table is tenant-scoped; none is global.** The snapshot is stale
+(generated Oct 2 22:28, before `20261017_001`) and is regenerated with its migration log
+as one pair before either is trusted again.
+
+**What RLS was doing, and why it stops.** The policy pair is not isolation, it is a
+*shared-data* mechanism: read allows the tenant's own rows **or** the shared reference
+tenant's, defaulting to the sentinel `00000000-0000-0000-0000-000000000001`; write is the
+tenant's own rows only. In a shared database that sentinel is how 200 tenants read one copy
+of reference data. In a **per-tenant database the database is the boundary** (ADR-030's
+principle that isolation is structural, not filter-based), and a policy that admits rows
+owned by a different tenant id is the row-filter model this architecture moved away from.
+The tenant migration therefore creates the columns and no policies, and the reference rows
+are copied into each tenant database as part of the move (ADR-043) — read-only by
+convention, enforced by the fact that nothing writes them there.
+
+**The three `oms` foreign keys are dropped, deliberately and explicitly.**
+
+| Constraint | From | To |
+|---|---|---|
+| `fk_ama_account` | `orm.account_model_assignment` | `oms.account` |
+| `fk_bi_security` | `orm.basket_item` | `oms.security` |
+| `fk_pl_position` | `orm.position_lot` | `oms."position"` |
+
+`oms` stays in `alpha` (ADR-029: metadata never leaves `alpha`), and a foreign key cannot
+cross databases. The alternative — carrying a local copy of those three `oms` tables — was
+rejected because it would fork the position and account of record into a second store that
+`alpha` does not know about, which is a worse failure than a missing constraint. The
+columns stay; the constraint does not. **This is written down because "the constraint
+silently vanished" is the failure mode that gets rediscovered**, and because the three
+tables still carry the columns, so nothing about the schema announces that the guarantee is
+gone.
+
+**Consequence.** `internal/migrations/ormmove` owns the ordered, dependency-checked copy.
+Nothing edits an applied migration (ADR-024); the reference-row handling and any future
+constraint work are new numbered files.
+
+### ADR-043: The ORM Move Is A Fleet Of Per-Tenant Copies, Verified Before The Cutover, And The Cutover Is A Registry Flip
+
+**Decision.** Moving ORM data is a `migrations.MoveFleet` rollout of one idempotent,
+self-verifying copy per tenant, followed by a registry flip. It is not a dump-and-restore
+and not a one-off script.
+
+**Per-tenant, in dependency order.** The copy order is derived from the `orm → orm`
+foreign-key graph (16 constraints) rather than hand-listed, and
+`internal/migrations/ormmove` asserts that order against the declared edges so it cannot
+rot silently. Roots are `order`, `basket`, `model_portfolio`; `position_lot` has no
+internal parent at all, its only reference being the dropped `oms."position"` one.
+
+**Idempotent and resumable.** Each table is copied with a tenant predicate and an
+`ON CONFLICT DO NOTHING` on the primary key, so a second run is a no-op rather than a
+duplicate-key error, and a run interrupted mid-fleet resumes without redoing completed
+tenants. `MoveFleet` reuses the wave, concurrency and stop-after-a-bad-wave semantics that
+`migrations.Fleet` already has for migrations, and keeps the same property that matters
+most: **a bad tenant does not take the fleet down with it**.
+
+**A tenant whose counts do not match is reported and not cut over.** Every table is counted
+on both sides after the copy and the tenant is marked `Done` only when they agree. This is
+the whole safety property of the move: a partial copy that reports success is worse than no
+copy, because the cutover is a one-way door for writes.
+
+**The cutover is a registry flip, not a deployment.** Per ADR-040 a cutover is the binding
+version bump plus, when every process cannot be restarted, a wait of at least `AuthTTL`
+(3s in production) or an in-process `InvalidateDatasource`. Writes pause, the flip happens,
+convergence is awaited, the result is verified, and only then do writes resume — **not
+before every process has converged**, because a process still inside its `AuthTTL` is
+still writing to the old database. The shared database stays readable through the
+verification window; dropping it is a separate, reversible step.
+
+**The rollback is the status quo.** Until the shared database is dropped, reverting is a
+binding flip back. That is why this decision does not delete anything.
 
 ## Open items
 

@@ -144,6 +144,17 @@ func main() {
 	// Initialize TenantDBManager
 	tenantManager := platform.NewTenantDBManager(db)
 
+	// The ORM (crims) activities resolve their tenant's own orm database through
+	// the same router (ADR-030/ADR-043). Without this they fail closed with
+	// trading.ErrNoResolver: there is no longer a shared ORM database to fall
+	// back to, which is the point of the move.
+	if ormRouter, err := platform.NewTenantRouter(db); err != nil {
+		log.Fatalf("❌ tenant orm router: %v", err)
+	} else {
+		trading.SetResolver(ormRouter)
+		log.Println("✅ ORM activities resolve through tenantdb")
+	}
+
 	// Register Wealth Activities
 	wealthActivities := wealth.NewWealthActivities(tenantManager)
 	w.RegisterActivity(wealthActivities.SubmitClientDataActivity)
