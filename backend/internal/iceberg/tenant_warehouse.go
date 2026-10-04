@@ -66,20 +66,26 @@ func (p *LakekeeperProvisioner) EnsureTenantWarehouse(ctx context.Context, spec 
 	if err != nil {
 		return nil, err
 	}
-	if spec.AccessKeyID == "" || spec.SecretAccessKey == "" {
-		return nil, errors.New("tenant warehouse: a per-tenant storage credential is required")
+	return p.ensureWarehouse(ctx, "tenant warehouse", name, spec.Region, spec.Endpoint, spec.AccessKeyID, spec.SecretAccessKey)
+}
+
+// ensureWarehouse is the one implementation of "a warehouse over its own bucket", shared by tenant
+// warehouses and the platform's ivy-control warehouse. The name is derived by the caller from a fixed
+// rule, and the bucket is always the warehouse's own name.
+func (p *LakekeeperProvisioner) ensureWarehouse(ctx context.Context, what, name, region, endpoint, accessKeyID, secretAccessKey string) (*TenantWarehouse, error) {
+	if accessKeyID == "" || secretAccessKey == "" {
+		return nil, fmt.Errorf("%s: a storage credential scoped to its own bucket is required", what)
 	}
-	if spec.Endpoint == "" {
-		return nil, errors.New("tenant warehouse: storage endpoint is required")
+	if endpoint == "" {
+		return nil, fmt.Errorf("%s: storage endpoint is required", what)
 	}
-	region := spec.Region
 	if region == "" {
 		region = "us-east-1"
 	}
 
 	id, _, err := p.GetWarehouseByName(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("tenant warehouse: look up %s: %w", name, err)
+		return nil, fmt.Errorf("%s: look up %s: %w", what, name, err)
 	}
 	if id != "" {
 		return &TenantWarehouse{ID: id, Name: name, Bucket: name}, nil
@@ -93,14 +99,14 @@ func (p *LakekeeperProvisioner) EnsureTenantWarehouse(ctx context.Context, spec 
 			"key-prefix":        warehouseKeyPrefix,
 			"region":            region,
 			"sts-enabled":       false,
-			"endpoint":          spec.Endpoint,
+			"endpoint":          endpoint,
 			"path-style-access": true,
 		},
 		"storage-credential": map[string]interface{}{
 			"type":              "s3",
 			"credential-type":   "access-key",
-			"access-key-id":     spec.AccessKeyID,
-			"secret-access-key": spec.SecretAccessKey,
+			"access-key-id":     accessKeyID,
+			"secret-access-key": secretAccessKey,
 		},
 	}
 
@@ -111,13 +117,13 @@ func (p *LakekeeperProvisioner) EnsureTenantWarehouse(ctx context.Context, spec 
 	// warehouse is still absent, so it can never leak into a success.
 	id, status, err := p.GetWarehouseByName(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("tenant warehouse: look up %s after create: %w", name, err)
+		return nil, fmt.Errorf("%s: look up %s after create: %w", what, name, err)
 	}
 	if id == "" {
 		if createErr != nil {
-			return nil, fmt.Errorf("tenant warehouse: create %s: %w", name, createErr)
+			return nil, fmt.Errorf("%s: create %s: %w", what, name, createErr)
 		}
-		return nil, fmt.Errorf("tenant warehouse: %s not found after create (status %d)", name, status)
+		return nil, fmt.Errorf("%s: %s not found after create (status %d)", what, name, status)
 	}
 	return &TenantWarehouse{ID: id, Name: name, Bucket: name, Created: createErr == nil}, nil
 }

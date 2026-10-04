@@ -78,34 +78,41 @@ func (p *TenantBucketProvisioner) EnsureTenantBucket(ctx context.Context, spec T
 	if err != nil {
 		return nil, err
 	}
-	if spec.KMSKeyID == "" {
-		return nil, errors.New("tenant bucket: a per-tenant KMS key is required")
+	return p.ensureBucket(ctx, "tenant bucket", name, spec.KMSKeyID, spec.RetentionDays, spec.Region)
+}
+
+// ensureBucket is the one implementation of "WORM and encrypted under this key", shared by the tenant
+// bucket and the platform's ivy-control bucket so the two can never differ in what they enforce. The name
+// is always derived by the caller from a fixed rule; it is never taken from user input here.
+func (p *TenantBucketProvisioner) ensureBucket(ctx context.Context, what, name, kmsKeyID string, retentionDays uint, region string) (*TenantBucket, error) {
+	if kmsKeyID == "" {
+		return nil, fmt.Errorf("%s: a KMS key is required", what)
 	}
-	if spec.RetentionDays == 0 {
-		return nil, errors.New("tenant bucket: retention days is required and has no default")
+	if retentionDays == 0 {
+		return nil, fmt.Errorf("%s: retention days is required and has no default", what)
 	}
 
 	exists, err := p.api.BucketExists(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("tenant bucket: check %s: %w", name, err)
+		return nil, fmt.Errorf("%s: check %s: %w", what, name, err)
 	}
 	created := false
 	if !exists {
 		// Object Lock can only be requested here, at creation, and it also
 		// enables versioning.
-		if err := p.api.MakeBucket(ctx, name, minio.MakeBucketOptions{Region: spec.Region, ObjectLocking: true}); err != nil {
-			return nil, fmt.Errorf("tenant bucket: create %s: %w", name, err)
+		if err := p.api.MakeBucket(ctx, name, minio.MakeBucketOptions{Region: region, ObjectLocking: true}); err != nil {
+			return nil, fmt.Errorf("%s: create %s: %w", what, name, err)
 		}
 		created = true
 	}
 
-	if err := p.ensureObjectLock(ctx, name, spec.RetentionDays); err != nil {
+	if err := p.ensureObjectLock(ctx, name, retentionDays); err != nil {
 		return nil, err
 	}
-	if err := p.ensureEncryption(ctx, name, spec.KMSKeyID); err != nil {
+	if err := p.ensureEncryption(ctx, name, kmsKeyID); err != nil {
 		return nil, err
 	}
-	return &TenantBucket{Name: name, Created: created, RetentionDays: spec.RetentionDays, KMSKeyID: spec.KMSKeyID}, nil
+	return &TenantBucket{Name: name, Created: created, RetentionDays: retentionDays, KMSKeyID: kmsKeyID}, nil
 }
 
 // ExtendTenantRetention raises the default Object Lock retention of an existing tenant bucket

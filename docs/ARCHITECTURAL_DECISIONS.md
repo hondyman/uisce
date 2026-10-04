@@ -1413,6 +1413,44 @@ finding is empty, `audit_verified_through_id` covers the partition's last entry,
 here. The StarRocks read (`AuditRange`) is written against the documented 3.3 interface like the rest of
 ADR-036 and has not been run against a live instance.
 
+### ADR-049: The Platform Warehouse `ivy-control` Is Built By The Same Code As A Tenant's
+
+**Decision.** `ivy-control` (ADR-032) is created by `EnsureControlBucket` and `EnsureControlWarehouse`,
+which call the same `ensureBucket` and `ensureWarehouse` the tenant versions call. So the platform's
+storage cannot be weaker than a tenant's: Object Lock at creation, COMPLIANCE for the whole retention,
+default SSE-KMS under its own key, and a warehouse over its own bucket with a credential scoped to that
+bucket. The KMS key and the retention have no default, and an existing bucket is never re-locked or
+re-keyed (`ErrBucketConflict`). Its name cannot fall in the tenant namespace (`ivy-t-`), and a test
+holds that.
+
+**The credential has its own path, not a reserved tenant id.** Tenant credentials live at
+`/lakehouse/<tenant uuid>` under a MinIO account `ivy-lh-<12 hex>`. The platform's lives at
+`/lakehouse/platform/ivy-control` under `ivy-lh-platform-control`, so it can never equal a tenant's, and the
+platform is never given a tenant id to stand in for it. It is issued by the same `ensureCredential` (stored before
+created, policy limited to the one bucket, healed on re-run), and the same rule applies: whether one may be
+minted is decided by the registry, not the secrets store, which reports an outage as "not found". Once issued, a
+missing credential is `ErrCredentialLost` and needs a person.
+
+**The registry row** is `public.platform_lakehouse` (`20261216_001`): exactly one row (the name is the primary key
+and the only legal value), no tenant and no row-level security since it holds no tenant data. Retention can only
+rise, the warehouse id and the credential-issued time are set once, and a provisioned row cannot be deleted. It
+has no audit chain of its own; a run's result and Temporal history are the record.
+
+**Provisioning is started by an operator, never at boot**, because the retention cannot be shortened afterwards and
+must be an explicit number:
+
+    temporal workflow start --task-queue bp_queue --type PlatformLakehouseProvisioningWorkflow \
+      --workflow-id platform-lakehouse-provision --input '{"RetentionDays": 2555, "ActorID": "<you>"}'
+
+Re-running with the same or a lower number does nothing. A higher number against an already-provisioned bucket is
+refused and writes nothing: raising an existing bucket's default retention is a separate operation, and a record
+must not claim retention the bucket does not enforce. As for a tenant, there is no compensation: a failed run
+never deletes the bucket, and the next run resumes where it stopped. The activities are not registered as BP
+Designer client-safe.
+
+The Lakekeeper and MinIO calls are written against the same interfaces the tenant path already uses and have not
+been run against a live instance for the platform warehouse.
+
 ## Open items
 
 - **C1 (9.1) ported metric primitives into the rule VM.**

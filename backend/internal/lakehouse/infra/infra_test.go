@@ -371,3 +371,82 @@ func TestCredentialsFromEnv_IsBuiltOnFirstUseNotAtBoot(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, builds, "a successful build is cached")
 }
+
+// ADR-049: the platform credential has its own path and account, is scoped to ivy-control alone, and keeps
+// every property of a tenant's: stored before created, never minted once issued.
+func TestPlatformCredential_OwnPathOwnAccountScopedToIvyControl(t *testing.T) {
+	ctx := context.Background()
+	c, admin, store := newCreds()
+	admin.onAdd = func(r madmin.AddServiceAccountReq) {
+		m, err := store.GetMap(ctx, PlatformSecretPath)
+		require.NoError(t, err, "stored before the account is created")
+		require.Equal(t, r.AccessKey, m[KeyAccessKeyID])
+	}
+	require.NoError(t, c.EnsurePlatformCredential(ctx, true))
+	require.Len(t, admin.adds, 1)
+	r := admin.adds[0]
+	require.Equal(t, string(BucketPolicy(iceberg.ControlWarehouseName)), string(r.Policy), "authority over ivy-control and nothing else")
+	require.NotContains(t, string(r.Policy), "ivy-t-")
+	require.Equal(t, platformAccountName, r.Name)
+	require.LessOrEqual(t, len(r.Name), 32)
+	require.Regexp(t, `^[a-zA-Z][a-zA-Z0-9_-]*$`, r.Name)
+
+	k, s, err := c.ReadPlatform(ctx)
+	require.NoError(t, err)
+	require.Equal(t, r.AccessKey, k)
+	require.Equal(t, r.SecretKey, s)
+}
+
+func TestPlatformCredential_CanNeverBeATenantsPathOrAccount(t *testing.T) {
+	require.Equal(t, "/lakehouse/platform/ivy-control", PlatformSecretPath)
+	for i := 0; i < 200; i++ {
+		id := uuid.New()
+		require.NotEqual(t, PlatformSecretPath, SecretPath(id))
+		require.NotEqual(t, platformAccountName, accountName(id))
+	}
+}
+
+func TestPlatformCredential_DoesNotDisturbTenantsAndIsNotDisturbedByThem(t *testing.T) {
+	ctx := context.Background()
+	c, _, _ := newCreds()
+	id := uuid.New()
+	require.NoError(t, c.EnsureBucketCredential(ctx, id, bucketOf(id), true))
+	require.NoError(t, c.EnsurePlatformCredential(ctx, true))
+	tk, _, _ := c.Read(ctx, id)
+	pk, _, _ := c.ReadPlatform(ctx)
+	require.NotEqual(t, tk, pk)
+}
+
+func TestPlatformCredential_NeverMintsOnceIssued(t *testing.T) {
+	ctx := context.Background()
+	c, admin, store := newCreds()
+	require.ErrorIs(t, c.EnsurePlatformCredential(ctx, false), ErrCredentialLost)
+	require.Empty(t, admin.adds)
+	_, err := store.GetMap(ctx, PlatformSecretPath)
+	require.ErrorIs(t, err, secrets.ErrSecretNotFound, "nothing replaced it")
+
+	// A secrets-store outage is returned as it is, never as a licence to mint.
+	st := failingStore{MemoryProvider: secrets.NewMemoryProvider(), getErr: errors.New("vault sealed")}
+	c2 := &BucketCredentials{admin: &fakeAdmin{}, secrets: st, rand: cryptoRand()}
+	require.Error(t, c2.EnsurePlatformCredential(ctx, false))
+}
+
+func TestPlatformCredential_ReadRefusesMissingOrIncomplete(t *testing.T) {
+	ctx := context.Background()
+	c, _, store := newCreds()
+	_, _, err := c.ReadPlatform(ctx)
+	require.Error(t, err)
+	require.NoError(t, store.PutMap(ctx, PlatformSecretPath, map[string]string{KeyAccessKeyID: "only"}))
+	_, _, err = c.ReadPlatform(ctx)
+	require.ErrorContains(t, err, "incomplete")
+}
+
+func TestPlatformCredentialsFromEnv_UnconfiguredFailsClearlyAndNeverDefaults(t *testing.T) {
+	for _, k := range []string{"LAKEHOUSE_MINIO_ENDPOINT", "LAKEHOUSE_MINIO_ACCESS_KEY", "LAKEHOUSE_MINIO_SECRET_KEY"} {
+		t.Setenv(k, "")
+	}
+	pc := PlatformCredentialsFromEnv() // building it must not fail or connect
+	require.ErrorIs(t, pc.EnsurePlatformCredential(context.Background(), true), ErrNotConfigured)
+	_, _, err := pc.ReadPlatform(context.Background())
+	require.ErrorIs(t, err, ErrNotConfigured)
+}
