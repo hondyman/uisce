@@ -658,3 +658,70 @@ func TestProvisionedTenants(t *testing.T) {
 	require.NotContains(t, got, waiting, "configured but not provisioned has no warehouse to copy into")
 	require.NotContains(t, got, never)
 }
+
+func TestRecordAuditVerification(t *testing.T) {
+	db := openDB(t)
+	s := registry.NewStore(db)
+	ctx := context.Background()
+
+	t.Run("refuses a tenant with no registry row", func(t *testing.T) {
+		require.ErrorIs(t, s.RecordAuditVerification(ctx, newTenant(t, db, "NoRowVerify"), registry.AuditVerification{ThroughID: 3}), registry.ErrNotConfigured)
+	})
+
+	t.Run("a finding takes back an earlier pass, and a later pass clears the finding", func(t *testing.T) {
+		id := newTenant(t, db, "Verified")
+		_, err := s.SetRetention(ctx, id, 365, actor)
+		require.NoError(t, err)
+		got, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		require.Nil(t, got.AuditVerifiedAt, "never verified is not the same as verified")
+
+		require.NoError(t, s.RecordAuditVerification(ctx, id, registry.AuditVerification{ThroughID: 40}))
+		got, err = s.Get(ctx, id)
+		require.NoError(t, err)
+		require.EqualValues(t, 40, *got.AuditVerifiedThroughID)
+		require.NotNil(t, got.AuditVerifiedAt)
+		require.Nil(t, got.AuditVerifyFindingKind)
+
+		// Not monotonic, unlike the copy marker: a worse, lower result must replace a better one.
+		require.NoError(t, s.RecordAuditVerification(ctx, id, registry.AuditVerification{ThroughID: 12, FindingKind: "differs", FindingID: 13}))
+		got, err = s.Get(ctx, id)
+		require.NoError(t, err)
+		require.EqualValues(t, 12, *got.AuditVerifiedThroughID)
+		require.Equal(t, "differs", *got.AuditVerifyFindingKind)
+		require.EqualValues(t, 13, *got.AuditVerifyFindingID)
+
+		require.NoError(t, s.RecordAuditVerification(ctx, id, registry.AuditVerification{ThroughID: 50}))
+		got, err = s.Get(ctx, id)
+		require.NoError(t, err)
+		require.Nil(t, got.AuditVerifyFindingKind, "a clean run clears the finding")
+		require.Nil(t, got.AuditVerifyFindingID)
+	})
+
+	t.Run("a zero through id is a valid pass over an empty copy", func(t *testing.T) {
+		id := newTenant(t, db, "VerifiedEmpty")
+		_, err := s.SetRetention(ctx, id, 365, actor)
+		require.NoError(t, err)
+		require.NoError(t, s.RecordAuditVerification(ctx, id, registry.AuditVerification{}))
+		got, err := s.Get(ctx, id)
+		require.NoError(t, err)
+		require.EqualValues(t, 0, *got.AuditVerifiedThroughID)
+		require.NotNil(t, got.AuditVerifiedAt)
+	})
+
+	t.Run("refuses what the table would refuse, and the table refuses too", func(t *testing.T) {
+		id := newTenant(t, db, "VerifyBad")
+		_, err := s.SetRetention(ctx, id, 365, actor)
+		require.NoError(t, err)
+		require.Error(t, s.RecordAuditVerification(ctx, id, registry.AuditVerification{ThroughID: -1}))
+		require.Error(t, s.RecordAuditVerification(ctx, id, registry.AuditVerification{FindingKind: "differs"}), "a kind without an entry")
+		require.Error(t, s.RecordAuditVerification(ctx, id, registry.AuditVerification{FindingID: 4}), "an entry without a kind")
+		// The CHECK constraint is the backstop for a writer that skips the Go checks.
+		err = dbpkg.WithTenantTransaction(ctx, db, id.String(), func(tx *sql.Tx) error {
+			_, e := tx.Exec(`UPDATE public.tenant_lakehouse SET audit_verified_through_id = 1, audit_verified_at = now(),
+				audit_verify_finding_kind = 'free text with a value', audit_verify_finding_id = 2 WHERE tenant_id = $1`, id)
+			return e
+		})
+		require.Error(t, err, "the kind is an enumeration, so a value from a payload cannot be stored there")
+	})
+}

@@ -207,3 +207,24 @@ func sameJSON(a, b []byte) bool {
 }
 
 func isNothing(b []byte) bool { return len(b) == 0 || string(b) == "null" }
+
+// RecordAuditVerification stores a run's outcome where the tiering job reads it. A finding replaces any
+// earlier pass; a pass records how far the proof reaches. The activity is safe to retry: it replaces the
+// whole outcome, so a second attempt writes the same thing.
+func (a *TenantLakehouseActivities) RecordAuditVerification(ctx context.Context, in LakehouseProvisionInput, rep AuditVerifyReport) error {
+	id, err := in.tenant()
+	if err != nil {
+		return err
+	}
+	v := registry.AuditVerification{ThroughID: rep.ThroughID}
+	switch {
+	case rep.Finding != nil:
+		v.FindingKind, v.FindingID = rep.Finding.Kind, rep.Finding.ID
+	case !rep.Verified:
+		return nonRetryable(errTypeInvalidInput, fmt.Errorf("a report that is neither verified nor a finding cannot be recorded"))
+	}
+	if err := a.Registry.RecordAuditVerification(ctx, id, v); err != nil {
+		return fmt.Errorf("record the verification: %w", err)
+	}
+	return nil
+}

@@ -48,6 +48,8 @@ type LakehouseRegistry interface {
 	ProvisionedTenants(ctx context.Context) ([]uuid.UUID, error)
 	// VerifyAudit recomputes alpha's own chain and returns the first id that does not verify, or nil.
 	VerifyAudit(ctx context.Context, tenantID uuid.UUID) (*int64, error)
+	// RecordAuditVerification replaces the recorded outcome of the last verification (ADR-044).
+	RecordAuditVerification(ctx context.Context, tenantID uuid.UUID, v registry.AuditVerification) error
 }
 
 // LakehouseKeys manages the tenant's KMS key (KES).

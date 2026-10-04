@@ -1234,10 +1234,22 @@ partition detach, a retention drop). It reports and never repairs, copies, or ma
   (`AfterID`, the previous hash, rows so far), so the link is carried across the seam and `alpha` is not
   re-checked from the start.
 
-**Not decided here.** Where the result is recorded for the tiering job to read, and whether the verifier is
-scheduled, are left to that job. Until then a run's report is the evidence; nothing gates on it yet. The
-StarRocks read (`AuditRange`) is written against the documented 3.3 interface like the rest of ADR-036 and
-has not been run against a live instance.
+- **The outcome is recorded, and is not monotonic.** Each run replaces `tenant_lakehouse`'s
+  `audit_verified_through_id`, `audit_verified_at` and finding kind/entry in one statement
+  (`20261215_001`), so a later bad run takes back an earlier pass. This is the opposite of
+  `audit_copied_through_id`, which only rises. Only the final run of a continued chain records, since
+  only it knows the outcome. A run that cannot record fails, so silence is never read as a pass; a run
+  that cannot finish records nothing, and the earlier outcome stands with its age showing. The finding
+  kind is a `CHECK`-constrained enumeration, so a value from a payload cannot be stored there.
+- **Scheduled nightly** (`TenantLakehouseAuditVerifyAllWorkflow`), a few tenants at a time; a finding or
+  failure for one tenant is in the result and never fails the run. It only reads, so it adds nothing
+  under Object Lock.
+
+**For the tiering job.** A hot partition may be detached or dropped only when the tenant's recorded
+finding is empty, `audit_verified_through_id` covers the partition's last entry, and
+`audit_verified_at` is recent enough for the job's own tolerance. The gate itself is not implemented
+here. The StarRocks read (`AuditRange`) is written against the documented 3.3 interface like the rest of
+ADR-036 and has not been run against a live instance.
 
 ## Open items
 

@@ -126,6 +126,22 @@ type copyReg struct {
 	tenants []uuid.UUID
 	// brokenAlpha makes alpha's own chain fail to recompute at the given id.
 	brokenAlpha map[uuid.UUID]int64
+	// recorded is every verification outcome stored, per tenant, in order.
+	recorded  map[uuid.UUID][]registry.AuditVerification
+	recordErr error
+}
+
+func (r *copyReg) RecordAuditVerification(_ context.Context, id uuid.UUID, v registry.AuditVerification) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.recordErr != nil {
+		return r.recordErr
+	}
+	if r.recorded == nil {
+		r.recorded = map[uuid.UUID][]registry.AuditVerification{}
+	}
+	r.recorded[id] = append(r.recorded[id], v)
+	return nil
 }
 
 func (r *copyReg) VerifyAudit(_ context.Context, id uuid.UUID) (*int64, error) {
@@ -167,6 +183,8 @@ func (r *copyReg) ProvisionedTenants(context.Context) ([]uuid.UUID, error) { ret
 type router struct {
 	mu    sync.Mutex
 	dests map[uuid.UUID]*memDest
+	// fail makes reads of the named tenants' copies fail, as in an outage.
+	fail map[uuid.UUID]bool
 }
 
 func (r *router) d(id uuid.UUID) *memDest {
@@ -191,6 +209,9 @@ func (r *router) AppendAudit(ctx context.Context, id uuid.UUID, rows []infra.Aud
 }
 
 func (r *router) AuditRange(ctx context.Context, id uuid.UUID, after int64, limit int) ([]infra.AuditRow, error) {
+	if r.fail[id] {
+		return nil, errors.New("starrocks: connection refused")
+	}
 	return r.d(id).AuditRange(ctx, id, after, limit)
 }
 

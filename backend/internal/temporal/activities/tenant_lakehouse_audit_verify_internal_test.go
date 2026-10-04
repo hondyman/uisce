@@ -1,13 +1,17 @@
 package activities
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/lakehouse/infra"
 	"github.com/hondyman/uisce/backend/internal/lakehouse/registry"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/temporal"
 )
 
 var vt0 = time.Date(2026, 10, 3, 1, 2, 3, 456789000, time.UTC)
@@ -212,4 +216,38 @@ func afterRows(c []infra.AuditRow, id int64, n int) []infra.AuditRow {
 		}
 	}
 	return out
+}
+
+type recReg struct {
+	LakehouseRegistry
+	got  []registry.AuditVerification
+	fail error
+}
+
+func (r *recReg) RecordAuditVerification(_ context.Context, _ uuid.UUID, v registry.AuditVerification) error {
+	r.got = append(r.got, v)
+	return r.fail
+}
+
+func TestRecord_MapsAReportToTheOutcomeAndRefusesAnAmbiguousOne(t *testing.T) {
+	in := LakehouseProvisionInput{TenantID: uuid.NewString()}
+	reg := &recReg{}
+	a := &TenantLakehouseActivities{Registry: reg}
+	ctx := context.Background()
+
+	require.NoError(t, a.RecordAuditVerification(ctx, in, AuditVerifyReport{Verified: true, ThroughID: 9}))
+	require.NoError(t, a.RecordAuditVerification(ctx, in, AuditVerifyReport{ThroughID: 4, Finding: &AuditFinding{Kind: FindingDiffers, ID: 5}}))
+	require.Equal(t, []registry.AuditVerification{{ThroughID: 9}, {ThroughID: 4, FindingKind: FindingDiffers, FindingID: 5}}, reg.got)
+
+	// Neither verified nor a finding must never be stored as a pass.
+	err := a.RecordAuditVerification(ctx, in, AuditVerifyReport{})
+	require.Error(t, err)
+	require.Len(t, reg.got, 2)
+	var app *temporal.ApplicationError
+	require.ErrorAs(t, err, &app)
+	require.True(t, app.NonRetryable())
+
+	reg.fail = errors.New("db down")
+	require.Error(t, a.RecordAuditVerification(ctx, in, AuditVerifyReport{Verified: true}), "a store failure is surfaced, to be retried")
+	require.Error(t, a.RecordAuditVerification(ctx, LakehouseProvisionInput{TenantID: "nope"}, AuditVerifyReport{Verified: true}))
 }

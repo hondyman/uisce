@@ -28,3 +28,20 @@ func StartTenantLakehouseAuditCopyCron(ctx context.Context, c client.Client, tas
 	}
 	return err
 }
+
+// StartTenantLakehouseAuditVerifyCron starts the scheduled all-tenants verification (every AuditVerifyCron),
+// with the same fixed-id, already-started-is-success behaviour as the copy.
+func StartTenantLakehouseAuditVerifyCron(ctx context.Context, c client.Client, taskQueue string) error {
+	_, err := c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    AuditVerifyAllWorkflowID,
+		TaskQueue:             taskQueue,
+		CronSchedule:          AuditVerifyCron,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+		WorkflowRunTimeout:    6 * time.Hour,
+	}, TenantLakehouseAuditVerifyAllWorkflowName)
+	var started *serviceerror.WorkflowExecutionAlreadyStarted
+	if errors.As(err, &started) {
+		return nil
+	}
+	return err
+}

@@ -416,6 +416,9 @@ func main() {
 	w.RegisterWorkflowWithOptions(provisioningworkflows.TenantLakehouseAuditVerifyWorkflow, temporalworkflow.RegisterOptions{
 		Name: provisioningworkflows.TenantLakehouseAuditVerifyWorkflowName,
 	})
+	w.RegisterWorkflowWithOptions(provisioningworkflows.TenantLakehouseAuditVerifyAllWorkflow, temporalworkflow.RegisterOptions{
+		Name: provisioningworkflows.TenantLakehouseAuditVerifyAllWorkflowName,
+	})
 	w.RegisterActivity(lakehouseActivities)
 	log.Println("✅ Registered Tenant Lakehouse Provisioning Workflow")
 	pkgworkflows.RegisterSafeActivity("HealthCheck", provisioningActivities.HealthCheck)
@@ -478,6 +481,12 @@ func main() {
 		log.Printf("⚠️  Could not schedule the lakehouse audit copy: %v", err)
 	} else {
 		log.Println("✅ Lakehouse audit copy scheduled")
+	}
+	// ADR-044: verify each copy against alpha nightly. Same best-effort, fixed-id scheduling.
+	if err := provisioningworkflows.StartTenantLakehouseAuditVerifyCron(context.Background(), temporalClient, "bp_queue"); err != nil {
+		log.Printf("⚠️  Could not schedule the lakehouse audit verification: %v", err)
+	} else {
+		log.Println("✅ Lakehouse audit verification scheduled")
 	}
 
 	// Wait for shutdown signal

@@ -2,11 +2,13 @@ package workflows_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/lakehouse/infra"
+	"github.com/hondyman/uisce/backend/internal/lakehouse/registry"
 	"github.com/hondyman/uisce/backend/internal/temporal/activities"
 	"github.com/hondyman/uisce/backend/internal/temporal/workflows"
 	"github.com/stretchr/testify/require"
@@ -191,4 +193,98 @@ type downDest struct{ memDest }
 
 func (d *downDest) AuditRange(_ context.Context, _ uuid.UUID, _ int64, _ int) ([]infra.AuditRow, error) {
 	return nil, fmt.Errorf("starrocks: connection refused")
+}
+
+func TestAuditVerify_APassIsRecordedWithHowFarItReaches(t *testing.T) {
+	r := newCopyRig()
+	id := uuid.New()
+	r.copied(t, id, 6)
+	r.reg.entries[id] = chain(9) // three pending
+	_, err := r.verify(t, id)
+	require.NoError(t, err)
+	require.Equal(t, []registry.AuditVerification{{ThroughID: 6}}, r.reg.recorded[id])
+}
+
+// The point of recording: a later bad run must take back an earlier pass.
+func TestAuditVerify_AFindingReplacesAnEarlierPass(t *testing.T) {
+	r := newCopyRig()
+	id := uuid.New()
+	r.copied(t, id, 6)
+	_, err := r.verify(t, id)
+	require.NoError(t, err)
+	r.rt.d(id).rows[3].Hash = "tampered"
+	_, err = r.verify(t, id)
+	require.NoError(t, err)
+	got := r.reg.recorded[id]
+	require.Len(t, got, 2)
+	require.Empty(t, got[0].FindingKind)
+	require.Equal(t, registry.AuditVerification{ThroughID: 3, FindingKind: activities.FindingDiffers, FindingID: 4}, got[1],
+		"the finding names the kind and entry, and the proof stops at the last good one")
+}
+
+func TestAuditVerify_ABrokenAlphaIsRecordedToo(t *testing.T) {
+	r := newCopyRig()
+	id := uuid.New()
+	r.copied(t, id, 4)
+	r.reg.brokenAlpha = map[uuid.UUID]int64{id: 2}
+	_, err := r.verify(t, id)
+	require.NoError(t, err)
+	require.Equal(t, []registry.AuditVerification{{FindingKind: activities.FindingAlphaChainBroken, FindingID: 2}}, r.reg.recorded[id])
+}
+
+// A result that could not be stored is not a result: the run fails, so nobody reads silence as a pass.
+func TestAuditVerify_AnOutcomeThatCannotBeRecordedFailsTheRun(t *testing.T) {
+	r := newCopyRig()
+	id := uuid.New()
+	r.copied(t, id, 3)
+	r.reg.recordErr = errors.New("alpha unavailable")
+	_, err := r.verify(t, id)
+	require.Error(t, err)
+}
+
+func TestAuditVerify_ARunThatHandsOverRecordsNothing(t *testing.T) {
+	r := newCopyRig()
+	id := uuid.New()
+	all := chain(activities.AuditVerifyPageSize*50 + 3)
+	r.reg.entries[id] = all
+	d := r.rt.d(id)
+	for _, e := range all {
+		d.rows = append(d.rows, infra.AuditRow{ID: e.ID, At: e.At, ActorID: e.ActorID, ActorRole: e.ActorRole, Action: e.Action,
+			AfterJSON: string(e.After), PrevHash: e.PrevHash, Hash: e.Hash})
+	}
+	env := r.env()
+	env.RegisterWorkflow(workflows.TenantLakehouseAuditVerifyWorkflow)
+	env.ExecuteWorkflow(workflows.TenantLakehouseAuditVerifyWorkflow, workflows.AuditVerifyInput{
+		Lakehouse: activities.LakehouseProvisionInput{TenantID: id.String(), ActorID: "a", ActorRole: "global_admin"}})
+	var can *workflow.ContinueAsNewError
+	require.ErrorAs(t, env.GetWorkflowError(), &can)
+	require.Empty(t, r.reg.recorded[id], "only the last run knows the outcome")
+}
+
+func TestAuditVerifyAll_OneTenantsFindingOrFailureDoesNotStopTheOthers(t *testing.T) {
+	r := newCopyRig()
+	good, bad, down := uuid.New(), uuid.New(), uuid.New()
+	r.reg.tenants = []uuid.UUID{good, bad, down}
+	for _, id := range r.reg.tenants {
+		r.copied(t, id, 3)
+	}
+	r.rt.d(bad).rows[1].ActorID = "mallory"
+	r.rt.fail = map[uuid.UUID]bool{down: true}
+
+	env := r.env()
+	env.RegisterWorkflow(workflows.TenantLakehouseAuditVerifyWorkflow)
+	env.RegisterWorkflow(workflows.TenantLakehouseAuditVerifyAllWorkflow)
+	env.ExecuteWorkflow(workflows.TenantLakehouseAuditVerifyAllWorkflow)
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError(), "the schedule must keep running")
+	var res workflows.AuditVerifyAllResult
+	require.NoError(t, env.GetWorkflowResult(&res))
+	require.Equal(t, 3, res.Tenants)
+	require.Equal(t, 1, res.Verified)
+	require.Equal(t, map[string]string{bad.String(): activities.FindingDiffers}, res.Findings)
+	require.Contains(t, res.Failed, down.String())
+	require.Len(t, res.Failed, 1)
+	require.Len(t, r.reg.recorded[good], 1)
+	require.Len(t, r.reg.recorded[bad], 1)
+	require.Empty(t, r.reg.recorded[down], "an outage records nothing: the earlier outcome stands and its age shows")
 }
