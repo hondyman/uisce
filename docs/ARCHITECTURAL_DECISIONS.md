@@ -1980,3 +1980,8 @@ Two habits earned here, and they are cheap:
 **What this does not establish.** The snapshot is itself unverified against a live database —
 that is half B, and the snapshot has already been shown once to misrepresent reality. A clean
 comparison against an unverified reference is evidence about the two *files*, not about alpha.
+
+<!-- Sentinel probe. The only path in this pull request's diff is under docs/,
+     so the backend path filter excludes the matrix and it is skipped.
+     Recording here whether `Backend Tests Summary` still reports, because a check
+     that stops reporting blocks a pull request forever. -->
