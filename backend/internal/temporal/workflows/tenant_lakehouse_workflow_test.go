@@ -415,4 +415,5 @@ func (f *lhFakes) AuditAfter(context.Context, uuid.UUID, int64, int) ([]registry
 	return nil, nil
 }
 func (f *lhFakes) MarkAuditCopied(context.Context, uuid.UUID, int64) error { return nil }
+func (f *lhFakes) VerifyAudit(context.Context, uuid.UUID) (*int64, error)  { return nil, nil }
 func (f *lhFakes) ProvisionedTenants(context.Context) ([]uuid.UUID, error) { return nil, nil }

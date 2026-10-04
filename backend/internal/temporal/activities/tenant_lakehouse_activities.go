@@ -46,6 +46,8 @@ type LakehouseRegistry interface {
 	MarkAuditCopied(ctx context.Context, tenantID uuid.UUID, throughID int64) error
 	// ProvisionedTenants lists the tenants that have a warehouse to copy into.
 	ProvisionedTenants(ctx context.Context) ([]uuid.UUID, error)
+	// VerifyAudit recomputes alpha's own chain and returns the first id that does not verify, or nil.
+	VerifyAudit(ctx context.Context, tenantID uuid.UUID) (*int64, error)
 }
 
 // LakehouseKeys manages the tenant's KMS key (KES).

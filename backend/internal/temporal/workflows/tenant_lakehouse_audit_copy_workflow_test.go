@@ -97,6 +97,17 @@ func (d *memDest) AppendAudit(_ context.Context, _ uuid.UUID, rows []infra.Audit
 	}
 	return nil
 }
+func (d *memDest) AuditRange(_ context.Context, _ uuid.UUID, after int64, limit int) ([]infra.AuditRow, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var out []infra.AuditRow
+	for _, r := range d.rows {
+		if r.ID > after && len(out) < limit {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
 func (d *memDest) ids() []int64 {
 	var out []int64
 	for _, r := range d.rows {
@@ -113,6 +124,15 @@ type copyReg struct {
 	cfgs    map[uuid.UUID]*registry.Config
 	copied  map[uuid.UUID]int64
 	tenants []uuid.UUID
+	// brokenAlpha makes alpha's own chain fail to recompute at the given id.
+	brokenAlpha map[uuid.UUID]int64
+}
+
+func (r *copyReg) VerifyAudit(_ context.Context, id uuid.UUID) (*int64, error) {
+	if n, ok := r.brokenAlpha[id]; ok {
+		return &n, nil
+	}
+	return nil, nil
 }
 
 func (r *copyReg) Get(_ context.Context, id uuid.UUID) (*registry.Config, error) {
@@ -168,6 +188,10 @@ func (r *router) AuditHash(ctx context.Context, id uuid.UUID, n int64) (string, 
 }
 func (r *router) AppendAudit(ctx context.Context, id uuid.UUID, rows []infra.AuditRow) error {
 	return r.d(id).AppendAudit(ctx, id, rows)
+}
+
+func (r *router) AuditRange(ctx context.Context, id uuid.UUID, after int64, limit int) ([]infra.AuditRow, error) {
+	return r.d(id).AuditRange(ctx, id, after, limit)
 }
 
 type copyRig struct {

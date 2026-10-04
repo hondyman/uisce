@@ -412,6 +412,10 @@ func main() {
 	w.RegisterWorkflowWithOptions(provisioningworkflows.TenantLakehouseAuditCopyAllWorkflow, temporalworkflow.RegisterOptions{
 		Name: provisioningworkflows.TenantLakehouseAuditCopyAllWorkflowName,
 	})
+	// ADR-035: prove the copy matches alpha before anything depends on it. Read-only.
+	w.RegisterWorkflowWithOptions(provisioningworkflows.TenantLakehouseAuditVerifyWorkflow, temporalworkflow.RegisterOptions{
+		Name: provisioningworkflows.TenantLakehouseAuditVerifyWorkflowName,
+	})
 	w.RegisterActivity(lakehouseActivities)
 	log.Println("✅ Registered Tenant Lakehouse Provisioning Workflow")
 	pkgworkflows.RegisterSafeActivity("HealthCheck", provisioningActivities.HealthCheck)

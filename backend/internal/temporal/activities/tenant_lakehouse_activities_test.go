@@ -551,4 +551,5 @@ func (f *fakeReg) AuditAfter(context.Context, uuid.UUID, int64, int) ([]registry
 	return nil, nil
 }
 func (f *fakeReg) MarkAuditCopied(context.Context, uuid.UUID, int64) error { return nil }
+func (f *fakeReg) VerifyAudit(context.Context, uuid.UUID) (*int64, error)  { return nil, nil }
 func (f *fakeReg) ProvisionedTenants(context.Context) ([]uuid.UUID, error) { return nil, nil }

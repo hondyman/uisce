@@ -285,3 +285,41 @@ func TestAuditDestinationFromEnv_UnconfiguredAndLazy(t *testing.T) {
 	_, _ = lazy.MaxAuditID(ctx, testTenant)
 	require.Equal(t, 1, builds, "a successful build is cached")
 }
+
+func TestAuditRange_ReadsInOrderWithBoundParametersAndEitherTimestampForm(t *testing.T) {
+	ctx := context.Background()
+	sr, mock, rec := newSR(t, StarRocksConfig{})
+	cols := []string{"id", "at", "actor_id", "actor_role", "action", "before_json", "after_json", "prev_hash", "hash"}
+	when := time.Date(2026, 10, 3, 4, 5, 6, 789000000, time.UTC)
+	mock.ExpectQuery("").WithArgs(int64(4), 2).WillReturnRows(sqlmock.NewRows(cols).
+		AddRow(int64(5), when, "alice", "global_admin", "configured", nil, `{"a":1}`, "p", "h5").
+		AddRow(int64(6), []byte("2026-10-03 04:05:06.789"), "bob", "r", "x", "", "", "h5", "h6"))
+	got, err := sr.AuditRange(ctx, testTenant, 4, 2)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.Equal(t, when, got[0].At)
+	require.Equal(t, when, got[1].At, "text and time forms read the same instant")
+	require.Equal(t, "", got[0].BeforeJSON, "a NULL column is empty text")
+	require.Equal(t, "SELECT `id`, `at`, `actor_id`, `actor_role`, `action`, `before_json`, `after_json`, `prev_hash`, `hash` FROM "+
+		testCat+".audit.lakehouse_events WHERE `id` > ? ORDER BY `id` ASC LIMIT ?", rec.stmts[0], "bound parameters and chain order")
+}
+
+func TestAuditRange_RefusesWhatItCannotReadExactly(t *testing.T) {
+	ctx := context.Background()
+	sr, mock, _ := newSR(t, StarRocksConfig{})
+	_, err := sr.AuditRange(ctx, testTenant, 0, 0)
+	require.Error(t, err)
+	_, err = sr.AuditRange(ctx, testTenant, 0, MaxAppendRows+1)
+	require.Error(t, err)
+	_, err = sr.AuditRange(ctx, uuid.Nil, 0, 10)
+	require.Error(t, err)
+
+	cols := []string{"id", "at", "actor_id", "actor_role", "action", "before_json", "after_json", "prev_hash", "hash"}
+	mock.ExpectQuery("").WillReturnRows(sqlmock.NewRows(cols).AddRow(int64(1), "garbage", "a", "r", "x", "", "", "p", "h"))
+	_, err = sr.AuditRange(ctx, testTenant, 0, 10)
+	require.ErrorContains(t, err, "unreadable timestamp", "a guessed timestamp could call a changed row unchanged")
+
+	mock.ExpectQuery("").WillReturnError(errors.New("boom"))
+	_, err = sr.AuditRange(ctx, testTenant, 0, 10)
+	require.Error(t, err)
+}

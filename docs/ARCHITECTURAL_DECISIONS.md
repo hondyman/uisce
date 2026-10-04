@@ -1211,6 +1211,34 @@ It was caught by running *the workflow's exact expression* against the real pack
 pushing, not by review. The step now carries a count guard (`< 100` packages fails loudly) so a
 broken partition cannot report green again.
 
+### ADR-044: The Iceberg Audit Copy Is Verified Against `alpha` By A Read-Only Workflow; A Finding Is A Result, Not An Error
+
+**Decision.** `TenantLakehouseAuditVerifyWorkflow` proves a tenant's Iceberg audit copy (ADR-036)
+matches `alpha`, and is the gate ADR-035 requires before anything depends on the copy (a hot
+partition detach, a retention drop). It reports and never repairs, copies, or marks anything.
+
+- **`alpha` first.** Its own chain is recomputed once (`tenant_lakehouse_audit_verify`). A copy that
+  faithfully matches a record that no longer recomputes proves nothing, so that is reported as
+  `alpha_chain_broken` before any comparison starts.
+- **Lag is not a finding; a hole is.** The copy runs every 15 minutes, so entries `alpha` holds beyond the
+  copy's highest id are *pending*. The report says how far the proof reaches (`ThroughID`). An entry `alpha`
+  has *below* that id and the copy lacks is `missing_in_copy`, because the copy only appends in order.
+- **Every field is compared**, not just the hash: timestamp at the microsecond the database keeps, actor,
+  role, action, before/after as JSON data (key order is not meaning), and `prev_hash`/`hash`. The copy's
+  own `prev_hash` linkage is checked separately, so two records that agree and are both mislinked are
+  still caught (`chain_break`). Unreadable JSON on either side is a difference, never a pass.
+- **A finding is returned, not raised.** Retrying cannot change it, so it is a result with a nil error;
+  only an outage is retried. A finding names the entry and the field and never a value, because audit
+  payloads can hold personal data and the report is logged.
+- **Bounded history.** One run is 50 pages of 1000; a longer chain continues as a new run from its cursor
+  (`AfterID`, the previous hash, rows so far), so the link is carried across the seam and `alpha` is not
+  re-checked from the start.
+
+**Not decided here.** Where the result is recorded for the tiering job to read, and whether the verifier is
+scheduled, are left to that job. Until then a run's report is the evidence; nothing gates on it yet. The
+StarRocks read (`AuditRange`) is written against the documented 3.3 interface like the rest of ADR-036 and
+has not been run against a live instance.
+
 ## Open items
 
 - **C1 (9.1) ported metric primitives into the rule VM.**
