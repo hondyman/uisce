@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,11 +12,26 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
+
+	"github.com/hondyman/uisce/backend/internal/profiler"
 )
 
 func TestWebSocketEndToEndProfiler(t *testing.T) {
 	// runProfile log.Fatals without ALPHA_DB_URL, which kills the whole test binary.
 	t.Setenv("SEMLAYER_TEST_SKIP_ALPHA_POOL", "1")
+	// This test is about the websocket delivering a job's messages, not about a source database. The
+	// profiler fails closed without a source connection (it used to "succeed" against an empty DSN),
+	// so a stand-in reports one table of progress and finishes.
+	origProfile := profiler.ProfileTablesFunc
+	profiler.ProfileTablesFunc = func(_ context.Context, _ *zap.Logger, _ *pgxpool.Pool, _, _ string, _ *pgxpool.Pool, _ string, tables []string, _ int, _ float64, _ int, progress profiler.ProgressFunc) error {
+		for i := range tables {
+			progress(i+1, len(tables), "profiling")
+		}
+		return nil
+	}
+	t.Cleanup(func() { profiler.ProfileTablesFunc = origProfile })
 	// Setup server and hub
 	srv := &Server{WsHub: newWebSocketHub()}
 	go srv.WsHub.run()
