@@ -1,0 +1,60 @@
+name: Compliance Engine & Migration Chain CI
+
+# Continuous integration workflow for the Core Compliance Engine, Regulatory Change Workflow,
+# Point-in-Time Effective Dating, Snapshots, and Fresh Database Migration Chain (001 <-> 007).
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/internal/compliance/**'
+      - 'backend/db/migrations/**'
+      - '.github/workflows/compliance-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/internal/compliance/**'
+      - 'backend/db/migrations/**'
+      - '.github/workflows/compliance-ci.yml'
+
+jobs:
+  compliance-test:
+    name: Compliance Engine & Migration Chain Suite
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_DB: alpha
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=5s --health-timeout=5s --health-retries=10
+
+    env:
+      ALPHA_DSN: host=localhost port=5432 user=postgres password=postgres dbname=alpha sslmode=disable
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Wait for Postgres Service
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            sleep 1
+          done
+
+      - name: Run Compliance Unit & Migration Chain Tests (-race)
+        run: go test -v -race ./backend/internal/compliance/...

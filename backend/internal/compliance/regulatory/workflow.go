@@ -14,12 +14,13 @@ import (
 const (
 	RegulatoryChangeTaskQueue = "compliance-regulatory-change"
 
-	SignalTriageCase   = "TriageCaseSignal"
-	SignalReviewCase   = "ReviewCaseSignal"
-	SignalApproveCase  = "ApproveCaseSignal"
-	SignalPublishCase  = "PublishCaseSignal"
-	SignalRejectCase   = "RejectCaseSignal"
-	SignalCloseNoImpact = "CloseNoImpactSignal"
+	SignalTriageCase       = "TriageCaseSignal"
+	SignalReviewCase       = "ReviewCaseSignal"
+	SignalApproveCase      = "ApproveCaseSignal"
+	SignalPublishCase      = "PublishCaseSignal"
+	SignalRejectCase       = "RejectCaseSignal"
+	SignalCloseNoImpact    = "CloseNoImpactSignal"
+	SignalRouteBacklogCase = "RouteBacklogCaseSignal"
 )
 
 type RegulatoryWorkflowInput struct {
@@ -68,7 +69,7 @@ type RegulatoryWorkflowResult struct {
 	Notes                 string                      `json:"notes"`
 }
 
-// RegulatoryChangeWorkflow orchestrates the 5-stage regulatory change lifecycle
+// RegulatoryChangeWorkflow orchestrates the 5-stage regulatory change lifecycle with non-auto-closing persistent SLA escalation
 func RegulatoryChangeWorkflow(ctx workflow.Context, input RegulatoryWorkflowInput) (*RegulatoryWorkflowResult, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("RegulatoryChangeWorkflow started", "case_code", input.IntakeReq.CaseCode)
@@ -104,6 +105,7 @@ func RegulatoryChangeWorkflow(ctx workflow.Context, input RegulatoryWorkflowInpu
 	publishChan := workflow.GetSignalChannel(ctx, SignalPublishCase)
 	rejectChan := workflow.GetSignalChannel(ctx, SignalRejectCase)
 	closeChan := workflow.GetSignalChannel(ctx, SignalCloseNoImpact)
+	backlogChan := workflow.GetSignalChannel(ctx, SignalRouteBacklogCase)
 
 	currentStatus := StatusIntaked
 	escalated := false
@@ -112,14 +114,22 @@ func RegulatoryChangeWorkflow(ctx workflow.Context, input RegulatoryWorkflowInpu
 	for {
 		selector := workflow.NewSelector(ctx)
 
-		// TTL Escalation Timer
+		// SLA Timer: Fires Escalation Activity when deadline passes and schedules recurring reminder, leaving case OPEN
 		if !escalated {
 			ttlTimer := workflow.NewTimer(ctx, dueDuration)
 			selector.AddFuture(ttlTimer, func(f workflow.Future) {
-				logger.Warn("Case exceeded TTL without resolution; escalating", "case_code", caseCode)
+				logger.Warn("Case exceeded TTL without resolution; escalating alert", "case_code", caseCode)
 				var actErr error
-				_ = workflow.ExecuteActivity(ctx, "EscalateCaseActivity", caseID).Get(ctx, &actErr)
+				_ = workflow.ExecuteActivity(ctx, "EscalateCaseActivity", caseID, "SLA deadline exceeded without resolution").Get(ctx, &actErr)
 				escalated = true
+			})
+		} else {
+			// Recurring 7-day re-escalation while remaining OPEN
+			reEscalateTimer := workflow.NewTimer(ctx, 7*24*time.Hour)
+			selector.AddFuture(reEscalateTimer, func(f workflow.Future) {
+				logger.Warn("Case remains unaddressed; firing recurring escalation", "case_code", caseCode)
+				var actErr error
+				_ = workflow.ExecuteActivity(ctx, "EscalateCaseActivity", caseID, "Recurring 7-day unaddressed case escalation").Get(ctx, &actErr)
 			})
 		}
 
@@ -143,6 +153,17 @@ func RegulatoryChangeWorkflow(ctx workflow.Context, input RegulatoryWorkflowInpu
 			currentStatus = StatusClosedNoImpact
 		})
 
+		// Route to Backlog Signal (Available in TRIAGED / NEW_RULE_REQUIRED)
+		selector.AddReceive(backlogChan, func(c workflow.ReceiveChannel, more bool) {
+			var sig TriageSignalPayload
+			c.Receive(ctx, &sig)
+			var actErr error
+			err := workflow.ExecuteActivity(ctx, "RouteToNewRuleBacklogActivity", caseID, sig.TriagedBy, sig.TriageNotes).Get(ctx, &actErr)
+			if err == nil {
+				currentStatus = StatusNewRuleBacklog
+			}
+		})
+
 		// Stage 2: Triage Signal
 		selector.AddReceive(triageChan, func(c workflow.ReceiveChannel, more bool) {
 			var sig TriageSignalPayload
@@ -157,7 +178,11 @@ func RegulatoryChangeWorkflow(ctx workflow.Context, input RegulatoryWorkflowInpu
 			var actErr error
 			err := workflow.ExecuteActivity(ctx, "TriageCaseActivity", triageReq).Get(ctx, &actErr)
 			if err == nil {
-				currentStatus = StatusTriaged
+				if sig.Classification == ClassificationNewRuleRequired {
+					currentStatus = StatusNewRuleBacklog
+				} else {
+					currentStatus = StatusTriaged
+				}
 			}
 		})
 
@@ -219,50 +244,55 @@ func RegulatoryChangeWorkflow(ctx workflow.Context, input RegulatoryWorkflowInpu
 		Status:                currentStatus,
 		PublishedRuleVersions: publishedEntries,
 		CompletedAt:           workflow.Now(ctx),
+		Notes:                 fmt.Sprintf("Workflow finalized with status %s", currentStatus),
 	}, nil
 }
 
-// Activities implementation wrapping Service methods
-type Activities struct {
+// Activity definitions for engine binding
+type WorkflowActivities struct {
 	service *Service
 }
 
-func NewActivities(service *Service) *Activities {
-	return &Activities{service: service}
+func NewWorkflowActivities(service *Service) *WorkflowActivities {
+	return &WorkflowActivities{service: service}
 }
 
-func (a *Activities) CreateCaseActivity(ctx context.Context, req IntakeRequest) (*RegulatoryChangeCase, error) {
+func (a *WorkflowActivities) CreateCaseActivity(ctx context.Context, req IntakeRequest) (*RegulatoryChangeCase, error) {
 	return a.service.CreateCase(ctx, req)
 }
 
-func (a *Activities) TriageCaseActivity(ctx context.Context, req TriageRequest) error {
+func (a *WorkflowActivities) TriageCaseActivity(ctx context.Context, req TriageRequest) error {
 	return a.service.TriageCase(ctx, req)
 }
 
-func (a *Activities) StartReviewActivity(ctx context.Context, caseID uuid.UUID, stewardID string, diffs []RuleDiffView) error {
-	return a.service.StartReview(ctx, caseID, stewardID, diffs)
+func (a *WorkflowActivities) StartReviewActivity(ctx context.Context, caseID uuid.UUID, stewardID string, diffViews []RuleDiffView) error {
+	return a.service.StartReview(ctx, caseID, stewardID, diffViews)
 }
 
-func (a *Activities) ExecuteCorpusGateActivity(ctx context.Context, caseID uuid.UUID, stewardID string, drafts []RuleDraft) (*drift.CorpusRunResult, error) {
+func (a *WorkflowActivities) ExecuteCorpusGateActivity(ctx context.Context, caseID uuid.UUID, stewardID string, drafts []RuleDraft) (*drift.CorpusRunResult, error) {
 	return a.service.ExecuteCorpusGate(ctx, caseID, stewardID, drafts)
 }
 
-func (a *Activities) ApproveCaseActivity(ctx context.Context, caseID uuid.UUID, stewardID string, notes string) error {
+func (a *WorkflowActivities) ApproveCaseActivity(ctx context.Context, caseID uuid.UUID, stewardID string, notes string) error {
 	return a.service.ApproveCase(ctx, caseID, stewardID, notes)
 }
 
-func (a *Activities) PublishReleaseActivity(ctx context.Context, req PublishRequest) ([]PublishedRuleVersionEntry, error) {
+func (a *WorkflowActivities) PublishReleaseActivity(ctx context.Context, req PublishRequest) ([]PublishedRuleVersionEntry, error) {
 	return a.service.PublishRelease(ctx, req)
 }
 
-func (a *Activities) EscalateCaseActivity(ctx context.Context, caseID uuid.UUID) error {
-	return a.service.EscalateCase(ctx, caseID)
+func (a *WorkflowActivities) EscalateCaseActivity(ctx context.Context, caseID uuid.UUID, reason string) error {
+	return a.service.EscalateCase(ctx, caseID, reason)
 }
 
-func (a *Activities) RejectCaseActivity(ctx context.Context, caseID uuid.UUID, actor, reason string) error {
+func (a *WorkflowActivities) CloseCaseActivity(ctx context.Context, caseID uuid.UUID, actor string, reason string) error {
+	return a.service.CloseCase(ctx, caseID, actor, reason)
+}
+
+func (a *WorkflowActivities) RejectCaseActivity(ctx context.Context, caseID uuid.UUID, actor string, reason string) error {
 	return a.service.RejectCase(ctx, caseID, actor, reason)
 }
 
-func (a *Activities) CloseCaseActivity(ctx context.Context, caseID uuid.UUID, actor, reason string) error {
-	return a.service.CloseCaseNoImpact(ctx, caseID, actor, reason)
+func (a *WorkflowActivities) RouteToNewRuleBacklogActivity(ctx context.Context, caseID uuid.UUID, stewardID string, notes string) error {
+	return a.service.RouteToNewRuleBacklog(ctx, caseID, stewardID, notes)
 }

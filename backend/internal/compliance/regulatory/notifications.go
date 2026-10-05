@@ -24,7 +24,7 @@ func NewNotificationService(db *sql.DB) *NotificationService {
 	return &NotificationService{
 		db: db,
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 5 * time.Second,
 		},
 	}
 }
@@ -75,28 +75,62 @@ func SignWebhookPayload(secret []byte, payload []byte) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
+// VerifyWebhookSignature verifies HMAC-SHA256 signature against payload and secret
+func VerifyWebhookSignature(secret []byte, payload []byte, signature string) bool {
+	expected := SignWebhookPayload(secret, payload)
+	return hmac.Equal([]byte(expected), []byte(signature))
+}
+
 // DispatchWebhook sends an HMAC-signed webhook to a tenant's registered endpoint
 func (s *NotificationService) DispatchWebhook(ctx context.Context, endpoint string, secret []byte, payload []byte) error {
+	return s.DispatchWebhookWithRetry(ctx, endpoint, secret, payload, 1, 0)
+}
+
+// DispatchWebhookWithRetry delivers an HMAC-signed webhook with retry policy
+func (s *NotificationService) DispatchWebhookWithRetry(ctx context.Context, endpoint string, secret []byte, payload []byte, maxAttempts int, initialBackoff time.Duration) error {
+	if maxAttempts <= 0 {
+		maxAttempts = 3
+	}
+	if initialBackoff <= 0 {
+		initialBackoff = 50 * time.Millisecond
+	}
+
 	signature := SignWebhookPayload(secret, payload)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return fmt.Errorf("create webhook request: %w", err)
+	var lastErr error
+	backoff := initialBackoff
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+		if err != nil {
+			return fmt.Errorf("create webhook request: %w", err)
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Uisce-Signature-SHA256", signature)
+		req.Header.Set("X-Uisce-Timestamp", fmt.Sprintf("%d", time.Now().Unix()))
+
+		resp, err := s.httpClient.Do(req)
+		if err == nil {
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				_ = resp.Body.Close()
+				return nil
+			}
+			_ = resp.Body.Close()
+			lastErr = fmt.Errorf("endpoint returned status %d", resp.StatusCode)
+		} else {
+			lastErr = err
+		}
+
+		if attempt < maxAttempts {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+				backoff *= 2
+			}
+		}
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Uisce-Signature-SHA256", signature)
-	req.Header.Set("X-Uisce-Timestamp", fmt.Sprintf("%d", time.Now().Unix()))
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("execute webhook request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("webhook endpoint returned status %d", resp.StatusCode)
-	}
-
-	return nil
+	return fmt.Errorf("webhook delivery failed after %d attempts: %w", maxAttempts, lastErr)
 }
