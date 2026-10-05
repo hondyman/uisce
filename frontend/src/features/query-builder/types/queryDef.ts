@@ -135,6 +135,8 @@ export interface SavedQueryState {
   filters: FilterDef[];
   parameters: SavedQueryParameter[];
   limit?: number;
+  /** Persisted QuerySubject (cube pin or BO). Mirrored on SavedQuery.subject. */
+  subject?: QuerySubject;
 }
 
 export type CoreQueryStatus = 'core' | 'vanilla' | 'extended' | 'upgrade_available' | 'cloned' | 'custom';
@@ -148,17 +150,26 @@ export interface QueryCustomization {
   cloneQueryId?: string;
 }
 
+export type SavedQuerySourceKind = 'business_object' | 'cube';
+
 export interface SavedQuery {
   id: string;
   tenantId: string;
   userId: string;
   name: string;
   description: string;
+  /**
+   * business_object (default) or cube. For cube rows, `boId` carries the
+   * cube id (server source_id) for list-filter compatibility.
+   */
+  sourceKind?: SavedQuerySourceKind;
   boId: string;
   bindingId: string;
   /** Additional Business Objects joined into this query. Editable after
    * creation; boId/bindingId are not (see saved_query_handler.go). */
   relatedBoIds: string[];
+  /** Analytical subject pin; required for cube execute (RoutePinned). */
+  subject?: QuerySubject;
   chartType: SavedQueryChartType;
   state: SavedQueryState;
   tags: string[];

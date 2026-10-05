@@ -7,7 +7,13 @@
  */
 
 import { apiFetch } from '../../../lib/apiClient';
-import type { SavedQuery, SavedQueryChartType, SavedQueryState, SavedQueryFolder } from '../types/queryDef';
+import type {
+  QuerySubject,
+  SavedQuery,
+  SavedQueryChartType,
+  SavedQueryState,
+  SavedQueryFolder,
+} from '../types/queryDef';
 
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await apiFetch(path, {
@@ -33,8 +39,14 @@ async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
 export interface SavedQueryInput {
   name: string;
   description?: string;
-  boId: string;
+  /**
+   * Required for business_object subjects. Omit when `subject.kind === 'cube'`
+   * — server sets source_id from subject.cubeId.
+   */
+  boId?: string;
   bindingId?: string;
+  /** Explicit analytical subject. Cube creates must pass kind:'cube'. */
+  subject?: QuerySubject;
   /** Editable after creation. boId/bindingId are locked once the query
    * exists and are ignored by the backend on update. */
   relatedBoIds?: string[];

@@ -1,11 +1,13 @@
 package querybuilder
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -57,12 +59,20 @@ type SavedQueryMeasure struct {
 
 // SavedQueryState is the shape persisted in data_explorer.saved_query.query_state.
 type SavedQueryState struct {
-	Dimensions []SavedQueryDimension `json:"dimensions"`
-	Measures   []SavedQueryMeasure   `json:"measures"`
-	Filters    []SavedQueryFilter    `json:"filters"`
-	Parameters []SavedQueryParameter `json:"parameters"`
-	Limit      int                   `json:"limit,omitempty"`
+	Dimensions []SavedQueryDimension     `json:"dimensions"`
+	Measures   []SavedQueryMeasure       `json:"measures"`
+	Filters    []SavedQueryFilter        `json:"filters"`
+	Parameters []SavedQueryParameter     `json:"parameters"`
+	Limit      int                       `json:"limit,omitempty"`
+	// Subject pins the analytical subject (business_object | cube) for execute.
+	// Cube rows also set source_kind='cube' / source_id=cubeId on the table row.
+	Subject *boresolver.QuerySubject `json:"subject,omitempty"`
 }
+
+const (
+	savedQuerySourceBusinessObject = "business_object"
+	savedQuerySourceCube           = "cube"
+)
 
 // SavedQuery is one row of data_explorer.saved_query, with QueryState
 // decoded for JSON responses instead of the raw jsonb bytes.
@@ -72,26 +82,30 @@ type SavedQuery struct {
 	UserID        string              `json:"userId"`
 	Name          string              `json:"name"`
 	Description   string              `json:"description"`
-	BOID          string              `json:"boId"`
-	BindingID     string              `json:"bindingId"`
-	RelatedBOIDs  []string            `json:"relatedBoIds"`
-	ChartType     string              `json:"chartType"`
-	State         SavedQueryState     `json:"state"`
-	Tags          []string            `json:"tags"`
-	FolderID      string              `json:"folderId,omitempty"`
-	IsFavorite    bool                `json:"isFavorite"`
-	Visibility    string              `json:"visibility"`
-	IsCore        bool                `json:"isCore"`
-	Status        string              `json:"status,omitempty"` // active | deprecated | archived
-	ArchivedAt    *time.Time          `json:"archivedAt,omitempty"`
-	CreatedBy     string              `json:"createdBy,omitempty"`
-	CreatedAt     time.Time           `json:"createdAt"`
-	UpdatedAt     time.Time           `json:"updatedAt"`
-	CoreStatus    string              `json:"coreStatus,omitempty"` // core | vanilla | extended | upgrade_available | cloned | custom
-	Customization *QueryCustomization `json:"customization,omitempty"`
-	Editable      bool                `json:"editable"`
-	CanCustomize  bool                `json:"canCustomize"`
-	ClonedFrom    *QueryCloneSource   `json:"clonedFrom,omitempty"`
+	// SourceKind is business_object (default) or cube. For cube rows, BOID
+	// carries the cube id (source_id) for backward-compatible list filters.
+	SourceKind    string                   `json:"sourceKind,omitempty"`
+	BOID          string                   `json:"boId"`
+	BindingID     string                   `json:"bindingId"`
+	RelatedBOIDs  []string                 `json:"relatedBoIds"`
+	Subject       *boresolver.QuerySubject `json:"subject,omitempty"`
+	ChartType     string                   `json:"chartType"`
+	State         SavedQueryState          `json:"state"`
+	Tags          []string                 `json:"tags"`
+	FolderID      string                   `json:"folderId,omitempty"`
+	IsFavorite    bool                     `json:"isFavorite"`
+	Visibility    string                   `json:"visibility"`
+	IsCore        bool                     `json:"isCore"`
+	Status        string                   `json:"status,omitempty"` // active | deprecated | archived
+	ArchivedAt    *time.Time               `json:"archivedAt,omitempty"`
+	CreatedBy     string                   `json:"createdBy,omitempty"`
+	CreatedAt     time.Time                `json:"createdAt"`
+	UpdatedAt     time.Time                `json:"updatedAt"`
+	CoreStatus    string                   `json:"coreStatus,omitempty"` // core | vanilla | extended | upgrade_available | cloned | custom
+	Customization *QueryCustomization      `json:"customization,omitempty"`
+	Editable      bool                     `json:"editable"`
+	CanCustomize  bool                     `json:"canCustomize"`
+	ClonedFrom    *QueryCloneSource        `json:"clonedFrom,omitempty"`
 }
 
 type savedQueryRow struct {
@@ -100,6 +114,7 @@ type savedQueryRow struct {
 	UserID       string         `db:"user_id"`
 	Name         string         `db:"name"`
 	Description  string         `db:"description"`
+	SourceKind   string         `db:"source_kind"`
 	SourceID     string         `db:"source_id"`
 	BindingID    sql.NullString `db:"binding_id"`
 	RelatedBOIDs pq.StringArray `db:"related_bo_ids"`
@@ -117,18 +132,23 @@ type savedQueryRow struct {
 	UpdatedAt    time.Time      `db:"updated_at"`
 }
 
-const savedQuerySelectCols = `id, tenant_id, user_id, name, description, source_id, binding_id, related_bo_ids,
+const savedQuerySelectCols = `id, tenant_id, user_id, name, description, COALESCE(source_kind, 'business_object') AS source_kind, source_id, binding_id, related_bo_ids,
 	chart_type, query_state, tags, folder_id, is_favorite, visibility, is_core, COALESCE(status, 'active') AS status, archived_at, created_by, created_at, updated_at`
 
 func (r savedQueryRow) toSavedQuery() SavedQuery {
 	var state SavedQueryState
 	_ = json.Unmarshal(r.QueryState, &state)
-	return SavedQuery{
+	kind := r.SourceKind
+	if kind == "" {
+		kind = savedQuerySourceBusinessObject
+	}
+	sq := SavedQuery{
 		ID:           r.ID,
 		TenantID:     r.TenantID,
 		UserID:       r.UserID,
 		Name:         r.Name,
 		Description:  r.Description,
+		SourceKind:   kind,
 		BOID:         r.SourceID,
 		BindingID:    r.BindingID.String,
 		RelatedBOIDs: []string(r.RelatedBOIDs),
@@ -147,6 +167,32 @@ func (r savedQueryRow) toSavedQuery() SavedQuery {
 		Editable:     true,
 		CanCustomize: false,
 		CoreStatus:   "custom",
+	}
+	sq.Subject = resolvedSavedQuerySubject(sq)
+	return sq
+}
+
+// resolvedSavedQuerySubject returns the explicit subject from query_state, or
+// synthesizes one from source_kind / source_id for older rows.
+func resolvedSavedQuerySubject(sq SavedQuery) *boresolver.QuerySubject {
+	if sq.State.Subject != nil {
+		return sq.State.Subject
+	}
+	if sq.SourceKind == savedQuerySourceCube {
+		return &boresolver.QuerySubject{
+			Kind:            boresolver.QuerySubjectCube,
+			CubeID:          sq.BOID,
+			ContractVersion: boresolver.ContractVersionPin{Latest: true},
+		}
+	}
+	if sq.BOID == "" && sq.BindingID == "" {
+		return nil
+	}
+	return &boresolver.QuerySubject{
+		Kind:         boresolver.QuerySubjectBusinessObject,
+		BOID:         sq.BOID,
+		BindingID:    sq.BindingID,
+		RelatedBOIDs: sq.RelatedBOIDs,
 	}
 }
 
@@ -283,15 +329,90 @@ func (h *SavedQueryHandler) HandleListSavedQueries(w http.ResponseWriter, r *htt
 }
 
 type savedQueryCreateRequest struct {
-	Name         string          `json:"name"`
-	Description  string          `json:"description"`
-	BOID         string          `json:"boId"`
-	BindingID    string          `json:"bindingId"`
-	RelatedBOIDs []string        `json:"relatedBoIds"`
-	ChartType    string          `json:"chartType"`
-	State        SavedQueryState `json:"state"`
-	Tags         []string        `json:"tags"`
-	FolderID     string          `json:"folderId"`
+	Name         string                   `json:"name"`
+	Description  string                   `json:"description"`
+	BOID         string                   `json:"boId"`
+	BindingID    string                   `json:"bindingId"`
+	RelatedBOIDs []string                 `json:"relatedBoIds"`
+	Subject      *boresolver.QuerySubject `json:"subject,omitempty"`
+	ChartType    string                   `json:"chartType"`
+	State        SavedQueryState          `json:"state"`
+	Tags         []string                 `json:"tags"`
+	FolderID     string                   `json:"folderId"`
+}
+
+// normalizeSavedQueryIdentity locks source_kind/source_id from subject or BO fields.
+// Cube: source_kind='cube', source_id=cubeId, binding_id null. BO: existing rules.
+func normalizeSavedQueryIdentity(req *savedQueryCreateRequest) (sourceKind, sourceID string, bindingID interface{}, err error) {
+	if req == nil {
+		return "", "", nil, errors.New("missing request")
+	}
+	subj := req.Subject
+	if subj == nil {
+		subj = req.State.Subject
+	}
+	if subj != nil && subj.NormalizedKind() == boresolver.QuerySubjectCube {
+		cubeID := strings.TrimSpace(subj.CubeID)
+		if cubeID == "" {
+			return "", "", nil, errors.New("subject.cubeId is required for cube saved queries")
+		}
+		subj.Kind = boresolver.QuerySubjectCube
+		subj.CubeID = cubeID
+		req.Subject = subj
+		req.State.Subject = subj
+		return savedQuerySourceCube, cubeID, nil, nil
+	}
+	if strings.TrimSpace(req.Name) == "" || strings.TrimSpace(req.BOID) == "" {
+		return "", "", nil, errors.New("name and boId are required")
+	}
+	boSubj := &boresolver.QuerySubject{
+		Kind:         boresolver.QuerySubjectBusinessObject,
+		BOID:         req.BOID,
+		BindingID:    req.BindingID,
+		RelatedBOIDs: req.RelatedBOIDs,
+	}
+	if req.State.Subject == nil {
+		req.State.Subject = boSubj
+	}
+	req.Subject = req.State.Subject
+	var binding interface{}
+	if req.BindingID != "" {
+		binding = req.BindingID
+	}
+	return savedQuerySourceBusinessObject, req.BOID, binding, nil
+}
+
+// cubeVisibleToTenant reports whether cubeID is an active cube owned by the
+// tenant or a gold-core cube readable by the tenant (parity with CubeHandler.getByID).
+func (h *SavedQueryHandler) cubeVisibleToTenant(ctx context.Context, tenantID, cubeID string) (bool, error) {
+	var n int
+	err := h.db.GetContext(ctx, &n, `
+		SELECT 1 FROM data_explorer.cube_definition
+		WHERE id = $1 AND tenant_id = $2 AND archived_at IS NULL
+		LIMIT 1
+	`, cubeID, tenantID)
+	if err == nil {
+		return true, nil
+	}
+	if err != sql.ErrNoRows {
+		return false, err
+	}
+	gold := h.goldCopyID(ctx)
+	if gold == "" || gold == tenantID {
+		return false, nil
+	}
+	err = h.db.GetContext(ctx, &n, `
+		SELECT 1 FROM data_explorer.cube_definition
+		WHERE id = $1 AND tenant_id = $2 AND is_core = true AND archived_at IS NULL
+		LIMIT 1
+	`, cubeID, gold)
+	if err == nil {
+		return true, nil
+	}
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return false, err
 }
 
 // HandleCreateSavedQuery handles POST /api/explorer/saved-queries.
@@ -307,16 +428,33 @@ func (h *SavedQueryHandler) HandleCreateSavedQuery(w http.ResponseWriter, r *htt
 		h.writeError(w, fmt.Errorf("invalid request body: %w", err), http.StatusBadRequest)
 		return
 	}
-	if req.Name == "" || req.BOID == "" {
-		h.writeError(w, errors.New("name and boId are required"), http.StatusBadRequest)
+	if strings.TrimSpace(req.Name) == "" {
+		h.writeError(w, errors.New("name is required"), http.StatusBadRequest)
 		return
 	}
-	if owned, err := h.service.BOBelongsToTenant(req.BOID, secCtx.TenantID); err != nil {
-		h.writeError(w, err, http.StatusInternalServerError)
+	sourceKind, sourceID, bindingID, err := normalizeSavedQueryIdentity(&req)
+	if err != nil {
+		h.writeError(w, err, http.StatusBadRequest)
 		return
-	} else if !owned {
-		h.writeError(w, errors.New("forbidden: business object does not belong to the caller's tenant"), http.StatusForbidden)
-		return
+	}
+	if sourceKind == savedQuerySourceCube {
+		ok, err := h.cubeVisibleToTenant(r.Context(), secCtx.TenantID, sourceID)
+		if err != nil {
+			h.writeError(w, err, http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			h.writeError(w, errors.New("forbidden: cube does not belong to the caller's tenant"), http.StatusForbidden)
+			return
+		}
+	} else {
+		if owned, err := h.service.BOBelongsToTenant(sourceID, secCtx.TenantID); err != nil {
+			h.writeError(w, err, http.StatusInternalServerError)
+			return
+		} else if !owned {
+			h.writeError(w, errors.New("forbidden: business object does not belong to the caller's tenant"), http.StatusForbidden)
+			return
+		}
 	}
 	if req.ChartType == "" {
 		req.ChartType = "bar"
@@ -338,9 +476,9 @@ func (h *SavedQueryHandler) HandleCreateSavedQuery(w http.ResponseWriter, r *htt
 	err = h.db.QueryRowx(`
 		INSERT INTO data_explorer.saved_query
 			(id, tenant_id, user_id, name, description, source_kind, source_id, binding_id, related_bo_ids, chart_type, query_state, tags, folder_id, created_by)
-		VALUES ($1, $2, $3, $4, $5, 'business_object', $6, $7, $8, $9, $10, $11, $12, $13)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING `+savedQuerySelectCols+`
-	`, id, secCtx.TenantID, secCtx.UserID, req.Name, req.Description, req.BOID, req.BindingID, pq.Array(req.RelatedBOIDs), req.ChartType, stateBytes, pq.Array(req.Tags), folderID, secCtx.UserID).StructScan(&row)
+	`, id, secCtx.TenantID, secCtx.UserID, req.Name, req.Description, sourceKind, sourceID, bindingID, pq.Array(req.RelatedBOIDs), req.ChartType, stateBytes, pq.Array(req.Tags), folderID, secCtx.UserID).StructScan(&row)
 	if err != nil {
 		h.writeError(w, fmt.Errorf("failed to save query: %w", err), http.StatusInternalServerError)
 		return
@@ -417,6 +555,25 @@ func (h *SavedQueryHandler) HandleUpdateSavedQuery(w http.ResponseWriter, r *htt
 	if req.ChartType == "" {
 		req.ChartType = sq.ChartType
 	}
+	// Source kind / source_id stay locked after create. Refresh subject in
+	// query_state from the request when provided; otherwise keep existing.
+	if req.Subject != nil {
+		req.State.Subject = req.Subject
+	} else if req.State.Subject == nil && sq.State.Subject != nil {
+		req.State.Subject = sq.State.Subject
+	}
+	if sq.SourceKind == savedQuerySourceCube {
+		// Cube identity is immutable; force subject.kind/cubeId to match the row.
+		pin := boresolver.ContractVersionPin{Latest: true}
+		if req.State.Subject != nil {
+			pin = req.State.Subject.ContractVersion
+		}
+		req.State.Subject = &boresolver.QuerySubject{
+			Kind:            boresolver.QuerySubjectCube,
+			CubeID:          sq.BOID,
+			ContractVersion: pin,
+		}
+	}
 	stateBytes, err := json.Marshal(req.State)
 	if err != nil {
 		h.writeError(w, err, http.StatusBadRequest)
@@ -426,6 +583,10 @@ func (h *SavedQueryHandler) HandleUpdateSavedQuery(w http.ResponseWriter, r *htt
 	if req.FolderID != "" {
 		folderID = req.FolderID
 	}
+	related := req.RelatedBOIDs
+	if sq.SourceKind == savedQuerySourceCube {
+		related = nil
+	}
 	var out savedQueryRow
 	err = h.db.QueryRowx(`
 		UPDATE data_explorer.saved_query
@@ -434,7 +595,7 @@ func (h *SavedQueryHandler) HandleUpdateSavedQuery(w http.ResponseWriter, r *htt
 		WHERE id = $8 AND tenant_id = $9
 		RETURNING `+savedQuerySelectCols+`
 	`, req.Name, req.Description, req.ChartType, stateBytes, pq.Array(req.Tags),
-		pq.Array(req.RelatedBOIDs), folderID, sq.ID, tenantID).StructScan(&out)
+		pq.Array(related), folderID, sq.ID, tenantID).StructScan(&out)
 	if err != nil {
 		h.writeError(w, fmt.Errorf("failed to update saved query: %w", err), http.StatusInternalServerError)
 		return
@@ -529,14 +690,22 @@ func (h *SavedQueryHandler) HandleCloneSavedQuery(w http.ResponseWriter, r *http
 	secCtx, _, _ := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	newID := uuid.NewString()
 	stateBytes, _ := json.Marshal(sq.State)
+	sourceKind := sq.SourceKind
+	if sourceKind == "" {
+		sourceKind = savedQuerySourceBusinessObject
+	}
+	var bindingID interface{}
+	if sourceKind != savedQuerySourceCube && sq.BindingID != "" {
+		bindingID = sq.BindingID
+	}
 
 	var out savedQueryRow
 	err := h.db.QueryRowx(`
 		INSERT INTO data_explorer.saved_query
 			(id, tenant_id, user_id, name, description, source_kind, source_id, binding_id, related_bo_ids, chart_type, query_state, tags, is_core, created_by)
-		VALUES ($1, $2, $3, $4, $5, 'business_object', $6, $7, $8, $9, $10, $11, false, $3)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, false, $3)
 		RETURNING `+savedQuerySelectCols+`
-	`, newID, tenantID, secCtx.UserID, sq.Name+" (copy)", sq.Description, sq.BOID, sq.BindingID, pq.Array(sq.RelatedBOIDs), sq.ChartType, stateBytes, pq.Array(sq.Tags)).StructScan(&out)
+	`, newID, tenantID, secCtx.UserID, sq.Name+" (copy)", sq.Description, sourceKind, sq.BOID, bindingID, pq.Array(sq.RelatedBOIDs), sq.ChartType, stateBytes, pq.Array(sq.Tags)).StructScan(&out)
 	if err != nil {
 		h.writeError(w, fmt.Errorf("failed to clone saved query: %w", err), http.StatusInternalServerError)
 		return
@@ -730,9 +899,25 @@ func (h *SavedQueryHandler) HandleGetDiff(w http.ResponseWriter, r *http.Request
 }
 
 // savedQueryDef is the query a saved query runs, with its parameters resolved.
+// Cube subjects set Context.Subject so QueryService.Execute uses RoutePinned.
 func savedQueryDef(sq SavedQuery, tenantID string, filters []boresolver.FilterDef, limit int) *boresolver.QueryDef {
+	subj := resolvedSavedQuerySubject(sq)
+	ctx := boresolver.QueryContext{
+		BOID:         sq.BOID,
+		BindingID:    sq.BindingID,
+		TenantID:     tenantID,
+		RelatedBOIDs: sq.RelatedBOIDs,
+		Subject:      subj,
+	}
+	// For cube subjects, BOID on context is not a business object — clear it so
+	// opportunistic BO routing does not misfire if Subject were ignored.
+	if subj != nil && subj.NormalizedKind() == boresolver.QuerySubjectCube {
+		ctx.BOID = ""
+		ctx.BindingID = ""
+		ctx.RelatedBOIDs = nil
+	}
 	qd := &boresolver.QueryDef{
-		Context: boresolver.QueryContext{BOID: sq.BOID, BindingID: sq.BindingID, TenantID: tenantID, RelatedBOIDs: sq.RelatedBOIDs},
+		Context: ctx,
 		Query: boresolver.QueryRequest{
 			Dimensions: make([]boresolver.DimensionDef, len(sq.State.Dimensions)),
 			Measures:   make([]boresolver.MeasureDef, len(sq.State.Measures)),
