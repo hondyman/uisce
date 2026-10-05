@@ -108,6 +108,10 @@ B's books. Partitioning does not give that; the predicate does. Requirements:
   drop job that detaches by age. Take **(a) `RANGE (time)` plus the column and the CHECK**, unless you want a
   detach-by-tenant lever, in which case **(b) `LIST (tenant_id)` parents with `RANGE (time)` sub-partitions**.
   Either way the ADR records that tenant partitioning supplements the predicate and never replaces it.
+  **Retention is per tenant (decided 2026-10-05), which does not change this choice in a tenant database.** A 5-year and a
+  15-year tenant never share a table here: each has its own database, so the drop job for a database takes its cutoff from that
+  one tenant's policy and (a) is enough. (b) is the answer only where tenants share a database (any shared-database tier); it is
+  not needed for mixed windows across tenants. Iceberg already drops per `(tenant_id, month)` once that tenant's window closes.
 - **Iceberg:** `PARTITIONED BY (tenant_id, month(event_time))`. Here it prunes, and it gives the verifier and
   the drop job clean boundaries.
 - **Every read path carries the predicate structurally, not by review discipline:** a view per store or one
@@ -240,6 +244,19 @@ immutable by rule; a late row into it is a finding, not something to absorb).
 3. **Order and trade tables (`order_event`, `execution`, ...): needs the business owner. This is the one open item left.** It decides
    three things at once: books-and-records retention, whether a copy in object storage may be the record once the OLTP row is gone, and
    how long bronze is kept (which is the point-in-time restore window of decision 6).
+   **Revised shape of this decision (2026-10-05): retention is tenant configuration, bounded by the platform.**
+   - Stored per tenant in the gold copy's contractual config, `NOT NULL` at provisioning (the saga requires it the way it requires
+     `app`), with optional per-table overrides if `order_event` and `execution` differ from the default. The owner supplies the
+     **default, minimum and maximum**; values outside them are refused at provisioning and on update. **Bounds: TBD pending the
+     business owner.**
+   - **Extending is a config update; shortening is a delete.** A shortening either refuses until the data ages out, or is an explicit,
+     audited purge operation, never a config edit.
+   - **The drop job is tenant-aware and fails closed:** each partition's expiry is computed from its tenant's policy; a missing or
+     unreadable value means that tenant's data is not dropped (never a default of zero).
+   - **Bronze retention is per tenant too** (the restore window each tenant contracted for), independent of books-and-records
+     retention, held in the same config row.
+   - Questions to the owner: default/min/max for `order_event` and `execution`; who signs off on a value outside the default;
+     whether shortening is ever allowed after provisioning (our position: only by an audited purge).
 4. **Pilot table:** `quote`, unless it is itself under a best-execution retention rule, in which case it moves to
    decision 3.
 5. **Resolved by owner direction:** no Spark. The write side is the Iceberg Kafka Connect sink in append mode, with
