@@ -454,8 +454,7 @@ func TestCoreLibrary_All50CoreRules_ContentHashAgreement(t *testing.T) {
 			r.ast_condition::text,
 			r.parameter_thresholds::text,
 			COALESCE(r.citation, ''),
-			v.content_hash,
-			compliance.compute_rule_content_hash(r.ast_condition, r.parameter_thresholds, r.citation) AS sql_hash
+			v.content_hash
 		FROM compliance.compliance_rule r
 		JOIN compliance.compliance_rule_version v 
 		  ON r.id = v.rule_id AND COALESCE(r.current_version, 1) = v.version
@@ -469,12 +468,12 @@ func TestCoreLibrary_All50CoreRules_ContentHashAgreement(t *testing.T) {
 
 	checkedCount := 0
 	for rows.Next() {
-		var ruleCode, astStr, paramStr, citation, storedHash, sqlHash string
-		if err := rows.Scan(&ruleCode, &astStr, &paramStr, &citation, &storedHash, &sqlHash); err != nil {
+		var ruleCode, astStr, paramStr, citation, storedHash string
+		if err := rows.Scan(&ruleCode, &astStr, &paramStr, &citation, &storedHash); err != nil {
 			t.Fatalf("scan row: %v", err)
 		}
 
-		// Compute hash in Go via JCS transform
+		// Compute hash in Go via RFC 8785 canonical transform (Go is the sole hash authority)
 		goHash, err := canonical.ComputeRuleContentHashFromRaw([]byte(astStr), []byte(paramStr), citation)
 		if err != nil {
 			t.Fatalf("rule %s: ComputeRuleContentHashFromRaw failed: %v", ruleCode, err)
@@ -483,11 +482,8 @@ func TestCoreLibrary_All50CoreRules_ContentHashAgreement(t *testing.T) {
 		if len(storedHash) != 64 {
 			t.Fatalf("rule %s: stored hash is not 64 chars (%q)", ruleCode, storedHash)
 		}
-		if sqlHash != storedHash {
-			t.Fatalf("rule %s: SQL computed hash %s does not match stored snapshot hash %s", ruleCode, sqlHash, storedHash)
-		}
 		if goHash != storedHash {
-			t.Fatalf("rule %s: Go JCS computed hash %s does not match stored snapshot hash %s", ruleCode, goHash, storedHash)
+			t.Fatalf("rule %s: Go canonical computed hash %s does not match stored snapshot hash %s", ruleCode, goHash, storedHash)
 		}
 
 		checkedCount++
@@ -497,7 +493,7 @@ func TestCoreLibrary_All50CoreRules_ContentHashAgreement(t *testing.T) {
 		t.Fatalf("Expected to verify 50 core rules, verified %d", checkedCount)
 	}
 
-	t.Logf("100%% 3-Way Hash Agreement Verified across all %d Gold-Copy Core Rules (Go JCS == SQL JCS == Stored ContentHash)", checkedCount)
+	t.Logf("100%% Hash Agreement Verified across all %d Gold-Copy Core Rules (Go RFC 8785 Authority == Stored ContentHash)", checkedCount)
 }
 
 // 9. Rule Version Evolution Positive Path (Snapshot v1 -> Snapshot v2 in Transaction + Evaluation Event)

@@ -22,6 +22,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/compliance"
 	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
 	"github.com/hondyman/uisce/backend/internal/compliance/drift"
+	"github.com/hondyman/uisce/backend/internal/compliance/jobs"
 )
 
 func getAlphaTestDB(t *testing.T) *sql.DB {
@@ -58,22 +59,24 @@ func getAlphaTestDB(t *testing.T) *sql.DB {
 		return nil
 	}
 
-	// Ensure Migration 007 up is applied on the test DB
-	ensureMigration007Applied(t, db)
+	// Ensure Migrations 007 and 008 up are applied on the test DB
+	ensureMigrationsApplied(t, db)
 
 	return db
 }
 
-func ensureMigration007Applied(t *testing.T, db *sql.DB) {
+func ensureMigrationsApplied(t *testing.T, db *sql.DB) {
 	t.Helper()
 	migDir := filepath.Join("..", "..", "..", "db", "migrations")
 	if _, err := os.Stat(migDir); err != nil {
 		migDir = filepath.Join("backend", "db", "migrations")
 	}
 
-	upFile := filepath.Join(migDir, "20261218_007_regulatory_change_workflow.up.sql")
-	upContent, _ := os.ReadFile(upFile)
-	_, _ = db.Exec(string(upContent))
+	for _, f := range []string{"20261218_007_regulatory_change_workflow.up.sql", "20261219_008_trigger_refactor_and_draft_guard.up.sql"} {
+		upFile := filepath.Join(migDir, f)
+		upContent, _ := os.ReadFile(upFile)
+		_, _ = db.Exec(string(upContent))
+	}
 }
 
 // Gate 2: Transition Legality Tested Both Ways
@@ -142,15 +145,24 @@ func TestRegulatoryWorkflow_TransitionLegality(t *testing.T) {
 
 	dummyAST := map[string]interface{}{"type": "METRIC", "path": "pos.weight"}
 	dummyParams := map[string]interface{}{"limit": "0.100000"}
-	err = svc.SaveDrafts(ctx, c.ID, []RuleDraft{
+	corpusRes, err := svc.ExecuteCorpusGate(ctx, c.ID, "steward_alice", []RuleDraft{
 		{
 			RuleID:        dummyRuleID,
 			NewAST:        dummyAST,
 			NewThresholds: dummyParams,
 			NewCitation:   "Test Citation",
+			TestCorpus: []drift.ScenarioTestCase{
+				{
+					CaseID:          "TC_TRANS",
+					MetricSnapshots: map[string]interface{}{"pos.weight": decimal.RequireFromString("0.050000"), "limit": decimal.RequireFromString("0.100000")},
+					ExpectedPassed:  true,
+					ExpectedAction:  "APPROVED",
+				},
+			},
 		},
 	})
 	require.NoError(t, err)
+	require.True(t, corpusRes.AllPassed)
 
 	// 8. Legal transition: UNDER_REVIEW -> APPROVED_FOR_PUBLISH
 	err = svc.ApproveCase(ctx, c.ID, "steward_alice", "Corpus passed")
@@ -395,8 +407,9 @@ func TestRegulatoryWorkflow_FullHappyPathPublish(t *testing.T) {
 	var govNotes string
 	err = db.QueryRowContext(ctx, `
 		SELECT steward_notes FROM compliance.governance_audit_event
-		WHERE event_type = 'REGULATORY_CHANGE_PUBLISHED' AND steward_notes LIKE '%' || $1 || '%'
-	`, caseCode).Scan(&govNotes)
+		WHERE event_type = 'REGULATORY_CHANGE_PUBLISHED' AND rule_id = $1
+		ORDER BY created_at DESC LIMIT 1
+	`, depRuleID).Scan(&govNotes)
 	require.NoError(t, err)
 	require.Contains(t, govNotes, draftHash)
 	t.Logf("Governance audit event REGULATORY_CHANGE_PUBLISHED verified with cryptographic binding!")
@@ -453,19 +466,29 @@ func TestRegulatoryWorkflow_ApprovalContentBinding_AdversarialTamper(t *testing.
 		_, _ = db.ExecContext(context.Background(), "UPDATE compliance.compliance_rule SET valid_to = now() WHERE id = $1", ruleID)
 	}()
 
-	// 1. Save and approve draft with 10% limit
-	err = svc.SaveDrafts(ctx, c.ID, []RuleDraft{
+	_ = svc.TriageCase(ctx, TriageRequest{CaseID: c.ID, Classification: ClassificationParameterChange, TriagedBy: "steward"})
+	_ = svc.StartReview(ctx, c.ID, "steward", nil)
+
+	// 1. Run corpus gate and approve draft with 10% limit
+	corpusRes, err := svc.ExecuteCorpusGate(ctx, c.ID, "steward", []RuleDraft{
 		{
 			RuleID:        ruleID,
 			NewAST:        astOrig,
 			NewThresholds: paramsOrig,
 			NewCitation:   "Approved 10% Citation",
+			TestCorpus: []drift.ScenarioTestCase{
+				{
+					CaseID:          "TC_BASE",
+					MetricSnapshots: map[string]interface{}{"pos.weight": decimal.RequireFromString("0.050000"), "limit": decimal.RequireFromString("0.100000")},
+					ExpectedPassed:  true,
+					ExpectedAction:  "APPROVED",
+				},
+			},
 		},
 	})
 	require.NoError(t, err)
+	require.True(t, corpusRes.AllPassed)
 
-	_ = svc.TriageCase(ctx, TriageRequest{CaseID: c.ID, Classification: ClassificationParameterChange, TriagedBy: "steward"})
-	_ = svc.StartReview(ctx, c.ID, "steward", nil)
 	err = svc.ApproveCase(ctx, c.ID, "steward", "Approved 10%")
 	require.NoError(t, err)
 
@@ -982,3 +1005,296 @@ func TestRegulatoryWorkflow_WebhookDeliveryAndSignatureVerification(t *testing.T
 	require.Equal(t, int32(2), atomic.LoadInt32(&attempts), "Webhook dispatcher must retry on transient 500 error and succeed on second attempt")
 	t.Logf("Webhook delivery & HMAC-SHA256 signature verification with retry verified 100%%!")
 }
+
+// Step 1: Rule Snapshot Reconciler Sweep Test (Detects injected corruption & alerts)
+func TestRuleSnapshotReconciler_DetectsTamperedHash(t *testing.T) {
+	db := getAlphaTestDB(t)
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	reconciler := jobs.NewRuleSnapshotReconciler(db)
+
+	// 1. Initial baseline run across all 50 rules
+	initialReport, err := reconciler.ReconcileAll(ctx)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, initialReport.TotalScanned, 50)
+	require.Equal(t, 0, initialReport.Mismatched, "Initial baseline should have 0 hash mismatches")
+	t.Logf("Baseline snapshot reconciler sweep verified: %d/%d rules match Go canonical hash!", initialReport.Matched, initialReport.TotalScanned)
+
+	// 2. Insert test rule with deliberately tampered snapshot hash
+	testRuleID := uuid.New()
+	testRuleCode := fmt.Sprintf("TEST_RECON_%d", time.Now().UnixNano()%100000)
+	loader := compliance.NewMultiTenantRuleLoader(db)
+	goldTenant, err := loader.GetGoldCopyTenantID(ctx)
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO compliance.compliance_rule (
+			id, tenant_id, inherit_mode, rule_code, name, rule_phase, severity,
+			priority, is_active, current_version, ast_condition, parameter_thresholds,
+			citation, compiled_bytecode, library_status
+		) VALUES (
+			$1, $2, 'inherit', $3, 'Reconcile Test Rule', 'PRE_TRADE', 'HARD_BLOCK',
+			100, true, 1, '{"type":"METRIC","path":"pos.weight"}'::jsonb, '{"limit":"0.100000"}'::jsonb, 'Citation', '\x00'::bytea, 'ACTIVE'
+		)
+	`, testRuleID, goldTenant, testRuleCode)
+	require.NoError(t, err)
+
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "UPDATE compliance.compliance_rule SET valid_to = now() WHERE id = $1", testRuleID)
+	}()
+
+	tamperedHash := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO compliance.compliance_rule_version (
+			rule_id, version, tenant_id, resolved_ast, parameter_thresholds,
+			citation, effective_from, content_hash, compiled_bytecode_hash, created_by
+		) VALUES (
+			$1, 1, $2, '{"type":"METRIC","path":"pos.weight"}'::jsonb, '{"limit":"0.100000"}'::jsonb,
+			'Citation', now(), $3, $3, 'tester'
+		)
+	`, testRuleID, goldTenant, tamperedHash)
+	require.NoError(t, err)
+
+	// 3. Re-run sweep and assert detection of injected divergence
+	tamperedReport, err := reconciler.ReconcileAll(ctx)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, tamperedReport.Mismatched, 1, "Reconciler sweep must detect injected hash divergence")
+
+	foundMismatch := false
+	for _, m := range tamperedReport.Mismatches {
+		if m.RuleID == testRuleID {
+			foundMismatch = true
+			require.Equal(t, tamperedHash, m.StoredHash)
+			require.NotEmpty(t, m.ComputedHash)
+			require.NotEqual(t, tamperedHash, m.ComputedHash)
+			break
+		}
+	}
+	require.True(t, foundMismatch, "Reconciler must pinpoint the exact corrupted rule version")
+
+	// 4. Verify critical alert notification was written to compliance_notification
+	var notifCount int
+	err = db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM compliance.compliance_notification
+		WHERE kind = 'SYSTEM' AND title LIKE '%CRITICAL: Rule Version Hash Mismatch%'
+	`).Scan(&notifCount)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, notifCount, 1, "Critical incident notification must be logged into compliance_notification table")
+
+	t.Logf("RuleSnapshotReconciler detection and alerting fully verified!")
+}
+
+// Step 2: Corpus-Run -> Approval Binding (Modifying draft after corpus run prevents approval without re-run)
+func TestRegulatoryWorkflow_CorpusApprovalBinding_Tamper(t *testing.T) {
+	db := getAlphaTestDB(t)
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	svc := NewService(db)
+
+	caseCode := fmt.Sprintf("RCC-BIND-%d", time.Now().UnixNano()%100000)
+	c, err := svc.CreateCase(ctx, IntakeRequest{
+		CaseCode:    caseCode,
+		Source:      SourceRegulatorPublication,
+		Title:       "Corpus Approval Binding Test",
+		Description: "Verify approval rejects modified draft post-corpus execution",
+	})
+	require.NoError(t, err)
+
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_case_event WHERE case_id = $1", c.ID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_draft_rule WHERE case_id = $1", c.ID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_change_case WHERE id = $1", c.ID)
+	}()
+
+	ruleID := uuid.New()
+	ruleCode := fmt.Sprintf("TEST_BIND_%d", time.Now().UnixNano()%100000)
+	astOrig := map[string]interface{}{"type": "METRIC", "path": "pos.issuer_pct"}
+	paramsOrig := map[string]interface{}{"issuer_limit_pct": "0.050000"}
+
+	loader := compliance.NewMultiTenantRuleLoader(db)
+	goldTenant, err := loader.GetGoldCopyTenantID(ctx)
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO compliance.compliance_rule (
+			id, tenant_id, inherit_mode, rule_code, name, rule_phase, severity,
+			priority, is_active, current_version, ast_condition, parameter_thresholds,
+			citation, compiled_bytecode, library_status
+		) VALUES (
+			$1, $2, 'inherit', $3, 'Bind Test Rule', 'PRE_TRADE', 'HARD_BLOCK',
+			100, true, 1, $4::jsonb, $5::jsonb, 'Citation 1', '\x00'::bytea, 'ACTIVE'
+		)
+	`, ruleID, goldTenant, ruleCode, `{"type":"METRIC","path":"pos.issuer_pct"}`, `{"issuer_limit_pct":"0.050000"}`)
+	require.NoError(t, err)
+
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "UPDATE compliance.compliance_rule SET valid_to = now() WHERE id = $1", ruleID)
+	}()
+
+	_ = svc.TriageCase(ctx, TriageRequest{CaseID: c.ID, Classification: ClassificationParameterChange, TriagedBy: "steward"})
+	_ = svc.StartReview(ctx, c.ID, "steward", nil)
+
+	// 1. Run corpus on initial draft (5% limit)
+	initialDraft := RuleDraft{
+		RuleID:        ruleID,
+		NewAST:        astOrig,
+		NewThresholds: paramsOrig,
+		NewCitation:   "Citation 1",
+		TestCorpus: []drift.ScenarioTestCase{
+			{
+				CaseID:          "TC_1",
+				MetricSnapshots: map[string]interface{}{"pos.issuer_pct": decimal.RequireFromString("0.040000"), "issuer_limit_pct": decimal.RequireFromString("0.050000")},
+				ExpectedPassed:  true,
+				ExpectedAction:  "APPROVED",
+			},
+		},
+	}
+	res, err := svc.ExecuteCorpusGate(ctx, c.ID, "steward", []RuleDraft{initialDraft})
+	require.NoError(t, err)
+	require.True(t, res.AllPassed)
+
+	// 2. Tamper draft in storage without re-running corpus (update to 3% limit)
+	tamperedParams := map[string]interface{}{"issuer_limit_pct": "0.030000"}
+	err = svc.SaveDrafts(ctx, c.ID, []RuleDraft{
+		{
+			RuleID:        ruleID,
+			NewAST:        astOrig,
+			NewThresholds: tamperedParams,
+			NewCitation:   "Citation 1",
+		},
+	})
+	require.NoError(t, err)
+
+	// 3. Attempt to approve case without re-running corpus gate -> must fail!
+	err = svc.ApproveCase(ctx, c.ID, "steward", "Approval with stale corpus run")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "approval blocked: draft content for rule")
+	require.Contains(t, err.Error(), "has changed since last corpus execution")
+	t.Logf("Corpus-Run -> Approval binding verified: %v", err)
+}
+
+// Step 2: Draft Update Guard Trigger (Cannot mutate proposed content on an approved draft)
+func TestRegulatoryWorkflow_DraftUpdateGuardTrigger(t *testing.T) {
+	db := getAlphaTestDB(t)
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	caseID := uuid.New()
+	var ruleID uuid.UUID
+	err := db.QueryRowContext(ctx, "SELECT id FROM compliance.compliance_rule WHERE rule_code = 'UCITS_ISSUER_5'").Scan(&ruleID)
+	require.NoError(t, err)
+
+	// Direct test on regulatory_draft_rule table trigger
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO compliance.regulatory_change_case (id, case_code, source, title, description, due_at, created_by)
+		VALUES ($1, $2, 'INTERNAL', 'Trigger Test Case', 'Desc', now() + interval '30 days', 'tester')
+	`, caseID, fmt.Sprintf("RCC-TRG-%d", time.Now().UnixNano()%100000))
+	require.NoError(t, err)
+
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_draft_rule WHERE case_id = $1", caseID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_change_case WHERE id = $1", caseID)
+	}()
+
+	astBytes := []byte(`{"type":"METRIC","path":"pos.exposure"}`)
+	paramBytes := []byte(`{"limit":"0.100000"}`)
+	h, _ := canonical.ComputeRuleContentHashFromRaw(astBytes, paramBytes, "Cit")
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO compliance.regulatory_draft_rule (
+			id, case_id, rule_id, proposed_ast, proposed_parameter_thresholds,
+			proposed_citation, proposed_content_hash, is_approved
+		) VALUES (
+			gen_random_uuid(), $1, $2, $3::jsonb, $4::jsonb, 'Cit', $5, true
+		)
+	`, caseID, ruleID, string(astBytes), string(paramBytes), h)
+	require.NoError(t, err)
+
+	// Attempting in-place modification of proposed_parameter_thresholds on approved draft must fail
+	_, err = db.ExecContext(ctx, `
+		UPDATE compliance.regulatory_draft_rule
+		SET proposed_parameter_thresholds = '{"limit":"0.200000"}'::jsonb
+		WHERE case_id = $1 AND rule_id = $2
+	`, caseID, ruleID)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Audit Violation: Cannot modify proposed content on an approved regulatory draft")
+	t.Logf("Draft modification guard trigger verified: illegal update blocked on approved draft!")
+}
+
+// Step 2: Threshold-Aware Diff Summary in GetStewardReviewView
+func TestRegulatoryWorkflow_ThresholdDiffSummary(t *testing.T) {
+	db := getAlphaTestDB(t)
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	svc := NewService(db)
+
+	var depRuleID uuid.UUID
+	err := db.QueryRowContext(ctx, "SELECT id FROM compliance.compliance_rule WHERE rule_code = 'UCITS_ISSUER_5'").Scan(&depRuleID)
+	require.NoError(t, err)
+
+	caseCode := fmt.Sprintf("RCC-DIFF-%s", uuid.New().String()[:8])
+	c, err := svc.CreateCase(ctx, IntakeRequest{
+		CaseCode:    caseCode,
+		Source:      SourceRegulatorPublication,
+		Title:       "Threshold Diff Summary Test",
+		Description: "Testing threshold enumeration in diff view",
+	})
+	require.NoError(t, err)
+
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_case_event WHERE case_id = $1", c.ID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_draft_rule WHERE case_id = $1", c.ID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_change_case WHERE id = $1", c.ID)
+	}()
+
+	_ = svc.TriageCase(ctx, TriageRequest{CaseID: c.ID, Classification: ClassificationParameterChange, TriagedBy: "steward", AffectedRuleIDs: []uuid.UUID{depRuleID}})
+	_ = svc.StartReview(ctx, c.ID, "steward", nil)
+
+	// Fetch current rule AST and parameters
+	var astBytes []byte
+	var citation string
+	err = db.QueryRowContext(ctx, "SELECT ast_condition, citation FROM compliance.compliance_rule WHERE id = $1", depRuleID).Scan(&astBytes, &citation)
+	require.NoError(t, err)
+
+	var astMap map[string]interface{}
+	_ = json.Unmarshal(astBytes, &astMap)
+
+	// Propose changed thresholds with UNCHANGED AST (0.050000 -> 0.040000)
+	proposedParams := map[string]interface{}{
+		"issuer_limit_pct":          "0.040000",
+		"lookthrough":               true,
+		"aggregate_across_accounts": true,
+	}
+
+	err = svc.SaveDrafts(ctx, c.ID, []RuleDraft{
+		{
+			RuleID:        depRuleID,
+			NewAST:        astMap,
+			NewThresholds: proposedParams,
+			NewCitation:   citation,
+		},
+	})
+	require.NoError(t, err)
+
+	// Get Steward Review View
+	view, err := svc.GetStewardReviewView(ctx, c.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, view.DiffViews)
+
+	diffView := view.DiffViews[0]
+	require.NotNil(t, diffView.Diff)
+	require.Contains(t, diffView.Diff.SummaryText, "Threshold modifications: Param 'issuer_limit_pct': '0.050000' -> '0.040000'")
+	t.Logf("Threshold-aware diff summary verified: %q", diffView.Diff.SummaryText)
+}
+

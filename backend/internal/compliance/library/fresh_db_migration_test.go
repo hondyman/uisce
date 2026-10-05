@@ -146,7 +146,7 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 	_, err = freshDB.ExecContext(ctx, prereqSQL)
 	require.NoError(t, err)
 
-	// 5. Apply migrations 001 -> 006 UP in order
+	// 5. Apply migrations 001 -> 008 UP in order
 	upMigrations := []string{
 		"20261218_001_compliance_engine_core_tables.up.sql",
 		"20261218_002_governance_audit_and_privileges.up.sql",
@@ -155,6 +155,7 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 		"20261218_005_core_rule_library_seed.up.sql",
 		"20261218_006_rule_version_snapshots.up.sql",
 		"20261218_007_regulatory_change_workflow.up.sql",
+		"20261219_008_trigger_refactor_and_draft_guard.up.sql",
 	}
 
 	for _, migFile := range upMigrations {
@@ -188,9 +189,9 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 	require.Equal(t, 50, membershipCount, "All 50 rules must be mapped to ruleset memberships")
 
 	var regCaseTableCount int
-	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'compliance' AND table_name IN ('regulatory_change_case', 'regulatory_case_event', 'compliance_notification')").Scan(&regCaseTableCount)
+	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'compliance' AND table_name IN ('regulatory_change_case', 'regulatory_case_event', 'compliance_notification', 'regulatory_draft_rule')").Scan(&regCaseTableCount)
 	require.NoError(t, err)
-	require.Equal(t, 3, regCaseTableCount, "Migration 007 tables must exist")
+	require.Equal(t, 4, regCaseTableCount, "Migration 007 and 008 tables must exist")
 
 	t.Logf("Fresh DB Integrity Assertions Passed: Rules=%d, Versions=%d, Rulesets=%d, Memberships=%d, RegTables=%d",
 		ruleCount, versionCount, rulesetCount, membershipCount, regCaseTableCount)
@@ -207,8 +208,9 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 
 	t.Logf("Structural Mutation Guard Trigger verified: unauthorized mutation correctly blocked!")
 
-	// 8. Rollback Cycle: 007 -> 001 DOWN
+	// 8. Rollback Cycle: 008 -> 001 DOWN
 	downMigrations := []string{
+		"20261219_008_trigger_refactor_and_draft_guard.down.sql",
 		"20261218_007_regulatory_change_workflow.down.sql",
 		"20261218_006_rule_version_snapshots.down.sql",
 		"20261218_005_core_rule_library_seed.down.sql",
@@ -227,5 +229,5 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 		t.Logf("Migration %s DOWN executed cleanly", migFile)
 	}
 
-	t.Logf("FRESH DATABASE MIGRATION CHAIN & ROLLBACK CYCLE 001 <-> 007 FULLY VERIFIED!")
+	t.Logf("FRESH DATABASE MIGRATION CHAIN & ROLLBACK CYCLE 001 <-> 008 FULLY VERIFIED!")
 }

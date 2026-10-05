@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -350,9 +351,20 @@ func (s *Service) ExecuteCorpusGate(ctx context.Context, caseID uuid.UUID, stewa
 		`, string(corpusJSON), caseID, d.RuleID)
 	}
 
+	draftHashes := make(map[string]string)
+	for _, d := range drafts {
+		astBytes, _ := json.Marshal(d.NewAST)
+		paramBytes, _ := json.Marshal(d.NewThresholds)
+		h, err := canonical.ComputeRuleContentHashFromRaw(astBytes, paramBytes, d.NewCitation)
+		if err == nil {
+			draftHashes[d.RuleID.String()] = h
+		}
+	}
+
 	payloadJSON, _ := json.Marshal(map[string]interface{}{
 		"corpus_result": totalResult,
 		"steward_id":    stewardID,
+		"draft_hashes":  draftHashes,
 	})
 
 	_, err := s.db.ExecContext(ctx, `
@@ -405,6 +417,41 @@ func (s *Service) ApproveCase(ctx context.Context, caseID uuid.UUID, stewardID s
 
 	if len(approvedHashes) == 0 {
 		return errors.New("approval blocked: no draft rules found in regulatory_draft_rule for this case")
+	}
+
+	// Verify that corpus run occurred and draft hashes match
+	var corpusEventPayloadJSON []byte
+	err = tx.QueryRowContext(ctx, `
+		SELECT payload
+		FROM compliance.regulatory_case_event
+		WHERE case_id = $1 AND event_type = 'CORPUS_RUN'
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, caseID).Scan(&corpusEventPayloadJSON)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("approval blocked: case requires test corpus execution before approval")
+		}
+		return fmt.Errorf("check corpus run event: %w", err)
+	}
+
+	var corpusEventData struct {
+		DraftHashes map[string]string `json:"draft_hashes"`
+		CorpusResult struct {
+			AllPassed bool `json:"allPassed"`
+		} `json:"corpus_result"`
+	}
+	_ = json.Unmarshal(corpusEventPayloadJSON, &corpusEventData)
+
+	if !corpusEventData.CorpusResult.AllPassed {
+		return errors.New("approval blocked: latest test corpus execution did not pass")
+	}
+
+	for rID, pHash := range approvedHashes {
+		corpusHash, ok := corpusEventData.DraftHashes[rID]
+		if !ok || corpusHash != pHash {
+			return fmt.Errorf("approval blocked: draft content for rule %s has changed since last corpus execution (corpus_hash=%s, current_draft_hash=%s); re-run corpus gate before approving", rID, corpusHash, pHash)
+		}
 	}
 
 	// Mark drafts as approved
@@ -998,6 +1045,37 @@ func (s *Service) GetStewardTriageView(ctx context.Context, caseID uuid.UUID) (*
 				diff := drift.CompareAST(curAST, draft.ProposedAST)
 				corpusPassed := draft.CorpusResults != nil && draft.CorpusResults.AllPassed
 
+				// Enforce threshold-aware diff summary: when proposed_thresholds != current_thresholds,
+				// format explicit summary text even if the AST is invariant.
+				thresholdChanges := make([]string, 0)
+				for k, v1 := range curParams {
+					v2, ok := draft.ProposedParameterThresholds[k]
+					if !ok {
+						thresholdChanges = append(thresholdChanges, fmt.Sprintf("Removed param '%s'", k))
+					} else if fmt.Sprintf("%v", v1) != fmt.Sprintf("%v", v2) {
+						thresholdChanges = append(thresholdChanges, fmt.Sprintf("Param '%s': '%v' -> '%v'", k, v1, v2))
+					}
+				}
+				for k, v2 := range draft.ProposedParameterThresholds {
+					if _, ok := curParams[k]; !ok {
+						thresholdChanges = append(thresholdChanges, fmt.Sprintf("Added param '%s': '%v'", k, v2))
+					}
+				}
+
+				if len(thresholdChanges) > 0 {
+					sort.Strings(thresholdChanges)
+					thresholdSummary := "Threshold modifications: " + strings.Join(thresholdChanges, ", ")
+					if diff == nil {
+						diff = &drift.ASTSemanticDiff{
+							SummaryText: thresholdSummary,
+						}
+					} else if diff.SummaryText == "" || strings.HasPrefix(diff.SummaryText, "No semantic changes") {
+						diff.SummaryText = thresholdSummary
+					} else {
+						diff.SummaryText = diff.SummaryText + " | " + thresholdSummary
+					}
+				}
+
 				view.DiffViews = append(view.DiffViews, RuleDiffView{
 					RuleID:              ruleID,
 					RuleCode:            rCode,
@@ -1021,3 +1099,9 @@ func (s *Service) GetStewardTriageView(ctx context.Context, caseID uuid.UUID) (*
 
 	return view, nil
 }
+
+// GetStewardReviewView retrieves the complete steward diff presentation model for review and triage screens
+func (s *Service) GetStewardReviewView(ctx context.Context, caseID uuid.UUID) (*StewardTriageView, error) {
+	return s.GetStewardTriageView(ctx, caseID)
+}
+
