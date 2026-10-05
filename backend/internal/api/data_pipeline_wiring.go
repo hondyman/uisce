@@ -19,6 +19,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/mastering"
 	"github.com/hondyman/uisce/backend/internal/msgcat"
+	"github.com/hondyman/uisce/backend/internal/querybuilder"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/stagingbind"
 	"github.com/hondyman/uisce/backend/pkg/llm"
@@ -80,6 +81,9 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 		// A pipeline's master step masters the load it just committed.
 		deps.Master = pipelineMasterer{engine: engine}
 	}
+	// CUBE-2.4: thin cube_materialize destination starts the same
+	// CubeMaterializeWorkflow path as schedule kind cube_refresh / Deploy.
+	deps.CubeMaterialize = pipelineCubeMaterializer{srv: s}
 
 	store := &datapipeline.Store{DB: sqlxDB}
 	acts := &datapipeline.Activities{Store: store, Deps: deps}
@@ -213,4 +217,70 @@ func (m pipelineMasterer) MasterLoad(ctx context.Context, r datapipeline.MasterR
 		err = fmt.Errorf("mastering run %s failed: %s", run.ID, detail)
 	}
 	return out, err
+}
+
+// pipelineCubeMaterializer starts CubeMaterializeWorkflow for a pipeline's
+// cube_materialize node (CUBE-2.4). Same starter as schedule kind cube_refresh.
+type pipelineCubeMaterializer struct{ srv *Server }
+
+func (m pipelineCubeMaterializer) MaterializeCube(ctx context.Context, r datapipeline.CubeMaterializeStartRequest) (*datapipeline.CubeMaterializeResult, error) {
+	if m.srv == nil {
+		return nil, fmt.Errorf("cube materialize: server not configured")
+	}
+	if m.srv.CubeHandler == nil {
+		return nil, fmt.Errorf("cube materialize: cubes handler not configured")
+	}
+	cube, err := m.srv.CubeHandler.GetCubeForTenant(ctx, r.TenantID, r.CubeID)
+	if err != nil {
+		return nil, fmt.Errorf("cube %s: %w", r.CubeID, err)
+	}
+	grains := cube.Grains
+	if len(r.Grain) > 0 {
+		grains = [][]string{r.Grain}
+	}
+	if len(grains) == 0 {
+		return nil, fmt.Errorf("cube %s has no grains", r.CubeID)
+	}
+	samples := make([]querybuilder.FederationKeySample, 0, len(r.FederationKeySamples))
+	for _, s := range r.FederationKeySamples {
+		samples = append(samples, querybuilder.FederationKeySample{
+			LeftAlias:  s.LeftAlias,
+			RightAlias: s.RightAlias,
+			LeftKeys:   s.LeftKeys,
+			RightKeys:  s.RightKeys,
+			Matched:    s.Matched,
+		})
+	}
+
+	started, already := 0, 0
+	var workflowIDs []string
+	for _, grain := range grains {
+		wfID, plan, startErr := m.srv.StartCubeMaterialize(ctx, querybuilder.CubeMaterializeRequest{
+			TenantID:             r.TenantID,
+			CubeID:               r.CubeID,
+			Grain:                grain,
+			Force:                r.Force,
+			FederationKeySamples: samples,
+		})
+		if startErr != nil {
+			if isAlreadyRunning(startErr) {
+				already++
+				continue
+			}
+			return nil, startErr
+		}
+		started++
+		if wfID != "" {
+			workflowIDs = append(workflowIDs, wfID)
+		}
+		_ = plan
+	}
+	return &datapipeline.CubeMaterializeResult{
+		CubeID:         r.CubeID,
+		Started:        started,
+		AlreadyRunning: already,
+		Grains:         len(grains),
+		WorkflowIDs:    workflowIDs,
+		Summary:        fmt.Sprintf("started=%d already_running=%d grains=%d", started, already, len(grains)),
+	}, nil
 }

@@ -195,8 +195,15 @@ func (s *Store) FinishRun(ctx context.Context, tenantID, runID string, sum *Summ
 	outputs := []byte("{}")
 	if sum != nil {
 		in, out, errs = sum.RecordsIn, sum.RecordsOut, sum.Errors
+		outMap := map[string]any{}
 		if len(sum.Mastering) > 0 {
-			outputs, _ = json.Marshal(map[string]any{"mastering": sum.Mastering})
+			outMap["mastering"] = sum.Mastering
+		}
+		if len(sum.CubeMaterialize) > 0 {
+			outMap["cube_materialize"] = sum.CubeMaterialize
+		}
+		if len(outMap) > 0 {
+			outputs, _ = json.Marshal(outMap)
 		}
 	}
 	_, err := s.DB.ExecContext(ctx, `
