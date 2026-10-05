@@ -8,6 +8,7 @@ import { sourceScoringBlueprint } from './sourceScoring';
 import { validationRulesBlueprint } from './validationRules';
 import { lakehouseStreamingBlueprint } from './lakehouseStreaming';
 import { systemLakehouseBlueprint } from './systemLakehouse';
+import { cubesCatalogBlueprint } from './cubesCatalog';
 
 /**
  * Pages the studio can start from: complete, working pages built entirely
@@ -92,6 +93,12 @@ export const PAGE_BLUEPRINTS: PageBlueprint[] = [
     name: 'Tenant lakehouse',
     description: "System: each tenant's one Iceberg warehouse and its per-tenant audit retention, with provisioning and the audit trail.",
     build: systemLakehouseBlueprint,
+  },
+  {
+    id: 'cubes-catalog',
+    name: 'Cubes',
+    description: 'Aggregation contracts: dimensions, governed metrics, grains, and materialization. Built in Page Studio.',
+    build: cubesCatalogBlueprint,
   },
 ];
 
