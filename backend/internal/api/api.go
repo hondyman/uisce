@@ -237,6 +237,7 @@ type Server struct {
 	SavedQueryHandler       *querybuilder.SavedQueryHandler
 	SavedQueryFolderHandler *querybuilder.SavedQueryFolderHandler
 	CubeHandler             *querybuilder.CubeHandler
+	cubeMaterializeActs     *querybuilder.CubeMaterializeActivities // CUBE-1.2 Temporal activities
 	SearchHandler           *handlers.SearchHandler
 	NLQHandler              *handlers.NLQHandler
 	AuditHistoryHandler     *handlers.AuditHistoryHandler
@@ -1820,6 +1821,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.MessageCatalog = msgcat.NewCatalog(msgcatStore)
 		srv.registerBOCRUDRoutes(r, sqlxDB)
 		srv.registerScheduleRoutes(r, sqlxDB, temporalClient, reportService, reportExecutor)
+		srv.registerCubeMaterializeWorker(sqlxDB, temporalClient)
 		srv.registerNBAEngineRoutes(r, sqlxDB)
 		srv.registerBillingRoutes(r)
 		srv.registerFeedbackRoutes(r)

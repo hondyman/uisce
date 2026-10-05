@@ -1,0 +1,396 @@
+package querybuilder
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"strings"
+
+	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/analytics"
+	"github.com/hondyman/uisce/backend/internal/boresolver"
+	"github.com/hondyman/uisce/backend/internal/goldcopy"
+	"github.com/hondyman/uisce/backend/internal/models"
+	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
+)
+
+// CubeMaterializeRequest is one grain deploy/refresh (CUBE-1.2 hot path).
+// Iceberg cold commit lands in CUBE-1.3 on the same attempt_id.
+type CubeMaterializeRequest struct {
+	TenantID    string   `json:"tenant_id"`
+	CubeID      string   `json:"cube_id"`
+	Grain       []string `json:"grain"`
+	SourceTable string   `json:"source_table,omitempty"` // optional override; else BO driver table
+	AttemptID   string   `json:"attempt_id,omitempty"`
+	Force       bool     `json:"force,omitempty"` // skip content_hash noop
+}
+
+// CubeMaterializePlan is the validated, compiled hot-tier plan for one grain.
+type CubeMaterializePlan struct {
+	TenantID            string            `json:"tenant_id"`
+	CubeID              string            `json:"cube_id"`
+	CubeName            string            `json:"cube_name"`
+	ContractVersion     int               `json:"contract_version"`
+	ContentHash         string            `json:"content_hash"`
+	BOID                string            `json:"bo_id"`
+	IsCore              bool              `json:"is_core"`
+	Grain               []string          `json:"grain"`
+	GrainHash           string            `json:"grain_hash"`
+	NodeID              string            `json:"node_id"`
+	NodeName            string            `json:"node_name"`
+	AttemptID           string            `json:"attempt_id"`
+	SourceTable         string            `json:"source_table"`
+	TargetDatabase      string            `json:"target_database"`
+	DDL                 string            `json:"ddl"`
+	DDLContentHash      string            `json:"ddl_content_hash"`
+	MaterializationName string            `json:"materialization_name"`
+	Noop                bool              `json:"noop"`
+	NoopReason          string            `json:"noop_reason,omitempty"`
+	MeasureColumns      map[string]string `json:"measure_columns,omitempty"`
+	GroupByColumns      []string          `json:"group_by_columns,omitempty"`
+	LifecycleBefore     string            `json:"lifecycle_before,omitempty"`
+}
+
+// CubeMaterializeHotResult is the outcome of applying the hot StarRocks step.
+type CubeMaterializeHotResult struct {
+	MaterializationName string `json:"materialization_name"`
+	TargetDatabase      string `json:"target_database"`
+	AppliedDDL          bool   `json:"applied_ddl"`
+	RowCount            int64  `json:"row_count"`
+}
+
+// CubeMaterializer validates, plans, and applies single-BO cube grains to StarRocks.
+type CubeMaterializer struct {
+	db          *sqlx.DB
+	registry    *CubeMaterializationRegistry
+	starrocksDB *sql.DB
+	ddl         *CubeDDLGenerator
+}
+
+// NewCubeMaterializer wires Postgres control plane + optional StarRocks hot plane.
+func NewCubeMaterializer(db *sqlx.DB, starrocksDB *sql.DB) *CubeMaterializer {
+	var lifecycle *analytics.PreAggLifecycleService
+	if db != nil {
+		lifecycle = analytics.NewPreAggLifecycleService(db)
+	}
+	gen := NewCubeDDLGenerator("starrocks")
+	// Deploy path: authoring already validated metrics; gate must be present
+	// (CubeDDLGenerator fails closed without one) but does not re-litigate PII.
+	gen.SetTermGate(func(termNodeID string, field *boresolver.BOField) error { return nil })
+	return &CubeMaterializer{
+		db:          db,
+		registry:    NewCubeMaterializationRegistry(db, lifecycle),
+		starrocksDB: starrocksDB,
+		ddl:         gen,
+	}
+}
+
+// ValidateAndPlan loads the cube, ensures the grain catalog node, compiles DDL,
+// and reports content_hash noop when the Active grain already matches.
+func (m *CubeMaterializer) ValidateAndPlan(ctx context.Context, req CubeMaterializeRequest) (*CubeMaterializePlan, error) {
+	if m == nil || m.db == nil {
+		return nil, fmt.Errorf("cube materializer: database not configured")
+	}
+	tenantID := strings.TrimSpace(req.TenantID)
+	cubeID := strings.TrimSpace(req.CubeID)
+	grain := normalizeGrain(req.Grain)
+	if tenantID == "" || cubeID == "" {
+		return nil, fmt.Errorf("cube materializer: tenant_id and cube_id are required")
+	}
+	if len(grain) == 0 {
+		return nil, fmt.Errorf("cube materializer: grain is required")
+	}
+
+	cube, err := m.loadCube(ctx, tenantID, cubeID)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateCubeStructural(*cube); err != nil {
+		return nil, err
+	}
+	if !cube.Federation.Empty() {
+		return nil, fmt.Errorf("cube materializer: federated cubes require CUBE-2.x; cube %s has federation sources/joins", cube.ID)
+	}
+	if !grainCovered(cube.Grains, grain) {
+		return nil, fmt.Errorf("cube materializer: grain %v is not declared on cube %s", grain, cube.ID)
+	}
+
+	metrics, err := m.loadMetrics(ctx, tenantID, cube.MetricIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load metrics: %w", err)
+	}
+	if err := ValidateCubeMetricReferences(*cube, metrics); err != nil {
+		return nil, err
+	}
+
+	nodes, err := m.registry.EnsureGrainNodes(ctx, *cube)
+	if err != nil {
+		return nil, err
+	}
+	var node *CubeMaterializationNode
+	wantHash := GrainHash(grain)
+	for i := range nodes {
+		if nodes[i].GrainHash == wantHash {
+			node = &nodes[i]
+			break
+		}
+	}
+	if node == nil {
+		return nil, fmt.Errorf("cube materializer: grain node missing after ensure for %v", grain)
+	}
+
+	sourceTable := strings.TrimSpace(req.SourceTable)
+	if sourceTable == "" {
+		sourceTable, err = m.resolveSourceTable(ctx, tenantID, cube.BOID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	generated, err := m.ddl.GenerateCubeMaterializationDDL(
+		tenantID, cube.IsCore, *cube, grain, sourceTable, metrics, nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("compile cube DDL: %w", err)
+	}
+
+	attemptID := strings.TrimSpace(req.AttemptID)
+	if attemptID == "" {
+		attemptID = uuid.New().String()
+	}
+
+	targetDB := fmt.Sprintf("tenant_%s", sanitizeIdentifier(tenantID))
+	if cube.IsCore {
+		targetDB = "gold"
+	}
+
+	plan := &CubeMaterializePlan{
+		TenantID:            tenantID,
+		CubeID:              cube.ID,
+		CubeName:            cube.Name,
+		ContractVersion:     cube.ContractVersion,
+		ContentHash:         cube.ContentHash,
+		BOID:                cube.BOID,
+		IsCore:              cube.IsCore,
+		Grain:               grain,
+		GrainHash:           node.GrainHash,
+		NodeID:              node.ID.String(),
+		NodeName:            node.NodeName,
+		AttemptID:           attemptID,
+		SourceTable:         sourceTable,
+		TargetDatabase:      targetDB,
+		DDL:                 generated.DDL,
+		DDLContentHash:      generated.ContentHash,
+		MaterializationName: generated.MaterializationName,
+		MeasureColumns:      generated.MeasureColumns,
+		GroupByColumns:      generated.GroupByColumns,
+		LifecycleBefore:     node.Properties.LifecycleStatus,
+	}
+
+	if !req.Force &&
+		node.Properties.LifecycleStatus == models.LifecycleActive &&
+		strings.TrimSpace(node.Properties.CubeContentHash) != "" &&
+		node.Properties.CubeContentHash == cube.ContentHash {
+		plan.Noop = true
+		plan.NoopReason = "content_hash unchanged and grain already Active"
+	}
+	return plan, nil
+}
+
+// BeginAttempt marks the grain node Materializing for plan.AttemptID.
+func (m *CubeMaterializer) BeginAttempt(ctx context.Context, plan *CubeMaterializePlan) error {
+	if plan == nil {
+		return fmt.Errorf("cube materializer: plan is required")
+	}
+	nodeID, err := uuid.Parse(plan.NodeID)
+	if err != nil {
+		return fmt.Errorf("cube materializer: invalid node_id: %w", err)
+	}
+	return m.registry.BeginAttempt(ctx, nodeID, plan.AttemptID)
+}
+
+// ApplyHot provisions the StarRocks database and applies CREATE MATERIALIZED VIEW
+// (which also loads from the source table for single-BO cubes).
+func (m *CubeMaterializer) ApplyHot(ctx context.Context, plan *CubeMaterializePlan) (*CubeMaterializeHotResult, error) {
+	if plan == nil {
+		return nil, fmt.Errorf("cube materializer: plan is required")
+	}
+	if m.starrocksDB == nil {
+		return nil, fmt.Errorf("starrocks connection is not available (check STARROCKS_HOST/PORT/USER/PASSWORD)")
+	}
+
+	if _, err := m.starrocksDB.ExecContext(ctx,
+		fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", quoteStarRocksIdent(plan.TargetDatabase)),
+	); err != nil {
+		return nil, fmt.Errorf("ensure starrocks database %q: %w", plan.TargetDatabase, err)
+	}
+
+	qualified := fmt.Sprintf("%s.%s",
+		quoteStarRocksIdent(plan.TargetDatabase),
+		quoteStarRocksIdent(plan.MaterializationName),
+	)
+	ddl := qualifyCubeMVName(plan.DDL, plan.MaterializationName, qualified)
+
+	// Replace an existing MV when re-deploying a changed contract.
+	_, _ = m.starrocksDB.ExecContext(ctx, fmt.Sprintf("DROP MATERIALIZED VIEW IF EXISTS %s", qualified))
+
+	if _, err := m.starrocksDB.ExecContext(ctx, ddl); err != nil {
+		return nil, fmt.Errorf("apply cube materialization DDL: %w", err)
+	}
+
+	var rowCount int64
+	countSQL := fmt.Sprintf(
+		"SELECT IFNULL(table_rows, 0) FROM information_schema.tables WHERE table_schema = %s AND table_name = %s",
+		quoteStarRocksString(plan.TargetDatabase),
+		quoteStarRocksString(plan.MaterializationName),
+	)
+	_ = m.starrocksDB.QueryRowContext(ctx, countSQL).Scan(&rowCount)
+
+	return &CubeMaterializeHotResult{
+		MaterializationName: plan.MaterializationName,
+		TargetDatabase:      plan.TargetDatabase,
+		AppliedDDL:          true,
+		RowCount:            rowCount,
+	}, nil
+}
+
+// CompleteAttempt marks Active and advances LastRefreshedAt.
+func (m *CubeMaterializer) CompleteAttempt(ctx context.Context, plan *CubeMaterializePlan, hot *CubeMaterializeHotResult) error {
+	if plan == nil {
+		return fmt.Errorf("cube materializer: plan is required")
+	}
+	nodeID, err := uuid.Parse(plan.NodeID)
+	if err != nil {
+		return fmt.Errorf("cube materializer: invalid node_id: %w", err)
+	}
+	stats := &models.PreAggStats{}
+	if hot != nil {
+		stats.RowCount = hot.RowCount
+	}
+	return m.registry.CompleteAttempt(ctx, nodeID, plan.AttemptID, stats)
+}
+
+// FailAttempt marks Failed without advancing freshness.
+func (m *CubeMaterializer) FailAttempt(ctx context.Context, plan *CubeMaterializePlan, cause error) error {
+	if plan == nil {
+		return fmt.Errorf("cube materializer: plan is required")
+	}
+	nodeID, err := uuid.Parse(plan.NodeID)
+	if err != nil {
+		return fmt.Errorf("cube materializer: invalid node_id: %w", err)
+	}
+	return m.registry.FailAttempt(ctx, nodeID, plan.AttemptID, cause)
+}
+
+func (m *CubeMaterializer) loadCube(ctx context.Context, tenantID, cubeID string) (*CubeDefinition, error) {
+	var row cubeDefRow
+	err := m.db.GetContext(ctx, &row, `
+		SELECT `+cubeDefSelectCols+`
+		FROM data_explorer.cube_definition
+		WHERE id = $1 AND tenant_id = $2 AND archived_at IS NULL
+	`, cubeID, tenantID)
+	if err == nil {
+		c := row.toCubeDefinition()
+		return &c, nil
+	}
+	if err != sql.ErrNoRows {
+		return nil, err
+	}
+	gold := goldcopy.ResolveTenantID(ctx, m.db)
+	if gold == uuid.Nil || gold.String() == tenantID {
+		return nil, fmt.Errorf("cube %s not found for tenant %s", cubeID, tenantID)
+	}
+	err = m.db.GetContext(ctx, &row, `
+		SELECT `+cubeDefSelectCols+`
+		FROM data_explorer.cube_definition
+		WHERE id = $1 AND is_core = true AND tenant_id = $2 AND archived_at IS NULL
+	`, cubeID, gold.String())
+	if err != nil {
+		return nil, fmt.Errorf("cube %s not found for tenant %s: %w", cubeID, tenantID, err)
+	}
+	c := row.toCubeDefinition()
+	return &c, nil
+}
+
+func (m *CubeMaterializer) loadMetrics(ctx context.Context, tenantID string, ids []string) (map[string]MetricDefinition, error) {
+	out := make(map[string]MetricDefinition, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []metricDefRow
+	err := m.db.SelectContext(ctx, &rows, `
+		SELECT `+metricDefRowColumns+`
+		FROM data_explorer.metric_definition
+		WHERE (tenant_id = $1 OR is_core = true)
+		  AND status = 'active' AND archived_at IS NULL
+		  AND id::text = ANY($2)
+	`, tenantID, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		mdef := row.toMetricDefinition()
+		out[strings.ToLower(strings.TrimSpace(mdef.ID))] = mdef
+	}
+	return out, nil
+}
+
+func (m *CubeMaterializer) resolveSourceTable(ctx context.Context, tenantID, boID string) (string, error) {
+	boID = strings.TrimSpace(boID)
+	if boID == "" {
+		return "", fmt.Errorf("cube materializer: bo_id is required to resolve source table")
+	}
+	var table string
+	err := m.db.GetContext(ctx, &table, `
+		SELECT COALESCE(NULLIF(TRIM(driver_table_name), ''), NULLIF(TRIM(bo_key), ''), '')
+		FROM public.business_objects
+		WHERE tenant_id = $1::uuid
+		  AND (bo_key = $2 OR id::text = $2)
+		LIMIT 1
+	`, tenantID, boID)
+	if err == sql.ErrNoRows {
+		// Gold BO fallback by key/id without tenant filter.
+		err = m.db.GetContext(ctx, &table, `
+			SELECT COALESCE(NULLIF(TRIM(driver_table_name), ''), NULLIF(TRIM(bo_key), ''), '')
+			FROM public.business_objects
+			WHERE bo_key = $1 OR id::text = $1
+			LIMIT 1
+		`, boID)
+	}
+	if err != nil {
+		return "", fmt.Errorf("resolve source table for BO %q: %w", boID, err)
+	}
+	if strings.TrimSpace(table) == "" {
+		return "", fmt.Errorf("BO %q has no driver_table_name", boID)
+	}
+	return table, nil
+}
+
+func grainCovered(grains [][]string, want []string) bool {
+	wantHash := GrainHash(want)
+	for _, g := range grains {
+		if GrainHash(g) == wantHash {
+			return true
+		}
+	}
+	return false
+}
+
+func quoteStarRocksIdent(ident string) string {
+	return "`" + strings.ReplaceAll(ident, "`", "``") + "`"
+}
+
+func quoteStarRocksString(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+// qualifyCubeMVName rewrites CREATE MATERIALIZED VIEW <name> to a database-qualified
+// target without changing the AS SELECT body produced by CubeDDLGenerator.
+func qualifyCubeMVName(ddl, bareName, qualified string) string {
+	needle := "CREATE MATERIALIZED VIEW " + bareName
+	if strings.Contains(ddl, needle) {
+		return strings.Replace(ddl, needle, "CREATE MATERIALIZED VIEW "+qualified, 1)
+	}
+	return ddl
+}

@@ -40,6 +40,13 @@ func NewPreAggregationService(db *sqlx.DB, boResolver *BOContextResolver, semant
 // (e.g. "tenant_<id>.mv_execution_npv", "oms.orm_execution"). Returns nil on
 // any failure so callers degrade to the existing stub behavior instead of
 // blocking server startup on an optional dependency.
+// OpenStarRocksDB opens a MySQL-protocol connection to the StarRocks FE using
+// STARROCKS_HOST/PORT/USER/PASSWORD. Returns nil when the FE is unreachable so
+// optional callers (pre-agg, cube materialize) degrade instead of blocking boot.
+func OpenStarRocksDB() *sql.DB {
+	return newStarRocksDB()
+}
+
 func newStarRocksDB() *sql.DB {
 	host := getEnv("STARROCKS_HOST", "127.0.0.1")
 	port := getEnvInt("STARROCKS_PORT", 9030)

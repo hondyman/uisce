@@ -1,0 +1,82 @@
+package querybuilder
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+
+	"github.com/jmoiron/sqlx"
+)
+
+// Activity names for CubeMaterializeWorkflow (stable for registration + tests).
+const (
+	ActCubeValidateAndPlan = "CubeValidateAndPlan"
+	ActCubeBeginAttempt    = "CubeBeginAttempt"
+	ActCubeApplyHot        = "CubeApplyHot"
+	ActCubeCompleteAttempt = "CubeCompleteAttempt"
+	ActCubeFailAttempt     = "CubeFailAttempt"
+)
+
+// CubeMaterializeActivities wraps CubeMaterializer for Temporal.
+// Lives in querybuilder (not temporal/activities) to avoid the
+// querybuilder → handlers → … → temporal/activities → querybuilder import cycle.
+type CubeMaterializeActivities struct {
+	Materializer *CubeMaterializer
+}
+
+// NewCubeMaterializeActivities builds activities from control-plane + StarRocks DBs.
+func NewCubeMaterializeActivities(db *sqlx.DB, starrocksDB *sql.DB) *CubeMaterializeActivities {
+	return &CubeMaterializeActivities{
+		Materializer: NewCubeMaterializer(db, starrocksDB),
+	}
+}
+
+// CubeValidateAndPlan validates the cube contract and compiles hot DDL for one grain.
+func (a *CubeMaterializeActivities) CubeValidateAndPlan(ctx context.Context, req CubeMaterializeRequest) (*CubeMaterializePlan, error) {
+	if a == nil || a.Materializer == nil {
+		return nil, fmt.Errorf("cube materialize activities: not configured")
+	}
+	return a.Materializer.ValidateAndPlan(ctx, req)
+}
+
+// CubeBeginAttempt marks the grain Materializing for the plan's attempt_id.
+func (a *CubeMaterializeActivities) CubeBeginAttempt(ctx context.Context, plan *CubeMaterializePlan) error {
+	if a == nil || a.Materializer == nil {
+		return fmt.Errorf("cube materialize activities: not configured")
+	}
+	return a.Materializer.BeginAttempt(ctx, plan)
+}
+
+// CubeApplyHot creates the StarRocks MV (single-BO extract+load via AS SELECT).
+func (a *CubeMaterializeActivities) CubeApplyHot(ctx context.Context, plan *CubeMaterializePlan) (*CubeMaterializeHotResult, error) {
+	if a == nil || a.Materializer == nil {
+		return nil, fmt.Errorf("cube materialize activities: not configured")
+	}
+	return a.Materializer.ApplyHot(ctx, plan)
+}
+
+// CubeCompleteAttempt flips lifecycle Active and sets LastRefreshedAt.
+func (a *CubeMaterializeActivities) CubeCompleteAttempt(ctx context.Context, plan *CubeMaterializePlan, hot *CubeMaterializeHotResult) error {
+	if a == nil || a.Materializer == nil {
+		return fmt.Errorf("cube materialize activities: not configured")
+	}
+	return a.Materializer.CompleteAttempt(ctx, plan, hot)
+}
+
+// CubeFailAttemptInput carries the plan plus a serializable error message.
+type CubeFailAttemptInput struct {
+	Plan         *CubeMaterializePlan `json:"plan"`
+	ErrorMessage string               `json:"error_message"`
+}
+
+// CubeFailAttempt marks Failed without advancing freshness.
+func (a *CubeMaterializeActivities) CubeFailAttempt(ctx context.Context, in CubeFailAttemptInput) error {
+	if a == nil || a.Materializer == nil {
+		return fmt.Errorf("cube materialize activities: not configured")
+	}
+	cause := fmt.Errorf("%s", in.ErrorMessage)
+	if in.ErrorMessage == "" {
+		cause = fmt.Errorf("cube materialize failed")
+	}
+	return a.Materializer.FailAttempt(ctx, in.Plan, cause)
+}
