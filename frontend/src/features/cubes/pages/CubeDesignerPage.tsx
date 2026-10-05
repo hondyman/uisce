@@ -456,6 +456,20 @@ const CubeDesignerPage: React.FC = () => {
           {validation.structuralError ? ` (${validation.structuralError})` : ''} · metrics=
           {String(validation.metricsOk)}
           {validation.metricsError ? ` (${validation.metricsError})` : ''}
+          {typeof validation.federationOk === 'boolean'
+            ? ` · federation=${String(validation.federationOk)}`
+            : ''}
+          {validation.federationError ? ` (${validation.federationError})` : ''}
+          {validation.orphanReport
+            ? ` · orphan max=${validation.orphanReport.maxPercent}% observed=${validation.orphanReport.observedMaxPercent}%${
+                validation.orphanReport.skipped ? ' (skipped)' : ''
+              }`
+            : validation.orphanRateMaxPct != null
+              ? ` · orphanRateMaxPct=${validation.orphanRateMaxPct}`
+              : ''}
+          {validation.federationTransforms?.length
+            ? ` · transforms=${validation.federationTransforms.length}`
+            : ''}
           {validation.breakReasons?.length
             ? ` · breakReasons: ${validation.breakReasons.join(', ')}`
             : ''}
@@ -694,7 +708,9 @@ const CubeDesignerPage: React.FC = () => {
               {draft.materialization.coldEngine || 'iceberg'}
             </Typography>
             <Alert severity="info">
-              Federation UI is deferred to CUBE-2.3. Saves store empty federation {'{}'}.
+              Federation authoring UI is CUBE-2.3. CUBE-2.1 validate already gates join shape,
+              transform_term projections, and orphan rate (default fail &gt; 1.0%, overridable via
+              federation.orphanRateMaxPercent + federationKeySamples on validate).
             </Alert>
           </Stack>
         )}

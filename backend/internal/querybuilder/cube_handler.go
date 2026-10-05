@@ -127,6 +127,10 @@ type cubeWriteRequest struct {
 	Federation      *CubeFederation            `json:"federation,omitempty"`
 	IsCore          *bool                      `json:"isCore,omitempty"`
 	Status          string                     `json:"status,omitempty"`
+	// FederationKeySamples optional orphan-gate fixtures (CUBE-2.1). When
+	// federation is declared and samples are present, validate fails closed
+	// if unmatched keys exceed orphanRateMaxPercent (default 1.0%).
+	FederationKeySamples []FederationKeySample `json:"federationKeySamples,omitempty"`
 }
 
 func (req cubeWriteRequest) applyCreate(tenantID, userID string) CubeDefinition {
@@ -748,6 +752,7 @@ func (h *CubeHandler) HandleValidateCube(w http.ResponseWriter, r *http.Request)
 	}
 
 	draft := *existing
+	var keySamples []FederationKeySample
 	raw, _ := readLimitedBody(r, 1<<20)
 	if len(strings.TrimSpace(string(raw))) > 0 {
 		var req cubeWriteRequest
@@ -759,6 +764,7 @@ func (h *CubeHandler) HandleValidateCube(w http.ResponseWriter, r *http.Request)
 		if bodyHasField(raw, "description") {
 			draft.Description = req.Description
 		}
+		keySamples = req.FederationKeySamples
 	}
 
 	structuralOK := true
@@ -780,24 +786,48 @@ func (h *CubeHandler) HandleValidateCube(w http.ResponseWriter, r *http.Request)
 		metricsErr = err.Error()
 	}
 
+	metricIDSet := make(map[string]bool, len(metrics))
+	for id := range metrics {
+		metricIDSet[strings.ToLower(strings.TrimSpace(id))] = true
+	}
+	// Validate: require orphan samples only when the client supplied them.
+	// Shape + transform compile always run for federated drafts.
+	requireOrphan := len(keySamples) > 0 && !draft.Federation.Empty()
+	projections, orphanReport, fedErr := EvaluateFederationPlan(
+		draft.Federation, metricIDSet, keySamples, requireOrphan,
+	)
+	federationOK := fedErr == nil && (draft.Federation.Empty() || orphanReport.Ok || orphanReport.Skipped)
+	var federationErr string
+	if fedErr != nil {
+		federationOK = false
+		federationErr = fedErr.Error()
+	} else if !draft.Federation.Empty() && !orphanReport.Skipped && !orphanReport.Ok {
+		federationOK = false
+		federationErr = orphanReport.Detail
+	}
+
 	breakReasons := DetectCubeContractBreaking(*existing, draft)
 	hash := ComputeCubeContentHash(draft, metricContentHashes(metrics, draft.MetricIDs))
 
-	ok := structuralOK && metricsOK
+	ok := structuralOK && metricsOK && federationOK
 	status := http.StatusOK
 	if !ok {
 		status = http.StatusUnprocessableEntity
 	}
 	h.writeJSON(w, status, map[string]interface{}{
-		"ok":               ok,
-		"structuralOk":     structuralOK,
-		"structuralError":  structuralErr,
-		"metricsOk":        metricsOK,
-		"metricsError":     metricsErr,
-		"breakReasons":     breakReasons,
-		"contentHash":      hash,
-		"contractVersion":  existing.ContractVersion,
-		"orphanRateMaxPct": EffectiveOrphanRateMax(draft.Federation),
+		"ok":                   ok,
+		"structuralOk":         structuralOK,
+		"structuralError":      structuralErr,
+		"metricsOk":            metricsOK,
+		"metricsError":         metricsErr,
+		"federationOk":         federationOK,
+		"federationError":      federationErr,
+		"federationTransforms": projections,
+		"orphanReport":         orphanReport,
+		"breakReasons":         breakReasons,
+		"contentHash":          hash,
+		"contractVersion":      existing.ContractVersion,
+		"orphanRateMaxPct":     EffectiveOrphanRateMax(draft.Federation),
 	})
 }
 

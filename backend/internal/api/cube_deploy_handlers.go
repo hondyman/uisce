@@ -17,6 +17,8 @@ import (
 type cubeDeployRequest struct {
 	Grain []string `json:"grain,omitempty"` // when empty, all cube grains are started
 	Force bool     `json:"force,omitempty"` // deploy defaults force=true; refresh defaults false
+	// FederationKeySamples optional CUBE-2.1 orphan fixtures for federated cubes.
+	FederationKeySamples []querybuilder.FederationKeySample `json:"federationKeySamples,omitempty"`
 }
 
 // HandleCubeDeploy starts CubeMaterializeWorkflow for one or all grains (force=true).
@@ -88,10 +90,11 @@ func (s *Server) handleCubeMaterializeStart(w http.ResponseWriter, r *http.Reque
 
 	for _, grain := range grains {
 		req := querybuilder.CubeMaterializeRequest{
-			TenantID: secCtx.TenantID,
-			CubeID:   cubeID,
-			Grain:    grain,
-			Force:    force,
+			TenantID:             secCtx.TenantID,
+			CubeID:               cubeID,
+			Grain:                grain,
+			Force:                force,
+			FederationKeySamples: body.FederationKeySamples,
 		}
 		wfID, plan, startErr := s.StartCubeMaterialize(r.Context(), req)
 		res := startResult{Grain: grain}

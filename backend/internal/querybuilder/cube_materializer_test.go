@@ -31,29 +31,50 @@ func TestCubeMaterializer_RejectsFederation(t *testing.T) {
 		Joins:   []CubeFederationJoin{{LeftAlias: "a", RightAlias: "p", KeyKind: "common", LeftTermIDs: []string{"account_id"}, RightTermIDs: []string{"account_id"}}},
 	})
 
-	rows := sqlmock.NewRows([]string{
-		"id", "tenant_id", "name", "description", "bo_id",
-		"dimensions", "time_dimension", "metric_ids", "grains", "materialization",
-		"federation", "contract_version", "content_hash", "is_core", "status",
-		"archived_at", "created_by", "created_at", "updated_at",
-	}).AddRow(
-		cubeID, tenantID, "Fed Cube", "", "account",
-		dims, nil, metrics, grains, mat,
-		fed, 1, "hash", false, "active",
-		nil, nil, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-	)
-	mock.ExpectQuery(`SELECT .+ FROM data_explorer.cube_definition`).
-		WithArgs(cubeID, tenantID).
-		WillReturnRows(rows)
+	expectFedCube := func() {
+		rows := sqlmock.NewRows([]string{
+			"id", "tenant_id", "name", "description", "bo_id",
+			"dimensions", "time_dimension", "metric_ids", "grains", "materialization",
+			"federation", "contract_version", "content_hash", "is_core", "status",
+			"archived_at", "created_by", "created_at", "updated_at",
+		}).AddRow(
+			cubeID, tenantID, "Fed Cube", "", "account",
+			dims, nil, metrics, grains, mat,
+			fed, 1, "hash", false, "active",
+			nil, nil, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		)
+		mock.ExpectQuery(`SELECT .+ FROM data_explorer.cube_definition`).
+			WithArgs(cubeID, tenantID).
+			WillReturnRows(rows)
+	}
 
-	_, err = m.ValidateAndPlan(context.Background(), CubeMaterializeRequest{
-		TenantID: tenantID,
-		CubeID:   cubeID,
-		Grain:    []string{"account_id"},
+	t.Run("no samples fail-closed orphan gate", func(t *testing.T) {
+		expectFedCube()
+		_, err = m.ValidateAndPlan(context.Background(), CubeMaterializeRequest{
+			TenantID: tenantID,
+			CubeID:   cubeID,
+			Grain:    []string{"account_id"},
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrCubeFederationOrphanGate)
+		require.NoError(t, mock.ExpectationsWereMet())
 	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "CUBE-2.x")
-	require.NoError(t, mock.ExpectationsWereMet())
+
+	t.Run("passing samples still require CUBE-2.2 materialize", func(t *testing.T) {
+		expectFedCube()
+		_, err = m.ValidateAndPlan(context.Background(), CubeMaterializeRequest{
+			TenantID: tenantID,
+			CubeID:   cubeID,
+			Grain:    []string{"account_id"},
+			FederationKeySamples: []FederationKeySample{{
+				LeftAlias: "a", RightAlias: "p",
+				LeftKeys: 1000, RightKeys: 1000, Matched: 995,
+			}},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "CUBE-2.2")
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
 }
 
 func TestCubeMaterializer_ApplyHotRequiresStarRocks(t *testing.T) {

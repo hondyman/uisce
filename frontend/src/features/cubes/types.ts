@@ -72,12 +72,47 @@ export type CubeListResponse = {
   nextCursor?: string;
 };
 
+export type FederationJoinOrphanStats = {
+  leftAlias: string;
+  rightAlias: string;
+  leftKeys: number;
+  rightKeys: number;
+  matched: number;
+  leftOrphanPct: number;
+  rightOrphanPct: number;
+  ok: boolean;
+  detail?: string;
+};
+
+export type FederationOrphanReport = {
+  joins?: FederationJoinOrphanStats[];
+  maxPercent: number;
+  observedMaxPercent: number;
+  ok: boolean;
+  skipped?: boolean;
+  detail?: string;
+};
+
+export type FederationTransformProjection = {
+  joinIndex: number;
+  leftAlias: string;
+  rightAlias: string;
+  transformTermId: string;
+  leftTermIds: string[];
+  rightTermIds: string[];
+  compiledExpr: string;
+};
+
 export type CubeValidateResponse = {
   ok: boolean;
   structuralOk: boolean;
   structuralError?: string;
   metricsOk: boolean;
   metricsError?: string;
+  federationOk?: boolean;
+  federationError?: string;
+  federationTransforms?: FederationTransformProjection[];
+  orphanReport?: FederationOrphanReport;
   breakReasons?: string[];
   contentHash?: string;
   contractVersion?: number;

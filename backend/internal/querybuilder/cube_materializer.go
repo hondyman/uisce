@@ -24,6 +24,9 @@ type CubeMaterializeRequest struct {
 	SourceTable string   `json:"source_table,omitempty"` // optional override; else BO driver table
 	AttemptID   string   `json:"attempt_id,omitempty"`
 	Force       bool     `json:"force,omitempty"` // skip content_hash noop
+	// FederationKeySamples optional CUBE-2.1 orphan-gate fixtures. Required
+	// (fail-closed) when the cube declares federation; live sampling is CUBE-2.2.
+	FederationKeySamples []FederationKeySample `json:"federation_key_samples,omitempty"`
 }
 
 // CubeMaterializePlan is the validated, compiled dual-tier plan for one grain.
@@ -140,7 +143,14 @@ func (m *CubeMaterializer) ValidateAndPlan(ctx context.Context, req CubeMaterial
 		return nil, err
 	}
 	if !cube.Federation.Empty() {
-		return nil, fmt.Errorf("cube materializer: federated cubes require CUBE-2.x; cube %s has federation sources/joins", cube.ID)
+		// CUBE-2.1 owns orphan/transform validation; CUBE-2.2 owns multi-source
+		// extract + join materialize. Fail closed without samples; with passing
+		// samples still refuse until 2.2 join extract exists.
+		metricIDSet := map[string]bool{}
+		if _, _, fedErr := EvaluateFederationPlan(cube.Federation, metricIDSet, req.FederationKeySamples, true); fedErr != nil {
+			return nil, fmt.Errorf("cube materializer: federation gate: %w", fedErr)
+		}
+		return nil, fmt.Errorf("cube materializer: federated cubes require CUBE-2.2 multi-source materialize; cube %s passed CUBE-2.1 orphan gate but has no join extract yet", cube.ID)
 	}
 	if !grainCovered(cube.Grains, grain) {
 		return nil, fmt.Errorf("cube materializer: grain %v is not declared on cube %s", grain, cube.ID)
