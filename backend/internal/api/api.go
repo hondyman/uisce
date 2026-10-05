@@ -236,6 +236,7 @@ type Server struct {
 	DrillDownResolver       *optimizer.DrillDownResolver
 	SavedQueryHandler       *querybuilder.SavedQueryHandler
 	SavedQueryFolderHandler *querybuilder.SavedQueryFolderHandler
+	CubeHandler             *querybuilder.CubeHandler
 	SearchHandler           *handlers.SearchHandler
 	NLQHandler              *handlers.NLQHandler
 	AuditHistoryHandler     *handlers.AuditHistoryHandler
@@ -1171,6 +1172,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// at that point in NewServer).
 		srv.SavedQueryHandler = querybuilder.NewSavedQueryHandler(sqlxDB, qbService, qbExecutor, securityDeps)
 		srv.SavedQueryFolderHandler = querybuilder.NewSavedQueryFolderHandler(sqlxDB, securityDeps)
+		srv.CubeHandler = querybuilder.NewCubeHandler(sqlxDB, securityDeps)
 	}
 
 	boStatusService := analytics.NewBOStatusService(srv.SQLXDB)
@@ -3497,8 +3499,19 @@ func (s *Server) registerAIRoutes(r chi.Router) {
 	r.Post("/calc/vectorized", s.runVectorizedCalculations)
 }
 
-// registerExplorerRoutes mounts query, search, and saved query endpoints
+// registerExplorerRoutes mounts query, search, saved query, and cube endpoints
 func (s *Server) registerExplorerRoutes(r chi.Router) {
+	if s.CubeHandler != nil {
+		r.Route("/cubes", func(r chi.Router) {
+			r.Get("/", s.CubeHandler.HandleListCubes)
+			r.Post("/", s.CubeHandler.HandleCreateCube)
+			r.Get("/{id}", s.CubeHandler.HandleGetCube)
+			r.Patch("/{id}", s.CubeHandler.HandlePatchCube)
+			r.Post("/{id}/validate", s.CubeHandler.HandleValidateCube)
+			r.Post("/{id}/versions", s.CubeHandler.HandlePublishCubeVersion)
+		})
+	}
+
 	r.Route("/explorer", func(r chi.Router) {
 		r.Post("/query/execute", s.QueryHandler.HandleExecuteQuery)
 		r.Post("/query/compile", s.QueryHandler.HandleCompileQuery)
