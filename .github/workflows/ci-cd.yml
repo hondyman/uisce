@@ -294,6 +294,12 @@ jobs:
     # Gated on the same filter as build-backend, so the shards can never run
     # for a tree that build-backend would not have built either.
     if: needs.changes.outputs.backend == 'true'
+    # Matrix outputs are auto-aggregated as a JSON array by GitHub Actions,
+    # one element per matrix iteration. The sentinel `backend-coverage-status`
+    # reads this to decide whether every shard uploaded its coverage to codecov
+    # without needing to walk artifacts.
+    outputs:
+      shard-uploaded: ${{ steps.record-upload.outputs.uploaded }}
     strategy:
       fail-fast: false
       matrix:
@@ -336,12 +342,44 @@ jobs:
         go test -short -race -coverprofile=coverage.out $(tr '\n' ' ' < shard.txt)
         go tool cover -func=coverage.out | tail -1
 
+    # ADR-049 (B): coverage upload is TELEMETRY, not a test outcome. The test
+    # matrix result must reflect tests only, not telemetry reliability. A
+    # missing codecov token is the same kind of infrastructure failure as a
+    # flaky Snyk scan (which already has `continue-on-error: true` on
+    # Security Scan): a bad day in the telemetry layer, not a defect in the
+    # tree the test was running against.
     - name: Upload Coverage
+      id: upload-coverage
       uses: codecov/codecov-action@v4
       with:
         files: backend/coverage.out
         flags: backend
         name: backend-shard-${{ matrix.shard }}
+      continue-on-error: true
+
+    # Capture the upload outcome as a matrix-output so the sentinel below
+    # can aggregate without parsing artifacts. `if: always()` is load-bearing:
+    # without it, a cancelled upload step would not record an outcome and the
+    # sentinel would see a `null` element (which `jq select(. == false)`
+    # correctly ignores, so the sentinel's SUCCESS/FAILURE verdict is
+    # accurate whether the shard was skipped, cancelled, or completed).
+    - name: Record upload outcome
+      if: always()
+      id: record-upload
+      run: |
+        case "${{ steps.upload-coverage.outcome }}" in
+          success)
+            echo "uploaded=true" >> "$GITHUB_OUTPUT"
+            ;;
+          failure|cancelled)
+            echo "uploaded=false" >> "$GITHUB_OUTPUT"
+            ;;
+          *)
+            # Skipped (e.g. Run Tests failed and Upload was not reached).
+            # Don't record; the matrix element is null and the sentinel ignores it.
+            echo "::notice::upload-coverage outcome: ${{ steps.upload-coverage.outcome }}, not recording"
+            ;;
+        esac
 
   # ==========================================================================
   # Backend integration tests (real service dependencies)
@@ -456,6 +494,60 @@ jobs:
         fi
         if [ "$MATRIX_RESULT" = "skipped" ]; then
           echo "matrix skipped by the path filter; nothing to summarise"
+        fi
+
+  # ==========================================================================
+  # Coverage upload status (sentinel for telemetry)
+  # ==========================================================================
+  # ADR-049 (B): coverage upload is decoupled from merge gating. This is the
+  # always-reported-by-construction sentinel that surfaces the upload state
+  # independently of the test outcome.
+  #
+  # Properties (per the ruling on B's implementation):
+  #   - `if: always()`: never skipped, never absent. The signal is always
+  #     visible to anyone looking at the PR's checks. An intermittent warn
+  #     is wallpaper; an always-reported warn is honest.
+  #   - Non-required: not in the branch protection required set. Telemetry
+  #     reliability does not gate deploys; it informs them.
+  #   - Sentinel output: SUCCESS = "all shards uploaded their coverage"
+  #     (or matrix skipped / nothing-to-summarize). FAILURE = "at least one
+  #     shard failed to upload". A pass-on-upload-success / fail-on-upload-missing
+  #     decision in code, not in branch-protection configuration - so a future
+  #     edit to the required set cannot silently disable the visibility.
+  #
+  # What this check does NOT do:
+  #   - It does NOT report test pass/fail. That's `backend-tests-summary`
+  #     (above), and remains required.
+  #   - It does NOT block merges on upload failure. A missing codecov token
+  #     produces a red sentinel but does not produce a red required set;
+  #     the merge can still proceed once tests pass.
+  backend-coverage-status:
+    name: Backend Tests Coverage Status
+    runs-on: ubuntu-latest
+    needs: [backend-tests]
+    if: always()
+    steps:
+    - name: Verify coverage upload
+      env:
+        # Aggregated matrix output. JSON array, one element per shard;
+        # `null` where a shard did not record (e.g. Upload was skipped).
+        SHARDS: ${{ needs.backend-tests.outputs.shard-uploaded }}
+      run: |
+        if [ -z "$SHARDS" ]; then
+          echo "matrix was skipped by the path filter; no coverage expected"
+          exit 0
+        fi
+        echo "shard outcomes: $SHARDS"
+        total=$(echo "$SHARDS" | jq 'length')
+        not_recorded=$(echo "$SHARDS" | jq '[.[] | select(. == null)] | length')
+        missing=$(echo "$SHARDS" | jq '[.[] | select(. == false)] | length')
+        echo "shards=$total not_recorded=$not_recorded missing=$missing"
+        if [ "$missing" -gt 0 ]; then
+          echo "::error::$missing shards failed to upload coverage to codecov"
+          echo "::error::this is the same failure mode that froze main on 2026-10-04"
+          echo "::error::when d022abc3f's merge push exposed a missing codecov token"
+          echo "::error::ADR-049: telemetry does not gate merges; the token itself is the P0"
+          exit 1
         fi
 
   build-frontend:
