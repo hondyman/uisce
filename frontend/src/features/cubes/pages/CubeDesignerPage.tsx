@@ -47,12 +47,15 @@ import {
 import type {
   CubeDefinition,
   CubeDraft,
-  CubeMaterialization,
   CubeMetricOption,
   CubeValidateResponse,
-  FederationKeySample,
 } from '../types';
-import { federationIsActive, normalizeFederation } from '../types';
+import { federationIsActive } from '../types';
+import {
+  cubeDraftFromDefinition,
+  cubeDraftPayload,
+  emptyCubeDraft,
+} from '../draft';
 import FederationEditor from '../FederationEditor';
 
 type TabKey =
@@ -64,65 +67,9 @@ type TabKey =
   | 'materialization'
   | 'versions';
 
-const DEFAULT_MATERIALIZATION: CubeMaterialization = {
-  strategy: 'starrocks_mv',
-  refreshStrategy: 'manual',
-  hotEngine: 'starrocks',
-  coldEngine: 'iceberg',
-  stalePolicy: 'serve_with_flag',
-};
-
-function emptyDraft(): CubeDraft {
-  return {
-    name: '',
-    description: '',
-    boId: 'account',
-    dimensions: [],
-    metricIds: [],
-    grains: [],
-    materialization: { ...DEFAULT_MATERIALIZATION },
-    federation: {},
-    federationKeySamples: [],
-  };
-}
-
-function draftFromCube(c: CubeDefinition): CubeDraft {
-  return {
-    name: c.name,
-    description: c.description || '',
-    boId: c.boId,
-    dimensions: c.dimensions || [],
-    metricIds: c.metricIds || [],
-    grains: c.grains || [],
-    materialization: { ...DEFAULT_MATERIALIZATION, ...(c.materialization || {}) },
-    federation: c.federation || {},
-    federationKeySamples: [],
-  };
-}
-
-function draftPayload(d: CubeDraft, opts?: { includeKeySamples?: boolean }): Record<string, unknown> {
-  const federation = normalizeFederation(d.federation);
-  const body: Record<string, unknown> = {
-    name: d.name.trim(),
-    description: d.description,
-    boId: d.boId.trim(),
-    dimensions: d.dimensions,
-    metricIds: d.metricIds,
-    grains: d.grains,
-    materialization: d.materialization,
-    federation,
-  };
-  if (opts?.includeKeySamples && federationIsActive(federation) && d.federationKeySamples?.length) {
-    body.federationKeySamples = d.federationKeySamples.map((s: FederationKeySample) => ({
-      leftAlias: s.leftAlias,
-      rightAlias: s.rightAlias,
-      leftKeys: s.leftKeys,
-      rightKeys: s.rightKeys,
-      matched: s.matched,
-    }));
-  }
-  return body;
-}
+const emptyDraft = emptyCubeDraft;
+const draftFromCube = cubeDraftFromDefinition;
+const draftPayload = cubeDraftPayload;
 
 const CubeDesignerPage: React.FC = () => {
   const locale = useLocale();
