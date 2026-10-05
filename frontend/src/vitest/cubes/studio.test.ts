@@ -11,6 +11,7 @@ vi.mock('../../features/cubes/cubeDefinitionApi', () => ({
   listCubeMetrics: vi.fn(),
   getCubeImpact: vi.fn(),
   previewCubeImpact: vi.fn(),
+  cascadeCube: vi.fn(),
 }));
 
 vi.mock('../../studio-core/binding/businessObjectApi', async (orig) => {
@@ -25,6 +26,7 @@ import {
   createCube,
   deployCube,
   getCube,
+  cascadeCube,
   getCubeImpact,
   listCubeMetrics,
   listCubes,
@@ -50,6 +52,7 @@ const api = {
   listCubeMetrics: listCubeMetrics as unknown as ReturnType<typeof vi.fn>,
   getCubeImpact: getCubeImpact as unknown as ReturnType<typeof vi.fn>,
   previewCubeImpact: previewCubeImpact as unknown as ReturnType<typeof vi.fn>,
+  cascadeCube: cascadeCube as unknown as ReturnType<typeof vi.fn>,
   listBusinessObjects: listBusinessObjects as unknown as ReturnType<typeof vi.fn>,
 };
 
@@ -92,6 +95,7 @@ describe('cubes studio registration (PR3)', () => {
       'cubes.businessObjects',
       'cubes.impact',
       'cubes.impactPreview',
+      'cubes.cascade',
     ]) {
       expect(getOperation(id), id).toBeTruthy();
     }
@@ -100,6 +104,7 @@ describe('cubes studio registration (PR3)', () => {
     expect(getOperation('cubes.validate')?.kind).toBe('mutation');
     expect(getOperation('cubes.impact')?.kind).toBe('query');
     expect(getOperation('cubes.impactPreview')?.kind).toBe('mutation');
+    expect(getOperation('cubes.cascade')?.kind).toBe('mutation');
   });
 
   it('registers cubes.FederationEditor + cubes.ImpactPanel and never a full-page cubes.Designer', () => {
@@ -264,5 +269,26 @@ describe('cubes.impact / impactPreview', () => {
     };
     expect(prev.changeClass).toBe('archive');
     expect(api.previewCubeImpact).toHaveBeenCalledWith('c-1', { action: 'archive', patch: undefined });
+
+    api.cascadeCube.mockResolvedValueOnce({
+      changeClass: 'archive',
+      mode: 'fail_closed',
+      action: 'archive',
+      cube: { id: 'c-1', status: 'archived' },
+      consumersAffected: [{ kind: 'cube', id: 'c-1', action: 'archived' }],
+    });
+    const casc = (await run('cubes.cascade', {
+      id: 'c-1',
+      action: 'archive',
+      confirmToken: 'tok',
+      mode: 'fail_closed',
+    })) as { mode: string };
+    expect(casc.mode).toBe('fail_closed');
+    expect(api.cascadeCube).toHaveBeenCalledWith('c-1', {
+      action: 'archive',
+      confirmToken: 'tok',
+      mode: 'fail_closed',
+      patch: undefined,
+    });
   });
 });

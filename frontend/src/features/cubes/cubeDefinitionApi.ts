@@ -1,5 +1,7 @@
 import apiClient from '../../utils/apiClient';
 import type {
+  CubeCascadeMode,
+  CubeCascadeReceipt,
   CubeDefinition,
   CubeImpactPreviewAction,
   CubeImpactPreviewReport,
@@ -155,6 +157,21 @@ export async function previewCubeImpact(
   },
 ): Promise<CubeImpactPreviewReport> {
   return apiClient<CubeImpactPreviewReport>(`cubes/${encodeURIComponent(id)}/impact/preview`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function cascadeCube(
+  id: string,
+  body: {
+    action: 'archive' | 'publish_version';
+    confirmToken: string;
+    mode: CubeCascadeMode;
+    patch?: Record<string, unknown>;
+  },
+): Promise<CubeCascadeReceipt> {
+  return apiClient<CubeCascadeReceipt>(`cubes/${encodeURIComponent(id)}/cascade`, {
     method: 'POST',
     body: JSON.stringify(body),
   });

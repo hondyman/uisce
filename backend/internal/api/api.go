@@ -3514,6 +3514,7 @@ func (s *Server) registerExplorerRoutes(r chi.Router) {
 			r.Get("/{id}", s.CubeHandler.HandleGetCube)
 			r.Get("/{id}/impact", s.CubeHandler.HandleGetCubeImpact)
 			r.Post("/{id}/impact/preview", s.CubeHandler.HandlePostCubeImpactPreview)
+			r.Post("/{id}/cascade", s.CubeHandler.HandlePostCubeCascade)
 			r.Patch("/{id}", s.CubeHandler.HandlePatchCube)
 			r.Post("/{id}/validate", s.CubeHandler.HandleValidateCube)
 			r.Post("/{id}/versions", s.CubeHandler.HandlePublishCubeVersion)

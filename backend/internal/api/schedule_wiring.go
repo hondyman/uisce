@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"regexp"
@@ -14,6 +15,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/msgcat"
+	"github.com/hondyman/uisce/backend/internal/querybuilder"
 	"github.com/hondyman/uisce/backend/internal/reports"
 	"github.com/hondyman/uisce/backend/internal/schedule"
 	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
@@ -83,6 +85,20 @@ func (s *Server) registerScheduleRoutes(r chi.Router, sqlxDB *sqlx.DB, tc tempor
 	cals := &schedule.MDMCalendars{DB: calDB, GoldTenantID: gold}
 	svc := &schedule.Service{Store: store, Engine: &schedule.TemporalEngine{Client: tc}, Calendars: cals, Runners: runners}
 	s.ScheduleService = svc
+
+	// A4 archive cascade: pause cube_refresh schedules through the same
+	// SetEnabled path as the Schedules UI (DB + Temporal pause).
+	if s.CubeHandler != nil {
+		s.CubeHandler.SetCascadeSideEffects(querybuilder.CubeCascadeSideEffects{
+			PauseSchedule: func(ctx context.Context, tenantID, scheduleID, actorUserID string) error {
+				_, err := svc.SetEnabled(ctx, schedule.Actor{
+					UserID:   actorUserID,
+					TenantID: tenantID,
+				}, scheduleID, false)
+				return err
+			},
+		})
+	}
 
 	if tc != nil {
 		acts := &schedule.Activities{Store: store, Calendars: cals, Runners: runners}

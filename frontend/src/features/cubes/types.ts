@@ -146,6 +146,29 @@ export type CubeImpactPreviewReport = CubeImpactReport & {
   patchHash?: string;
 };
 
+/** A4 POST /api/cubes/{id}/cascade (archive modes; publish_version is A5). */
+export type CubeCascadeMode =
+  | 'fail_closed'
+  | 'disable_consumers'
+  | 'rewire_latest'
+  | 'bump_and_refresh'
+  | string;
+export type CubeCascadeAffected = {
+  kind: string;
+  id: string;
+  label?: string;
+  action: string;
+  detail?: string;
+};
+export type CubeCascadeReceipt = {
+  cube: CubeDefinition;
+  changeClass: string;
+  mode: string;
+  action: string;
+  consumersAffected: CubeCascadeAffected[];
+  impact?: CubeImpactPreviewReport;
+};
+
 export type FederationJoinOrphanStats = {
   leftAlias: string;
   rightAlias: string;

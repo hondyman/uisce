@@ -6,6 +6,10 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  FormControl,
+  FormControlLabel,
+  Radio,
+  RadioGroup,
   Stack,
   Table,
   TableBody,
@@ -14,8 +18,10 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { getCubeImpact, previewCubeImpact } from './cubeDefinitionApi';
+import { cascadeCube, getCubeImpact, previewCubeImpact } from './cubeDefinitionApi';
 import type {
+  CubeCascadeMode,
+  CubeCascadeReceipt,
   CubeDraft,
   CubeImpactConsumer,
   CubeImpactPreviewAction,
@@ -108,17 +114,22 @@ const ImpactPanel: React.FC<ImpactPanelProps> = ({
   const [report, setReport] = useState<CubeImpactReport | null>(null);
   const [preview, setPreview] = useState<CubeImpactPreviewReport | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
+  const [cascadeMode, setCascadeMode] = useState<CubeCascadeMode>('fail_closed');
+  const [cascadeBusy, setCascadeBusy] = useState(false);
+  const [receipt, setReceipt] = useState<CubeCascadeReceipt | null>(null);
 
   const load = useCallback(async () => {
     if (!id) {
       setReport(null);
       setPreview(null);
+      setReceipt(null);
       setError(null);
       return;
     }
     setLoading(true);
     setError(null);
     setPreview(null);
+    setReceipt(null);
     try {
       const r = await getCubeImpact(id);
       setReport(r);
@@ -138,6 +149,7 @@ const ImpactPanel: React.FC<ImpactPanelProps> = ({
     if (!id || readOnly) return;
     setPreviewBusy(true);
     setError(null);
+    setReceipt(null);
     try {
       const body: { action: CubeImpactPreviewAction; patch?: Record<string, unknown> } = { action };
       if ((action === 'patch' || action === 'publish_version') && draft) {
@@ -145,11 +157,45 @@ const ImpactPanel: React.FC<ImpactPanelProps> = ({
       }
       const r = await previewCubeImpact(id, body);
       setPreview(r);
+      const preferred =
+        r.recommendedMode && (r.allowedModes || []).includes(r.recommendedMode)
+          ? r.recommendedMode
+          : (r.allowedModes || [])[0] || 'fail_closed';
+      setCascadeMode(preferred);
     } catch (e) {
       setPreview(null);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setPreviewBusy(false);
+    }
+  };
+
+  const runCascadeArchive = async () => {
+    if (!id || readOnly || !preview || preview.changeClass !== 'archive') return;
+    if (!preview.confirmToken) {
+      setError('Preview again to mint a confirm token before Confirm.');
+      return;
+    }
+    setCascadeBusy(true);
+    setError(null);
+    try {
+      const r = await cascadeCube(id, {
+        action: 'archive',
+        confirmToken: preview.confirmToken,
+        mode: cascadeMode,
+      });
+      setPreview(null);
+      setReceipt(r);
+      try {
+        const inv = await getCubeImpact(id);
+        setReport(inv);
+      } catch {
+        /* receipt already proves cascade; inventory refresh is best-effort */
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCascadeBusy(false);
     }
   };
 
@@ -250,12 +296,12 @@ const ImpactPanel: React.FC<ImpactPanelProps> = ({
       {!readOnly && (
         <>
           <Divider />
-          <Typography variant="subtitle2">Dry-run preview (cascade Confirm lands in A4)</Typography>
+          <Typography variant="subtitle2">Preview + cascade Confirm</Typography>
           <Stack direction="row" flexWrap="wrap" gap={1}>
             <Button
               size="small"
               variant="outlined"
-              disabled={previewBusy}
+              disabled={previewBusy || cascadeBusy}
               onClick={() => void runPreview('archive')}
             >
               Preview archive
@@ -263,7 +309,7 @@ const ImpactPanel: React.FC<ImpactPanelProps> = ({
             <Button
               size="small"
               variant="outlined"
-              disabled={previewBusy || !draft}
+              disabled={previewBusy || cascadeBusy || !draft}
               onClick={() => void runPreview('patch')}
             >
               Preview patch
@@ -272,7 +318,7 @@ const ImpactPanel: React.FC<ImpactPanelProps> = ({
               size="small"
               variant="outlined"
               color="warning"
-              disabled={previewBusy || !draft}
+              disabled={previewBusy || cascadeBusy || !draft}
               onClick={() => void runPreview('publish_version')}
             >
               Preview publish version
@@ -280,7 +326,7 @@ const ImpactPanel: React.FC<ImpactPanelProps> = ({
           </Stack>
           {!draft && (
             <Typography variant="caption" color="text.secondary">
-              Patch / publish previews need a draft binding (designer). Archive works from inventory alone.
+              Patch / publish previews need a draft binding (designer). Archive Confirm works from inventory alone.
             </Typography>
           )}
         </>
@@ -307,8 +353,71 @@ const ImpactPanel: React.FC<ImpactPanelProps> = ({
             Blocking: {preview.blockingCount} · Recommended mode: {preview.recommendedMode}
           </Typography>
           <Typography variant="body2">Allowed: {(preview.allowedModes || []).join(', ')}</Typography>
-          <Typography variant="caption" display="block" sx={{ mt: 0.5, wordBreak: 'break-all' }}>
-            confirmToken minted ({preview.confirmToken?.length || 0} chars) — cascade apply deferred to A4.
+          <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+            confirmToken minted ({preview.confirmToken?.length || 0} chars, ≤10m TTL).
+          </Typography>
+
+          {preview.changeClass === 'archive' && !readOnly && (
+            <Box sx={{ mt: 1.5 }}>
+              <Typography variant="body2" fontWeight={600} gutterBottom>
+                Cascade mode
+              </Typography>
+              <FormControl>
+                <RadioGroup
+                  value={cascadeMode}
+                  onChange={(_, v) => setCascadeMode(v)}
+                >
+                  {(preview.allowedModes || ['fail_closed']).map((m) => (
+                    <FormControlLabel
+                      key={m}
+                      value={m}
+                      control={<Radio size="small" />}
+                      label={
+                        m === 'fail_closed'
+                          ? 'fail_closed — 409 if any blocking consumer remains'
+                          : m === 'disable_consumers'
+                            ? 'disable_consumers — pause schedules / deactivate pipelines, then archive (pins left)'
+                            : m
+                      }
+                    />
+                  ))}
+                </RadioGroup>
+              </FormControl>
+              <Stack direction="row" gap={1} sx={{ mt: 1 }}>
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="error"
+                  disabled={cascadeBusy || previewBusy}
+                  onClick={() => void runCascadeArchive()}
+                >
+                  {cascadeBusy ? 'Confirming…' : 'Confirm archive cascade'}
+                </Button>
+              </Stack>
+            </Box>
+          )}
+
+          {preview.changeClass !== 'archive' && (
+            <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+              Publish-version cascade Confirm lands in A5. Patch stays preview-only.
+            </Typography>
+          )}
+        </Alert>
+      )}
+
+      {receipt && (
+        <Alert severity="success" onClose={() => setReceipt(null)}>
+          <Typography variant="body2" fontWeight={600}>
+            Cascade applied — {receipt.action} / {receipt.mode}
+          </Typography>
+          <Typography variant="body2">
+            Cube status: {receipt.cube?.status || 'archived'} · affected{' '}
+            {(receipt.consumersAffected || []).length}
+          </Typography>
+          <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+            {(receipt.consumersAffected || [])
+              .map((a) => `${a.kind}:${a.action}`)
+              .join(' · ') || 'no consumer side-effects'}
           </Typography>
         </Alert>
       )}

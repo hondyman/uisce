@@ -12,6 +12,7 @@ import {
   listCubeMetrics,
   listCubes,
   patchCube,
+  cascadeCube,
   previewCubeImpact,
   refreshCube,
   validateCube,
@@ -344,7 +345,7 @@ const operations: OperationDef[] = [
     kind: 'mutation',
     label: 'Cube impact preview',
     description:
-      'POST /api/cubes/{id}/impact/preview — changeClass + confirmToken. Cascade apply is A4.',
+      'POST /api/cubes/{id}/impact/preview — changeClass + confirmToken for cascade Confirm.',
     params: [
       { name: 'id', type: 'string', required: true },
       { name: 'action', type: 'string', required: true },
@@ -368,6 +369,44 @@ const operations: OperationDef[] = [
         patch = cubeDraftPayload(p.draft as CubeDraft);
       }
       return previewCubeImpact(need(p, 'id'), { action, patch });
+    },
+  },
+  {
+    id: 'cubes.cascade',
+    domain: DOMAIN,
+    kind: 'mutation',
+    label: 'Cube cascade apply',
+    description:
+      'POST /api/cubes/{id}/cascade — A4 archive with fail_closed|disable_consumers. publish_version is A5.',
+    params: [
+      { name: 'id', type: 'string', required: true },
+      { name: 'action', type: 'string', required: true },
+      { name: 'confirmToken', type: 'string', required: true },
+      { name: 'mode', type: 'string', required: true },
+      { name: 'draft', type: 'object' },
+      { name: 'patch', type: 'object' },
+    ],
+    fields: [
+      { name: 'cube', type: 'object' },
+      { name: 'changeClass', type: 'string' },
+      { name: 'mode', type: 'string' },
+      { name: 'action', type: 'string' },
+      { name: 'consumersAffected', type: 'object' },
+    ],
+    run: async (p) => {
+      const action = need(p, 'action') as 'archive' | 'publish_version';
+      let patch: Record<string, unknown> | undefined;
+      if (p.patch && typeof p.patch === 'object' && !Array.isArray(p.patch)) {
+        patch = p.patch as Record<string, unknown>;
+      } else if (p.draft && typeof p.draft === 'object') {
+        patch = cubeDraftPayload(p.draft as CubeDraft);
+      }
+      return cascadeCube(need(p, 'id'), {
+        action,
+        confirmToken: need(p, 'confirmToken'),
+        mode: need(p, 'mode'),
+        patch,
+      });
     },
   },
 ];
@@ -464,7 +503,7 @@ registerDomainComponents([
     domain: DOMAIN,
     label: 'Cube impact panel',
     description:
-      'Composition + consumers inventory and dry-run impact preview (archive/patch/publish). Cascade Confirm is A4.',
+      'Composition + consumers inventory, dry-run preview, and archive cascade Confirm (fail_closed|disable_consumers).',
     inputs: [
       { name: 'cubeId', label: 'Cube id', type: 'string', required: true },
       { name: 'draft', label: 'Working draft (optional for patch/publish preview)', type: 'object' },
