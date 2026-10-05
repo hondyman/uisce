@@ -165,6 +165,7 @@ const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; r
   import('./pages/PageBrowser').then((m) => ({ default: m.StandalonePageRenderer }))
 );
 const FixedIncomeDashboard = React.lazy(() => import('./components/FixedIncomeDashboard'));
+const ComplianceDecisionBlotter = React.lazy(() => import('./components/compliance/ComplianceDecisionBlotter'));
 const AIPortfolioRebalancer = React.lazy(() => import('./components/AIPortfolioRebalancer'));
 const ScenarioAnalysisPro = React.lazy(() => import('./components/ScenarioAnalysisPro'));
 
@@ -362,6 +363,24 @@ function ProtectedApp() {
                 <FixedIncomeDashboard />
               </ProtectedRoute>
             </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="view/compliance-blotter"
+          element={
+            <StandaloneWindowWrapper title="Pre-Trade Compliance Blotter">
+              <ProtectedRoute>
+                <ComplianceDecisionBlotter />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="compliance/blotter"
+          element={
+            <ProtectedRoute>
+              <ComplianceDecisionBlotter />
+            </ProtectedRoute>
           }
         />
         <Route

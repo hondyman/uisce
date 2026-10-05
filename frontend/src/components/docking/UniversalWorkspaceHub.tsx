@@ -19,6 +19,7 @@ const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; r
 const AIPortfolioRebalancer = React.lazy(() => import('../AIPortfolioRebalancer'));
 const ScenarioAnalysisPro = React.lazy(() => import('../ScenarioAnalysisPro'));
 const FixedIncomeDashboard = React.lazy(() => import('../FixedIncomeDashboard'));
+const ComplianceDecisionBlotter = React.lazy(() => import('../compliance/ComplianceDecisionBlotter'));
 
 // Module-level guard to prevent React StrictMode double-restoration on desktop boot
 let hasAutoRestoredOnBoot = false;
@@ -147,6 +148,15 @@ const dockComponents = {
       </div>
     </PanelErrorBoundary>
   ),
+  compliance_blotter: (_props: IDockviewPanelProps) => (
+    <PanelErrorBoundary panelTitle="Pre-Trade Compliance Blotter">
+      <div style={{ height: '100%', width: '100%', overflow: 'auto', background: '#050d1a' }}>
+        <React.Suspense fallback={<div style={{ padding: 20, color: '#94a3b8' }}>Loading Compliance Blotter...</div>}>
+          <ComplianceDecisionBlotter />
+        </React.Suspense>
+      </div>
+    </PanelErrorBoundary>
+  ),
 };
 
 export interface WorkstationAlert {
@@ -159,7 +169,8 @@ export interface WorkstationAlert {
   onDismiss: () => void;
 }
 
-export function getComponentForRoute(route: string): 'orders' | 'rebalancer' | 'scenario' | 'fixed_income' | null {
+export function getComponentForRoute(route: string): 'orders' | 'rebalancer' | 'scenario' | 'fixed_income' | 'compliance_blotter' | null {
+  if (route.includes('compliance') || route.includes('blotter')) return 'compliance_blotter';
   if (route.includes('rebalancer')) return 'rebalancer';
   if (route.includes('scenario')) return 'scenario';
   if (route.includes('fixed_income') || route.includes('fixed-income')) return 'fixed_income';
@@ -573,7 +584,7 @@ export const UniversalWorkspaceHub: React.FC = () => {
   }, [dockApi, consolidatedPanelIds]);
 
   // Add individual panel to workspace
-  const handleAddPanel = (component: 'orders' | 'rebalancer' | 'scenario' | 'fixed_income', title: string) => {
+  const handleAddPanel = (component: 'orders' | 'rebalancer' | 'scenario' | 'fixed_income' | 'compliance_blotter', title: string) => {
     if (!dockApi) return;
     const id = `panel_${component}_${Date.now()}`;
     dockApi.addPanel({
@@ -856,6 +867,18 @@ export const UniversalWorkspaceHub: React.FC = () => {
               title="Add Fixed Income"
             >
               + Fixed Income
+            </button>
+            <button
+              onClick={() => handleAddPanel('compliance_blotter', 'Pre-Trade Compliance Blotter')}
+              style={{
+                ...btnStyle,
+                color: '#818cf8',
+                borderColor: '#4f46e540',
+                background: '#4f46e520',
+              }}
+              title="Add Pre-Trade Compliance Blotter"
+            >
+              + Compliance Blotter
             </button>
           </div>
 
