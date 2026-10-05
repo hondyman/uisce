@@ -32,6 +32,7 @@ import (
 //	SAGA_TEST_ALPHA_APP_DSN    the ordinary role the code runs as (no superuser, no BYPASSRLS),
 //	                           a member of uisce_gold_copy_sync
 //	SAGA_TEST_PG_HOST/PORT/USER  a superuser on the cluster that holds the tenant databases
+//	SAGA_TEST_PG_PASSWORD        its password (required)
 //
 // The cluster must be a DEDICATED, hardened test cluster: provisioning now proves a tenant's role
 // can connect to no other database, so every other database on the cluster, including postgres and
@@ -108,6 +109,10 @@ func newSagaRigOpts(t *testing.T, shared *sagaRig, createDB bool) *sagaRig {
 	if adminDSN == "" || appDSN == "" || host == "" || user == "" || port == 0 {
 		t.Skip("SAGA_TEST_* not set")
 	}
+	// No default: a rig that runs with whatever password it likes diverges from CI the day it is run against trust auth.
+	// scripts/ci/realdb-local.sh is the supported way to get a rig, and it sets this.
+	password := os.Getenv("SAGA_TEST_PG_PASSWORD")
+	require.NotEmpty(t, password, "SAGA_TEST_PG_PASSWORD is required; use scripts/ci/realdb-local.sh")
 	adm, err := sql.Open("pgx", adminDSN)
 	require.NoError(t, err)
 	t.Cleanup(func() { adm.Close() })
@@ -145,7 +150,7 @@ func newSagaRigOpts(t *testing.T, shared *sagaRig, createDB bool) *sagaRig {
 
 	r := &sagaRig{
 		app: app, admin: adm, sec: secrets.NewMemoryProvider(),
-		cluster: activities.TenantDatabaseAdmin{Host: host, Port: port, User: user, Password: "x"},
+		cluster: activities.TenantDatabaseAdmin{Host: host, Port: port, User: user, Password: password},
 		tenant:  uuid.NewString(), instance: uuid.NewString(), dsOrm: uuid.NewString(), dsOther: uuid.NewString(),
 		database: "tdb_saga_" + strings.ReplaceAll(uuid.NewString()[:8], "-", ""), gold: "gold_copy_db",
 	}
