@@ -398,7 +398,7 @@ func (r dbFederationBindingResolver) ResolveDrivingTable(ctx context.Context, te
 			LIMIT 1
 		`, tenantID, boID, hint)
 		if err == nil && strings.TrimSpace(table) != "" {
-			return table, nil
+			return QualifyCubeSourceTable(table), nil
 		}
 	}
 
@@ -424,7 +424,7 @@ func (r dbFederationBindingResolver) ResolveDrivingTable(ctx context.Context, te
 	if strings.TrimSpace(table) == "" {
 		return "", fmt.Errorf("%w: BO %q has no driver_table_name", ErrCubeFederationCompile, boID)
 	}
-	return table, nil
+	return QualifyCubeSourceTable(table), nil
 }
 
 func (r dbFederationBindingResolver) ResolveTermColumn(ctx context.Context, tenantID, boID, bindingHint, termID string) (string, error) {

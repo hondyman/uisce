@@ -130,6 +130,9 @@ func TestGenerateFederatedCubeMaterializationDDL_PositionAccount(t *testing.T) {
 	assert.Contains(t, got.DDL, "pos.account_number AS account_number")
 	assert.Contains(t, got.DDL, "pos.as_of_date AS as_of_date")
 	assert.Contains(t, got.DDL, "GROUP BY pos.account_number, pos.as_of_date")
+	assert.Contains(t, got.DDL, "REFRESH ASYNC EVERY(INTERVAL 1 HOUR)")
 	assert.Contains(t, strings.ToLower(got.DDL), "units_sold")
+	assert.Contains(t, got.DDL, "pos.") // metric t0.* remapped onto driving alias
+	assert.NotContains(t, got.DDL, "t0.")
 	assert.NotContains(t, got.DDL, "CUBE-2.2")
 }

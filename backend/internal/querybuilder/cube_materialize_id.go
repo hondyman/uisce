@@ -16,8 +16,8 @@ const CubeTaskQueue = "uisce-cubes"
 const CubeMaterializeWorkflowName = "CubeMaterializeWorkflow"
 
 // CubeMaterializeWorkflowID builds the single-flight workflow ID for one grain
-// of one cube contract version. Temporal REJECT_DUPLICATE refuses a second run
-// while this ID is open (CUBE-1.2 review fix #4).
+// of one cube contract version. Concurrent starts while this ID is open are
+// refused via WorkflowExecutionErrorWhenAlreadyStarted (CUBE-1.2 review fix #4).
 func CubeMaterializeWorkflowID(tenantID, cubeID string, contractVersion int, grainHash string) string {
 	return fmt.Sprintf("cube-materialize-%s-%s-v%d-%s",
 		strings.TrimSpace(tenantID),
@@ -27,13 +27,16 @@ func CubeMaterializeWorkflowID(tenantID, cubeID string, contractVersion int, gra
 	)
 }
 
-// CubeMaterializeStartOptions returns StartWorkflowOptions with REJECT_DUPLICATE
-// so concurrent Deploy/Refresh for the same grain is refused rather than queued.
+// CubeMaterializeStartOptions returns StartWorkflowOptions that single-flight
+// while a run is open, and allow a new run after the prior execution closes
+// (failed ApplyHot retry, Deploy after fail, Refresh after Active).
+// ALLOW_DUPLICATE + WorkflowExecutionErrorWhenAlreadyStarted: true → 409 when
+// still running; REJECT_DUPLICATE would permanently block the same grain ID.
 func CubeMaterializeStartOptions(tenantID, cubeID string, contractVersion int, grainHash string) client.StartWorkflowOptions {
 	return client.StartWorkflowOptions{
 		ID:                                       CubeMaterializeWorkflowID(tenantID, cubeID, contractVersion, grainHash),
 		TaskQueue:                                CubeTaskQueue,
-		WorkflowIDReusePolicy:                    enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowIDReusePolicy:                    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowExecutionErrorWhenAlreadyStarted: true,
 	}
 }

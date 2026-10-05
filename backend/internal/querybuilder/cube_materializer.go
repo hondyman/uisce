@@ -333,6 +333,16 @@ func (m *CubeMaterializer) ApplyHot(ctx context.Context, plan *CubeMaterializePl
 		return nil, fmt.Errorf("apply cube materialization DDL: %w", err)
 	}
 
+	// Federated ASYNC MVs over JDBC start empty until refreshed; force a sync
+	// refresh so dual-commit cold CTAS and row counts see populated data.
+	if strings.Contains(strings.ToUpper(ddl), "REFRESH ASYNC") {
+		if _, err := m.starrocksDB.ExecContext(ctx,
+			fmt.Sprintf("REFRESH MATERIALIZED VIEW %s WITH SYNC MODE", qualified),
+		); err != nil {
+			return nil, fmt.Errorf("refresh cube materialization %s: %w", qualified, err)
+		}
+	}
+
 	var rowCount int64
 	countSQL := fmt.Sprintf(
 		"SELECT IFNULL(table_rows, 0) FROM information_schema.tables WHERE table_schema = %s AND table_name = %s",
@@ -519,7 +529,7 @@ func (m *CubeMaterializer) resolveSourceTable(ctx context.Context, tenantID, boI
 	if strings.TrimSpace(table) == "" {
 		return "", fmt.Errorf("BO %q has no driver_table_name", boID)
 	}
-	return table, nil
+	return QualifyCubeSourceTable(table), nil
 }
 
 func grainCovered(grains [][]string, want []string) bool {

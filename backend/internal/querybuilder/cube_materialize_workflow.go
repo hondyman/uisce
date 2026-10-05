@@ -34,7 +34,7 @@ type CubeMaterializeWorkflowResult struct {
 // handlers → temporal/workflows → querybuilder would form an import cycle.
 //
 // Workflow ID: cube-materialize-{tenant}-{cube}-v{ver}-{grain_hash}
-// with REJECT_DUPLICATE (see CubeMaterializeStartOptions).
+// with single-flight while open (see CubeMaterializeStartOptions).
 //
 // Dual-commit (CUBE-1.3): Active + DualCommitWatermark only after both tiers OK.
 // Cold failure compensates by dropping the hot MV and marking Failed.

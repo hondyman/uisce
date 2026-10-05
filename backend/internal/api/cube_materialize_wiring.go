@@ -59,7 +59,7 @@ func (s *Server) registerCubeMaterializeWorker(sqlxDB *sqlx.DB, tc temporalclien
 	log.Infof("cubes: worker started on task queue %s", querybuilder.CubeTaskQueue)
 }
 
-// StartCubeMaterialize starts CubeMaterializeWorkflow with REJECT_DUPLICATE.
+// StartCubeMaterialize starts CubeMaterializeWorkflow (single-flight while open).
 // Caller must supply a grain that exists on the cube; contract_version and
 // grain_hash are taken from the validated plan after a local ValidateAndPlan
 // so the workflow ID matches the in-flight attempt.

@@ -21,11 +21,11 @@ func TestCubeMaterializeWorkflowID_Stable(t *testing.T) {
 	)
 }
 
-func TestCubeMaterializeStartOptions_RejectDuplicate(t *testing.T) {
+func TestCubeMaterializeStartOptions_AllowDuplicateSingleFlight(t *testing.T) {
 	opts := CubeMaterializeStartOptions("t1", "c1", 2, "deadbeef")
 	assert.Equal(t, CubeTaskQueue, opts.TaskQueue)
 	assert.Equal(t, "cube-materialize-t1-c1-v2-deadbeef", opts.ID)
-	assert.Equal(t, enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, opts.WorkflowIDReusePolicy)
+	assert.Equal(t, enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, opts.WorkflowIDReusePolicy)
 	assert.True(t, opts.WorkflowExecutionErrorWhenAlreadyStarted)
 }
 

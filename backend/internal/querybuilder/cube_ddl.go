@@ -188,6 +188,16 @@ func (g *CubeDDLGenerator) generateCubeMaterializationDDL(
 		}
 	}
 
+	// Federated FROM (JOIN …) cannot use StarRocks SYNC MVs (single-table only).
+	// ASYNC + EVERY interval is required for JDBC/external multi-table grains.
+	federated := dimExprs != nil && strings.Contains(strings.ToUpper(sourceTable), " JOIN ")
+	drivingAlias := "t0"
+	if federated {
+		if a := firstSQLTableAlias(sourceTable); a != "" {
+			drivingAlias = a
+		}
+	}
+
 	// One measure column per governed metric, named from the metric ID so the
 	// router can map a requested measure back to it unambiguously.
 	measureExprs := make([]string, 0, len(keyCols)+len(cube.MetricIDs))
@@ -232,18 +242,33 @@ func (g *CubeDDLGenerator) generateCubeMaterializationDDL(
 			return nil, fmt.Errorf("metric id %q has no usable column name", id)
 		}
 		measureColumns[strings.ToLower(strings.TrimSpace(id))] = col
-		measureExprs = append(measureExprs, fmt.Sprintf("%s AS %s", compiled.SQLExpr, col))
+		sqlExpr := compiled.SQLExpr
+		if federated && drivingAlias != "t0" {
+			// MetricCompiler hardcodes t0.<term>; remap onto the federation driving alias.
+			sqlExpr = rewriteMetricTableAlias(sqlExpr, "t0", drivingAlias)
+		}
+		measureExprs = append(measureExprs, fmt.Sprintf("%s AS %s", sqlExpr, col))
 	}
 
 	name := CubeMaterializationName(tenantID, isGoldCopy, cube, keyCols)
+	// StarRocks SYNC MVs reject PARTITION BY. Only emit a partition clause when
+	// the grain carries a recognizable time dimension (ASYNC-capable grains).
 	partitionCol := timeColumnOf(keyCols)
-	if dimExprs != nil {
+	if partitionCol != "" && dimExprs != nil {
 		if q, ok := dimExprs[partitionCol]; ok && strings.TrimSpace(q) != "" {
 			partitionCol = strings.TrimSpace(q)
 		}
 	}
-	ddl := fmt.Sprintf(`CREATE MATERIALIZED VIEW %s
-PARTITION BY date_trunc('day', %s)
+	partitionClause := ""
+	if partitionCol != "" {
+		partitionClause = fmt.Sprintf("\nPARTITION BY date_trunc('day', %s)", partitionCol)
+	}
+	refreshClause := ""
+	if federated {
+		// External/JDBC multi-table MVs require an explicit ASYNC refresh interval.
+		refreshClause = "\nREFRESH ASYNC EVERY(INTERVAL 1 HOUR)"
+	}
+	ddl := fmt.Sprintf(`CREATE MATERIALIZED VIEW %s%s%s
 PROPERTIES (
   "replication_num" = "1"
 )
@@ -252,7 +277,8 @@ AS SELECT
 FROM %s
 GROUP BY %s;`,
 		name,
-		partitionCol,
+		refreshClause,
+		partitionClause,
 		strings.Join(measureExprs, ",\n  "),
 		strings.TrimSpace(sourceTable),
 		strings.Join(groupByDims, ", "),
@@ -304,9 +330,9 @@ func CubeMaterializationName(tenantID string, isGoldCopy bool, cube CubeDefiniti
 	)
 }
 
-// timeColumnOf picks the column to partition by, preferring a recognizable
-// time dimension. Returns the first key column as a fallback so the DDL is
-// always valid.
+// timeColumnOf picks a recognizable time dimension for PARTITION BY.
+// Returns empty when the grain has no time hint — StarRocks SYNC MVs cannot
+// use PARTITION BY, so non-time grains omit the clause entirely.
 func timeColumnOf(keyCols []string) string {
 	timeHints := []string{"date", "day", "month", "year", "week", "ts", "time", "period"}
 	for _, col := range keyCols {
@@ -317,5 +343,35 @@ func timeColumnOf(keyCols []string) string {
 			}
 		}
 	}
-	return keyCols[0]
+	return ""
+}
+
+// firstSQLTableAlias returns the first `AS <alias>` from a FROM/JOIN clause.
+func firstSQLTableAlias(fromSQL string) string {
+	upper := strings.ToUpper(fromSQL)
+	idx := strings.Index(upper, " AS ")
+	if idx < 0 {
+		return ""
+	}
+	rest := strings.TrimSpace(fromSQL[idx+4:])
+	end := len(rest)
+	for i, r := range rest {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			continue
+		}
+		end = i
+		break
+	}
+	return sanitizeIdentifier(rest[:end])
+}
+
+// rewriteMetricTableAlias remaps MetricCompiler's hardcoded t0.<col> onto a
+// federation driving alias (e.g. pos.<col>) so measures resolve in JOIN FROM.
+func rewriteMetricTableAlias(expr, fromAlias, toAlias string) string {
+	fromAlias = strings.TrimSpace(fromAlias)
+	toAlias = strings.TrimSpace(toAlias)
+	if fromAlias == "" || toAlias == "" || fromAlias == toAlias {
+		return expr
+	}
+	return strings.ReplaceAll(expr, fromAlias+".", toAlias+".")
 }
