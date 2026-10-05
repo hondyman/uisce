@@ -34,4 +34,6 @@ SAGA_TEST_PG_PASSWORD=${PGPASSWORD}
 SCANNER_TEST_ADMIN_DSN=${base}/postgres?sslmode=disable
 TENANTSCHEMA_TEST_ADMIN_DSN=${base}/postgres?sslmode=disable
 TENANT_MIGRATE_TEST_DSN=${base}/tdb_migrate?sslmode=disable
+# CandidateDDL creates/drops its own database against the maintenance DB.
+TENANT_DDL_TEST_ADMIN_DSN=${base}/postgres?sslmode=disable
 ENV
