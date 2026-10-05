@@ -81,6 +81,106 @@ export type CubeListResponse = {
   nextCursor?: string;
 };
 
+/** A1 GET /api/cubes/{id}/impact */
+export type CubeImpactMetric = { id: string; name?: string; status?: string };
+export type CubeImpactPhysicalGrain = {
+  nodeName?: string;
+  grainHash?: string;
+  grain?: string[];
+  lifecycleStatus?: string;
+  icebergTable?: string;
+  dualCommitWatermark?: string | null;
+  attemptId?: string;
+  contractVersion?: number;
+};
+export type CubeImpactComposition = {
+  cubeId: string;
+  name: string;
+  status: string;
+  contractVersion: number;
+  contentHash: string;
+  isCore: boolean;
+  boId: string;
+  dimensions: CubeDimension[];
+  timeDimension?: CubeTimeDimension | null;
+  metrics: CubeImpactMetric[];
+  grains: string[][];
+  federation: CubeFederation;
+  materialization: CubeMaterialization;
+  physical?: { grains: CubeImpactPhysicalGrain[] };
+};
+export type CubeImpactConsumer = {
+  kind: string;
+  id: string;
+  label: string;
+  href?: string;
+  severity: 'info' | 'warning' | 'blocking' | string;
+  blocking: boolean;
+  detail?: string;
+  enabled?: boolean;
+  pin?: { contractVersion?: number | string };
+};
+export type CubeImpactSummary = {
+  consumerCount: number;
+  blockingCount: number;
+  warningCount: number;
+  physicalGrainCount: number;
+};
+export type CubeImpactReport = {
+  cubeId: string;
+  composition: CubeImpactComposition;
+  consumers: CubeImpactConsumer[];
+  summary: CubeImpactSummary;
+};
+
+/** A2 POST /api/cubes/{id}/impact/preview */
+export type CubeImpactPreviewAction = 'archive' | 'patch' | 'publish_version';
+export type CubeImpactPreviewReport = CubeImpactReport & {
+  changeClass: 'archive' | 'non_breaking_patch' | 'breaking_contract' | string;
+  breakReasons: string[];
+  blockingCount: number;
+  confirmToken: string;
+  allowedModes: string[];
+  recommendedMode: string;
+  nextVersion?: number;
+  patchHash?: string;
+};
+
+/** A4/A5 POST /api/cubes/{id}/cascade (archive + publish_version). */
+export type CubeCascadeMode =
+  | 'fail_closed'
+  | 'disable_consumers'
+  | 'rewire_latest'
+  | 'bump_and_refresh'
+  | string;
+export type CubeCascadeAffected = {
+  kind: string;
+  id: string;
+  label?: string;
+  action: string;
+  detail?: string;
+};
+export type CubeCascadeMaterializeStart = {
+  grain: string[];
+  grainHash?: string;
+  workflowId?: string;
+  attemptId?: string;
+  alreadyRunning?: boolean;
+  error?: string;
+  skipped?: boolean;
+};
+export type CubeCascadeReceipt = {
+  cube: CubeDefinition;
+  changeClass: string;
+  mode: string;
+  action: string;
+  consumersAffected: CubeCascadeAffected[];
+  impact?: CubeImpactPreviewReport;
+  breakReasons?: string[];
+  previousVersion?: number;
+  materializeStarts?: CubeCascadeMaterializeStart[];
+};
+
 export type FederationJoinOrphanStats = {
   leftAlias: string;
   rightAlias: string;

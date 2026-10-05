@@ -40,14 +40,16 @@ describe('Cube designer seed matches its blueprint', () => {
     expect(bp.slug).toBe('cube-designer');
   });
 
-  it('wires editorStart, FederationEditor, create→navigate, and designer tabs', () => {
+  it('wires editorStart, FederationEditor, ImpactPanel, create→navigate, and designer tabs', () => {
     expect(sql).toContain('cubes.editorStart');
     expect(sql).toContain('cubes.FederationEditor');
+    expect(sql).toContain('cubes.ImpactPanel');
     expect(sql).toContain('cubes.create');
     expect(sql).toContain('/build/cubes/{{result.id}}');
     expect(sql).toContain('cubes.patchDraft');
     expect(sql).toContain('"overview"');
     expect(sql).toContain('"federation"');
     expect(sql).toContain('"materialization"');
+    expect(sql).toContain('"impact"');
   });
 });

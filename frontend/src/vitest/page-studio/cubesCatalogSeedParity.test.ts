@@ -40,11 +40,14 @@ describe('Cubes catalog seed matches its blueprint', () => {
     expect(bp.slug).toBe('cubes-catalog');
   });
 
-  it('wires cubes.list and navigate to the coded designer paths', () => {
+  it('wires cubes.list, designer paths, and Impact drawer', () => {
     expect(sql).toContain('cubes.list');
     expect(sql).toContain('/build/cubes/new');
     expect(sql).toContain('/build/cubes/{{row.id}}');
     expect(sql).toContain('cubes.deploy');
     expect(sql).toContain('cubes.refresh');
+    expect(sql).toContain('cubes.ImpactPanel');
+    expect(sql).toContain('impactCubeId');
+    expect(sql).toContain('"type": "Drawer"');
   });
 });

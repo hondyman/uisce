@@ -1,9 +1,10 @@
 import type { ComponentDefinition, CorePageDefinition, PageLayout } from '../../../../types/pageStudio';
-import type { Action, ColumnDef } from '../appModel';
+import type { Action, ColumnDef, ConditionNode } from '../appModel';
 
 /**
  * Cubes catalog (slug cubes-catalog): list/filter by scope, open designer,
- * deploy/refresh via cubes.* operations. Served at /build/cubes via STUDIO_ROUTES (PR5).
+ * deploy/refresh via cubes.* operations, Impact drawer (A3). Served at
+ * /build/cubes via STUDIO_ROUTES (PR5).
  */
 
 const op = (
@@ -12,13 +13,16 @@ const op = (
   onSuccess: Action[] = [],
   more: Record<string, unknown> = {},
 ): Action => ({ kind: 'runOperation', operation, params, onSuccess, ...more } as Action);
+const set = (name: string, value: unknown = null): Action => ({ kind: 'setVariable', name, value });
+const cond = (field: string, operator: string, value?: unknown): ConditionNode =>
+  ({ type: 'condition', field, operator, value });
 const col = (id: string, header: string, cell: ColumnDef['cell'] | ColumnDef['stack'], more: Partial<ColumnDef> = {}): ColumnDef =>
   Array.isArray(cell) ? { id, header, stack: cell, ...more } : { id, header, cell: cell as ColumnDef['cell'], ...more };
 
 const fit = { flex: '0 0 auto' };
 
 type NodeSpec = {
-  type: 'Row' | 'Column';
+  type: 'Row' | 'Column' | 'Drawer';
   children: string[];
   style?: Record<string, string>;
   props?: Record<string, unknown>;
@@ -41,7 +45,7 @@ function cubesCatalogPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
       icon: 'cube',
       title: 'Cubes',
       subtitle:
-        'Published aggregation contracts — dimensions, governed metrics, grains, and materialization plan.',
+        'Published aggregation contracts — dimensions, governed metrics, grains, materialization, and impact.',
     },
     { style: { flex: '1 1 320px' } },
   );
@@ -120,6 +124,14 @@ function cubesCatalogPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
           buttons: [
             { label: 'Open', onClick: [{ kind: 'navigate', to: '/build/cubes/{{row.id}}' }] },
             {
+              label: 'Impact',
+              icon: 'insights',
+              onClick: [
+                set('impactCubeId', '{{row.id}}'),
+                set('impactCubeName', '{{row.name}}'),
+              ],
+            },
+            {
               label: 'Deploy',
               icon: 'play',
               onClick: [
@@ -164,17 +176,46 @@ function cubesCatalogPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
     ] satisfies ColumnDef[],
   });
 
+  w('impact_dc', 'DomainComponent', {
+    component: 'cubes.ImpactPanel',
+    inputs: {
+      cubeId: '{{vars.impactCubeId}}',
+      title: 'Impact — {{vars.impactCubeName}}',
+    },
+  });
+
+  const closeImpact = [set('impactCubeId'), set('impactCubeName')];
+
   const main = layout('page_root', {
-    page_root: { type: 'Column', children: ['top', 'grid'], style: { gap: '16px' } },
-    top: { type: 'Row', children: ['hdr', 'scope', 'new_btn'], style: { alignItems: 'center', gap: '12px', flexWrap: 'wrap' } },
+    page_root: {
+      type: 'Column',
+      children: ['top', 'grid', 'impact_drawer'],
+      style: { gap: '16px' },
+    },
+    top: {
+      type: 'Row',
+      children: ['hdr', 'scope', 'new_btn'],
+      style: { alignItems: 'center', gap: '12px', flexWrap: 'wrap' },
+    },
+    impact_drawer: {
+      type: 'Drawer',
+      children: ['impact_dc'],
+      props: {
+        title: 'Cube impact',
+        subtitle: '{{vars.impactCubeName}}',
+        width: 720,
+        openWhen: cond('vars.impactCubeId', 'is_not_empty'),
+        onClose: closeImpact,
+      },
+    },
   });
 
   return {
     name: 'Cubes',
     slug: 'cubes-catalog',
     description:
-      'Aggregation contracts: dimensions, governed metrics, grains, and materialization. Built in Page Studio.',
-    version: 1,
+      'Aggregation contracts: dimensions, governed metrics, grains, materialization, and impact. Built in Page Studio.',
+    version: 2,
     isCore: true,
     status: 'published',
     layout: main,
@@ -186,7 +227,11 @@ function cubesCatalogPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
     app: {
       chrome: 'none' as const,
       surface: { maxWidth: 1200, padding: 3 },
-      variables: [{ name: 'scope', default: 'all', url: true, description: 'Cube list scope filter' }],
+      variables: [
+        { name: 'scope', default: 'all', url: true, description: 'Cube list scope filter' },
+        { name: 'impactCubeId', description: 'Cube id open in the Impact drawer' },
+        { name: 'impactCubeName', description: 'Cube name shown in the Impact drawer title' },
+      ],
       queries: [
         {
           id: 'cubes',
