@@ -111,7 +111,12 @@ B's books. Partitioning does not give that; the predicate does. Requirements:
   **Retention is per tenant (decided 2026-10-05), which does not change this choice in a tenant database.** A 5-year and a
   15-year tenant never share a table here: each has its own database, so the drop job for a database takes its cutoff from that
   one tenant's policy and (a) is enough. (b) is the answer only where tenants share a database (any shared-database tier); it is
-  not needed for mixed windows across tenants. Iceberg already drops per `(tenant_id, month)` once that tenant's window closes.
+  not needed for mixed windows across tenants.
+  **Guard the drop job's target.** Before it detaches or drops anything, the job asserts the database's tenant identity (the
+  registry value for the datasource it was handed) against the database it is actually connected to, and refuses on any mismatch.
+  A per-tenant `CHECK (tenant_id = ...)` stops a misrouted write but not a `DROP`; age-based detach on the wrong database is the
+  one way a misrouted job destroys another tenant's books-and-records. It is the drop-side twin of the read-path predicate.
+  Offboarding a tenant is dropping its database, so no detach-by-tenant lever is needed in a tenant database. Iceberg already drops per `(tenant_id, month)` once that tenant's window closes.
 - **Iceberg:** `PARTITIONED BY (tenant_id, month(event_time))`. Here it prunes, and it gives the verifier and
   the drop job clean boundaries.
 - **Every read path carries the predicate structurally, not by review discipline:** a view per store or one
