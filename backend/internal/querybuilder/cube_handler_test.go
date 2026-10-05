@@ -43,6 +43,7 @@ func setupCubeHandlerEnv(t *testing.T) (*CubeHandler, *chi.Mux, sqlmock.Sqlmock,
 	r.Post("/api/cubes", h.HandleCreateCube)
 	r.Get("/api/cubes/{id}", h.HandleGetCube)
 	r.Get("/api/cubes/{id}/impact", h.HandleGetCubeImpact)
+	r.Post("/api/cubes/{id}/impact/preview", h.HandlePostCubeImpactPreview)
 	r.Patch("/api/cubes/{id}", h.HandlePatchCube)
 	r.Post("/api/cubes/{id}/validate", h.HandleValidateCube)
 	r.Post("/api/cubes/{id}/versions", h.HandlePublishCubeVersion)

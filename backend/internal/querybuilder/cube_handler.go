@@ -38,6 +38,9 @@ const (
 type CubeHandler struct {
 	db   *sqlx.DB
 	deps handlers.SecurityContextDeps
+	// impactConfirmSecret signs GET/POST impact confirm tokens (A2+). When
+	// empty, falls back to CUBE_IMPACT_CONFIRM_SECRET then JWT_SECRET.
+	impactConfirmSecret []byte
 }
 
 // NewCubeHandler constructs the cubes API handler.

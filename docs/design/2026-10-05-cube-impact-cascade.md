@@ -237,7 +237,7 @@ Implementation: prefer small DomainComponent `cubes.ImpactPanel` + studio op `cu
 |----|--------|------|
 | **A0** | This doc | Approved |
 | **A1** | Inventory service + `GET …/impact` + Go tests | **Done** — unit + alpha smoke (CUBE-2.5) |
-| **A2** | `POST …/impact/preview` + changeClass + confirmToken | Break vs non-break tests |
+| **A2** | `POST …/impact/preview` + changeClass + confirmToken | **Done** — unit + alpha smoke |
 | **A3** | `cubes.ImpactPanel` + catalog/designer wiring (dry-run) | Browser proof |
 | **A4** | `POST …/cascade` archive + `fail_closed` / `disable_consumers` | 409 vs clean archive test |
 | **A5** | Cascade `publish_version` + `rewire_latest` / `bump_and_refresh` | Designer Confirm + rematerialize receipt |
