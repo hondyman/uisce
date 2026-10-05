@@ -20,6 +20,8 @@ import {
   Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import SaveIcon from '@mui/icons-material/Save';
 import SpeedIcon from '@mui/icons-material/Speed';
 import VerifiedIcon from '@mui/icons-material/Verified';
@@ -34,10 +36,13 @@ import {
 import type { SemanticTermView } from '../../../features/query-builder/types/queryDef';
 import {
   createCube,
+  deployCube,
   getCube,
   listCubeMetrics,
   patchCube,
+  refreshCube,
   validateCube,
+  type CubeMaterializeStartResponse,
 } from '../cubeDefinitionApi';
 import type {
   CubeDefinition,
@@ -106,6 +111,8 @@ const CubeDesignerPage: React.FC = () => {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [deploying, setDeploying] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [validation, setValidation] = useState<CubeValidateResponse | null>(null);
@@ -295,6 +302,66 @@ const CubeDesignerPage: React.FC = () => {
     }
   };
 
+  const summarizeStarts = (res: CubeMaterializeStartResponse, verb: string) => {
+    const running = (res.starts || []).filter((s) => s.already_running);
+    const ok = (res.starts || []).filter((s) => s.workflow_id && !s.already_running && !s.error);
+    const failed = (res.starts || []).filter((s) => s.error && !s.already_running);
+    if (running.length && !ok.length) {
+      return {
+        kind: 'running' as const,
+        message: `Already running — ${running.length} grain(s) in flight (${running.map((s) => s.workflow_id || s.grain_hash).join(', ')})`,
+      };
+    }
+    const parts = [`${verb}: started ${ok.length}`];
+    if (running.length) parts.push(`${running.length} already running`);
+    if (failed.length) parts.push(`${failed.length} failed`);
+    return { kind: failed.length && !ok.length ? ('error' as const) : ('ok' as const), message: parts.join(' · ') };
+  };
+
+  const onDeploy = async () => {
+    if (!saved?.id) {
+      setError('Save the cube before Deploy');
+      return;
+    }
+    setDeploying(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const res = await deployCube(saved.id);
+      const summary = summarizeStarts(res, 'Deploy');
+      if (summary.kind === 'running' || summary.kind === 'error') setError(summary.message);
+      else setInfo(summary.message);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/already running|409/i.test(msg)) setError(`Already running — ${msg}`);
+      else setError(msg);
+    } finally {
+      setDeploying(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    if (!saved?.id) {
+      setError('Save the cube before Refresh');
+      return;
+    }
+    setRefreshing(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const res = await refreshCube(saved.id);
+      const summary = summarizeStarts(res, 'Refresh');
+      if (summary.kind === 'running' || summary.kind === 'error') setError(summary.message);
+      else setInfo(summary.message);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/already running|409/i.test(msg)) setError(`Already running — ${msg}`);
+      else setError(msg);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -337,7 +404,7 @@ const CubeDesignerPage: React.FC = () => {
             {draft.boId && <Chip label={draft.boId} size="small" variant="outlined" />}
           </Stack>
         </Box>
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
           <Button
             variant="outlined"
             startIcon={<VerifiedIcon />}
@@ -345,6 +412,22 @@ const CubeDesignerPage: React.FC = () => {
             onClick={() => void onValidate()}
           >
             {validating ? 'Validating…' : 'Validate'}
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<CloudUploadIcon />}
+            disabled={deploying || !saved}
+            onClick={() => void onDeploy()}
+          >
+            {deploying ? 'Deploying…' : 'Deploy'}
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            disabled={refreshing || !saved}
+            onClick={() => void onRefresh()}
+          >
+            {refreshing ? 'Refreshing…' : 'Refresh'}
           </Button>
           <Button
             variant="contained"

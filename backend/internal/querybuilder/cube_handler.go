@@ -255,6 +255,37 @@ func (h *CubeHandler) validateForWrite(ctx context.Context, tenantID string, c *
 	return nil
 }
 
+// GetCubeForTenant loads a cube visible to the tenant (own row or gold core).
+// Used by deploy/refresh and the cube_refresh schedule runner (CUBE-1.5).
+func (h *CubeHandler) GetCubeForTenant(ctx context.Context, tenantID, id string) (*CubeDefinition, error) {
+	return h.getByID(ctx, tenantID, id)
+}
+
+// ListCubesForTenant lists cubes for schedule target pickers (CUBE-1.5).
+func (h *CubeHandler) ListCubesForTenant(ctx context.Context, tenantID, scope, boID string, limit int, cursor string) ([]CubeDefinition, string, error) {
+	if limit <= 0 {
+		limit = defaultCubeLimit
+	}
+	gold := h.goldCopyID(ctx)
+	var cur *cubeCursor
+	if strings.TrimSpace(cursor) != "" {
+		c, err := decodeCubeCursor(cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		cur = &c
+	}
+	items, next, err := h.listCubes(ctx, tenantID, gold, scope, boID, cur, limit)
+	if err != nil {
+		return nil, "", err
+	}
+	nextStr := ""
+	if next != nil {
+		nextStr = encodeCubeCursor(*next)
+	}
+	return items, nextStr, nil
+}
+
 func (h *CubeHandler) getByID(ctx context.Context, tenantID, id string) (*CubeDefinition, error) {
 	var row cubeDefRow
 	err := h.db.GetContext(ctx, &row, `

@@ -75,3 +75,59 @@ export async function publishCubeVersion(
     body: JSON.stringify(body),
   });
 }
+
+export type CubeMaterializeStart = {
+  grain: string[];
+  grain_hash?: string;
+  workflow_id?: string;
+  attempt_id?: string;
+  noop?: boolean;
+  noop_reason?: string;
+  already_running?: boolean;
+  error?: string;
+};
+
+export type CubeMaterializeStartResponse = {
+  cube_id: string;
+  force: boolean;
+  starts: CubeMaterializeStart[];
+};
+
+async function startCubeMaterialize(
+  path: string,
+  body?: { grain?: string[]; force?: boolean },
+): Promise<CubeMaterializeStartResponse> {
+  try {
+    return await apiClient(path, {
+      method: 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    // 409 already_running still returns the starts receipt in the error body.
+    const msg = e instanceof Error ? e.message : String(e);
+    const idx = msg.indexOf('{"cube_id"');
+    if (idx >= 0) {
+      try {
+        const parsed = JSON.parse(msg.slice(idx)) as CubeMaterializeStartResponse;
+        if (parsed && Array.isArray(parsed.starts)) return parsed;
+      } catch {
+        /* fall through */
+      }
+    }
+    throw e;
+  }
+}
+
+export async function deployCube(
+  id: string,
+  body?: { grain?: string[]; force?: boolean },
+): Promise<CubeMaterializeStartResponse> {
+  return startCubeMaterialize(`cubes/${encodeURIComponent(id)}/deploy`, body);
+}
+
+export async function refreshCube(
+  id: string,
+  body?: { grain?: string[]; force?: boolean },
+): Promise<CubeMaterializeStartResponse> {
+  return startCubeMaterialize(`cubes/${encodeURIComponent(id)}/refresh`, body);
+}

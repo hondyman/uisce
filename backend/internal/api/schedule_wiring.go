@@ -74,6 +74,9 @@ func (s *Server) registerScheduleRoutes(r chi.Router, sqlxDB *sqlx.DB, tc tempor
 		siSvc := si.NewService(sqlxDB, si.NewSemanticAdapter(sqlxDB, s.SemanticSvc), logging.GetLogger())
 		runners.Register(newJobDAGRunner(siSvc, tc, si.NewRepository(sqlxDB)))
 	}
+	if s.CubeHandler != nil {
+		runners.Register(&cubeRefreshRunner{cubes: s.CubeHandler, starter: s})
+	}
 	s.ScheduleRunners = runners
 
 	store := &schedule.Store{DB: sqlxDB}
