@@ -1,0 +1,11 @@
+# The real-database gate: what must run, enumerated from the source by `go test -list`, not counted by hand.
+# Format:  package <package dir under backend/> <go test -run pattern>
+#          exclude <TestName>      (a test that cannot run on the throwaway cluster; each needs a reason)
+# The invariant checked by realdb-check.py: every test `go test -list` finds for the pattern, minus the exclusions,
+# must have run and passed. A skip, a failure, a deleted test or a renamed one all fail the gate.
+package internal/temporal/activities ^(TestTenantDatabase_|TestIsolation_|TestStructure_|TestStructureBind_|TestRoleGroup_|TestConcurrentProvision_|TestConfigureFromEnv_)
+package internal/scanner .
+package internal/tenantschema .
+package internal/migrations .
+# needs a real template source database (TENANT_STRUCTURE_TIMING_SOURCE_DSN), which CI does not have
+exclude TestStructure_OnboardingTimingOnARealTemplate
