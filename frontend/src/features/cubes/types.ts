@@ -44,6 +44,15 @@ export type CubeFederation = {
   orphanRateMaxPercent?: number;
 };
 
+/** Validate/deploy orphan-gate fixture (not persisted on cube_definition). */
+export type FederationKeySample = {
+  leftAlias: string;
+  rightAlias: string;
+  leftKeys: number;
+  rightKeys: number;
+  matched: number;
+};
+
 export type CubeDefinition = {
   id: string;
   tenantId: string;
@@ -138,4 +147,44 @@ export type CubeDraft = {
   metricIds: string[];
   grains: string[][];
   materialization: CubeMaterialization;
+  federation: CubeFederation;
+  /** Session-only fixtures sent with validate when federation is declared. */
+  federationKeySamples: FederationKeySample[];
 };
+
+/** True when the draft declares at least one federation source or join. */
+export function federationIsActive(f?: CubeFederation | null): boolean {
+  if (!f) return false;
+  return (f.sources?.length ?? 0) > 0 || (f.joins?.length ?? 0) > 0;
+}
+
+/** Normalize federation for create/patch/validate (empty → {}). */
+export function normalizeFederation(f?: CubeFederation | null): CubeFederation {
+  if (!f) return {};
+  const sources = (f.sources || [])
+    .map((s) => ({
+      boId: (s.boId || '').trim(),
+      alias: (s.alias || '').trim().toLowerCase(),
+      bindingHint: (s.bindingHint || '').trim() || undefined,
+    }))
+    .filter((s) => s.boId && s.alias);
+  const joins = (f.joins || [])
+    .map((j) => ({
+      leftAlias: (j.leftAlias || '').trim().toLowerCase(),
+      rightAlias: (j.rightAlias || '').trim().toLowerCase(),
+      keyKind: (j.keyKind || 'common').trim().toLowerCase(),
+      leftTermIds: (j.leftTermIds || []).map((t) => t.trim()).filter(Boolean),
+      rightTermIds: (j.rightTermIds || []).map((t) => t.trim()).filter(Boolean),
+      transformTermId:
+        (j.keyKind || '').toLowerCase() === 'transform'
+          ? (j.transformTermId || '').trim() || undefined
+          : undefined,
+    }))
+    .filter((j) => j.leftAlias && j.rightAlias && j.leftTermIds.length > 0 && j.rightTermIds.length > 0);
+  if (sources.length === 0 && joins.length === 0) return {};
+  const out: CubeFederation = { sources, joins };
+  if (f.orphanRateMaxPercent != null && f.orphanRateMaxPercent > 0) {
+    out.orphanRateMaxPercent = f.orphanRateMaxPercent;
+  }
+  return out;
+}

@@ -50,9 +50,19 @@ import type {
   CubeMaterialization,
   CubeMetricOption,
   CubeValidateResponse,
+  FederationKeySample,
 } from '../types';
+import { federationIsActive, normalizeFederation } from '../types';
+import FederationEditor from '../FederationEditor';
 
-type TabKey = 'overview' | 'dimensions' | 'metrics' | 'grains' | 'materialization' | 'versions';
+type TabKey =
+  | 'overview'
+  | 'dimensions'
+  | 'metrics'
+  | 'grains'
+  | 'federation'
+  | 'materialization'
+  | 'versions';
 
 const DEFAULT_MATERIALIZATION: CubeMaterialization = {
   strategy: 'starrocks_mv',
@@ -71,6 +81,8 @@ function emptyDraft(): CubeDraft {
     metricIds: [],
     grains: [],
     materialization: { ...DEFAULT_MATERIALIZATION },
+    federation: {},
+    federationKeySamples: [],
   };
 }
 
@@ -83,11 +95,14 @@ function draftFromCube(c: CubeDefinition): CubeDraft {
     metricIds: c.metricIds || [],
     grains: c.grains || [],
     materialization: { ...DEFAULT_MATERIALIZATION, ...(c.materialization || {}) },
+    federation: c.federation || {},
+    federationKeySamples: [],
   };
 }
 
-function draftPayload(d: CubeDraft): Record<string, unknown> {
-  return {
+function draftPayload(d: CubeDraft, opts?: { includeKeySamples?: boolean }): Record<string, unknown> {
+  const federation = normalizeFederation(d.federation);
+  const body: Record<string, unknown> = {
     name: d.name.trim(),
     description: d.description,
     boId: d.boId.trim(),
@@ -95,8 +110,18 @@ function draftPayload(d: CubeDraft): Record<string, unknown> {
     metricIds: d.metricIds,
     grains: d.grains,
     materialization: d.materialization,
-    federation: {},
+    federation,
   };
+  if (opts?.includeKeySamples && federationIsActive(federation) && d.federationKeySamples?.length) {
+    body.federationKeySamples = d.federationKeySamples.map((s: FederationKeySample) => ({
+      leftAlias: s.leftAlias,
+      rightAlias: s.rightAlias,
+      leftKeys: s.leftKeys,
+      rightKeys: s.rightKeys,
+      matched: s.matched,
+    }));
+  }
+  return body;
 }
 
 const CubeDesignerPage: React.FC = () => {
@@ -291,9 +316,9 @@ const CubeDesignerPage: React.FC = () => {
     setError(null);
     setInfo(null);
     try {
-      const res = await validateCube(saved.id, draftPayload(draft));
+      const res = await validateCube(saved.id, draftPayload(draft, { includeKeySamples: true }));
       setValidation(res);
-      if (res.ok) setInfo('Validate OK — structural and metric references pass');
+      if (res.ok) setInfo('Validate OK — structural, metrics, and federation gates pass');
       else setError('Validate failed — see details below');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -402,6 +427,14 @@ const CubeDesignerPage: React.FC = () => {
               />
             )}
             {draft.boId && <Chip label={draft.boId} size="small" variant="outlined" />}
+            {federationIsActive(draft.federation) && (
+              <Chip
+                label={`federated · ${draft.federation.sources?.length || 0} sources`}
+                size="small"
+                color="secondary"
+                variant="outlined"
+              />
+            )}
           </Stack>
         </Box>
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -488,6 +521,14 @@ const CubeDesignerPage: React.FC = () => {
           <Tab label="Dimensions" value="dimensions" />
           <Tab label="Metrics" value="metrics" />
           <Tab label="Grains" value="grains" />
+          <Tab
+            label={
+              federationIsActive(draft.federation)
+                ? `Federation (${draft.federation.sources?.length || 0})`
+                : 'Federation'
+            }
+            value="federation"
+          />
           <Tab label="Materialization" value="materialization" />
           <Tab label="Versions" value="versions" />
         </Tabs>
@@ -667,6 +708,19 @@ const CubeDesignerPage: React.FC = () => {
           </Stack>
         )}
 
+        {tab === 'federation' && (
+          <FederationEditor
+            primaryBoId={draft.boId}
+            bos={bos}
+            federation={draft.federation || {}}
+            keySamples={draft.federationKeySamples || []}
+            onChange={(federation) => setDraft((d) => ({ ...d, federation }))}
+            onKeySamplesChange={(federationKeySamples) =>
+              setDraft((d) => ({ ...d, federationKeySamples }))
+            }
+          />
+        )}
+
         {tab === 'materialization' && (
           <Stack spacing={2} maxWidth={480}>
             <FormControl fullWidth>
@@ -707,11 +761,6 @@ const CubeDesignerPage: React.FC = () => {
               Hot engine: {draft.materialization.hotEngine || 'starrocks'} · Cold engine:{' '}
               {draft.materialization.coldEngine || 'iceberg'}
             </Typography>
-            <Alert severity="info">
-              Federation authoring UI is CUBE-2.3. CUBE-2.1 validate already gates join shape,
-              transform_term projections, and orphan rate (default fail &gt; 1.0%, overridable via
-              federation.orphanRateMaxPercent + federationKeySamples on validate).
-            </Alert>
           </Stack>
         )}
 
