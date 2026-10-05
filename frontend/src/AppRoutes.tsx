@@ -39,7 +39,7 @@ import { AIBusinessTermSuggestionsPage } from "./pages/catalog/AIBusinessTermSug
 import { BusinessTermDetailPage } from "./pages/catalog/BusinessTermDetailPage";
 import EntityPickerPage from "./features/custom-attributes/pages/EntityPickerPage";
 import WorkbenchPage from "./features/custom-attributes/pages/WorkbenchPage";
-import { CubesCatalogPage, CubeDesignerPage } from "./features/cubes";
+import { CubeDesignerPage } from "./features/cubes";
 import CustomComponentPage from "./pages/CustomComponentPage";
 import AdvancedRuleBuilderPage from "./pages/AdvancedRuleBuilderPage";
 import SystemValidationsPage from "./pages/SystemValidationsPage";
@@ -275,7 +275,7 @@ function ProtectedApp() {
             wizard on the list page, which ?new=1 opens. */}
         <Route path="business-objects/new" element={<Navigate to={`/${locale}/business-objects?new=1`} replace />} />
         <Route path="business-objects/:id" element={<ProtectedRoute><BusinessObjectDetailsPage /></ProtectedRoute>} />
-        <Route path="build/cubes" element={<ProtectedRoute><CubesCatalogPage /></ProtectedRoute>} />
+        {/* Catalog /build/cubes is STUDIO_ROUTES → cubes-catalog (PR5). Designer stays coded until PR6. */}
         <Route path="build/cubes/new" element={<ProtectedRoute><CubeDesignerPage /></ProtectedRoute>} />
         <Route path="build/cubes/:cubeId" element={<ProtectedRoute><CubeDesignerPage /></ProtectedRoute>} />
         <Route path="semantic-health" element={<ProtectedRoute><SemanticHealthDashboard /></ProtectedRoute>} />

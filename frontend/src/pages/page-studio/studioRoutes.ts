@@ -20,6 +20,8 @@ export const STUDIO_ROUTES: { path: string; slug: string }[] = [
   { path: 'infrastructure/streaming', slug: 'lakehouse-streaming' },
   { path: 'lakehouse-streaming', slug: 'lakehouse-streaming' },
   { path: 'system/lakehouse', slug: 'system-lakehouse' },
+  // PR5: catalog only — designer stays coded at build/cubes/new + :cubeId until PR6
+  { path: 'build/cubes', slug: 'cubes-catalog' },
 ];
 
 /** The app routes a page is served at, e.g. ['/data/mastering']. */
