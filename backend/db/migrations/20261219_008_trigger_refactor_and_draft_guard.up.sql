@@ -3,7 +3,8 @@
 -- Tier 2 Trigger Refactor & Draft Modification Guard:
 -- 1. Simplify trg_enforce_rule_version_snapshot to an existence check only
 -- 2. Drop compliance.to_jcs and compliance.compute_rule_content_hash (Go is sole hash authority)
--- 3. Add trg_guard_regulatory_draft_mutation on compliance.regulatory_draft_rule
+-- 3. Add DRAFT_REVISED event_type to compliance.regulatory_case_event
+-- 4. Add trg_guard_regulatory_draft_mutation on compliance.regulatory_draft_rule with audit trail
 
 -- 1. Existence-only snapshot trigger (Go is the sole hash authority)
 CREATE OR REPLACE FUNCTION compliance.enforce_rule_version_snapshot() RETURNS trigger AS $$
@@ -36,7 +37,19 @@ END $$ LANGUAGE plpgsql;
 DROP FUNCTION IF EXISTS compliance.compute_rule_content_hash(jsonb, jsonb, text);
 DROP FUNCTION IF EXISTS compliance.to_jcs(jsonb);
 
--- 3. Draft Modification Guard Trigger
+-- 3. Add DRAFT_REVISED event_type to regulatory_case_event CHECK constraint
+ALTER TABLE compliance.regulatory_case_event
+    DROP CONSTRAINT IF EXISTS regulatory_case_event_event_type_check;
+
+ALTER TABLE compliance.regulatory_case_event
+    ADD CONSTRAINT regulatory_case_event_event_type_check
+    CHECK (event_type IN (
+        'CASE_OPENED','TRIAGED','REVIEW_STARTED','STAKEHOLDER_NOTED',
+        'CORPUS_RUN','APPROVED','PUBLISHED','CLOSED','ESCALATED',
+        'NEW_RULE_ROUTED','EXPIRED','REJECTED','DRAFT_REVISED'
+    ));
+
+-- 4. Draft Modification Guard Trigger with DRAFT_REVISED Audit Logging
 CREATE OR REPLACE FUNCTION compliance.guard_regulatory_draft_mutation()
 RETURNS trigger AS $$
 BEGIN
@@ -49,9 +62,25 @@ BEGIN
             RAISE EXCEPTION 'Audit Violation: Cannot modify proposed content on an approved regulatory draft (draft_id: %). Reject or un-approve draft first.', OLD.id;
         END IF;
 
-        -- If draft had passed corpus, modifying proposed fields invalidates corpus results
+        -- If draft had passed corpus, modifying proposed fields invalidates corpus results and writes DRAFT_REVISED audit event
         IF OLD.corpus_results IS DISTINCT FROM '{}'::jsonb THEN
             NEW.corpus_results := '{}'::jsonb;
+
+            INSERT INTO compliance.regulatory_case_event (
+                id, case_id, event_type, actor, payload, created_at
+            ) VALUES (
+                gen_random_uuid(),
+                NEW.case_id,
+                'DRAFT_REVISED',
+                COALESCE(NULLIF(current_setting('app.current_user', true), ''), 'system_steward'),
+                json_build_object(
+                    'rule_id', NEW.rule_id,
+                    'old_content_hash', OLD.proposed_content_hash,
+                    'new_content_hash', NEW.proposed_content_hash,
+                    'reason', 'Draft modified post-corpus execution; corpus_results invalidated'
+                )::jsonb,
+                now()
+            );
         END IF;
     END IF;
 

@@ -30,13 +30,20 @@ type ReconciliationReport struct {
 	Mismatched   int                `json:"mismatched"`
 	Mismatches   []SnapshotMismatch `json:"mismatches,omitempty"`
 	DurationMs   int64              `json:"duration_ms"`
+	Timestamp    time.Time          `json:"timestamp"`
 }
 
-// Global metric counter for prometheus integration
-var RuleSnapshotHashMismatchCount uint64
+// Prometheus-exportable global metric gauges & counters
+var (
+	RuleSnapshotHashMismatchCount uint64
+	ReconcilerLastSweepTimestamp  int64
+	ReconcilerLastSweepDurationMs int64
+	ReconcilerTotalSweepsCount    uint64
+)
 
 // RuleSnapshotReconciler iterates all compliance_rule_version snapshots,
 // recomputes their RFC 8785 canonical content hash in Go, and alerts on mismatch.
+// Operates on a scheduled interval (e.g. every 15 minutes) and targeted via Debezium events.
 type RuleSnapshotReconciler struct {
 	db *sql.DB
 }
@@ -72,6 +79,7 @@ func (r *RuleSnapshotReconciler) ReconcileAll(ctx context.Context) (*Reconciliat
 
 	report := &ReconciliationReport{
 		Mismatches: make([]SnapshotMismatch, 0),
+		Timestamp:  start,
 	}
 
 	for rows.Next() {
@@ -121,8 +129,90 @@ func (r *RuleSnapshotReconciler) ReconcileAll(ctx context.Context) (*Reconciliat
 		}
 	}
 
-	report.DurationMs = time.Since(start).Milliseconds()
+	durationMs := time.Since(start).Milliseconds()
+	report.DurationMs = durationMs
+
+	// Update liveness watchdog gauges
+	atomic.StoreInt64(&ReconcilerLastSweepTimestamp, start.Unix())
+	atomic.StoreInt64(&ReconcilerLastSweepDurationMs, durationMs)
+	atomic.AddUint64(&ReconcilerTotalSweepsCount, 1)
+
 	return report, nil
+}
+
+// ReconcileRuleEvent performs targeted immediate verification of a single rule upon Debezium CDC update
+func (r *RuleSnapshotReconciler) ReconcileRuleEvent(ctx context.Context, ruleID uuid.UUID) (*SnapshotMismatch, error) {
+	var (
+		ruleCode, tenantIDStr, citation, storedHash string
+		astStr, paramStr                           string
+		version                                    int
+	)
+
+	err := r.db.QueryRowContext(ctx, `
+		SELECT 
+			COALESCE(r.rule_code, 'CUSTOM_RULE'),
+			r.tenant_id,
+			v.version,
+			v.resolved_ast::text,
+			v.parameter_thresholds::text,
+			COALESCE(v.citation, ''),
+			v.content_hash
+		FROM compliance.compliance_rule_version v
+		JOIN compliance.compliance_rule r ON v.rule_id = r.id
+		WHERE v.rule_id = $1 AND r.valid_to IS NULL
+		ORDER BY v.version DESC
+		LIMIT 1
+	`, ruleID).Scan(&ruleCode, &tenantIDStr, &version, &astStr, &paramStr, &citation, &storedHash)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // No active snapshot found
+		}
+		return nil, fmt.Errorf("query rule version for event reconciliation: %w", err)
+	}
+
+	tenantID, _ := uuid.Parse(tenantIDStr)
+	computedHash, err := canonical.ComputeRuleContentHashFromRaw([]byte(astStr), []byte(paramStr), citation)
+	if err != nil {
+		return nil, fmt.Errorf("recompute hash for rule %s: %w", ruleCode, err)
+	}
+
+	if computedHash != storedHash {
+		atomic.AddUint64(&RuleSnapshotHashMismatchCount, 1)
+		mismatch := &SnapshotMismatch{
+			RuleID:       ruleID,
+			RuleCode:     ruleCode,
+			Version:      version,
+			TenantID:     tenantID,
+			StoredHash:   storedHash,
+			ComputedHash: computedHash,
+			DetectedAt:   time.Now(),
+		}
+		r.alertMismatch(ctx, *mismatch)
+		return mismatch, nil
+	}
+
+	return nil, nil
+}
+
+// IsWatchdogStale evaluates whether the reconciler has failed to execute within 2x the expected schedule cadence
+func (r *RuleSnapshotReconciler) IsWatchdogStale(maxCadence time.Duration) bool {
+	lastTs := atomic.LoadInt64(&ReconcilerLastSweepTimestamp)
+	if lastTs == 0 {
+		return true // Never executed
+	}
+	lastSweep := time.Unix(lastTs, 0)
+	return time.Since(lastSweep) > (2 * maxCadence)
+}
+
+// GetWatchdogMetrics returns current liveness and execution telemetry
+func (r *RuleSnapshotReconciler) GetWatchdogMetrics() (lastSweep time.Time, durationMs int64, totalSweeps uint64) {
+	lastTs := atomic.LoadInt64(&ReconcilerLastSweepTimestamp)
+	if lastTs > 0 {
+		lastSweep = time.Unix(lastTs, 0)
+	}
+	durationMs = atomic.LoadInt64(&ReconcilerLastSweepDurationMs)
+	totalSweeps = atomic.LoadUint64(&ReconcilerTotalSweepsCount)
+	return
 }
 
 func (r *RuleSnapshotReconciler) alertMismatch(ctx context.Context, m SnapshotMismatch) {

@@ -90,7 +90,7 @@ func TestRegulatoryWorkflow_TransitionLegality(t *testing.T) {
 	svc := NewService(db)
 
 	// 1. Open Case (INTAKED)
-	caseCode := fmt.Sprintf("RCC-TEST-LEG-%d", time.Now().UnixNano()%1000000)
+	caseCode := fmt.Sprintf("RCC-TEST-LEG-%s", uuid.New().String()[:8])
 	c, err := svc.CreateCase(ctx, IntakeRequest{
 		CaseCode:        caseCode,
 		Source:          SourceRegulatorPublication,
@@ -261,7 +261,7 @@ func TestRegulatoryWorkflow_FullHappyPathPublish(t *testing.T) {
 	}()
 
 	// 1. Intake Case
-	caseCode := fmt.Sprintf("RCC-2027-%d", time.Now().UnixNano()%100000)
+	caseCode := fmt.Sprintf("RCC-2027-%s", uuid.New().String()[:8])
 	c, err := svc.CreateCase(ctx, IntakeRequest{
 		CaseCode:        caseCode,
 		Source:          SourceRegulatorPublication,
@@ -426,7 +426,7 @@ func TestRegulatoryWorkflow_ApprovalContentBinding_AdversarialTamper(t *testing.
 	svc := NewService(db)
 
 	// Setup case & rule
-	caseCode := fmt.Sprintf("RCC-TAMPER-%d", time.Now().UnixNano()%100000)
+	caseCode := fmt.Sprintf("RCC-TAMPER-%s", uuid.New().String()[:8])
 	c, err := svc.CreateCase(ctx, IntakeRequest{
 		CaseCode:    caseCode,
 		Source:      SourceRegulatorPublication,
@@ -524,7 +524,7 @@ func TestRegulatoryWorkflow_CorpusGateRejection(t *testing.T) {
 	goldTenant, err := loader.GetGoldCopyTenantID(ctx)
 	require.NoError(t, err)
 
-	caseCode := fmt.Sprintf("RCC-FAIL-%d", time.Now().UnixNano()%100000)
+	caseCode := fmt.Sprintf("RCC-FAIL-%s", uuid.New().String()[:8])
 	c, err := svc.CreateCase(ctx, IntakeRequest{
 		CaseCode:        caseCode,
 		Source:          SourceRegulatorPublication,
@@ -806,7 +806,7 @@ func TestRegulatoryWorkflow_StewardPresentationView(t *testing.T) {
 	`, goldTenant).Scan(&ucits5ID, &curASTBytes, &curParamsBytes, &curCitation)
 	require.NoError(t, err)
 
-	caseCode := fmt.Sprintf("RCC-VIEW-%d", time.Now().UnixNano()%100000)
+	caseCode := fmt.Sprintf("RCC-VIEW-%s", uuid.New().String()[:8])
 	c, err := svc.CreateCase(ctx, IntakeRequest{
 		CaseCode:        caseCode,
 		Source:          SourceRegulatorPublication,
@@ -882,7 +882,7 @@ func TestRegulatoryWorkflow_NewRuleRequiredRouting(t *testing.T) {
 
 	svc := NewService(db)
 
-	caseCode := fmt.Sprintf("RCC-NEW-RULE-%d", time.Now().UnixNano()%100000)
+	caseCode := fmt.Sprintf("RCC-NEW-RULE-%s", uuid.New().String()[:8])
 	c, err := svc.CreateCase(ctx, IntakeRequest{
 		CaseCode:    caseCode,
 		Source:      SourceRegulatorPublication,
@@ -929,7 +929,7 @@ func TestRegulatoryWorkflow_OperationalMetricsView(t *testing.T) {
 
 	svc := NewService(db)
 
-	caseCode := fmt.Sprintf("RCC-OVERDUE-%d", time.Now().UnixNano()%100000)
+	caseCode := fmt.Sprintf("RCC-OVERDUE-%s", uuid.New().String()[:8])
 	c, err := svc.CreateCase(ctx, IntakeRequest{
 		CaseCode:    caseCode,
 		Source:      SourceScheduledReview,
@@ -1084,10 +1084,22 @@ func TestRuleSnapshotReconciler_DetectsTamperedHash(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, notifCount, 1, "Critical incident notification must be logged into compliance_notification table")
 
-	t.Logf("RuleSnapshotReconciler detection and alerting fully verified!")
+	// 5. Verify Watchdog Liveness Gauges & Targeted Debezium Event Verification
+	lastSweep, durationMs, totalSweeps := reconciler.GetWatchdogMetrics()
+	require.False(t, lastSweep.IsZero(), "Watchdog last_sweep timestamp must be set")
+	require.GreaterOrEqual(t, durationMs, int64(0))
+	require.GreaterOrEqual(t, totalSweeps, uint64(1))
+	require.False(t, reconciler.IsWatchdogStale(15*time.Minute), "Reconciler must NOT be stale immediately after sweep")
+
+	eventMismatch, err := reconciler.ReconcileRuleEvent(ctx, testRuleID)
+	require.NoError(t, err)
+	require.NotNil(t, eventMismatch, "Debezium targeted single-rule reconciliation must detect corruption immediately")
+	require.Equal(t, testRuleID, eventMismatch.RuleID)
+
+	t.Logf("RuleSnapshotReconciler detection, watchdog liveness metrics, and Debezium event sweep fully verified!")
 }
 
-// Step 2: Corpus-Run -> Approval Binding (Modifying draft after corpus run prevents approval without re-run)
+// Step 2: Corpus-Run -> Approval Binding (Modifying draft after corpus run prevents approval without re-run & emits DRAFT_REVISED)
 func TestRegulatoryWorkflow_CorpusApprovalBinding_Tamper(t *testing.T) {
 	db := getAlphaTestDB(t)
 	defer db.Close()
@@ -1097,7 +1109,7 @@ func TestRegulatoryWorkflow_CorpusApprovalBinding_Tamper(t *testing.T) {
 
 	svc := NewService(db)
 
-	caseCode := fmt.Sprintf("RCC-BIND-%d", time.Now().UnixNano()%100000)
+	caseCode := fmt.Sprintf("RCC-BIND-%s", uuid.New().String()[:8])
 	c, err := svc.CreateCase(ctx, IntakeRequest{
 		CaseCode:    caseCode,
 		Source:      SourceRegulatorPublication,
@@ -1113,7 +1125,7 @@ func TestRegulatoryWorkflow_CorpusApprovalBinding_Tamper(t *testing.T) {
 	}()
 
 	ruleID := uuid.New()
-	ruleCode := fmt.Sprintf("TEST_BIND_%d", time.Now().UnixNano()%100000)
+	ruleCode := fmt.Sprintf("TEST_BIND_%s", uuid.New().String()[:8])
 	astOrig := map[string]interface{}{"type": "METRIC", "path": "pos.issuer_pct"}
 	paramsOrig := map[string]interface{}{"issuer_limit_pct": "0.050000"}
 
@@ -1171,7 +1183,17 @@ func TestRegulatoryWorkflow_CorpusApprovalBinding_Tamper(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 3. Attempt to approve case without re-running corpus gate -> must fail!
+	// 3. Verify DRAFT_REVISED audit event was automatically emitted by the database trigger
+	var revisedCount int
+	err = db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM compliance.regulatory_case_event
+		WHERE case_id = $1 AND event_type = 'DRAFT_REVISED'
+	`, c.ID).Scan(&revisedCount)
+	require.NoError(t, err)
+	require.Equal(t, 1, revisedCount, "Modifying draft post-corpus execution must write a DRAFT_REVISED audit event")
+	t.Logf("DRAFT_REVISED audit event verified in append-only ledger!")
+
+	// 4. Attempt to approve case without re-running corpus gate -> must fail!
 	err = svc.ApproveCase(ctx, c.ID, "steward", "Approval with stale corpus run")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "approval blocked: draft content for rule")
@@ -1196,7 +1218,7 @@ func TestRegulatoryWorkflow_DraftUpdateGuardTrigger(t *testing.T) {
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO compliance.regulatory_change_case (id, case_code, source, title, description, due_at, created_by)
 		VALUES ($1, $2, 'INTERNAL', 'Trigger Test Case', 'Desc', now() + interval '30 days', 'tester')
-	`, caseID, fmt.Sprintf("RCC-TRG-%d", time.Now().UnixNano()%100000))
+	`, caseID, fmt.Sprintf("RCC-TRG-%s", uuid.New().String()[:8]))
 	require.NoError(t, err)
 
 	defer func() {

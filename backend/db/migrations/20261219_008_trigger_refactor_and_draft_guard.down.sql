@@ -1,12 +1,29 @@
 -- 20261219_008_trigger_refactor_and_draft_guard.down.sql
 --
 -- Revert Tier 2 Trigger Refactor & Draft Mutation Guard
+--
+-- WARNING: Reverting this migration restores the SQL implementation of JCS (compliance.to_jcs)
+-- and compute_rule_content_hash. This reintroduces dual RFC 8785 canonicalizers (Go vs SQL)
+-- and requires running the 3-way agreement test (TestCoreLibrary_All50CoreRules_ContentHashAgreement)
+-- to guard against bit-for-bit canonicalization divergence between PL/pgSQL and Go.
 
 -- 1. Drop draft guard trigger
 DROP TRIGGER IF EXISTS trg_guard_regulatory_draft_mutation ON compliance.regulatory_draft_rule;
 DROP FUNCTION IF EXISTS compliance.guard_regulatory_draft_mutation();
 
--- 2. Recreate compliance.to_jcs and compliance.compute_rule_content_hash
+-- 2. Revert regulatory_case_event check constraint to exclude DRAFT_REVISED
+ALTER TABLE compliance.regulatory_case_event
+    DROP CONSTRAINT IF EXISTS regulatory_case_event_event_type_check;
+
+ALTER TABLE compliance.regulatory_case_event
+    ADD CONSTRAINT regulatory_case_event_event_type_check
+    CHECK (event_type IN (
+        'CASE_OPENED','TRIAGED','REVIEW_STARTED','STAKEHOLDER_NOTED',
+        'CORPUS_RUN','APPROVED','PUBLISHED','CLOSED','ESCALATED',
+        'NEW_RULE_ROUTED','EXPIRED','REJECTED'
+    ));
+
+-- 3. Recreate compliance.to_jcs and compliance.compute_rule_content_hash
 CREATE OR REPLACE FUNCTION compliance.to_jcs(val jsonb) RETURNS text AS $$
 DECLARE
     t text;
@@ -47,7 +64,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- 3. Restore enforce_rule_version_snapshot with hash check
+-- 4. Restore enforce_rule_version_snapshot with hash check
 CREATE OR REPLACE FUNCTION compliance.enforce_rule_version_snapshot() RETURNS trigger AS $$
 BEGIN
     IF OLD.ast_condition IS DISTINCT FROM NEW.ast_condition
