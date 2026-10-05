@@ -1,0 +1,83 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: compliance-partition-maintenance
+  namespace: uisce-system
+  labels:
+    app.kubernetes.io/name: compliance-partition-maintenance
+    app.kubernetes.io/part-of: uisce-compliance
+spec:
+  # Run every Sunday at 02:00 UTC to maintain a 3-month partition horizon ahead
+  schedule: "0 2 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: compliance-partition-maintenance
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: partition-runner
+              image: uisce-backend:latest
+              command:
+                - /app/compliance-jobs
+                - --job=partition-maintenance
+                - --months-ahead=3
+              env:
+                - name: ALPHA_DB_HOST
+                  value: "100.84.50.65"
+                - name: ALPHA_DB_PORT
+                  value: "5432"
+                - name: ALPHA_DB_NAME
+                  value: "alpha"
+                - name: ALPHA_DB_USER
+                  value: "postgres"
+                - name: ALPHA_DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: alpha-db-credentials
+                      key: password
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: compliance-default-partition-monitor
+  namespace: uisce-system
+  labels:
+    app.kubernetes.io/name: compliance-default-partition-monitor
+    app.kubernetes.io/part-of: uisce-compliance
+spec:
+  # Check for incident rows in the default partition every 5 minutes
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Replace
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: compliance-default-partition-monitor
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: incident-monitor
+              image: uisce-backend:latest
+              command:
+                - /app/compliance-jobs
+                - --job=default-partition-monitor
+                - --pagerduty-webhook=$(PAGERDUTY_INCIDENT_WEBHOOK)
+              env:
+                - name: PAGERDUTY_INCIDENT_WEBHOOK
+                  valueFrom:
+                    secretKeyRef:
+                      name: compliance-alert-webhooks
+                      key: pagerduty-url
+                - name: ALPHA_DB_HOST
+                  value: "100.84.50.65"
+                - name: ALPHA_DB_NAME
+                  value: "alpha"
