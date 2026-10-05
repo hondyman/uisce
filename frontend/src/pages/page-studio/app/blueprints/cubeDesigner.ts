@@ -4,7 +4,7 @@ import type { Action, ConditionNode, FormFieldSpec } from '../appModel';
 /**
  * Cube designer host (slug cube-designer): composed Page Studio page for
  * /build/cubes/new and /build/cubes/:id. Tabs + Form/ops + cubes.FederationEditor
- * DomainComponent — no full-page cubes.Designer DC (design §B.5).
+ * + cubes.ImpactPanel DomainComponents — no full-page cubes.Designer DC.
  */
 
 const op = (
@@ -135,6 +135,12 @@ function cubeDesignerPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
         },
       ),
     ],
+  }, { style: fit, visibleWhen: EXISTING });
+
+  w('impact_btn', 'ActionButton', {
+    label: 'Impact', icon: 'insights', variant: 'text',
+    tooltip: 'Composition, consumers, and dry-run change preview',
+    onClick: [set('tab', 'impact')],
   }, { style: fit, visibleWhen: EXISTING });
 
   w('save_create', 'ActionButton', {
@@ -317,8 +323,22 @@ function cubeDesignerPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
 
   // --- versions ----------------------------------------------------------------
   w('versions_text', 'TextBlock', {
-    text: 'Current contract_version: {{queries.load.data.contractVersion}}. Additive edits use Save (PATCH). Breaking grain/dimension/metric/federation changes require POST /api/cubes/{id}/versions.',
+    text: 'Current contract_version: {{queries.load.data.contractVersion}}. Additive edits use Save (PATCH). Breaking grain/dimension/metric/federation changes require POST /api/cubes/{id}/versions. Use the Impact tab to preview consumers before archive or publish.',
   });
+
+  // --- impact DomainComponent (A3 dry-run) ------------------------------------
+  w('impact_new_hint', 'AlertBanner', {
+    severity: 'info',
+    text: 'Save the cube first to assess consumers and preview archive / contract publish.',
+  }, { visibleWhen: NEW });
+  w('impact_dc', 'DomainComponent', {
+    component: 'cubes.ImpactPanel',
+    inputs: {
+      cubeId: ID,
+      draft: '{{vars.draft}}',
+      title: 'Impact — {{queries.load.data.title}}',
+    },
+  }, { visibleWhen: EXISTING });
 
   const tabs: PageTab[] = [{
     id: 'designer',
@@ -342,7 +362,7 @@ function cubeDesignerPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
       },
       actions: {
         type: 'Row',
-        children: ['validate_btn', 'deploy_btn', 'refresh_btn', 'save_create', 'save_patch'],
+        children: ['validate_btn', 'deploy_btn', 'refresh_btn', 'impact_btn', 'save_create', 'save_patch'],
         style: { alignItems: 'center', gap: '8px', marginLeft: 'auto', flex: '0 0 auto' },
       },
       banners: {
@@ -365,6 +385,7 @@ function cubeDesignerPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
           'tab_federation',
           'tab_materialization',
           'tab_versions',
+          'tab_impact',
         ],
         props: {
           variable: 'tab',
@@ -376,6 +397,7 @@ function cubeDesignerPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
             { id: 'federation', label: 'Federation' },
             { id: 'materialization', label: 'Materialization' },
             { id: 'versions', label: 'Versions' },
+            { id: 'impact', label: 'Impact' },
           ],
         },
       },
@@ -414,6 +436,11 @@ function cubeDesignerPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
         children: ['versions_text'],
         style: { gap: '12px', maxWidth: '640px' },
       },
+      tab_impact: {
+        type: 'Column',
+        children: ['impact_new_hint', 'impact_dc'],
+        style: { gap: '12px', maxWidth: '960px' },
+      },
     }),
   }];
 
@@ -421,8 +448,8 @@ function cubeDesignerPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
     name: 'Cube designer',
     slug: 'cube-designer',
     description:
-      'Compose a cube contract: overview, dimensions, metrics, grains, federation, and materialization. Served at /build/cubes/new and /build/cubes/:id.',
-    version: 1,
+      'Compose a cube contract: overview, dimensions, metrics, grains, federation, materialization, and impact. Served at /build/cubes/new and /build/cubes/:id.',
+    version: 2,
     isCore: true,
     status: 'published',
     layout: tabs[0].layout,

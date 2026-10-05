@@ -1,6 +1,9 @@
 import apiClient from '../../utils/apiClient';
 import type {
   CubeDefinition,
+  CubeImpactPreviewAction,
+  CubeImpactPreviewReport,
+  CubeImpactReport,
   CubeListResponse,
   CubeMetricOption,
   CubeScope,
@@ -130,4 +133,29 @@ export async function refreshCube(
   body?: { grain?: string[]; force?: boolean },
 ): Promise<CubeMaterializeStartResponse> {
   return startCubeMaterialize(`cubes/${encodeURIComponent(id)}/refresh`, body);
+}
+
+export async function getCubeImpact(
+  id: string,
+  opts?: { includePhysical?: boolean },
+): Promise<CubeImpactReport> {
+  const q = new URLSearchParams();
+  if (opts?.includePhysical === false) q.set('includePhysical', '0');
+  const qs = q.toString();
+  return apiClient<CubeImpactReport>(
+    `cubes/${encodeURIComponent(id)}/impact${qs ? `?${qs}` : ''}`,
+  );
+}
+
+export async function previewCubeImpact(
+  id: string,
+  body: {
+    action: CubeImpactPreviewAction;
+    patch?: Record<string, unknown>;
+  },
+): Promise<CubeImpactPreviewReport> {
+  return apiClient<CubeImpactPreviewReport>(`cubes/${encodeURIComponent(id)}/impact/preview`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }

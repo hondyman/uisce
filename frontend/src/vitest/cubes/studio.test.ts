@@ -9,6 +9,8 @@ vi.mock('../../features/cubes/cubeDefinitionApi', () => ({
   deployCube: vi.fn(),
   refreshCube: vi.fn(),
   listCubeMetrics: vi.fn(),
+  getCubeImpact: vi.fn(),
+  previewCubeImpact: vi.fn(),
 }));
 
 vi.mock('../../studio-core/binding/businessObjectApi', async (orig) => {
@@ -23,9 +25,11 @@ import {
   createCube,
   deployCube,
   getCube,
+  getCubeImpact,
   listCubeMetrics,
   listCubes,
   patchCube,
+  previewCubeImpact,
   refreshCube,
   validateCube,
 } from '../../features/cubes/cubeDefinitionApi';
@@ -44,6 +48,8 @@ const api = {
   deployCube: deployCube as unknown as ReturnType<typeof vi.fn>,
   refreshCube: refreshCube as unknown as ReturnType<typeof vi.fn>,
   listCubeMetrics: listCubeMetrics as unknown as ReturnType<typeof vi.fn>,
+  getCubeImpact: getCubeImpact as unknown as ReturnType<typeof vi.fn>,
+  previewCubeImpact: previewCubeImpact as unknown as ReturnType<typeof vi.fn>,
   listBusinessObjects: listBusinessObjects as unknown as ReturnType<typeof vi.fn>,
 };
 
@@ -84,21 +90,30 @@ describe('cubes studio registration (PR3)', () => {
       'cubes.refresh',
       'cubes.metrics',
       'cubes.businessObjects',
+      'cubes.impact',
+      'cubes.impactPreview',
     ]) {
       expect(getOperation(id), id).toBeTruthy();
     }
     expect(getOperation('cubes.list')?.kind).toBe('query');
     expect(getOperation('cubes.create')?.kind).toBe('mutation');
     expect(getOperation('cubes.validate')?.kind).toBe('mutation');
+    expect(getOperation('cubes.impact')?.kind).toBe('query');
+    expect(getOperation('cubes.impactPreview')?.kind).toBe('mutation');
   });
 
-  it('registers cubes.FederationEditor and never a full-page cubes.Designer', () => {
+  it('registers cubes.FederationEditor + cubes.ImpactPanel and never a full-page cubes.Designer', () => {
     const fed = getDomainComponent('cubes.FederationEditor');
     expect(fed?.domain).toBe('cubes');
     expect(fed?.inputs.map((i) => i.name)).toEqual(
       expect.arrayContaining(['primaryBoId', 'bos', 'federation', 'keySamples']),
     );
     expect(fed?.events.map((e) => e.name)).toEqual(['onChange', 'onKeySamplesChange']);
+    const impact = getDomainComponent('cubes.ImpactPanel');
+    expect(impact?.domain).toBe('cubes');
+    expect(impact?.inputs.map((i) => i.name)).toEqual(
+      expect.arrayContaining(['cubeId', 'draft', 'readOnly', 'title']),
+    );
     expect(getDomainComponent('cubes.Designer')).toBeUndefined();
     expect(listDomainComponents().some((d) => d.id === 'cubes.Designer')).toBe(false);
   });
@@ -221,5 +236,33 @@ describe('cubes.list / create / validate / businessObjects', () => {
     const draft = emptyCubeDraft({ name: 'Positions', boId: 'bo-pos' });
     await run('cubes.patch', { id: 'c-1', draft });
     expect(api.patchCube).toHaveBeenCalledWith('c-1', expect.objectContaining({ name: 'Positions' }));
+  });
+});
+
+describe('cubes.impact / impactPreview', () => {
+  it('loads inventory and preview via API helpers', async () => {
+    api.getCubeImpact.mockResolvedValueOnce({
+      cubeId: 'c-1',
+      composition: { name: 'Positions' },
+      consumers: [],
+      summary: { consumerCount: 0, blockingCount: 0, warningCount: 0, physicalGrainCount: 0 },
+    });
+    const inv = (await run('cubes.impact', { id: 'c-1' })) as { cubeId: string };
+    expect(inv.cubeId).toBe('c-1');
+    expect(api.getCubeImpact).toHaveBeenCalledWith('c-1', { includePhysical: true });
+
+    api.previewCubeImpact.mockResolvedValueOnce({
+      changeClass: 'archive',
+      confirmToken: 'tok',
+      allowedModes: ['fail_closed'],
+      recommendedMode: 'fail_closed',
+      breakReasons: [],
+      blockingCount: 0,
+    });
+    const prev = (await run('cubes.impactPreview', { id: 'c-1', action: 'archive' })) as {
+      changeClass: string;
+    };
+    expect(prev.changeClass).toBe('archive');
+    expect(api.previewCubeImpact).toHaveBeenCalledWith('c-1', { action: 'archive', patch: undefined });
   });
 });

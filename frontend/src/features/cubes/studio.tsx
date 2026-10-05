@@ -8,21 +8,28 @@ import {
   createCube,
   deployCube,
   getCube,
+  getCubeImpact,
   listCubeMetrics,
   listCubes,
   patchCube,
+  previewCubeImpact,
   refreshCube,
   validateCube,
 } from './cubeDefinitionApi';
 import { cubeDraftFromDefinition, cubeDraftPayload, emptyCubeDraft } from './draft';
 import FederationEditor from './FederationEditor';
-import type { CubeDraft, CubeFederation, FederationKeySample } from './types';
+import ImpactPanel from './ImpactPanel';
+import type {
+  CubeDraft,
+  CubeFederation,
+  CubeImpactPreviewAction,
+  FederationKeySample,
+} from './types';
 
 /**
- * Cubes Page Studio surface (PR3): registered operations for future
- * cubes-catalog / cube-designer blueprints, plus the small
- * `cubes.FederationEditor` DomainComponent. Do **not** register a
- * full-page `cubes.Designer` DomainComponent that rehosts the old coded designer shell.
+ * Cubes Page Studio surface: catalog/designer ops + small DomainComponents
+ * (`cubes.FederationEditor`, `cubes.ImpactPanel`). Do **not** register a
+ * full-page `cubes.Designer` DomainComponent that rehosts a coded designer shell.
  */
 
 const DOMAIN = 'cubes';
@@ -310,6 +317,59 @@ const operations: OperationDef[] = [
       return { rows, bos: rows };
     },
   },
+  {
+    id: 'cubes.impact',
+    domain: DOMAIN,
+    kind: 'query',
+    label: 'Cube impact inventory',
+    description: 'GET /api/cubes/{id}/impact — composition + consumers + physical grains.',
+    params: [
+      { name: 'id', type: 'string', required: true },
+      { name: 'includePhysical', type: 'boolean' },
+    ],
+    fields: [
+      { name: 'cubeId', type: 'string' },
+      { name: 'composition', type: 'object' },
+      { name: 'consumers', type: 'object' },
+      { name: 'summary', type: 'object' },
+    ],
+    run: async (p) =>
+      getCubeImpact(need(p, 'id'), {
+        includePhysical: p.includePhysical === false ? false : true,
+      }),
+  },
+  {
+    id: 'cubes.impactPreview',
+    domain: DOMAIN,
+    kind: 'mutation',
+    label: 'Cube impact preview',
+    description:
+      'POST /api/cubes/{id}/impact/preview — changeClass + confirmToken. Cascade apply is A4.',
+    params: [
+      { name: 'id', type: 'string', required: true },
+      { name: 'action', type: 'string', required: true },
+      { name: 'draft', type: 'object' },
+      { name: 'patch', type: 'object' },
+    ],
+    fields: [
+      { name: 'changeClass', type: 'string' },
+      { name: 'breakReasons', type: 'object' },
+      { name: 'blockingCount', type: 'number' },
+      { name: 'confirmToken', type: 'string' },
+      { name: 'allowedModes', type: 'object' },
+      { name: 'recommendedMode', type: 'string' },
+    ],
+    run: async (p) => {
+      const action = need(p, 'action') as CubeImpactPreviewAction;
+      let patch: Record<string, unknown> | undefined;
+      if (p.patch && typeof p.patch === 'object' && !Array.isArray(p.patch)) {
+        patch = p.patch as Record<string, unknown>;
+      } else if (p.draft && typeof p.draft === 'object') {
+        patch = cubeDraftPayload(p.draft as CubeDraft);
+      }
+      return previewCubeImpact(need(p, 'id'), { action, patch });
+    },
+  },
 ];
 
 registerOperations(operations);
@@ -358,6 +418,23 @@ const FederationEditorAdapter: React.FC<{
   );
 };
 
+const ImpactPanelAdapter: React.FC<{
+  inputs: Record<string, unknown>;
+  emit: (event: string, payload?: Record<string, unknown>) => void;
+}> = ({ inputs }) => {
+  const cubeId = typeof inputs.cubeId === 'string' ? inputs.cubeId : '';
+  const draft =
+    inputs.draft && typeof inputs.draft === 'object' && !Array.isArray(inputs.draft)
+      ? (inputs.draft as CubeDraft)
+      : null;
+  const readOnly = inputs.readOnly === true;
+  const title = typeof inputs.title === 'string' && inputs.title.trim() ? inputs.title : 'Cube impact';
+  if (!cubeId.trim()) {
+    return <Alert severity="info">Bind a cube id to assess impact.</Alert>;
+  }
+  return <ImpactPanel cubeId={cubeId} draft={draft} readOnly={readOnly} title={title} />;
+};
+
 registerDomainComponents([
   {
     id: 'cubes.FederationEditor',
@@ -381,6 +458,21 @@ registerDomainComponents([
       },
     ],
     render: FederationEditorAdapter,
+  },
+  {
+    id: 'cubes.ImpactPanel',
+    domain: DOMAIN,
+    label: 'Cube impact panel',
+    description:
+      'Composition + consumers inventory and dry-run impact preview (archive/patch/publish). Cascade Confirm is A4.',
+    inputs: [
+      { name: 'cubeId', label: 'Cube id', type: 'string', required: true },
+      { name: 'draft', label: 'Working draft (optional for patch/publish preview)', type: 'object' },
+      { name: 'readOnly', label: 'Hide preview actions', type: 'boolean' },
+      { name: 'title', label: 'Panel title', type: 'string' },
+    ],
+    events: [],
+    render: ImpactPanelAdapter,
   },
 ]);
 

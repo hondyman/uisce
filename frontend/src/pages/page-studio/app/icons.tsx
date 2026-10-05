@@ -27,6 +27,9 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import InsightsIcon from '@mui/icons-material/Insights';
+import CheckIcon from '@mui/icons-material/Check';
+import ViewInArIcon from '@mui/icons-material/ViewInAr';
 import type { SvgIconProps } from '@mui/material';
 
 /**
@@ -63,6 +66,9 @@ export const PAGE_ICONS: Record<string, React.ComponentType<SvgIconProps>> = {
   assistant: AutoAwesomeIcon,
   back: ArrowBackIcon,
   help: HelpOutlineIcon,
+  insights: InsightsIcon,
+  check: CheckIcon,
+  cube: ViewInArIcon,
 };
 
 export function PageIcon({ name, ...props }: { name?: string } & SvgIconProps) {

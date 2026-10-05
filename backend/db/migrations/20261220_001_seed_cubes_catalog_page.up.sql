@@ -1,11 +1,10 @@
 -- 20261220_001_seed_cubes_catalog_page.up.sql
 -- Seeds the core Page Studio page "Cubes" (slug cubes-catalog) in the gold-copy tenant.
--- JSON is GENERATED from frontend/src/pages/page-studio/app/blueprints/cubesCatalog.ts;
--- vitest cubesCatalogSeedParity.test.ts fails if they differ. Change the blueprint, then
+-- JSON is GENERATED from frontend/src/pages/page-studio/app/blueprints/;
+-- vitest *SeedParity*.test.ts fails if they differ. Change the blueprint, then
 -- regenerate this block, never one without the other.
 --
--- PR4: page seed only (no AppRoutes flip). MainNavigation already links /build/cubes;
--- PR5 will serve this slug via STUDIO_ROUTES at that path.
+-- PR4 seed + A3 Impact drawer. MainNavigation links /build/cubes; STUDIO_ROUTES serves this slug.
 
 INSERT INTO public.page_definitions (
     id, tenant_id, name, slug, description, layout, tabs, components, data_sources,
@@ -13,7 +12,7 @@ INSERT INTO public.page_definitions (
 ) VALUES (
     '018f9d02-0001-7000-8000-000000000400',
     '99e99e99-99e9-49e9-89e9-99e99e99e999',
-    'Cubes', 'cubes-catalog', 'Aggregation contracts: dimensions, governed metrics, grains, and materialization. Built in Page Studio.',
+    'Cubes', 'cubes-catalog', 'Aggregation contracts: dimensions, governed metrics, grains, materialization, and impact. Built in Page Studio.',
     $layout${
   "root": "page_root",
   "nodes": {
@@ -22,7 +21,8 @@ INSERT INTO public.page_definitions (
       "type": "Column",
       "children": [
         "top",
-        "grid"
+        "grid",
+        "impact_drawer"
       ],
       "style": {
         "gap": "16px"
@@ -41,6 +41,35 @@ INSERT INTO public.page_definitions (
         "gap": "12px",
         "flexWrap": "wrap"
       }
+    },
+    "impact_drawer": {
+      "id": "impact_drawer",
+      "type": "Drawer",
+      "children": [
+        "impact_dc"
+      ],
+      "props": {
+        "title": "Cube impact",
+        "subtitle": "{{vars.impactCubeName}}",
+        "width": 720,
+        "openWhen": {
+          "type": "condition",
+          "field": "vars.impactCubeId",
+          "operator": "is_not_empty"
+        },
+        "onClose": [
+          {
+            "kind": "setVariable",
+            "name": "impactCubeId",
+            "value": null
+          },
+          {
+            "kind": "setVariable",
+            "name": "impactCubeName",
+            "value": null
+          }
+        ]
+      }
     }
   }
 }$layout$::jsonb,
@@ -52,7 +81,7 @@ INSERT INTO public.page_definitions (
     "props": {
       "icon": "cube",
       "title": "Cubes",
-      "subtitle": "Published aggregation contracts — dimensions, governed metrics, grains, and materialization plan."
+      "subtitle": "Published aggregation contracts — dimensions, governed metrics, grains, materialization, and impact."
     },
     "style": {
       "flex": "1 1 320px"
@@ -203,6 +232,22 @@ INSERT INTO public.page_definitions (
                 ]
               },
               {
+                "label": "Impact",
+                "icon": "insights",
+                "onClick": [
+                  {
+                    "kind": "setVariable",
+                    "name": "impactCubeId",
+                    "value": "{{row.id}}"
+                  },
+                  {
+                    "kind": "setVariable",
+                    "name": "impactCubeName",
+                    "value": "{{row.name}}"
+                  }
+                ]
+              },
+              {
                 "label": "Deploy",
                 "icon": "play",
                 "onClick": [
@@ -251,6 +296,17 @@ INSERT INTO public.page_definitions (
         }
       ]
     }
+  },
+  "impact_dc": {
+    "id": "impact_dc",
+    "type": "DomainComponent",
+    "props": {
+      "component": "cubes.ImpactPanel",
+      "inputs": {
+        "cubeId": "{{vars.impactCubeId}}",
+        "title": "Impact — {{vars.impactCubeName}}"
+      }
+    }
   }
 }$comp$::jsonb,
     $ds$[]$ds$::jsonb,
@@ -280,6 +336,14 @@ INSERT INTO public.page_definitions (
       "default": "all",
       "url": true,
       "description": "Cube list scope filter"
+    },
+    {
+      "name": "impactCubeId",
+      "description": "Cube id open in the Impact drawer"
+    },
+    {
+      "name": "impactCubeName",
+      "description": "Cube name shown in the Impact drawer title"
     }
   ],
   "queries": [
@@ -294,7 +358,7 @@ INSERT INTO public.page_definitions (
     }
   ]
 }$app$::jsonb,
-    1, true, 'published', NOW()
+    2, true, 'published', NOW()
 )
 ON CONFLICT (tenant_id, slug) DO UPDATE SET
     name = EXCLUDED.name, description = EXCLUDED.description, layout = EXCLUDED.layout,
