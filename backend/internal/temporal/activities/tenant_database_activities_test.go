@@ -64,14 +64,14 @@ EXCEPTION WHEN OTHERS THEN
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql STABLE;
-CREATE TABLE tenants (id uuid PRIMARY KEY, name text, code text, status text, allowed_regions jsonb);
+CREATE TABLE tenants (id uuid PRIMARY KEY, name text, code text, status text, allowed_regions jsonb, gold_copy boolean NOT NULL DEFAULT false);
 CREATE TABLE tenant_instance (id uuid PRIMARY KEY, tenant_id uuid NOT NULL REFERENCES tenants(id), is_active bool NOT NULL DEFAULT true);
 CREATE TABLE tenant_product (id uuid PRIMARY KEY, datasource_id uuid NOT NULL REFERENCES tenant_instance(id), is_active bool NOT NULL DEFAULT true);
 CREATE TABLE alpha_datasource (id uuid PRIMARY KEY, datasource_code text NOT NULL);
 CREATE TABLE tenant_product_datasource (
     id uuid PRIMARY KEY, tenant_product_id uuid NOT NULL REFERENCES tenant_product(id),
     alpha_datasource_id uuid NOT NULL REFERENCES alpha_datasource(id),
-    is_active bool NOT NULL DEFAULT true, config jsonb NOT NULL DEFAULT '{}');
+    is_active bool NOT NULL DEFAULT true, config jsonb NOT NULL DEFAULT '{}', core_id uuid);
 `
 
 const sagaPolicies = `
@@ -120,8 +120,10 @@ func newSagaRigOpts(t *testing.T, shared *sagaRig, createDB bool) *sagaRig {
 	require.NoError(t, err)
 	b2, err := os.ReadFile(migDir + "20261210_001_binding_pg_credential.up.sql")
 	require.NoError(t, err)
+	b3, err := os.ReadFile(migDir + "20261217_001_structure_template_marker.up.sql")
+	require.NoError(t, err)
 	if shared == nil {
-		for _, q := range []string{`DROP SCHEMA public CASCADE`, `CREATE SCHEMA public`, sagaStub, string(b1), string(b2), sagaPolicies} {
+		for _, q := range []string{`DROP SCHEMA public CASCADE`, `CREATE SCHEMA public`, sagaStub, string(b1), string(b2), string(b3), sagaPolicies} {
 			_, err := adm.Exec(q)
 			require.NoError(t, err)
 		}

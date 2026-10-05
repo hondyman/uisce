@@ -123,6 +123,36 @@ func TestProvision_AppAndQueueReachTheWorkflow(t *testing.T) {
 	require.NoError(t, g.mock.ExpectationsWereMet())
 }
 
+func TestProvision_TheTemplateDatasourceReachesTheWorkflow(t *testing.T) {
+	g := newRig(t)
+	g.expectFree("gold_copy_db")
+	w := g.do("POST", provPath,
+		`{"tenant_name":"Acme Corp","instance_name":"prod","tenant_code":"acme","app":"orm","template_datasource_id":"441f62c9-aad1-481d-9aab-62943fa11cd3"}`, globalAdmin)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Equal(t, "441f62c9-aad1-481d-9aab-62943fa11cd3", g.tc.inputs[0].TemplateDatasourceID)
+	require.Equal(t, "orm", g.tc.inputs[0].App)
+	require.NoError(t, g.mock.ExpectationsWereMet())
+}
+
+func TestProvision_TheMarkerRequestNamesNoIdAndReachesTheWorkflow(t *testing.T) {
+	g := newRig(t)
+	g.expectFree("gold_copy_db")
+	w := g.do("POST", provPath,
+		`{"tenant_name":"Acme Corp","instance_name":"prod","tenant_code":"acme","app":"orm","structure_from_gold_copy":true}`, globalAdmin)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.True(t, g.tc.inputs[0].StructureFromGoldCopy)
+	require.Empty(t, g.tc.inputs[0].TemplateDatasourceID, "the saga resolves the template; the request carries no id")
+	require.NoError(t, g.mock.ExpectationsWereMet())
+}
+
+func TestProvision_WithoutATemplateTheCloneIsUnchanged(t *testing.T) {
+	g := newRig(t)
+	g.expectFree("gold_copy_db")
+	w := g.do("POST", provPath, `{"tenant_name":"Acme","instance_name":"prod","tenant_code":"acme","app":"orm"}`, globalAdmin)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Empty(t, g.tc.inputs[0].TemplateDatasourceID)
+}
+
 func TestProvision_WithoutAnAppNothingChanges(t *testing.T) {
 	g := newRig(t)
 	g.expectFree("gold_copy_db")
@@ -134,17 +164,22 @@ func TestProvision_WithoutAnAppNothingChanges(t *testing.T) {
 // Everything below must be refused before the database is read or a workflow is started.
 func TestProvision_RefusesUnsafeInputBeforeDoingAnything(t *testing.T) {
 	cases := map[string]string{
-		"app uppercase":       `{"tenant_name":"A","instance_name":"p","app":"Orm"}`,
-		"app path":            `{"tenant_name":"A","instance_name":"p","app":"../orm"}`,
-		"app sql":             `{"tenant_name":"A","instance_name":"p","app":"orm; drop"}`,
-		"code with quote":     `{"tenant_name":"A","instance_name":"p","tenant_code":"x\"; DROP DATABASE postgres; --"}`,
-		"code uppercase":      `{"tenant_name":"A","instance_name":"p","tenant_code":"Acme"}`,
-		"code leading digit":  `{"tenant_name":"A","instance_name":"p","tenant_code":"1acme"}`,
-		"code too long":       `{"tenant_name":"A","instance_name":"p","tenant_code":"` + strings.Repeat("a", 60) + `"}`,
-		"code with a space":   `{"tenant_name":"A","instance_name":"p","tenant_code":"ac me"}`,
-		"missing tenant name": `{"instance_name":"p"}`,
-		"missing instance":    `{"tenant_name":"A"}`,
-		"not json":            `nope`,
+		"app uppercase":        `{"tenant_name":"A","instance_name":"p","app":"Orm"}`,
+		"app path":             `{"tenant_name":"A","instance_name":"p","app":"../orm"}`,
+		"app sql":              `{"tenant_name":"A","instance_name":"p","app":"orm; drop"}`,
+		"code with quote":      `{"tenant_name":"A","instance_name":"p","tenant_code":"x\"; DROP DATABASE postgres; --"}`,
+		"code uppercase":       `{"tenant_name":"A","instance_name":"p","tenant_code":"Acme"}`,
+		"code leading digit":   `{"tenant_name":"A","instance_name":"p","tenant_code":"1acme"}`,
+		"code too long":        `{"tenant_name":"A","instance_name":"p","tenant_code":"` + strings.Repeat("a", 60) + `"}`,
+		"code with a space":    `{"tenant_name":"A","instance_name":"p","tenant_code":"ac me"}`,
+		"template without app": `{"tenant_name":"A","instance_name":"p","template_datasource_id":"11111111-1111-4111-8111-111111111111"}`,
+		"template not a uuid":  `{"tenant_name":"A","instance_name":"p","app":"orm","template_datasource_id":"gold"}`,
+		"template with sql":    `{"tenant_name":"A","instance_name":"p","app":"orm","template_datasource_id":"1' OR '1'='1"}`,
+		"marker without app":   `{"tenant_name":"A","instance_name":"p","structure_from_gold_copy":true}`,
+		"marker and an id":     `{"tenant_name":"A","instance_name":"p","app":"orm","structure_from_gold_copy":true,"template_datasource_id":"11111111-1111-4111-8111-111111111111"}`,
+		"missing tenant name":  `{"instance_name":"p"}`,
+		"missing instance":     `{"tenant_name":"A"}`,
+		"not json":             `nope`,
 	}
 	for name, body := range cases {
 		g := newRig(t)

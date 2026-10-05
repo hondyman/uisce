@@ -21,6 +21,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/secrets"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/tenantdb"
+	"github.com/hondyman/uisce/backend/internal/tenantschema"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"time"
@@ -110,6 +111,9 @@ func (a *TenantProvisioningActivities) validateTenantDatabase(in provisioning.Te
 	if !a.TenantDB.configured() {
 		return "", nonRetryable(errTypeTenantDBConfig, ErrTenantDatabaseNotConfigured)
 	}
+	if err := a.checkRoleGroup(); err != nil {
+		return "", err
+	}
 	return role, nil
 }
 
@@ -124,14 +128,30 @@ func (a *TenantProvisioningActivities) BindTenantDatabase(ctx context.Context, i
 	}
 	var out provisioning.TenantDatabaseBinding
 	err = db.WithTenantTransaction(ctx, a.ControlDB.DB, in.TenantID, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `
-			SELECT tpd.id
-			FROM public.tenant_product_datasource tpd
-			JOIN public.tenant_product tp ON tp.id = tpd.tenant_product_id
-			JOIN public.alpha_datasource ad ON ad.id = tpd.alpha_datasource_id
-			WHERE tp.datasource_id = $1 AND ad.datasource_code = $2`, in.InstanceID, in.App)
+		// The datasource to repoint. In structure mode (ADR-050) it is the tenant's clone OF THE TEMPLATE, found by the id of the
+		// gold datasource it was cloned from (core_id), because an application code is not that: the gold copy has an empty
+		// placeholder coded `orm` and the real CRIMS template coded `FO_ORM` (twice), so matching by code would repoint the wrong
+		// row or refuse as ambiguous. Without a template it is the datasource of the app's code, as before.
+		var rows *sql.Rows
+		var err error
+		what := fmt.Sprintf("the %s datasource", in.App)
+		if in.TemplateDatasourceID != "" {
+			what = "the tenant's copy of the template datasource " + in.TemplateDatasourceID
+			rows, err = tx.QueryContext(ctx, `
+				SELECT tpd.id
+				FROM public.tenant_product_datasource tpd
+				JOIN public.tenant_product tp ON tp.id = tpd.tenant_product_id
+				WHERE tp.datasource_id = $1 AND tpd.core_id = $2`, in.InstanceID, in.TemplateDatasourceID)
+		} else {
+			rows, err = tx.QueryContext(ctx, `
+				SELECT tpd.id
+				FROM public.tenant_product_datasource tpd
+				JOIN public.tenant_product tp ON tp.id = tpd.tenant_product_id
+				JOIN public.alpha_datasource ad ON ad.id = tpd.alpha_datasource_id
+				WHERE tp.datasource_id = $1 AND ad.datasource_code = $2`, in.InstanceID, in.App)
+		}
 		if err != nil {
-			return fmt.Errorf("find the %s datasource: %w", in.App, err)
+			return fmt.Errorf("find %s: %w", what, err)
 		}
 		var ids []string
 		for rows.Next() {
@@ -148,7 +168,7 @@ func (a *TenantProvisioningActivities) BindTenantDatabase(ctx context.Context, i
 		}
 		if len(ids) != 1 {
 			return nonRetryable(errTypeTenantDBInput,
-				fmt.Errorf("instance %s has %d datasource(s) for app %q; exactly one is required", in.InstanceID, len(ids), in.App))
+				fmt.Errorf("instance %s has %d datasource(s) for %s; exactly one is required", in.InstanceID, len(ids), what))
 		}
 		out.DatasourceID = ids[0]
 		out.Role = role
@@ -259,6 +279,44 @@ func newPassword() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
+// checkRoleGroup refuses a configured group name that is not a plain lower-case identifier. It is non-retryable: no retry
+// fixes a configuration value, and a gate that is set but malformed must stop the run, not turn itself off.
+func (a *TenantProvisioningActivities) checkRoleGroup() error {
+	if a.RoleGroup == "" || pgIdent.MatchString(a.RoleGroup) {
+		return nil
+	}
+	return nonRetryable(errTypeTenantDBConfig, fmt.Errorf("%w: TENANT_DB_ROLE_GROUP=%q is not a plain lower-case identifier (letters, digits and underscores, starting with a letter, at most 63 characters)",
+		ErrTenantDatabaseNotConfigured, a.RoleGroup))
+}
+
+// joinRoleGroup makes the tenant's role a member of the configured role group, if there is one. A group that does not
+// exist is a configuration error that no retry fixes, so the step fails closed and says what to create, rather than
+// leaving a tenant whose role exists and cannot connect.
+func (a *TenantProvisioningActivities) joinRoleGroup(ctx context.Context, conn *sql.DB, role string) error {
+	if err := a.checkRoleGroup(); err != nil {
+		return err
+	}
+	if a.RoleGroup == "" {
+		return nil
+	}
+	var stmt string
+	var exists bool
+	if err := conn.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1)`, a.RoleGroup).Scan(&exists); err != nil {
+		return fmt.Errorf("look up the role group: %w", err)
+	}
+	if !exists {
+		return nonRetryable(errTypeTenantDBConfig, fmt.Errorf("%w: the role group %q does not exist; create it (CREATE ROLE %s NOLOGIN) and add its pg_hba.conf line, see docs/runbooks/tenant-database-access.md",
+			ErrTenantDatabaseNotConfigured, a.RoleGroup, a.RoleGroup))
+	}
+	if err := conn.QueryRowContext(ctx, `SELECT format('GRANT %I TO %I', $1::text, $2::text)`, a.RoleGroup, role).Scan(&stmt); err != nil {
+		return fmt.Errorf("build group grant: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, stmt); err != nil {
+		return fmt.Errorf("add the role to its group: %w", err)
+	}
+	return nil
+}
+
 // ensureRole creates the role (or resets its password to the stored one) and grants it DML on
 // the tenant's schema. It never gets DDL: migrations run as the administrator.
 func (a *TenantProvisioningActivities) ensureRole(ctx context.Context, database, role, password string) error {
@@ -280,6 +338,10 @@ func (a *TenantProvisioningActivities) ensureRole(ctx context.Context, database,
 	}
 	if _, err := conn.ExecContext(ctx, ddl); err != nil {
 		return fmt.Errorf("create role: %w", redact(err, password))
+	}
+
+	if err := a.joinRoleGroup(ctx, conn, role); err != nil {
+		return err
 	}
 
 	for _, tmpl := range []string{
@@ -573,6 +635,9 @@ func (a *TenantProvisioningActivities) RegisterTenantDatabaseActivities(w Activi
 	w.RegisterActivity(a.BindTenantDatabase)
 	w.RegisterActivity(a.ProvisionTenantDatabaseAccess)
 	w.RegisterActivity(a.ApplyTenantMigrations)
+	w.RegisterActivity(a.ResolveStructureTemplate)
+	w.RegisterActivity(a.PlanTenantStructure)
+	w.RegisterActivity(a.ApplyTenantStructure)
 	w.RegisterActivity(a.ProbeTenantDatabase)
 	w.RegisterActivity(a.ActivateTenantDatabase)
 	w.RegisterActivity(a.RollbackTenantDatabase)
@@ -593,4 +658,16 @@ func (a *TenantProvisioningActivities) ConfigureTenantDatabaseFromEnv() {
 		a.Secrets = p
 	}
 	a.Creds = dscreds.Default()
+	// Set means set: a malformed value is KEPT, so every tenant-database step refuses (checkRoleGroup) with the value in the
+	// message, instead of the gate quietly switching itself off. Unset is a legitimate no-op (a cluster whose
+	// pg_hba.conf already admits every tenant role).
+	if g := os.Getenv("TENANT_DB_ROLE_GROUP"); g != "" {
+		a.RoleGroup = g
+		if err := a.checkRoleGroup(); err != nil {
+			a.Logger.Errorf("%v: every tenant-database step will refuse until it is fixed", err)
+		}
+	}
+	if a.ControlDB != nil {
+		a.Templates = &tenantschema.Loader{Store: &tenantschema.AlphaStore{DB: a.ControlDB.DB, Resolver: security.NewDBDatasourceResolver(a.ControlDB)}}
+	}
 }

@@ -187,6 +187,11 @@ const sagaCompensationVersion = "saga-compensation-v2"
 // request that does not name an app takes exactly the path it took before.
 const sagaTenantDatabaseVersion = "saga-tenant-database-v1"
 
+// sagaTenantStructureVersion gates the compiled-structure path (ADR-050): the tenant's structure is compiled from what
+// alpha holds after the gold copy's scan instead of being cloned from the gold copy's database. It also requires App and
+// TemplateDatasourceID, so a request that names no template takes exactly the path it took before.
+const sagaTenantStructureVersion = "saga-tenant-structure-v1"
+
 // TenantInstanceProvisioningWorkflowFn is the registered provisioning saga.
 func TenantInstanceProvisioningWorkflowFn(ctx workflow.Context, input provisioning.ProvisioningWorkflowInput) (*provisioning.ProvisioningWorkflowResult, error) {
 	if workflow.GetVersion(ctx, sagaCompensationVersion, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
@@ -348,6 +353,29 @@ func tenantInstanceProvisioning(ctx workflow.Context, input provisioning.Provisi
 			"tenantOwned", state.TenantOwned, "instanceOwned", state.InstanceOwned)
 	}
 
+	// 3b. Plan the structure (ADR-050), before anything is created: a template that cannot be deployed (an incomplete or
+	// unsupported scan, or a datasource that is not the gold copy's) refuses the run here, with nothing but the two rows
+	// above to undo.
+	structureMode := input.App != "" && (input.TemplateDatasourceID != "" || input.StructureFromGoldCopy) &&
+		workflow.GetVersion(ctx, sagaTenantStructureVersion, workflow.DefaultVersion, 1) == 1
+	var structure provisioning.StructurePlan
+	templateID := input.TemplateDatasourceID
+	if structureMode {
+		planIn := provisioning.TenantDatabaseInput{TenantID: input.TenantID, InstanceID: input.InstanceID, App: input.App,
+			DatabaseName: input.DatabaseName, TemplateDatasourceID: templateID}
+		if templateID == "" {
+			// The template is whatever the gold copy marks for this app; zero or several refuse the run here.
+			if e := workflow.ExecuteActivity(ctx, acts.ResolveStructureTemplate, planIn).Get(ctx, &templateID); e != nil {
+				return fail("ResolveStructureTemplate", e)
+			}
+			planIn.TemplateDatasourceID = templateID
+		}
+		if e := workflow.ExecuteActivity(ctx, acts.PlanTenantStructure, planIn).Get(ctx, &structure); e != nil {
+			return fail("PlanTenantStructure", e)
+		}
+		logger.Info("Tenant structure planned", "template", structure.TemplateDatasourceID, "hash", structure.Hash, "tables", structure.Tables, "statements", structure.Statements)
+	}
+
 	// 4. Tenant database.
 	if e := workflow.ExecuteActivity(ctx, acts.CreateTenantDatabase, input.DatabaseName).Get(ctx, nil); e != nil {
 		return fail("CreateTenantDatabase", e)
@@ -358,12 +386,15 @@ func tenantInstanceProvisioning(ctx workflow.Context, input provisioning.Provisi
 		}})
 	}
 
-	// 5. Schema. Undone by dropping the database above, so no compensation of its own.
-	if e := workflow.ExecuteActivity(ctx, acts.CloneSchemaFromGoldCopy, provisioning.CloneSchemaInput{
-		SourceDatabase: input.GoldCopyDatabase,
-		TargetDatabase: input.DatabaseName,
-	}).Get(ctx, nil); e != nil {
-		return fail("CloneSchemaFromGoldCopy", e)
+	// 5. Schema. Undone by dropping the database above, so no compensation of its own. In structure mode there is no
+	// clone: the structure is applied in step 8, from alpha's scan, and the gold copy's database is never read.
+	if !structureMode {
+		if e := workflow.ExecuteActivity(ctx, acts.CloneSchemaFromGoldCopy, provisioning.CloneSchemaInput{
+			SourceDatabase: input.GoldCopyDatabase,
+			TargetDatabase: input.DatabaseName,
+		}).Get(ctx, nil); e != nil {
+			return fail("CloneSchemaFromGoldCopy", e)
+		}
 	}
 
 	// 6. Lakekeeper namespace.
@@ -404,6 +435,8 @@ func tenantInstanceProvisioning(ctx workflow.Context, input provisioning.Provisi
 			DatabaseName:     input.DatabaseName,
 			GoldCopyDatabase: input.GoldCopyDatabase,
 			BaselineThrough:  input.BaselineThrough,
+			TemplateDatasourceID: templateID,
+			StructureHash:        structure.Hash,
 		}
 		var bound provisioning.TenantDatabaseBinding
 		if e := workflow.ExecuteActivity(ctx, acts.BindTenantDatabase, tdIn).Get(ctx, &bound); e != nil {
@@ -420,11 +453,20 @@ func tenantInstanceProvisioning(ctx workflow.Context, input provisioning.Provisi
 			return fail("ProvisionTenantDatabaseAccess", e)
 		}
 		var report migrations.Report
-		if e := workflow.ExecuteActivity(ctx, acts.ApplyTenantMigrations, tdIn).Get(ctx, &report); e != nil {
-			return fail("ApplyTenantMigrations", e)
-		}
-		if !report.Done {
-			return fail("ApplyTenantMigrations", fmt.Errorf("migration report for %s is not done", report.Target))
+		if structureMode {
+			if e := workflow.ExecuteActivity(ctx, acts.ApplyTenantStructure, tdIn).Get(ctx, &report); e != nil {
+				return fail("ApplyTenantStructure", e)
+			}
+			if !report.Done {
+				return fail("ApplyTenantStructure", fmt.Errorf("structure report for %s is not done", report.Target))
+			}
+		} else {
+			if e := workflow.ExecuteActivity(ctx, acts.ApplyTenantMigrations, tdIn).Get(ctx, &report); e != nil {
+				return fail("ApplyTenantMigrations", e)
+			}
+			if !report.Done {
+				return fail("ApplyTenantMigrations", fmt.Errorf("migration report for %s is not done", report.Target))
+			}
 		}
 		if e := workflow.ExecuteActivity(ctx, acts.ProbeTenantDatabase, tdIn).Get(ctx, nil); e != nil {
 			return fail("ProbeTenantDatabase", e)
