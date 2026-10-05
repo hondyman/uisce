@@ -1483,6 +1483,88 @@ database, equals the source column by column, constraint by constraint, index by
 trigger. The first run against a real server found a defect the mocked tests could not: an index that is a partition of a
 partitioned index also has `relispartition` set and no bound, so the partitioning query is restricted to tables.
 
+**Onboarding uses it (the saga).** `ProvisionTenantRequest` and `ProvisioningWorkflowInput` take a
+`template_datasource_id` (with `app`; an admin-only request, a uuid, validated before a workflow starts). With it, behind
+`workflow.GetVersion("saga-tenant-structure-v1")`, the saga changes in three places and in no other:
+
+**The template is marked, not configured.** Naming a template datasource by a setting would make a config string the source of truth
+(the same drift that put `crims` in the repository while the deployment runs `alpha`). Instead
+`tenant_product_datasource.structure_template_app` marks the one datasource that is the template for an app; a partial unique index
+allows at most one per app, and a trigger refuses the mark on any datasource that is not the gold-copy tenant's. A request with
+`structure_from_gold_copy` (exclusive with an explicit `template_datasource_id`) runs `ResolveStructureTemplate` first, which refuses
+(non-retryable, before anything is created) when none or more than one is marked, listing the ids. The plan result carries the
+template id and the plan hash, which is the record of what a run deployed.
+
+1. **`PlanTenantStructure` runs before anything is created.** It loads the template from `alpha` (the datasource's owner
+   must be the gold-copy tenant, checked before any metadata is read), compiles it, and returns a hash, a table count and a
+   statement count (never the SQL, which belongs in no workflow history). A template that cannot be deployed (incomplete or
+   unsupported scan, not the gold copy's) refuses the run with only the tenant and instance rows to undo.
+2. **No `CloneSchemaFromGoldCopy`.** The gold copy's database is never read.
+3. **`ApplyTenantStructure` replaces `ApplyTenantMigrations`.** It recompiles and refuses (`TenantStructureChanged`,
+   non-retryable) if the template no longer compiles to the planned hash, so a rescan during a run cannot slip through.
+   It applies the plan in one transaction through the same `TenantRunner` as every tenant migration (advisory lock, log,
+   drift): the plan is one generated migration, `0001_structure.up.sql`, under the target `tenant:<id>:structure`, whose
+   sha256 is the plan hash, so a tenant built from a different compilation is drift and is refused, never mixed. It then
+   grants the tenant's role usage, DML and sequence use on **each schema of the template** and default privileges for what
+   is created later: the role was created before the structure existed and had been granted on `public` only, and the
+   structure lives in `orm`, `mdm`, `cash_flow`. The role gets no DDL.
+
+A request without a template, or a template without an app, takes exactly the path it took before.
+
+**How fast, measured** (`TestStructure_OnboardingTimingOnARealTemplate`, real 522-table template scanned from the gold-copy source, the real saga
+activities on a PostgreSQL 16 laptop cluster): plan 118 ms (8,564 nodes loaded and compiled), apply 1.28 s (one transaction,
+3,526 statements, plus the grants on six schemas), probe 19 ms, a resumed re-apply 142 ms: **about 1.4 s for the tenant's whole
+structure**. Cloning a prebuilt template database was measured at 0.6 s against applying the compiled plan at 1.3 s, so a
+template-database clone would save about 0.7 s per tenant at the price of a template lifecycle (build per plan hash, no
+sessions on it while cloning, serialised clones, invalidation on rescan). **Not built, on purpose:** the structure is no longer
+what makes onboarding slow, and the other saga steps (the Lakekeeper namespace, cloning the gold copy's products, the
+tenant's role) have not been timed. Revisit only if they are measured and the structure is still the largest part.
+
+**Hosting: a tenant's role has to be admitted by the cluster.** The saga creates `<database>_app` and stores its password, but
+`pg_hba.conf` decides whether it may connect. On a cluster tightened to named roles (the dev host's is) a new tenant role matches no
+rule and is refused wherever no earlier rule happens to admit it. `TENANT_DB_ROLE_GROUP` names a cluster role every tenant role joins
+at provisioning, so one `hostssl all +<group> <address>/32 scram-sha-256` line admits them all. **Unset is a legitimate no-op** (a cluster
+whose `pg_hba.conf` already admits every tenant role). **Set and malformed refuses the run**, non-retryably, with the offending value in the
+message, from the planning step (before anything is created) and from every tenant-database step: a gate that a typo can switch off
+is not a gate. The group is never created by the saga (an administrator decision); set, well formed and missing, the step fails closed
+with the statement to run. Membership adds no privilege. The line's placement (first match wins) and scope (specific hosts, not the
+tailnet), and how to verify it from `pg_hba_file_rules` after `pg_reload_conf()`, are in `docs/runbooks/tenant-database-access.md`.
+
+**The tenant password is the credential of record.** Over `hostssl` with scram, access to a tenant's database is one password per tenant role.
+- *Where it lives.* In the secrets store, at the canonical path for the tenant and datasource (`dscreds.CanonicalPath`), written **before**
+  the role is created with it. The datasource row holds only the reference (`secret_path`), never the password. Cloning the gold copy
+  strips credentials and `secret_path` (`dscreds.StripForClone`), so no tenant ever holds another's, and the gold copy's certificate does not
+  travel.
+- *How it changes.* **There is no automated rotation.** The saga deliberately never replaces an issued credential: a re-run resets the role to
+  the *stored* password, and a stored secret that cannot be read after one was issued is `ErrCredentialLost`, never a reason to mint
+  another (the secrets store reports an outage as "not found"). A rotation is therefore a deliberate, manual act: `ALTER ROLE <role> PASSWORD`,
+  write the new secret at the canonical path, invalidate the credentials cache (`dscreds` `Invalidate`), and bump the binding's
+  `version`, because `tenantdb` pools are keyed by it and an existing pool would otherwise keep its old connections.
+- *What a leak costs.* The holder can authenticate as that one tenant's role from any address the `pg_hba` rule admits, and so read and
+  write that tenant's data. Not another tenant's (its role cannot connect to any other database; the saga's probe proves it), not the schema
+  (no DDL), and it is not a superuser. The blast radius is one tenant. Response: rotate as above, or drop the database and role and
+  re-provision. Narrowing the `pg_hba` rule to specific hosts is what keeps a leaked password from being usable from everywhere.
+- *What protects the connection today, and what does not.* The `hostssl` rule makes the **server** refuse a plaintext attempt from the
+  tenant group. The **client** side is weaker: `tenantdb` builds its pool from `pgxpool.ParseConfig("")` and never reads the datasource's `sslmode`
+  (the gold copy's own config says `disable`, which is kept when cloning but has no effect), so it uses the library default, `prefer`: TLS
+  **without checking the server's certificate**, falling back to plaintext if TLS is unavailable. Scram keeps the password off the wire, but a
+  machine in the middle could read and alter the data. This is an open hardening item, not fixed here: the router should take explicit TLS
+  settings (`require`, or `verify-full` with the cluster's CA) per cluster, and refuse a plaintext fallback.
+- *The alternative, and why not now.* A client certificate per tenant role (`verify-full`) needs no shared secret, but buys a certificate
+  lifecycle (issuance from a CA whose key custody is itself an open item, rotation, revocation, and different handling in each driver). Not worth
+  it now; it is the answer if the password ever has to be treated as a lower-assurance credential.
+
+**The datasource that is repointed is the tenant's copy of the template, not whichever has the app's code.** `BindTenantDatabase` used to find the
+datasource to repoint by matching the application code. In the gold copy the code `orm` belongs to an empty placeholder named "ORM", and the real
+CRIMS template carries the code `FO_ORM` (on two rows); `app: "orm"` would have repointed the placeholder's copy and left the tenant's CRIMS
+datasource naming nothing. In structure mode the saga now selects the tenant's clone of the template by `core_id` (the gold datasource a clone came
+from), refuses unless there is exactly one, and every other copy of a gold datasource that still names the gold copy's database loses it and fails closed.
+`app` is no longer what chooses the datasource in this mode; it must still be a plain identifier.
+
+**What the scan-freshness gate must keep.** When it lands it keeps everything above and softens none of it: plan before anything is created; refuse
+if the template recompiles to something other than what was planned; fail closed before a byte of a datasource's metadata is read unless it is the gold
+copy's. In particular it must **fail when it did not run**: a check that is skipped, absent, unconfigured or unreadable is a refusal, never a pass.
+
 **Current.** Not decided here, and not yet enforced: a deploy must refuse unless the gold copy's scan is fresh against its
 source. `scripts/tenant-ddl-scan-coverage.py` is the prototype of that check (on 2026-10-04 the scan of 2026-09-26 was 16
 tables and 238 columns behind). The generator that dumps the source directly stays as a **fidelity oracle** the compiled

@@ -2,6 +2,7 @@ package activities_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"reflect"
 	"runtime"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/hondyman/uisce/backend/internal/provisioning"
 	"github.com/hondyman/uisce/backend/internal/temporal/activities"
 )
 
@@ -31,8 +33,8 @@ func TestRegisterTenantDatabaseActivities_RegistersWhatTheSagaCalls(t *testing.T
 	(&activities.TenantProvisioningActivities{}).RegisterTenantDatabaseActivities(rec)
 	sort.Strings(rec.names)
 	require.Equal(t, []string{
-		"ActivateTenantDatabase", "ApplyTenantMigrations", "BindTenantDatabase", "InspectProvisioningState",
-		"ProbeTenantDatabase", "ProvisionTenantDatabaseAccess", "RollbackTenantDatabase",
+		"ActivateTenantDatabase", "ApplyTenantMigrations", "ApplyTenantStructure", "BindTenantDatabase", "InspectProvisioningState",
+		"PlanTenantStructure", "ProbeTenantDatabase", "ProvisionTenantDatabaseAccess", "ResolveStructureTemplate", "RollbackTenantDatabase",
 	}, rec.names)
 }
 
@@ -51,7 +53,7 @@ func TestBothWorkersRegisterTheTenantDatabaseActivitiesAndNeverAsBPSafe(t *testi
 				continue
 			}
 			for _, name := range []string{"BindTenantDatabase", "ProvisionTenantDatabaseAccess", "ApplyTenantMigrations",
-				"ProbeTenantDatabase", "ActivateTenantDatabase", "RollbackTenantDatabase", "InspectProvisioningState"} {
+				"PlanTenantStructure", "ResolveStructureTemplate", "ApplyTenantStructure", "ProbeTenantDatabase", "ActivateTenantDatabase", "RollbackTenantDatabase", "InspectProvisioningState"} {
 				if !strings.Contains(line, name) {
 					continue
 				}
@@ -73,5 +75,65 @@ func TestDatabaseActivitiesRefuseUnsafeNames(t *testing.T) {
 		err = acts.RollbackCreateTenantDatabase(context.Background(), bad)
 		require.Error(t, err, bad)
 		require.True(t, isNonRetryableOf(err, "TenantDatabaseInvalidInput"), "%q: %v", bad, err)
+	}
+}
+
+// Unset is a legitimate no-op. Set and malformed must STOP the run, with the offending value in the message: a gate that is
+// switched off by a typo is not a gate.
+func TestConfigureFromEnv_ASetButMalformedRoleGroupRefusesEveryTenantDatabaseStep(t *testing.T) {
+	admin := activities.TenantDatabaseAdmin{Host: "h", Port: 5432, User: "u", Password: "p"}
+	in := provisioning.TenantDatabaseInput{TenantID: "11111111-2222-3333-4444-555555555555", App: "orm", DatabaseName: "tenant_acme",
+		TemplateDatasourceID: "441f62c9-aad1-481d-9aab-62943fa11cd3"}
+	steps := map[string]func(a *activities.TenantProvisioningActivities) error{
+		"PlanTenantStructure": func(a *activities.TenantProvisioningActivities) error {
+			_, err := a.PlanTenantStructure(context.Background(), in)
+			return err
+		},
+		"BindTenantDatabase": func(a *activities.TenantProvisioningActivities) error {
+			_, err := a.BindTenantDatabase(context.Background(), in)
+			return err
+		},
+		"ProvisionTenantDatabaseAccess": func(a *activities.TenantProvisioningActivities) error {
+			return a.ProvisionTenantDatabaseAccess(context.Background(), in)
+		},
+		"ApplyTenantStructure": func(a *activities.TenantProvisioningActivities) error {
+			x := in
+			x.StructureHash = "h"
+			_, err := a.ApplyTenantStructure(context.Background(), x)
+			return err
+		},
+	}
+	for name, bad := range map[string]string{
+		"upper case": "Ivy_Apps", "an injected name": `x; DROP ROLE postgres`, "a quoted name": `"apps"`,
+		"too long": strings.Repeat("a", 64), "a dash": "ivy-apps", "a leading digit": "1apps",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("TENANT_DB_ROLE_GROUP", bad)
+			a := &activities.TenantProvisioningActivities{Logger: zap.NewNop().Sugar(), TenantDB: admin}
+			a.ConfigureTenantDatabaseFromEnv()
+			require.Equal(t, bad, a.RoleGroup, "the value is kept, not dropped: dropping it would turn the gate off")
+			for step, run := range steps {
+				err := run(a)
+				require.Error(t, err, step)
+				require.True(t, isNonRetryableOf(err, "TenantDatabaseNotConfigured"), "%s: %v", step, err)
+				require.ErrorContains(t, err, fmt.Sprintf("%q", bad), "%s must name the offending value (quoted, so it is unambiguous in a log)", step)
+				require.ErrorContains(t, err, "TENANT_DB_ROLE_GROUP", step)
+			}
+		})
+	}
+}
+
+func TestConfigureFromEnv_AValidOrUnsetRoleGroupIsAccepted(t *testing.T) {
+	for name, tc := range map[string]string{"unset": "", "a plain identifier": "ivy_tenant_apps", "with digits": "ivy_apps_2"} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("TENANT_DB_ROLE_GROUP", tc)
+			a := &activities.TenantProvisioningActivities{Logger: zap.NewNop().Sugar(), TenantDB: activities.TenantDatabaseAdmin{Host: "h", Port: 5432, User: "u", Password: "p"}}
+			a.ConfigureTenantDatabaseFromEnv()
+			require.Equal(t, tc, a.RoleGroup)
+			// no refusal on account of the group: the step fails later, for other reasons, or succeeds
+			_, err := a.BindTenantDatabase(context.Background(), provisioning.TenantDatabaseInput{TenantID: "11111111-2222-3333-4444-555555555555", App: "orm", DatabaseName: "Bad Name"})
+			require.Error(t, err)
+			require.NotContains(t, err.Error(), "TENANT_DB_ROLE_GROUP")
+		})
 	}
 }

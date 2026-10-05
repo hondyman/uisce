@@ -12,6 +12,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/dscreds"
 	"github.com/hondyman/uisce/backend/internal/migrations"
+	"github.com/hondyman/uisce/backend/internal/tenantschema"
 	"github.com/hondyman/uisce/backend/internal/secrets"
 	"github.com/hondyman/uisce/backend/internal/iceberg"
 	"github.com/hondyman/uisce/backend/internal/provisioning"
@@ -33,6 +34,13 @@ type TenantProvisioningActivities struct {
 	TenantDB   TenantDatabaseAdmin
 	Migrations *migrations.TenantRunner
 	Creds      *dscreds.Resolver
+	// Templates loads the gold copy's scan for the structure steps (tenant_structure_activities.go, ADR-048). Unset, those
+	// steps fail closed.
+	Templates *tenantschema.Loader
+	// RoleGroup, when set, is a cluster role every tenant's role is made a member of, so one pg_hba.conf line
+	// (`hostssl all +<group> <addresses> scram-sha-256`) admits every tenant role without listing them. It must already
+	// exist: creating cluster roles is an administrator's decision, not a side effect of onboarding. Empty means no group.
+	RoleGroup string
 }
 
 func NewTenantProvisioningActivities(db *sql.DB, controlDB *sql.DB, logger *zap.SugaredLogger) *TenantProvisioningActivities {
