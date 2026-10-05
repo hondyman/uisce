@@ -76,6 +76,7 @@ describe('cubes studio registration (PR3)', () => {
       'cubes.list',
       'cubes.get',
       'cubes.editorStart',
+      'cubes.patchDraft',
       'cubes.create',
       'cubes.patch',
       'cubes.validate',
@@ -100,6 +101,26 @@ describe('cubes studio registration (PR3)', () => {
     expect(fed?.events.map((e) => e.name)).toEqual(['onChange', 'onKeySamplesChange']);
     expect(getDomainComponent('cubes.Designer')).toBeUndefined();
     expect(listDomainComponents().some((d) => d.id === 'cubes.Designer')).toBe(false);
+  });
+});
+
+describe('cubes.patchDraft', () => {
+  it('merges federation and key samples into the draft', async () => {
+    const draft = emptyCubeDraft({ name: 'X', boId: 'account' });
+    const federation = {
+      sources: [{ boId: 'account', alias: 't0' }],
+      joins: [],
+    };
+    const samples = [{ leftAlias: 't0', rightAlias: 't1', leftKeys: 1, rightKeys: 1, matched: 1 }];
+    const r = (await run('cubes.patchDraft', {
+      draft,
+      federation,
+      federationKeySamples: samples,
+      patch: { description: 'merged' },
+    })) as { draft: { federation: typeof federation; federationKeySamples: typeof samples; description: string } };
+    expect(r.draft.federation).toEqual(federation);
+    expect(r.draft.federationKeySamples).toEqual(samples);
+    expect(r.draft.description).toBe('merged');
   });
 });
 

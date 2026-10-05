@@ -9,6 +9,7 @@ import { validationRulesBlueprint } from './validationRules';
 import { lakehouseStreamingBlueprint } from './lakehouseStreaming';
 import { systemLakehouseBlueprint } from './systemLakehouse';
 import { cubesCatalogBlueprint } from './cubesCatalog';
+import { cubeDesignerBlueprint } from './cubeDesigner';
 
 /**
  * Pages the studio can start from: complete, working pages built entirely
@@ -99,6 +100,12 @@ export const PAGE_BLUEPRINTS: PageBlueprint[] = [
     name: 'Cubes',
     description: 'Aggregation contracts: dimensions, governed metrics, grains, and materialization. Built in Page Studio.',
     build: cubesCatalogBlueprint,
+  },
+  {
+    id: 'cube-designer',
+    name: 'Cube designer',
+    description: 'Composed cube editor at /build/cubes/new and /build/cubes/:id (overview, axes, federation, materialization).',
+    build: cubeDesignerBlueprint,
   },
 ];
 

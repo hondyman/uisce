@@ -39,6 +39,15 @@ function asDraft(p: Record<string, unknown>): CubeDraft {
   return d as CubeDraft;
 }
 
+function asFederation(value: unknown): CubeFederation {
+  if (!value || typeof value !== 'object') return {};
+  return value as CubeFederation;
+}
+
+function asKeySamples(value: unknown): FederationKeySample[] {
+  return Array.isArray(value) ? (value as FederationKeySample[]) : [];
+}
+
 function optionalGrain(p: Record<string, unknown>): string[] | undefined {
   const g = p.grain;
   if (Array.isArray(g)) return g.map(String);
@@ -120,6 +129,7 @@ const operations: OperationDef[] = [
       { name: 'cube', type: 'object' },
       { name: 'key', type: 'string' },
       { name: 'title', type: 'string' },
+      { name: 'contractVersion', type: 'number' },
     ],
     run: async (p) => {
       const raw = typeof p.id === 'string' ? p.id.trim() : '';
@@ -132,6 +142,7 @@ const operations: OperationDef[] = [
           cube: null,
           key: 'new',
           title: 'New cube',
+          contractVersion: 1,
           federationKeySamples: draft.federationKeySamples,
         };
       }
@@ -143,8 +154,35 @@ const operations: OperationDef[] = [
         cube,
         key: `${cube.id}:${cube.contractVersion}`,
         title: cube.name,
+        contractVersion: cube.contractVersion,
         federationKeySamples: draft.federationKeySamples,
       };
+    },
+  },
+  {
+    id: 'cubes.patchDraft',
+    domain: DOMAIN,
+    kind: 'query',
+    label: 'Merge into cube draft (client)',
+    description:
+      'Returns draft with optional federation / keySamples / patch merged. Used by DomainComponent events and Form onChange.',
+    params: [
+      { name: 'draft', type: 'object', required: true },
+      { name: 'federation', type: 'object' },
+      { name: 'federationKeySamples', type: 'object' },
+      { name: 'patch', type: 'object' },
+    ],
+    fields: [{ name: 'draft', type: 'object' }],
+    run: async (p) => {
+      const draft: CubeDraft = { ...asDraft(p) };
+      if (p.federation !== undefined) draft.federation = asFederation(p.federation);
+      if (p.federationKeySamples !== undefined) {
+        draft.federationKeySamples = asKeySamples(p.federationKeySamples);
+      }
+      if (p.patch && typeof p.patch === 'object' && !Array.isArray(p.patch)) {
+        Object.assign(draft, p.patch as Partial<CubeDraft>);
+      }
+      return { draft };
     },
   },
   {
@@ -282,15 +320,6 @@ function asBos(value: unknown): BusinessObjectOption[] {
     (x): x is BusinessObjectOption =>
       !!x && typeof x === 'object' && typeof (x as BusinessObjectOption).id === 'string',
   );
-}
-
-function asFederation(value: unknown): CubeFederation {
-  if (!value || typeof value !== 'object') return {};
-  return value as CubeFederation;
-}
-
-function asKeySamples(value: unknown): FederationKeySample[] {
-  return Array.isArray(value) ? (value as FederationKeySample[]) : [];
 }
 
 const FederationEditorAdapter: React.FC<{
