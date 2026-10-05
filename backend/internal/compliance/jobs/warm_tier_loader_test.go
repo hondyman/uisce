@@ -55,6 +55,24 @@ func TestWarmTierLoader_EndToEndBatchSyncAndIdempotency(t *testing.T) {
 		return
 	}
 
+	// Describe StarRocks table to verify ingest_lsn and all columns
+	descRows, err := srDB.QueryContext(context.Background(), "DESCRIBE oms.compliance_evaluations")
+	require.NoError(t, err)
+	defer descRows.Close()
+
+	hasIngestLSN := false
+	for descRows.Next() {
+		var field, colType, nullStr, keyStr string
+		var defStr, extraStr sql.NullString
+		err := descRows.Scan(&field, &colType, &nullStr, &keyStr, &defStr, &extraStr)
+		require.NoError(t, err)
+		t.Logf("StarRocks Column: %-18s %-15s Null:%s Key:%s", field, colType, nullStr, keyStr)
+		if field == "ingest_lsn" {
+			hasIngestLSN = true
+		}
+	}
+	require.True(t, hasIngestLSN, "StarRocks oms.compliance_evaluations MUST carry ingest_lsn column")
+
 	tenantID := uuid.New()
 	ruleID := uuid.New()
 
