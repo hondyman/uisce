@@ -53,6 +53,9 @@ jobs:
           echo "Postgres never became ready: failing, not skipping" >&2
           exit 1
 
+      - name: ADR numbers are unique
+        run: python3 scripts/ci/adr-numbers-check.py
+
       - name: Run the real-database gate
         # The same script a developer runs locally (scripts/ci/realdb-local.sh): setup, tests and checker in one path.
         run: bash scripts/ci/realdb-run.sh
