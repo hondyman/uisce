@@ -22,7 +22,7 @@ import type { CubeDraft, CubeFederation, FederationKeySample } from './types';
  * Cubes Page Studio surface (PR3): registered operations for future
  * cubes-catalog / cube-designer blueprints, plus the small
  * `cubes.FederationEditor` DomainComponent. Do **not** register a
- * full-page `cubes.Designer` DomainComponent that rehosts CubeDesignerPage.
+ * full-page `cubes.Designer` DomainComponent that rehosts the old coded designer shell.
  */
 
 const DOMAIN = 'cubes';

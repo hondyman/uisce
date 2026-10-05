@@ -3,8 +3,7 @@ import type { Action, ColumnDef } from '../appModel';
 
 /**
  * Cubes catalog (slug cubes-catalog): list/filter by scope, open designer,
- * deploy/refresh via cubes.* operations. Pipelines-list pattern for PR4;
- * AppRoutes still serve coded CubesCatalogPage until PR5.
+ * deploy/refresh via cubes.* operations. Served at /build/cubes via STUDIO_ROUTES (PR5).
  */
 
 const op = (
