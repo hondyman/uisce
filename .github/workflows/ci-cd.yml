@@ -276,9 +276,9 @@ jobs:
   #   2. Coverage profiles from disjoint package sets concatenate into a
   #      valid single profile - one `mode:` header plus every data line.
   #      Verified by generating two real profiles and running
-  #      `go tool cover -func` on the concatenation. Each shard uploads its
-  #      own profile under the same `backend` flag and codecov merges them
-  #      server-side, which avoids a merge job on the critical path.
+  #      `go tool cover -func` on the concatenation. Each shard saves its own
+  #      profile as an artifact; backend-coverage-upload sends them to codecov
+  #      under the same `backend` flag, off the critical path and non-blocking.
   #
   # No test is removed and none is skipped: the union of the four shards is
   # exactly `go test ./...`. The change is only that they run concurrently.
@@ -336,12 +336,19 @@ jobs:
         go test -short -race -coverprofile=coverage.out $(tr '\n' ' ' < shard.txt)
         go tool cover -func=coverage.out | tail -1
 
-    - name: Upload Coverage
-      uses: codecov/codecov-action@v4
+    # Coverage is telemetry, not a test result. The shard only SAVES its profile; a separate job
+    # (backend-coverage-upload below) sends them to Codecov. A Codecov outage or a TLS failure to a
+    # third party therefore cannot redden a shard or Backend Tests Summary, which is how a transport
+    # failure at Codecov blocked every merge (issue #404). continue-on-error here too: a storage blip
+    # saving the profile is not a test failure either.
+    - name: Save coverage profile
+      uses: actions/upload-artifact@v4
+      continue-on-error: true
       with:
-        files: backend/coverage.out
-        flags: backend
-        name: backend-shard-${{ matrix.shard }}
+        name: coverage-shard-${{ matrix.shard }}
+        path: backend/coverage.out
+        if-no-files-found: warn
+        retention-days: 7
 
   # ==========================================================================
   # Backend integration tests (real service dependencies)
@@ -424,6 +431,71 @@ jobs:
         # stop paying a TCP timeout to discover the database CI just built.
         POLICY_DB_URL: postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
       run: go test -tags=integration -v ./internal/bundles/... ./internal/handlers/... ./internal/audit/... ./internal/api/...
+
+  # Uploads the shards' coverage profiles to Codecov. NOT a required check and not an input to
+  # Backend Tests Summary: it runs only after the tests passed, retries three times with backoff,
+  # and never fails the workflow (continue-on-error), because the upload depends on someone else's
+  # service. The per-shard profiles stay available as run artifacts (coverage-shard-N, 7 days);
+  # Codecov merges them under the one `backend` flag.
+  backend-coverage-upload:
+    name: Upload Backend Coverage
+    needs: [backend-tests]
+    if: always() && needs.backend-tests.result == 'success'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download the shards' profiles
+      uses: actions/download-artifact@v4
+      with:
+        pattern: coverage-shard-*
+        path: coverage
+
+    - name: Upload to Codecov (attempt 1)
+      id: up1
+      continue-on-error: true
+      uses: codecov/codecov-action@v7
+      with:
+        directory: coverage
+        flags: backend
+        name: backend
+        fail_ci_if_error: true
+
+    - name: Back off
+      if: steps.up1.outcome == 'failure'
+      run: sleep 30
+
+    - name: Upload to Codecov (attempt 2)
+      id: up2
+      if: steps.up1.outcome == 'failure'
+      continue-on-error: true
+      uses: codecov/codecov-action@v7
+      with:
+        directory: coverage
+        flags: backend
+        name: backend
+        fail_ci_if_error: true
+
+    - name: Back off
+      if: steps.up1.outcome == 'failure' && steps.up2.outcome == 'failure'
+      run: sleep 90
+
+    - name: Upload to Codecov (attempt 3)
+      id: up3
+      if: steps.up1.outcome == 'failure' && steps.up2.outcome == 'failure'
+      continue-on-error: true
+      uses: codecov/codecov-action@v7
+      with:
+        directory: coverage
+        flags: backend
+        name: backend
+        fail_ci_if_error: true
+
+    - name: Say so when every attempt failed
+      if: steps.up1.outcome == 'failure' && steps.up2.outcome == 'failure' && steps.up3.outcome == 'failure'
+      run: |
+        echo "::warning::Codecov upload failed three times; coverage for this run was not recorded (tests passed). See issue 404."
 
   # The matrix above cannot itself be a required status check: its legs report
   # `Backend Tests (1/4)` .. `(4/4)` on a full run and the literal, unrendered

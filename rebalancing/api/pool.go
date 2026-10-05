@@ -8,8 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// NewPool creates a Postgres connection pool, following the same
-// configuration used by rebalancing/worker's NewPool.
+// NewPool creates a Postgres connection pool.
 func NewPool(ctx context.Context, connString string) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(connString)
 	if err != nil {
