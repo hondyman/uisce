@@ -128,7 +128,7 @@ func (a *TenantProvisioningActivities) BindTenantDatabase(ctx context.Context, i
 	}
 	var out provisioning.TenantDatabaseBinding
 	err = db.WithTenantTransaction(ctx, a.ControlDB.DB, in.TenantID, func(tx *sql.Tx) error {
-		// The datasource to repoint. In structure mode (ADR-048) it is the tenant's clone OF THE TEMPLATE, found by the id of the
+		// The datasource to repoint. In structure mode (ADR-050) it is the tenant's clone OF THE TEMPLATE, found by the id of the
 		// gold datasource it was cloned from (core_id), because an application code is not that: the gold copy has an empty
 		// placeholder coded `orm` and the real CRIMS template coded `FO_ORM` (twice), so matching by code would repoint the wrong
 		// row or refuse as ambiguous. Without a template it is the datasource of the app's code, as before.

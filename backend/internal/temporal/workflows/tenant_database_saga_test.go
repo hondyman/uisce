@@ -22,7 +22,7 @@ import (
 
 type tdScenario struct {
 	app          string
-	template     string // TemplateDatasourceID; non-empty with an app selects the compiled-structure path (ADR-048)
+	template     string // TemplateDatasourceID; non-empty with an app selects the compiled-structure path (ADR-050)
 	fromMarker   bool   // StructureFromGoldCopy: the saga resolves the template from the gold copy's marker
 	resolved     string // what ResolveStructureTemplate returns (default goldTemplate)
 	planHash     string // returned by PlanTenantStructure (default "plan-hash")
@@ -249,7 +249,7 @@ func TestTenantDatabaseSaga_AnIncompleteMigrationReportFailsTheRun(t *testing.T)
 	require.NotEqual(t, -1, index(r.calls, "RollbackTenantDatabase"))
 }
 
-// ---- the compiled-structure path (ADR-048) ----------------------------------------------------
+// ---- the compiled-structure path (ADR-050) ----------------------------------------------------
 
 const goldTemplate = "11111111-1111-4111-8111-111111111111"
 

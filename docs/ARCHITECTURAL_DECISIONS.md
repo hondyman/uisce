@@ -1413,7 +1413,7 @@ finding is empty, `audit_verified_through_id` covers the partition's last entry,
 here. The StarRocks read (`AuditRange`) is written against the documented 3.3 interface like the rest of
 ADR-036 and has not been run against a live instance.
 
-### ADR-048: A Tenant Structure Is Built From What `alpha` Holds After The Gold Copy's Scan; The Scan Records Everything A Deploy Needs
+### ADR-050: A Tenant Structure Is Built From What `alpha` Holds After The Gold Copy's Scan; The Scan Records Everything A Deploy Needs
 
 **Decision (owner direction, 2026-10-04).** `alpha` metadata always wins. A new tenant's structure is built from the
 catalog nodes and edges that the gold-copy tenant's datasource scan left in `alpha`, after that scan has been synced,

@@ -120,7 +120,7 @@ type TenantRunner struct {
 	// Root holds one directory per app: <Root>/<app>/*.up.sql.
 	Root string
 	// Generated, when set, supplies the migrations of an app that has no directory because they are compiled
-	// from alpha's catalog scan (ADR-048). It returns (files, true, nil) for an app it owns, and (nil, false, nil) for
+	// from alpha's catalog scan (ADR-050). It returns (files, true, nil) for an app it owns, and (nil, false, nil) for
 	// any other, which then comes from Root as before. A generated file is recorded in the same migration log by name
 	// and sha256, so a database built from a different compilation is drift exactly as a changed file is.
 	Generated func(Target) ([]GeneratedFile, bool, error)

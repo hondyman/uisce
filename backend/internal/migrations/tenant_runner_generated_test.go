@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A generated app (ADR-048) gets the same lock, ledger and drift rule as a directory of files.
+// A generated app (ADR-050) gets the same lock, ledger and drift rule as a directory of files.
 
 func gen(files ...GeneratedFile) func(Target) ([]GeneratedFile, bool, error) {
 	return func(t Target) ([]GeneratedFile, bool, error) {
