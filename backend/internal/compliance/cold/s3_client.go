@@ -122,6 +122,12 @@ func (s *S3StorageClient) EnsureBucket(ctx context.Context, bucket string) error
 
 // UploadWORMObject uploads data with SEC Rule 17a-4 / FINRA 4511 Compliance Mode Object Lock
 func (s *S3StorageClient) UploadWORMObject(ctx context.Context, bucket, key string, data []byte) (string, error) {
+	etag, _, err := s.UploadWORMObjectWithVersion(ctx, bucket, key, data)
+	return etag, err
+}
+
+// UploadWORMObjectWithVersion uploads data with Object Lock and returns both ETag and VersionID
+func (s *S3StorageClient) UploadWORMObjectWithVersion(ctx context.Context, bucket, key string, data []byte) (string, string, error) {
 	if bucket == "" {
 		bucket = s.cfg.BucketName
 	}
@@ -135,10 +141,10 @@ func (s *S3StorageClient) UploadWORMObject(ctx context.Context, bucket, key stri
 
 	info, err := s.client.PutObject(ctx, bucket, key, bytes.NewReader(data), int64(len(data)), opts)
 	if err != nil {
-		return "", fmt.Errorf("put object with object lock (bucket=%s, key=%s): %w", bucket, key, err)
+		return "", "", fmt.Errorf("put object with object lock (bucket=%s, key=%s): %w", bucket, key, err)
 	}
 
-	return info.ETag, nil
+	return info.ETag, info.VersionID, nil
 }
 
 // DownloadObject fetches raw object bytes from S3/MinIO
@@ -189,10 +195,20 @@ func (s *S3StorageClient) ListObjects(ctx context.Context, bucket, prefix string
 	return results, nil
 }
 
-// AttemptDeleteObject tries to delete an object (used to test WORM Object Lock enforcement)
+// AttemptDeleteObject tries to delete an unversioned object reference
 func (s *S3StorageClient) AttemptDeleteObject(ctx context.Context, bucket, key string) error {
 	if bucket == "" {
 		bucket = s.cfg.BucketName
 	}
 	return s.client.RemoveObject(ctx, bucket, key, minio.RemoveObjectOptions{})
+}
+
+// AttemptDeleteVersion attempts to delete a specific version of an object (must fail under Compliance Mode)
+func (s *S3StorageClient) AttemptDeleteVersion(ctx context.Context, bucket, key, versionID string) error {
+	if bucket == "" {
+		bucket = s.cfg.BucketName
+	}
+	return s.client.RemoveObject(ctx, bucket, key, minio.RemoveObjectOptions{
+		VersionID: versionID,
+	})
 }

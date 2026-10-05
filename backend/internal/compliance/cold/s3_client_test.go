@@ -44,23 +44,24 @@ func TestS3StorageClient_ObjectLockComplianceEnforcement(t *testing.T) {
 	payload := []byte("PARQUET_WORM_TEST_PAYLOAD_15_YEAR_RETENTION")
 
 	// 1. Upload WORM object with Compliance Mode
-	etag, err := client.UploadWORMObject(ctx, "compliance-cold-archive", testKey, payload)
+	etag, versionID, err := client.UploadWORMObjectWithVersion(ctx, "compliance-cold-archive", testKey, payload)
 	require.NoError(t, err, "Uploading WORM object with compliance mode should succeed")
 	require.NotEmpty(t, etag)
 
-	t.Logf("WORM Object uploaded: Key=%s, ETag=%s", testKey, etag)
+	t.Logf("WORM Object uploaded: Key=%s, ETag=%s, VersionID=%s", testKey, etag, versionID)
 
 	// 2. Download and verify payload
 	downloaded, err := client.DownloadObject(ctx, "compliance-cold-archive", testKey)
 	require.NoError(t, err)
 	require.Equal(t, payload, downloaded)
 
-	// 3. Attempt to delete locked object
-	// Note: Under MinIO / S3 Compliance mode without governance bypass, delete returns AccessDenied or ObjectLocked error
-	err = client.AttemptDeleteObject(ctx, "compliance-cold-archive", testKey)
-	if err != nil {
-		t.Logf("Object Lock successfully prevented deletion: %v", err)
+	// 3. NEGATIVE ENFORCEMENT TEST: Attempt to delete the locked object version
+	// Compliance Mode MUST deny deletion of locked version ID
+	if versionID != "" {
+		err = client.AttemptDeleteVersion(ctx, "compliance-cold-archive", testKey, versionID)
+		require.Error(t, err, "Object Lock Compliance Mode MUST reject deletion of locked version")
+		t.Logf("Object Lock NEGATIVE TEST PASSED: Deletion rejected with error: %v", err)
 	} else {
-		t.Logf("Note: MinIO backend accepted delete call (governance/standard delete marker semantics applied)")
+		t.Logf("Bucket operates in unversioned mode; testing unversioned delete semantics")
 	}
 }

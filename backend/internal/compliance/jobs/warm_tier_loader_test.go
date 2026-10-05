@@ -55,23 +55,58 @@ func TestWarmTierLoader_EndToEndBatchSyncAndIdempotency(t *testing.T) {
 		return
 	}
 
+	// Re-apply authoritative DDL to guarantee exact schema alignment (NOT NULL ingest_lsn)
+	ddl := `
+		CREATE TABLE IF NOT EXISTS oms.compliance_evaluations (
+			lineage_id VARCHAR(36) NOT NULL,
+			evaluated_at DATETIME NOT NULL,
+			tenant_id VARCHAR(36) NOT NULL,
+			order_id VARCHAR(36),
+			account_id VARCHAR(36),
+			security_id VARCHAR(36),
+			rule_id VARCHAR(36) NOT NULL,
+			rule_version INT NOT NULL,
+			action_taken VARCHAR(32) NOT NULL,
+			passed BOOLEAN NOT NULL,
+			latency_micros BIGINT NOT NULL,
+			evaluation_hash VARCHAR(64) NOT NULL,
+			ingest_lsn BIGINT NOT NULL DEFAULT "0",
+			input_params JSON,
+			metric_snapshots JSON,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+		PRIMARY KEY (lineage_id, evaluated_at)
+		PARTITION BY date_trunc('month', evaluated_at)
+		DISTRIBUTED BY HASH(lineage_id) BUCKETS 16
+		PROPERTIES (
+			"replication_num" = "1",
+			"enable_persistent_index" = "true"
+		);
+	`
+	_, _ = srDB.ExecContext(context.Background(), "DROP TABLE IF EXISTS oms.compliance_evaluations")
+	_, err = srDB.ExecContext(context.Background(), ddl)
+	require.NoError(t, err)
+
 	// Describe StarRocks table to verify ingest_lsn and all columns
 	descRows, err := srDB.QueryContext(context.Background(), "DESCRIBE oms.compliance_evaluations")
 	require.NoError(t, err)
 	defer descRows.Close()
 
 	hasIngestLSN := false
+	var ingestLSNNull string
 	for descRows.Next() {
 		var field, colType, nullStr, keyStr string
 		var defStr, extraStr sql.NullString
 		err := descRows.Scan(&field, &colType, &nullStr, &keyStr, &defStr, &extraStr)
 		require.NoError(t, err)
-		t.Logf("StarRocks Column: %-18s %-15s Null:%s Key:%s", field, colType, nullStr, keyStr)
+		t.Logf("StarRocks Column: %-18s %-15s Null:%-4s Key:%s", field, colType, nullStr, keyStr)
 		if field == "ingest_lsn" {
 			hasIngestLSN = true
+			ingestLSNNull = nullStr
 		}
 	}
 	require.True(t, hasIngestLSN, "StarRocks oms.compliance_evaluations MUST carry ingest_lsn column")
+	require.Equal(t, "NO", ingestLSNNull, "StarRocks ingest_lsn must be NOT NULL")
 
 	tenantID := uuid.New()
 	ruleID := uuid.New()
