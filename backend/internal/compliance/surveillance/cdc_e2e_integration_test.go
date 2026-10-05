@@ -43,19 +43,17 @@ func TestPostTradeSurveillance_LiveDebeziumCDCAndDetectorE2E(t *testing.T) {
 		return
 	}
 
-	// Fetch valid placement_id, order_id, and tenant_id from alpha
-	var orderID, placementID, tenantID uuid.UUID
-	err = db.QueryRow("SELECT id, order_id, tenant_id FROM orm.placement LIMIT 1").Scan(&placementID, &orderID, &tenantID)
+	// Fetch valid placement_id, order_id, order_allocation_id, and tenant_id from alpha
+	var orderID, placementID, orderAllocID, tenantID uuid.UUID
+	err = db.QueryRow("SELECT p.id, p.order_id, oa.id, p.tenant_id FROM orm.placement p JOIN orm.order_allocation oa ON p.order_id = oa.order_id LIMIT 1").Scan(&placementID, &orderID, &orderAllocID, &tenantID)
 	if err != nil {
-		t.Fatalf("Query placement failed: %v", err)
+		t.Fatalf("Query placement & order_allocation failed: %v", err)
 	}
 
 	engine := NewPostTradeSurveillanceEngine()
 	ownerID := uuid.New()
 	engine.RegisterAccountOwner(orderID, ownerID)
 
-	// 2. Start Kafka Consumer on Debezium topic 'orm_oms.orm.execution'
-	topic := "orm_oms.orm.execution"
 	dialer := &kafka.Dialer{
 		Timeout: 10 * time.Second,
 		DialFunc: func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -71,78 +69,165 @@ func TestPostTradeSurveillance_LiveDebeziumCDCAndDetectorE2E(t *testing.T) {
 		},
 	}
 
-	reader := kafka.NewReader(kafka.ReaderConfig{
+	// 2. Start Kafka Readers on both Debezium topics: 'orm_oms.orm.execution' and 'orm_oms.orm.execution_allocation'
+	execTopic := "orm_oms.orm.execution"
+	allocTopic := "orm_oms.orm.execution_allocation"
+
+	execReader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:   []string{brokerAddr},
-		Topic:     topic,
+		Topic:     execTopic,
 		Partition: 0,
 		MaxBytes:  10e6,
 		Dialer:    dialer,
 	})
-	defer reader.Close()
+	defer execReader.Close()
+	_ = execReader.SetOffset(kafka.FirstOffset)
 
-	// Seek to end so we only consume new event
-	_ = reader.SetOffset(kafka.LastOffset)
+	allocReader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:   []string{brokerAddr},
+		Topic:     allocTopic,
+		Partition: 0,
+		MaxBytes:  10e6,
+		Dialer:    dialer,
+	})
+	defer allocReader.Close()
+	_ = allocReader.SetOffset(kafka.FirstOffset)
 
-	// 3. Insert new execution into alpha.orm.execution to trigger Debezium CDC
+	// 3. Insert Execution & Allocation into alpha PostgreSQL to trigger Debezium CDC
 	execID := uuid.New()
-	t.Logf("Inserting execution %s into alpha.orm.execution for Debezium capture...", execID)
+	allocID := uuid.New()
 
-	query := `
+	t.Logf("Inserting execution %s and allocation %s into alpha...", execID, allocID)
+
+	execQuery := `
 		INSERT INTO orm.execution (
 			id, placement_id, order_id, exec_qty, exec_price, 
 			broker_id, exec_time, transact_time, status, tenant_id
 		) VALUES (
-			$1, $2, $3, 150.0000, 152.7500,
+			$1, $2, $3, 200.0000, 155.5000,
 			'BRK_DEBEZIUM_TEST', NOW(), NOW(), 'FILLED', $4
 		)
 	`
-	_, err = db.Exec(query, execID, placementID, orderID, tenantID)
+	_, err = db.Exec(execQuery, execID, placementID, orderID, tenantID)
 	if err != nil {
 		t.Fatalf("Insert execution failed: %v", err)
 	}
 	defer func() {
+		_, _ = db.Exec("DELETE FROM orm.execution_allocation WHERE execution_id = $1", execID)
 		_, _ = db.Exec("DELETE FROM orm.execution WHERE id = $1", execID)
 	}()
 
-	// 4. Consume Debezium event from Redpanda
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	allocQuery := `
+		INSERT INTO orm.execution_allocation (
+			id, execution_id, order_allocation_id, alloc_exec_qty, alloc_exec_price,
+			created_at, tenant_id
+		) VALUES (
+			$1, $2, $3, 200.0000, 155.5000,
+			NOW(), $4
+		)
+	`
+	_, err = db.Exec(allocQuery, allocID, execID, orderAllocID, tenantID)
+	if err != nil {
+		t.Fatalf("Insert allocation failed: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	matched := false
-	t.Logf("Waiting for Debezium CDC change event on topic %s...", topic)
+	// 4. Consume Execution and Allocation concurrently from Redpanda
+	execCh := make(chan bool, 1)
+	allocCh := make(chan bool, 1)
+	errCh := make(chan error, 2)
 
-	for {
-		msg, err := reader.ReadMessage(ctx)
-		if err != nil {
-			t.Fatalf("Failed to read Debezium message from Redpanda: %v", err)
-		}
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				errCh <- fmt.Errorf("timeout waiting for execution %s: %w", execID, ctx.Err())
+				return
+			default:
+				msg, err := execReader.ReadMessage(ctx)
+				if err != nil {
+					errCh <- fmt.Errorf("execReader failed: %w", err)
+					return
+				}
 
-		var env struct {
-			Payload struct {
-				After struct {
-					ID string `json:"id"`
-				} `json:"after"`
-			} `json:"payload"`
-		}
-		_ = json.Unmarshal(msg.Value, &env)
+				var env struct {
+					Payload struct {
+						After struct {
+							ID string `json:"id"`
+						} `json:"after"`
+					} `json:"payload"`
+				}
+				_ = json.Unmarshal(msg.Value, &env)
 
-		if env.Payload.After.ID == execID.String() {
-			t.Logf("Captured Debezium CDC event for execution %s! Processing through surveillance engine...", execID)
-			if err := engine.ProcessExecutionCDC(context.Background(), msg.Value); err != nil {
-				t.Fatalf("ProcessExecutionCDC failed: %v", err)
+				if env.Payload.After.ID == execID.String() {
+					t.Logf("Captured Debezium CDC event for execution %s! Processing through surveillance...", execID)
+					if err := engine.ProcessExecutionCDC(context.Background(), msg.Value); err != nil {
+						errCh <- fmt.Errorf("ProcessExecutionCDC failed: %w", err)
+						return
+					}
+					execCh <- true
+					return
+				}
 			}
-			matched = true
-			break
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				errCh <- fmt.Errorf("timeout waiting for allocation %s: %w", allocID, ctx.Err())
+				return
+			default:
+				msg, err := allocReader.ReadMessage(ctx)
+				if err != nil {
+					errCh <- fmt.Errorf("allocReader failed: %w", err)
+					return
+				}
+
+				var env struct {
+					Payload struct {
+						After struct {
+							ID string `json:"id"`
+						} `json:"after"`
+					} `json:"payload"`
+				}
+				_ = json.Unmarshal(msg.Value, &env)
+
+				if env.Payload.After.ID == allocID.String() {
+					t.Logf("Captured Debezium CDC event for allocation %s! Processing through surveillance...", allocID)
+					if err := engine.ProcessExecutionAllocationCDC(context.Background(), msg.Value); err != nil {
+						errCh <- fmt.Errorf("ProcessExecutionAllocationCDC failed: %w", err)
+						return
+					}
+					allocCh <- true
+					return
+				}
+			}
+		}
+	}()
+
+	matchedExec := false
+	matchedAlloc := false
+
+	for !matchedExec || !matchedAlloc {
+		select {
+		case <-execCh:
+			matchedExec = true
+		case <-allocCh:
+			matchedAlloc = true
+		case err := <-errCh:
+			t.Fatalf("CDC consumption error: %v", err)
+		case <-ctx.Done():
+			t.Fatalf("Timed out waiting for CDC events (exec=%v, alloc=%v)", matchedExec, matchedAlloc)
 		}
 	}
 
-	if !matched {
-		t.Fatalf("Did not capture Debezium event for execution %s", execID)
+	if engine.Metrics().TotalProcessed.Load() < 2 {
+		t.Fatalf("Expected TotalProcessed >= 2 in surveillance metrics, got %d", engine.Metrics().TotalProcessed.Load())
 	}
 
-	if engine.Metrics().TotalProcessed.Load() < 1 {
-		t.Fatalf("Expected TotalProcessed >= 1 in surveillance metrics")
-	}
-
-	t.Logf("End-to-End Debezium CDC -> Redpanda -> Surveillance Engine Verified Successfully!")
+	t.Logf("Both Debezium CDC streams (execution + execution_allocation) verified end-to-end through Surveillance Engine!")
 }

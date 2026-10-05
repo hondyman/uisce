@@ -170,6 +170,77 @@ func (e *PostTradeSurveillanceEngine) ProcessExecutionCDC(ctx context.Context, r
 	return nil
 }
 
+// DebeziumAllocationPayload represents the CDC envelope for orm.execution_allocation
+type DebeziumAllocationPayload struct {
+	ID                string      `json:"id"`
+	ExecutionID       string      `json:"execution_id"`
+	OrderAllocationID string      `json:"order_allocation_id"`
+	AllocExecQty      json.Number `json:"alloc_exec_qty"`
+	AllocExecPrice    json.Number `json:"alloc_exec_price"`
+	TenantID          string      `json:"tenant_id"`
+	CreatedAt         interface{} `json:"created_at"`
+}
+
+// ProcessExecutionAllocationCDC processes allocation change events and runs pro-rata allocation fairness checks
+func (e *PostTradeSurveillanceEngine) ProcessExecutionAllocationCDC(ctx context.Context, rawPayload []byte) error {
+	var env debeziumCDCEnvelope
+	if err := json.Unmarshal(rawPayload, &env); err != nil {
+		return fmt.Errorf("unmarshal cdc envelope: %w", err)
+	}
+
+	if len(env.Payload.After) == 0 || string(env.Payload.After) == "null" {
+		return nil // Skip tombstones or deletes
+	}
+
+	var row DebeziumAllocationPayload
+	dec := json.NewDecoder(bytes.NewReader(env.Payload.After))
+	dec.UseNumber()
+	if err := dec.Decode(&row); err != nil {
+		return fmt.Errorf("unmarshal allocation payload: %w", err)
+	}
+
+	execID, err := uuid.Parse(row.ExecutionID)
+	if err != nil {
+		return fmt.Errorf("parse exec id: %w", err)
+	}
+
+	allocID, err := uuid.Parse(row.OrderAllocationID)
+	if err != nil {
+		return fmt.Errorf("parse order allocation id: %w", err)
+	}
+
+	tenantID, _ := uuid.Parse(row.TenantID)
+	qty, _ := decimal.NewFromString(string(row.AllocExecQty))
+	price, _ := decimal.NewFromString(string(row.AllocExecPrice))
+
+	e.metrics.TotalProcessed.Add(1)
+
+	alloc := BlockOrderAllocation{
+		AccountID:         allocID,
+		RequestedQuantity: qty,
+		AllocatedQuantity: qty,
+		AllocatedPrice:    price,
+	}
+
+	block := BlockOrderExecution{
+		BlockOrderID:  execID,
+		TenantID:      tenantID,
+		SecurityID:    execID,
+		TotalExecuted: qty,
+		AveragePrice:  price,
+		ExecutedAt:    time.Now().UTC(),
+		Allocations:   []BlockOrderAllocation{alloc},
+	}
+
+	violations, err := e.fairnessDetector.EvaluateBlockFairness(ctx, block)
+	if err == nil && len(violations) > 0 {
+		e.metrics.FairnessBreaches.Add(int64(len(violations)))
+		log.Printf("[SURVEILLANCE ALERT] Pro-rata fairness breach for execution=%s: %d violations", execID, len(violations))
+	}
+
+	return nil
+}
+
 // Metrics returns the active surveillance telemetry counters
 func (e *PostTradeSurveillanceEngine) Metrics() *SurveillanceMetrics {
 	return e.metrics

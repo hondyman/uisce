@@ -1,6 +1,7 @@
 -- StarRocks Warm Tier DDL for Compliance Evaluations & Surveillance
 -- Architecture: Primary Key Model on (lineage_id, evaluated_at) for idempotent Stream Load deduplication
 -- Partitioning: Monthly on evaluated_at for efficient analytical pruning and historical retention drops
+-- Deployment Precondition: "replication_num" = "3" in multi-node production (set to "1" in single-node dev)
 
 CREATE DATABASE IF NOT EXISTS oms;
 
@@ -17,6 +18,7 @@ CREATE TABLE IF NOT EXISTS oms.compliance_evaluations (
     passed BOOLEAN NOT NULL,
     latency_micros BIGINT NOT NULL,
     evaluation_hash VARCHAR(64) NOT NULL,
+    ingest_lsn BIGINT NOT NULL DEFAULT "0",
     input_params JSON,
     metric_snapshots JSON,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
