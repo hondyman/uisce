@@ -494,7 +494,8 @@ jobs:
 
     - name: Say so when every attempt failed
       if: steps.up1.outcome == 'failure' && steps.up2.outcome == 'failure' && steps.up3.outcome == 'failure'
-      run: echo "::warning::Codecov upload failed three times; coverage for this run was not recorded (tests passed). See issue #404."
+      run: |
+        echo "::warning::Codecov upload failed three times; coverage for this run was not recorded (tests passed). See issue 404."
 
   # The matrix above cannot itself be a required status check: its legs report
   # `Backend Tests (1/4)` .. `(4/4)` on a full run and the literal, unrendered
