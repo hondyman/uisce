@@ -315,6 +315,8 @@ type cubeDefRow struct {
 	MetricIDs       []byte     `db:"metric_ids"`
 	Grains          []byte     `db:"grains"`
 	Materialization []byte     `db:"materialization"`
+	Federation      []byte     `db:"federation"`
+	ContractVersion int        `db:"contract_version"`
 	ContentHash     string     `db:"content_hash"`
 	IsCore          bool       `db:"is_core"`
 	Status          string     `db:"status"`
@@ -326,18 +328,22 @@ type cubeDefRow struct {
 
 func (row cubeDefRow) toCubeDefinition() CubeDefinition {
 	c := CubeDefinition{
-		ID:          row.ID,
-		TenantID:    row.TenantID,
-		Name:        row.Name,
-		Description: row.Description,
-		BOID:        row.BOID,
-		ContentHash: row.ContentHash,
-		IsCore:      row.IsCore,
-		Status:      row.Status,
-		ArchivedAt:  row.ArchivedAt,
-		CreatedBy:   row.CreatedBy,
-		CreatedAt:   row.CreatedAt,
-		UpdatedAt:   row.UpdatedAt,
+		ID:              row.ID,
+		TenantID:        row.TenantID,
+		Name:            row.Name,
+		Description:     row.Description,
+		BOID:            row.BOID,
+		ContractVersion: row.ContractVersion,
+		ContentHash:     row.ContentHash,
+		IsCore:          row.IsCore,
+		Status:          row.Status,
+		ArchivedAt:      row.ArchivedAt,
+		CreatedBy:       row.CreatedBy,
+		CreatedAt:       row.CreatedAt,
+		UpdatedAt:       row.UpdatedAt,
+	}
+	if c.ContractVersion < 1 {
+		c.ContractVersion = 1
 	}
 	if len(row.Dimensions) > 0 {
 		_ = json.Unmarshal(row.Dimensions, &c.Dimensions)
@@ -357,6 +363,9 @@ func (row cubeDefRow) toCubeDefinition() CubeDefinition {
 	if len(row.Materialization) > 0 {
 		_ = json.Unmarshal(row.Materialization, &c.Materialization)
 	}
+	if len(row.Federation) > 0 {
+		_ = json.Unmarshal(row.Federation, &c.Federation)
+	}
 	return c
 }
 
@@ -373,6 +382,8 @@ func (r *CubeRouter) loadCube(ctx context.Context, tenantID, boID string) (*Cube
 	err := r.db.SelectContext(ctx, &rows, `
 		SELECT id, tenant_id, name, COALESCE(description,'') AS description, bo_id,
 		       dimensions, time_dimension, metric_ids, grains, materialization,
+		       COALESCE(federation, '{}'::jsonb) AS federation,
+		       COALESCE(contract_version, 1) AS contract_version,
 		       COALESCE(content_hash,'') AS content_hash, is_core, status, archived_at,
 		       created_by, created_at, updated_at
 		FROM data_explorer.cube_definition

@@ -54,15 +54,21 @@ func expectCubeQuery(t *testing.T, mock sqlmock.Sqlmock, cube *CubeDefinition) {
 	rows := sqlmock.NewRows([]string{
 		"id", "tenant_id", "name", "description", "bo_id", "dimensions",
 		"time_dimension", "metric_ids", "grains", "materialization",
+		"federation", "contract_version",
 		"content_hash", "is_core", "status", "archived_at", "created_by",
 		"created_at", "updated_at",
 	})
 	if cube != nil {
+		ver := cube.ContractVersion
+		if ver < 1 {
+			ver = 1
+		}
 		rows.AddRow(
 			cube.ID, routerTenant, cube.Name, cube.Description, cube.BOID,
 			mustJSON(t, cube.Dimensions), nullJSON(cube.TimeDimension),
 			mustJSON(t, cube.MetricIDs), mustJSON(t, cube.Grains),
-			mustJSON(t, cube.Materialization), nullStr(cube.ContentHash),
+			mustJSON(t, cube.Materialization), mustJSON(t, cube.Federation), ver,
+			nullStr(cube.ContentHash),
 			cube.IsCore, cube.Status, nil, nil,
 			time.Now().UTC(), time.Now().UTC(),
 		)

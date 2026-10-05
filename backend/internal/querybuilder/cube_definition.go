@@ -36,6 +36,13 @@ var (
 	// materialization carries can never be served, so the cube would advertise
 	// an axis it cannot answer.
 	ErrCubeDimensionNotInGrain = errors.New("cube dimension is not covered by any declared grain")
+
+	// ErrCubeFederationInvalid is returned when federation.sources/joins are
+	// malformed (missing aliases, mismatched composite key lengths, etc.).
+	ErrCubeFederationInvalid = errors.New("cube federation plan is invalid")
+
+	// ErrCubeContractVersionInvalid is returned when contract_version is < 1.
+	ErrCubeContractVersionInvalid = errors.New("cube contract_version must be >= 1")
 )
 
 // CubeDimension is one axis of the cube's dimension surface.
@@ -59,13 +66,58 @@ type CubeTimeDimension struct {
 // StalePolicy reuses the metric-layer vocabulary: "serve_with_flag" (default,
 // dashboards) or "force_raw_fallback" (compliance workloads that cannot
 // tolerate flagged data).
+//
+// HotEngine / ColdEngine default to starrocks / iceberg at deploy time when
+// empty. RetentionDays remains the legacy single window; RetentionDaysHot and
+// RetentionDaysCold override per tier when set (CUBE-0.1 / dual-tier plan).
 type CubeMaterializationConfig struct {
 	Strategy               string `json:"strategy"`                         // "starrocks_mv" (default) | "aggregate_table"
 	RefreshStrategy        string `json:"refreshStrategy,omitempty"`        // "manual" | "interval" | "incremental"
 	RefreshIntervalMinutes int    `json:"refreshIntervalMinutes,omitempty"` // compiled into PreAggProperties
 	PartitionGrain         string `json:"partitionGrain,omitempty"`
 	RetentionDays          int    `json:"retentionDays,omitempty"`
+	RetentionDaysHot       int    `json:"retentionDaysHot,omitempty"`
+	RetentionDaysCold      int    `json:"retentionDaysCold,omitempty"`
+	HotEngine              string `json:"hotEngine,omitempty"`   // "starrocks" (default)
+	ColdEngine             string `json:"coldEngine,omitempty"`  // "iceberg" (default)
 	StalePolicy            string `json:"stalePolicy,omitempty"` // "serve_with_flag" (default) | "force_raw_fallback"
+}
+
+// CubeFederationSource is one BO/binding participating in a federated cube.
+type CubeFederationSource struct {
+	BOID        string `json:"boId"`
+	Alias       string `json:"alias"`
+	BindingHint string `json:"bindingHint,omitempty"` // e.g. "orm", "mdm"
+}
+
+// CubeFederationJoin declares how two sources share keys.
+//
+// KeyKind is "common" (same semantic terms) or "transform" (deterministic
+// calc/term applied before join). TransformTermID must reference a
+// deterministic term/calc — never a metric_definition aggregate (ADR-011).
+// Composite keys use parallel LeftTermIDs / RightTermIDs (same length, order).
+type CubeFederationJoin struct {
+	LeftAlias       string   `json:"leftAlias"`
+	RightAlias      string   `json:"rightAlias"`
+	KeyKind         string   `json:"keyKind"` // "common" | "transform"
+	LeftTermIDs     []string `json:"leftTermIds"`
+	RightTermIDs    []string `json:"rightTermIds"`
+	TransformTermID string   `json:"transformTermId,omitempty"`
+}
+
+// CubeFederation is the declared multi-BO join plan. An empty plan (no
+// sources/joins) means the cube is single-BO on CubeDefinition.BOID.
+type CubeFederation struct {
+	Sources []CubeFederationSource `json:"sources,omitempty"`
+	Joins   []CubeFederationJoin   `json:"joins,omitempty"`
+	// OrphanRateMaxPercent fails deploy when unmatched keys exceed this on
+	// either side. Zero means use the platform default (1.0).
+	OrphanRateMaxPercent float64 `json:"orphanRateMaxPercent,omitempty"`
+}
+
+// Empty reports whether federation is undeclared (single-BO cube).
+func (f CubeFederation) Empty() bool {
+	return len(f.Sources) == 0 && len(f.Joins) == 0
 }
 
 // CubeDefinition is one row in data_explorer.cube_definition.
@@ -74,6 +126,10 @@ type CubeMaterializationConfig struct {
 // surface, a governed metric set, and a declared set of physical grains. It
 // stores no physical information at all — BOID is a logical reference — which
 // is what keeps cube definitions bundle-portable and gold-copy safe.
+//
+// ContractVersion is the published generation consumers pin. ContentHash
+// covers the semantic surface (including Federation); bump ContractVersion
+// when DetectCubeContractBreaking reports a break.
 type CubeDefinition struct {
 	ID              string                    `json:"id" db:"id"`
 	TenantID        string                    `json:"tenantId" db:"tenant_id"`
@@ -85,6 +141,8 @@ type CubeDefinition struct {
 	MetricIDs       []string                  `json:"metricIds" db:"metric_ids"`
 	Grains          [][]string                `json:"grains" db:"grains"`
 	Materialization CubeMaterializationConfig `json:"materialization" db:"materialization"`
+	Federation      CubeFederation            `json:"federation" db:"federation"`
+	ContractVersion int                       `json:"contractVersion" db:"contract_version"`
 	ContentHash     string                    `json:"contentHash" db:"content_hash"`
 	IsCore          bool                      `json:"isCore" db:"is_core"`
 	Status          string                    `json:"status" db:"status"` // "active" | "deprecated" | "archived"
@@ -165,14 +223,15 @@ func ComputeCubeContentHash(c CubeDefinition, metricContentHashes []string) stri
 	}
 
 	canonicalDoc := struct {
-		Name               string                    `json:"name"`
-		BOID               string                    `json:"boId"`
-		Dimensions         []CubeDimension           `json:"dimensions"`
-		TimeDimension      *CubeTimeDimension        `json:"timeDimension"`
-		MetricIDs          []string                  `json:"metricIds"`
-		MetricContentHashes []string                 `json:"metricContentHashes"`
-		Grains             [][]string                `json:"grains"`
-		Materialization    CubeMaterializationConfig `json:"materialization"`
+		Name                string                    `json:"name"`
+		BOID                string                    `json:"boId"`
+		Dimensions          []CubeDimension           `json:"dimensions"`
+		TimeDimension       *CubeTimeDimension        `json:"timeDimension"`
+		MetricIDs           []string                  `json:"metricIds"`
+		MetricContentHashes []string                  `json:"metricContentHashes"`
+		Grains              [][]string                `json:"grains"`
+		Materialization     CubeMaterializationConfig `json:"materialization"`
+		Federation          CubeFederation            `json:"federation"`
 	}{
 		Name:                strings.TrimSpace(c.Name),
 		BOID:                strings.TrimSpace(c.BOID),
@@ -182,11 +241,71 @@ func ComputeCubeContentHash(c CubeDefinition, metricContentHashes []string) stri
 		MetricContentHashes: contentHashes,
 		Grains:              grains,
 		Materialization:     c.Materialization,
+		Federation:          canonicalizeFederation(c.Federation),
 	}
 
 	b, _ := json.Marshal(canonicalDoc)
 	hash := sha256.Sum256(b)
 	return hex.EncodeToString(hash[:])
+}
+
+func canonicalizeFederation(f CubeFederation) CubeFederation {
+	out := CubeFederation{
+		OrphanRateMaxPercent: f.OrphanRateMaxPercent,
+	}
+	if len(f.Sources) > 0 {
+		out.Sources = make([]CubeFederationSource, len(f.Sources))
+		for i, s := range f.Sources {
+			out.Sources[i] = CubeFederationSource{
+				BOID:        strings.TrimSpace(s.BOID),
+				Alias:       strings.ToLower(strings.TrimSpace(s.Alias)),
+				BindingHint: strings.ToLower(strings.TrimSpace(s.BindingHint)),
+			}
+		}
+		sort.SliceStable(out.Sources, func(i, j int) bool {
+			if out.Sources[i].Alias != out.Sources[j].Alias {
+				return out.Sources[i].Alias < out.Sources[j].Alias
+			}
+			return out.Sources[i].BOID < out.Sources[j].BOID
+		})
+	}
+	if len(f.Joins) > 0 {
+		out.Joins = make([]CubeFederationJoin, len(f.Joins))
+		for i, jn := range f.Joins {
+			left := normalizeTermIDList(jn.LeftTermIDs)
+			right := normalizeTermIDList(jn.RightTermIDs)
+			out.Joins[i] = CubeFederationJoin{
+				LeftAlias:       strings.ToLower(strings.TrimSpace(jn.LeftAlias)),
+				RightAlias:      strings.ToLower(strings.TrimSpace(jn.RightAlias)),
+				KeyKind:         strings.ToLower(strings.TrimSpace(jn.KeyKind)),
+				LeftTermIDs:     left,
+				RightTermIDs:    right,
+				TransformTermID: strings.ToLower(strings.TrimSpace(jn.TransformTermID)),
+			}
+		}
+		sort.SliceStable(out.Joins, func(i, j int) bool {
+			a, b := out.Joins[i], out.Joins[j]
+			if a.LeftAlias != b.LeftAlias {
+				return a.LeftAlias < b.LeftAlias
+			}
+			if a.RightAlias != b.RightAlias {
+				return a.RightAlias < b.RightAlias
+			}
+			return strings.Join(a.LeftTermIDs, ",") < strings.Join(b.LeftTermIDs, ",")
+		})
+	}
+	return out
+}
+
+func normalizeTermIDList(ids []string) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[i] = strings.ToLower(strings.TrimSpace(id))
+	}
+	return out
 }
 
 // DimensionSet returns the cube's declared dimension term IDs lowercased and
@@ -209,6 +328,10 @@ func (c CubeDefinition) DimensionSet() []string {
 // because it requires loading metric_definition rows; see
 // ValidateCubeMetricReferences.
 func ValidateCubeStructural(c CubeDefinition) error {
+	// Zero is treated as 1 for authoring drafts that have not set the field yet.
+	if c.ContractVersion < 0 {
+		return ErrCubeContractVersionInvalid
+	}
 	if len(c.MetricIDs) == 0 {
 		return ErrCubeNoMetrics
 	}
@@ -244,7 +367,162 @@ func ValidateCubeStructural(c CubeDefinition) error {
 			return fmt.Errorf("%w: %q", ErrCubeDimensionNotInGrain, dim)
 		}
 	}
+	if err := ValidateCubeFederation(c.Federation); err != nil {
+		return err
+	}
 	return nil
+}
+
+// DefaultFederationOrphanRatePercent is the platform default when
+// federation.orphanRateMaxPercent is unset (CUBE Phase 2 gate).
+const DefaultFederationOrphanRatePercent = 1.0
+
+// ValidateCubeFederation checks federation shape without resolving terms in DB.
+// Empty federation is valid (single-BO cube).
+func ValidateCubeFederation(f CubeFederation) error {
+	if f.Empty() {
+		return nil
+	}
+	if f.OrphanRateMaxPercent < 0 {
+		return fmt.Errorf("%w: orphanRateMaxPercent must be >= 0", ErrCubeFederationInvalid)
+	}
+	aliases := make(map[string]string, len(f.Sources)) // alias -> boId
+	for i, s := range f.Sources {
+		alias := strings.ToLower(strings.TrimSpace(s.Alias))
+		boid := strings.TrimSpace(s.BOID)
+		if alias == "" {
+			return fmt.Errorf("%w: sources[%d] missing alias", ErrCubeFederationInvalid, i)
+		}
+		if boid == "" {
+			return fmt.Errorf("%w: sources[%d] (%s) missing boId", ErrCubeFederationInvalid, i, alias)
+		}
+		if _, dup := aliases[alias]; dup {
+			return fmt.Errorf("%w: duplicate source alias %q", ErrCubeFederationInvalid, alias)
+		}
+		aliases[alias] = boid
+	}
+	if len(f.Joins) > 0 && len(f.Sources) < 2 {
+		return fmt.Errorf("%w: joins require at least two sources", ErrCubeFederationInvalid)
+	}
+	for i, jn := range f.Joins {
+		left := strings.ToLower(strings.TrimSpace(jn.LeftAlias))
+		right := strings.ToLower(strings.TrimSpace(jn.RightAlias))
+		kind := strings.ToLower(strings.TrimSpace(jn.KeyKind))
+		if left == "" || right == "" {
+			return fmt.Errorf("%w: joins[%d] missing leftAlias/rightAlias", ErrCubeFederationInvalid, i)
+		}
+		if left == right {
+			return fmt.Errorf("%w: joins[%d] leftAlias and rightAlias must differ", ErrCubeFederationInvalid, i)
+		}
+		if _, ok := aliases[left]; !ok {
+			return fmt.Errorf("%w: joins[%d] unknown leftAlias %q", ErrCubeFederationInvalid, i, left)
+		}
+		if _, ok := aliases[right]; !ok {
+			return fmt.Errorf("%w: joins[%d] unknown rightAlias %q", ErrCubeFederationInvalid, i, right)
+		}
+		switch kind {
+		case "common", "transform":
+		case "":
+			return fmt.Errorf("%w: joins[%d] missing keyKind", ErrCubeFederationInvalid, i)
+		default:
+			return fmt.Errorf("%w: joins[%d] keyKind %q must be common|transform", ErrCubeFederationInvalid, i, kind)
+		}
+		if len(jn.LeftTermIDs) == 0 || len(jn.RightTermIDs) == 0 {
+			return fmt.Errorf("%w: joins[%d] requires leftTermIds and rightTermIds", ErrCubeFederationInvalid, i)
+		}
+		if len(jn.LeftTermIDs) != len(jn.RightTermIDs) {
+			return fmt.Errorf("%w: joins[%d] leftTermIds/rightTermIds length mismatch", ErrCubeFederationInvalid, i)
+		}
+		for _, id := range jn.LeftTermIDs {
+			if strings.TrimSpace(id) == "" {
+				return fmt.Errorf("%w: joins[%d] empty leftTermId", ErrCubeFederationInvalid, i)
+			}
+		}
+		for _, id := range jn.RightTermIDs {
+			if strings.TrimSpace(id) == "" {
+				return fmt.Errorf("%w: joins[%d] empty rightTermId", ErrCubeFederationInvalid, i)
+			}
+		}
+		if kind == "transform" && strings.TrimSpace(jn.TransformTermID) == "" {
+			return fmt.Errorf("%w: joins[%d] transform keyKind requires transformTermId", ErrCubeFederationInvalid, i)
+		}
+		if kind == "common" && strings.TrimSpace(jn.TransformTermID) != "" {
+			return fmt.Errorf("%w: joins[%d] common keyKind must not set transformTermId", ErrCubeFederationInvalid, i)
+		}
+	}
+	return nil
+}
+
+// CubeContractBreakReason names why a new draft must bump contract_version.
+type CubeContractBreakReason string
+
+const (
+	CubeBreakGrainChange       CubeContractBreakReason = "grains_changed"
+	CubeBreakDimensionRemoved  CubeContractBreakReason = "dimension_removed"
+	CubeBreakMetricRemoved     CubeContractBreakReason = "metric_removed"
+	CubeBreakFederationChanged CubeContractBreakReason = "federation_changed"
+)
+
+// DetectCubeContractBreaking compares a previously published cube to a draft.
+// Additive metrics/dimensions alone are not breaking; grain set changes,
+// removals, and federation plan changes are.
+//
+// Callers that receive a non-empty reason list must publish a new
+// contract_version (or reject in-place save when consumers pin the old version).
+func DetectCubeContractBreaking(published, draft CubeDefinition) []CubeContractBreakReason {
+	var reasons []CubeContractBreakReason
+
+	pubGrains := grainSignature(published.Grains)
+	draftGrains := grainSignature(draft.Grains)
+	if pubGrains != draftGrains {
+		reasons = append(reasons, CubeBreakGrainChange)
+	}
+
+	draftDims := toSet(draft.DimensionSet())
+	for _, d := range published.DimensionSet() {
+		if !draftDims[d] {
+			reasons = append(reasons, CubeBreakDimensionRemoved)
+			break
+		}
+	}
+
+	pubMetrics := toSet(normalizeTermIDList(published.MetricIDs))
+	draftMetrics := toSet(normalizeTermIDList(draft.MetricIDs))
+	for id := range pubMetrics {
+		if !draftMetrics[id] {
+			reasons = append(reasons, CubeBreakMetricRemoved)
+			break
+		}
+	}
+
+	pubFed, _ := json.Marshal(canonicalizeFederation(published.Federation))
+	draftFed, _ := json.Marshal(canonicalizeFederation(draft.Federation))
+	if string(pubFed) != string(draftFed) {
+		reasons = append(reasons, CubeBreakFederationChanged)
+	}
+
+	return reasons
+}
+
+func grainSignature(grains [][]string) string {
+	parts := make([]string, 0, len(grains))
+	for _, g := range grains {
+		norm := normalizeTermIDList(g)
+		cp := make([]string, len(norm))
+		copy(cp, norm)
+		sort.Strings(cp)
+		parts = append(parts, strings.Join(cp, "+"))
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, "|")
+}
+
+// EffectiveOrphanRateMax returns the cube override or platform default.
+func EffectiveOrphanRateMax(f CubeFederation) float64 {
+	if f.OrphanRateMaxPercent > 0 {
+		return f.OrphanRateMaxPercent
+	}
+	return DefaultFederationOrphanRatePercent
 }
 
 // ValidateCubeMetricReferences checks that every referenced metric ID resolves
