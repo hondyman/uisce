@@ -32,6 +32,11 @@ func (h *AnalyticsHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/exposure/{portfolioID}", h.GetFactorExposure)
 		r.Get("/attribution/{portfolioID}", h.GetAttribution)
 	})
+	// CUBE-0.5: keep demo Aggregate Designer paths Gone if this registrar is wired.
+	r.Route("/analytics", func(r chi.Router) {
+		r.Handle("/aggregates", http.HandlerFunc(HandleRetiredAggregateDemoGone))
+		r.Handle("/preview", http.HandlerFunc(HandleRetiredAggregateDemoGone))
+	})
 }
 
 // GetFactorExposure calculates and returns the beta exposure of a portfolio to various factors

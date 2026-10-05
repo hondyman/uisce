@@ -3501,6 +3501,9 @@ func (s *Server) registerAIRoutes(r chi.Router) {
 
 // registerExplorerRoutes mounts query, search, saved query, and cube endpoints
 func (s *Server) registerExplorerRoutes(r chi.Router) {
+	// CUBE-0.5: dual-mode Aggregate Designer demo APIs → 410 Gone.
+	RegisterRetiredAggregateDemoRoutes(r)
+
 	if s.CubeHandler != nil {
 		r.Route("/cubes", func(r chi.Router) {
 			r.Get("/", s.CubeHandler.HandleListCubes)
