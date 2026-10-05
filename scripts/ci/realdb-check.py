@@ -25,9 +25,12 @@ if not any(e.get("Test") for e in events):
     sys.exit("FAIL: no test events: nothing ran")
 
 passed, skipped, failed = collections.Counter(), [], []
+out = collections.defaultdict(list)
 pkg_failed = []
 for e in events:
     a, pkg, t = e.get("Action"), e.get("Package", ""), e.get("Test")
+    if a == "output" and t:
+        out[f"{pkg}.{t}"].append(e.get("Output", ""))
     if t and a == "pass" and "/" not in t:
         passed[pkg] += 1
     elif t and a == "skip":
@@ -36,6 +39,10 @@ for e in events:
         failed.append(f"{pkg}.{t}")
     elif not t and a == "fail":
         pkg_failed.append(pkg)
+
+# A failure that cannot be read in the log is a failure nobody can fix: show what the failing tests printed.
+for name in sorted(set(failed))[:5]:
+    print(f"--- output of {name}\n" + "".join(out[name])[-3000:])
 
 problems = []
 if failed or pkg_failed:
