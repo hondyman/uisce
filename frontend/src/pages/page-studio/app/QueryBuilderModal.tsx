@@ -52,6 +52,7 @@ import type {
 } from '../../../features/query-builder/types/queryDef';
 import { previewQuery } from '../../../features/query-builder/services/queryBuilderApi';
 import { friendlyQueryError, savedQueryResultToSet, type SavedQueryRunShape } from '../../../features/query-execution';
+import { subjectFromSavedQuery } from '../../../features/analytical-subject';
 import { useTenant } from '../../../contexts/TenantContext';
 import type { PageQuery, ParamBinding, PageVariable } from './appModel';
 
@@ -277,13 +278,14 @@ export default function QueryBuilderModal({
         tags: [],
       });
 
-      // Pass saved query as PageQuery
+      // Pass saved query as PageQuery (mirror subject for cube pins — PR1b)
       onSave({
         id: queryName,
         kind: 'savedQuery',
         savedQueryId: sq.id,
+        subject: subjectFromSavedQuery(sq),
         paramBindings: {},
-      });
+      } as PageQuery);
       onClose();
     } catch (e: any) {
       setRunError(e.message);
@@ -376,8 +378,9 @@ export default function QueryBuilderModal({
       id: editingQueryId || selectedQuery.name.replace(/[^\w]/g, '_').toLowerCase(),
       kind: 'savedQuery',
       savedQueryId: selectedQuery.id,
+      subject: subjectFromSavedQuery(selectedQuery),
       paramBindings,
-    });
+    } as PageQuery);
     onClose();
   };
 

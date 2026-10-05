@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   assertCubeSubjectMirror,
   isNumericCubePin,
+  subjectFromSavedQuery,
+  savedQueryBindProps,
 } from '../../../features/analytical-subject/subjectPin';
-import { cubeSubject } from '../../../features/analytical-subject/types';
+import { businessObjectSubject, cubeSubject } from '../../../features/analytical-subject/types';
 
 describe('isNumericCubePin', () => {
   it('accepts positive numeric contractVersion', () => {
@@ -61,5 +63,53 @@ describe('assertCubeSubjectMirror', () => {
       boId: 'c1',
     });
     expect(check).toEqual({ ok: true });
+  });
+});
+
+describe('subjectFromSavedQuery / savedQueryBindProps (PR1b)', () => {
+  it('prefers explicit cube subject', () => {
+    const pin = cubeSubject('cube-9', 4);
+    expect(subjectFromSavedQuery({ subject: pin, sourceKind: 'cube', boId: 'cube-9' })).toEqual(pin);
+  });
+
+  it('falls back to state.subject', () => {
+    const pin = cubeSubject('cube-2', 'latest');
+    expect(subjectFromSavedQuery({ state: { subject: pin }, boId: 'other' })).toEqual(pin);
+  });
+
+  it('synthesizes cube from sourceKind + boId', () => {
+    expect(subjectFromSavedQuery({ sourceKind: 'cube', boId: 'c-abc' })).toEqual(
+      cubeSubject('c-abc', 'latest'),
+    );
+  });
+
+  it('synthesizes BO subject from boId + bindingId', () => {
+    expect(subjectFromSavedQuery({ boId: 'bo-1', bindingId: 'bind-1', relatedBoIds: ['r1'] })).toEqual(
+      businessObjectSubject('bo-1', 'bind-1', ['r1']),
+    );
+  });
+
+  it('bind props always write subject beside savedQueryId', () => {
+    const pin = cubeSubject('c1', 2);
+    expect(
+      savedQueryBindProps({
+        id: 'sq-1',
+        subject: pin,
+        sourceKind: 'cube',
+        boId: 'c1',
+      }),
+    ).toEqual({
+      savedQueryId: 'sq-1',
+      subject: pin,
+      savedQueryParams: undefined,
+    });
+  });
+
+  it('unbind clears savedQueryId and subject', () => {
+    expect(savedQueryBindProps(null)).toEqual({
+      savedQueryId: undefined,
+      subject: undefined,
+      savedQueryParams: undefined,
+    });
   });
 });

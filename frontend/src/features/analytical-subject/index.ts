@@ -16,8 +16,10 @@ export {
 export {
   assertCubeSubjectMirror,
   isNumericCubePin,
+  subjectFromSavedQuery,
+  savedQueryBindProps,
 } from './subjectPin';
-export type { SubjectPinCheck } from './subjectPin';
+export type { SubjectPinCheck, SavedQuerySubjectSource } from './subjectPin';
 export { SubjectPicker } from './SubjectPicker';
 export type { SubjectPickerProps } from './SubjectPicker';
 export { RouteBadge, routeBadgeFromPreview } from './RouteBadge';
