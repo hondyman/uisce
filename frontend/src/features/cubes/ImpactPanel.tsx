@@ -170,8 +170,15 @@ const ImpactPanel: React.FC<ImpactPanelProps> = ({
     }
   };
 
-  const runCascadeArchive = async () => {
-    if (!id || readOnly || !preview || preview.changeClass !== 'archive') return;
+  const runCascadeConfirm = async () => {
+    if (!id || readOnly || !preview) return;
+    const action =
+      preview.changeClass === 'archive'
+        ? 'archive'
+        : preview.changeClass === 'breaking_contract'
+          ? 'publish_version'
+          : null;
+    if (!action) return;
     if (!preview.confirmToken) {
       setError('Preview again to mint a confirm token before Confirm.');
       return;
@@ -179,11 +186,20 @@ const ImpactPanel: React.FC<ImpactPanelProps> = ({
     setCascadeBusy(true);
     setError(null);
     try {
-      const r = await cascadeCube(id, {
-        action: 'archive',
+      const body: {
+        action: 'archive' | 'publish_version';
+        confirmToken: string;
+        mode: CubeCascadeMode;
+        patch?: Record<string, unknown>;
+      } = {
+        action,
         confirmToken: preview.confirmToken,
         mode: cascadeMode,
-      });
+      };
+      if (action === 'publish_version' && draft) {
+        body.patch = cubeDraftPayload(draft);
+      }
+      const r = await cascadeCube(id, body);
       setPreview(null);
       setReceipt(r);
       try {
@@ -196,6 +212,21 @@ const ImpactPanel: React.FC<ImpactPanelProps> = ({
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setCascadeBusy(false);
+    }
+  };
+
+  const modeLabel = (m: string): string => {
+    switch (m) {
+      case 'fail_closed':
+        return 'fail_closed — 409 if any blocking consumer remains';
+      case 'disable_consumers':
+        return 'disable_consumers — pause schedules / deactivate pipelines, then archive (pins left)';
+      case 'rewire_latest':
+        return 'rewire_latest — bump contract, rewrite SQ/page pins to new version, rematerialize grains';
+      case 'bump_and_refresh':
+        return 'bump_and_refresh — publish version + rematerialize; leave pins on prior version';
+      default:
+        return m;
     }
   };
 
@@ -357,49 +388,46 @@ const ImpactPanel: React.FC<ImpactPanelProps> = ({
             confirmToken minted ({preview.confirmToken?.length || 0} chars, ≤10m TTL).
           </Typography>
 
-          {preview.changeClass === 'archive' && !readOnly && (
-            <Box sx={{ mt: 1.5 }}>
-              <Typography variant="body2" fontWeight={600} gutterBottom>
-                Cascade mode
-              </Typography>
-              <FormControl>
-                <RadioGroup
-                  value={cascadeMode}
-                  onChange={(_, v) => setCascadeMode(v)}
-                >
-                  {(preview.allowedModes || ['fail_closed']).map((m) => (
-                    <FormControlLabel
-                      key={m}
-                      value={m}
-                      control={<Radio size="small" />}
-                      label={
-                        m === 'fail_closed'
-                          ? 'fail_closed — 409 if any blocking consumer remains'
-                          : m === 'disable_consumers'
-                            ? 'disable_consumers — pause schedules / deactivate pipelines, then archive (pins left)'
-                            : m
-                      }
-                    />
-                  ))}
-                </RadioGroup>
-              </FormControl>
-              <Stack direction="row" gap={1} sx={{ mt: 1 }}>
-                <Button
-                  size="small"
-                  variant="contained"
-                  color="error"
-                  disabled={cascadeBusy || previewBusy}
-                  onClick={() => void runCascadeArchive()}
-                >
-                  {cascadeBusy ? 'Confirming…' : 'Confirm archive cascade'}
-                </Button>
-              </Stack>
-            </Box>
-          )}
+          {(preview.changeClass === 'archive' || preview.changeClass === 'breaking_contract') &&
+            !readOnly && (
+              <Box sx={{ mt: 1.5 }}>
+                <Typography variant="body2" fontWeight={600} gutterBottom>
+                  Cascade mode
+                </Typography>
+                <FormControl>
+                  <RadioGroup value={cascadeMode} onChange={(_, v) => setCascadeMode(v)}>
+                    {(preview.allowedModes || ['fail_closed']).map((m) => (
+                      <FormControlLabel
+                        key={m}
+                        value={m}
+                        control={<Radio size="small" />}
+                        label={modeLabel(m)}
+                      />
+                    ))}
+                  </RadioGroup>
+                </FormControl>
+                <Stack direction="row" gap={1} sx={{ mt: 1 }}>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color={preview.changeClass === 'archive' ? 'error' : 'warning'}
+                    disabled={cascadeBusy || previewBusy}
+                    onClick={() => void runCascadeConfirm()}
+                  >
+                    {cascadeBusy
+                      ? 'Confirming…'
+                      : preview.changeClass === 'archive'
+                        ? 'Confirm archive cascade'
+                        : 'Confirm publish cascade'}
+                  </Button>
+                </Stack>
+              </Box>
+            )}
 
-          {preview.changeClass !== 'archive' && (
+          {preview.changeClass === 'non_breaking_patch' && (
             <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-              Publish-version cascade Confirm lands in A5. Patch stays preview-only.
+              Non-breaking patch stays preview-only — use Save / PATCH. Cascade apply is for
+              archive and breaking publish_version.
             </Typography>
           )}
         </Alert>
@@ -411,9 +439,18 @@ const ImpactPanel: React.FC<ImpactPanelProps> = ({
             Cascade applied — {receipt.action} / {receipt.mode}
           </Typography>
           <Typography variant="body2">
-            Cube status: {receipt.cube?.status || 'archived'} · affected{' '}
-            {(receipt.consumersAffected || []).length}
+            Cube status: {receipt.cube?.status || '—'}
+            {receipt.cube?.contractVersion != null
+              ? ` · contract v${receipt.previousVersion ?? '?'}→${receipt.cube.contractVersion}`
+              : ''}{' '}
+            · affected {(receipt.consumersAffected || []).length}
           </Typography>
+          {!!receipt.materializeStarts?.length && (
+            <Typography variant="body2">
+              Materialize starts: {receipt.materializeStarts.length} grain(s)
+              {receipt.materializeStarts.some((s) => s.skipped) ? ' (some skipped)' : ''}
+            </Typography>
+          )}
           <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
             {(receipt.consumersAffected || [])
               .map((a) => `${a.kind}:${a.action}`)

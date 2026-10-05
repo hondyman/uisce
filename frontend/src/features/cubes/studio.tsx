@@ -377,7 +377,7 @@ const operations: OperationDef[] = [
     kind: 'mutation',
     label: 'Cube cascade apply',
     description:
-      'POST /api/cubes/{id}/cascade — A4 archive with fail_closed|disable_consumers. publish_version is A5.',
+      'POST /api/cubes/{id}/cascade — archive (fail_closed|disable_consumers) or publish_version (fail_closed|rewire_latest|bump_and_refresh).',
     params: [
       { name: 'id', type: 'string', required: true },
       { name: 'action', type: 'string', required: true },

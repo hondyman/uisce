@@ -240,7 +240,7 @@ Implementation: prefer small DomainComponent `cubes.ImpactPanel` + studio op `cu
 | **A2** | `POST …/impact/preview` + changeClass + confirmToken | **Done** — unit + alpha smoke |
 | **A3** | `cubes.ImpactPanel` + catalog/designer wiring (dry-run) | **Done** — browser proof |
 | **A4** | `POST …/cascade` archive + `fail_closed` / `disable_consumers` | **Done** — unit 409/disable + alpha archive smoke + browser Confirm |
-| **A5** | Cascade `publish_version` + `rewire_latest` / `bump_and_refresh` | Designer Confirm + rematerialize receipt |
+| **A5** | Cascade `publish_version` + `rewire_latest` / `bump_and_refresh` | **Done** — unit fail_closed/rewire/bump + FE Confirm + materializeStarts |
 
 ---
 

@@ -146,7 +146,7 @@ export type CubeImpactPreviewReport = CubeImpactReport & {
   patchHash?: string;
 };
 
-/** A4 POST /api/cubes/{id}/cascade (archive modes; publish_version is A5). */
+/** A4/A5 POST /api/cubes/{id}/cascade (archive + publish_version). */
 export type CubeCascadeMode =
   | 'fail_closed'
   | 'disable_consumers'
@@ -160,6 +160,15 @@ export type CubeCascadeAffected = {
   action: string;
   detail?: string;
 };
+export type CubeCascadeMaterializeStart = {
+  grain: string[];
+  grainHash?: string;
+  workflowId?: string;
+  attemptId?: string;
+  alreadyRunning?: boolean;
+  error?: string;
+  skipped?: boolean;
+};
 export type CubeCascadeReceipt = {
   cube: CubeDefinition;
   changeClass: string;
@@ -167,6 +176,9 @@ export type CubeCascadeReceipt = {
   action: string;
   consumersAffected: CubeCascadeAffected[];
   impact?: CubeImpactPreviewReport;
+  breakReasons?: string[];
+  previousVersion?: number;
+  materializeStarts?: CubeCascadeMaterializeStart[];
 };
 
 export type FederationJoinOrphanStats = {

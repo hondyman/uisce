@@ -86,8 +86,7 @@ func (s *Server) registerScheduleRoutes(r chi.Router, sqlxDB *sqlx.DB, tc tempor
 	svc := &schedule.Service{Store: store, Engine: &schedule.TemporalEngine{Client: tc}, Calendars: cals, Runners: runners}
 	s.ScheduleService = svc
 
-	// A4 archive cascade: pause cube_refresh schedules through the same
-	// SetEnabled path as the Schedules UI (DB + Temporal pause).
+	// Cube cascade side-effects: pause schedules (A4) + start materialize (A5).
 	if s.CubeHandler != nil {
 		s.CubeHandler.SetCascadeSideEffects(querybuilder.CubeCascadeSideEffects{
 			PauseSchedule: func(ctx context.Context, tenantID, scheduleID, actorUserID string) error {
@@ -96,6 +95,9 @@ func (s *Server) registerScheduleRoutes(r chi.Router, sqlxDB *sqlx.DB, tc tempor
 					TenantID: tenantID,
 				}, scheduleID, false)
 				return err
+			},
+			StartMaterialize: func(ctx context.Context, req querybuilder.CubeMaterializeRequest) (string, *querybuilder.CubeMaterializePlan, error) {
+				return s.StartCubeMaterialize(ctx, req)
 			},
 		})
 	}
