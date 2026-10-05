@@ -159,3 +159,41 @@ func TestAlphaStore_AMissingDatasourceRowIsNotFound(t *testing.T) {
 	_, _, err = (&AlphaStore{DB: sdb}).Read(context.Background(), "gold-tenant", uuid.NewString())
 	require.ErrorIs(t, err, ErrTemplateNotFound)
 }
+
+type markStore struct {
+	*fakeStore
+	ids []string
+	err error
+}
+
+func (m markStore) Marked(context.Context, string) ([]string, error) { return m.ids, m.err }
+
+func TestResolve_ExactlyOneMarkedDatasourceIsTheTemplate(t *testing.T) {
+	id, err := Loader{Store: markStore{fakeStore: okStore(), ids: []string{dsID}}}.Resolve(context.Background(), "orm")
+	require.NoError(t, err)
+	require.Equal(t, dsID, id)
+}
+
+func TestResolve_ZeroOrSeveralRefuseAndSeveralListTheIds(t *testing.T) {
+	_, err := Loader{Store: markStore{fakeStore: okStore()}}.Resolve(context.Background(), "orm")
+	require.ErrorIs(t, err, ErrNoTemplateMarked)
+
+	_, err = Loader{Store: markStore{fakeStore: okStore(), ids: []string{"id-a", "id-b"}}}.Resolve(context.Background(), "orm")
+	require.ErrorIs(t, err, ErrTemplateAmbiguous)
+	require.Contains(t, err.Error(), "id-a")
+	require.Contains(t, err.Error(), "id-b")
+}
+
+func TestResolve_ABadAppAStoreErrorAndAStoreThatCannotResolveAllFailClosed(t *testing.T) {
+	for _, app := range []string{"", "Orm", "../orm", "orm; drop"} {
+		_, err := Loader{Store: markStore{fakeStore: okStore(), ids: []string{dsID}}}.Resolve(context.Background(), app)
+		require.ErrorIs(t, err, ErrNoTemplateMarked, app)
+	}
+	_, err := Loader{Store: markStore{fakeStore: okStore(), err: errors.New("db down")}}.Resolve(context.Background(), "orm")
+	require.ErrorContains(t, err, "db down")
+	require.NotErrorIs(t, err, ErrNoTemplateMarked, "an outage is not 'nothing is marked'")
+	_, err = Loader{Store: okStore()}.Resolve(context.Background(), "orm")
+	require.Error(t, err)
+	_, err = Loader{}.Resolve(context.Background(), "orm")
+	require.Error(t, err)
+}

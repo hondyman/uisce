@@ -31,6 +31,10 @@ var (
 	ErrBadSchemaName = errors.New("tenantschema: a declared schema name is not a plain identifier")
 	// ErrNoNodes: the scan holds nothing for the datasource.
 	ErrNoNodes = errors.New("tenantschema: alpha holds no scan for the template datasource")
+	// ErrNoTemplateMarked: no datasource is marked as the template for the app. Nothing is guessed.
+	ErrNoTemplateMarked = errors.New("tenantschema: no datasource is marked as the template for the app")
+	// ErrTemplateAmbiguous: more than one datasource is marked for the app. The message lists the ids found.
+	ErrTemplateAmbiguous = errors.New("tenantschema: more than one datasource is marked as the template for the app")
 )
 
 // Template is what the compiler is given.
@@ -51,8 +55,41 @@ type Store interface {
 	Read(ctx context.Context, tenantID, datasourceID string) (schemas string, nodes []*models.CatalogNode, err error)
 }
 
+// Marker is the part of a store that can say which datasources are marked as the template for an app. It is separate from
+// Store so a store that only loads a known template need not implement it.
+type Marker interface {
+	// Marked returns the ids of the datasources marked as the template for app, sorted.
+	Marked(ctx context.Context, app string) ([]string, error)
+}
+
 // Loader loads a template.
 type Loader struct{ Store Store }
+
+var appName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+
+// Resolve returns the id of the datasource marked as the template for app. Zero or more than one marked datasource is a
+// refusal, and the ambiguous case lists the ids it found: the template is a property of the gold copy, never a setting
+// that can point somewhere else than the data says.
+func (l Loader) Resolve(ctx context.Context, app string) (string, error) {
+	m, ok := l.Store.(Marker)
+	if l.Store == nil || !ok {
+		return "", errors.New("tenantschema: the store cannot resolve a marked template")
+	}
+	if !appName.MatchString(app) {
+		return "", fmt.Errorf("%w: %q is not an app code", ErrNoTemplateMarked, app)
+	}
+	ids, err := m.Marked(ctx, app)
+	if err != nil {
+		return "", fmt.Errorf("tenantschema: read the template marker: %w", err)
+	}
+	switch len(ids) {
+	case 0:
+		return "", fmt.Errorf("%w %q", ErrNoTemplateMarked, app)
+	case 1:
+		return ids[0], nil
+	}
+	return "", fmt.Errorf("%w %q: found %s", ErrTemplateAmbiguous, app, strings.Join(ids, ", "))
+}
 
 var schemaName = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
 
@@ -126,6 +163,30 @@ func (s *AlphaStore) Owner(ctx context.Context, datasourceID string) (string, er
 		return "", fmt.Errorf("tenantschema: resolve template datasource: %w", err)
 	}
 	return r.TenantID, nil
+}
+
+var _ Marker = (*AlphaStore)(nil)
+
+// Marked is a cross-tenant read of the marker column, so it needs the gold-copy-sync role. It returns every marked row
+// (the unique index allows one, but a resolver that trusted that would hide a violated index).
+func (s *AlphaStore) Marked(ctx context.Context, app string) ([]string, error) {
+	var ids []string
+	err := db.WithGoldCopySync(ctx, s.DB, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `SELECT id::text FROM public.tenant_product_datasource WHERE structure_template_app = $1 ORDER BY id`, app)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			ids = append(ids, id)
+		}
+		return rows.Err()
+	})
+	return ids, err
 }
 
 // IsGoldCopy is a cross-tenant read of one boolean, so it needs the gold-copy-sync role, as the resolver's own lookup does.

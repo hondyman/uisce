@@ -635,6 +635,7 @@ func (a *TenantProvisioningActivities) RegisterTenantDatabaseActivities(w Activi
 	w.RegisterActivity(a.BindTenantDatabase)
 	w.RegisterActivity(a.ProvisionTenantDatabaseAccess)
 	w.RegisterActivity(a.ApplyTenantMigrations)
+	w.RegisterActivity(a.ResolveStructureTemplate)
 	w.RegisterActivity(a.PlanTenantStructure)
 	w.RegisterActivity(a.ApplyTenantStructure)
 	w.RegisterActivity(a.ProbeTenantDatabase)

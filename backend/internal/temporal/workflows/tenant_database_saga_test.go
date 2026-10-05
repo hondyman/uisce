@@ -23,6 +23,8 @@ import (
 type tdScenario struct {
 	app          string
 	template     string // TemplateDatasourceID; non-empty with an app selects the compiled-structure path (ADR-048)
+	fromMarker   bool   // StructureFromGoldCopy: the saga resolves the template from the gold copy's marker
+	resolved     string // what ResolveStructureTemplate returns (default goldTemplate)
 	planHash     string // returned by PlanTenantStructure (default "plan-hash")
 	state        provisioning.ProvisioningState
 	failStep     string
@@ -40,7 +42,7 @@ func (s *tdScenario) run(t *testing.T) sagaRun {
 		acts.RegisterTenant, acts.RegisterInstance, acts.InspectProvisioningState,
 		acts.CreateTenantDatabase, acts.CloneSchemaFromGoldCopy, acts.CreateLakekeeperNamespace, acts.CloneGoldCopyProducts,
 		acts.BindTenantDatabase, acts.ProvisionTenantDatabaseAccess, acts.ApplyTenantMigrations,
-		acts.PlanTenantStructure, acts.ApplyTenantStructure,
+		acts.ResolveStructureTemplate, acts.PlanTenantStructure, acts.ApplyTenantStructure,
 		acts.ProbeTenantDatabase, acts.ActivateTenantDatabase,
 		acts.UpdateTenantStatus, acts.UpdateInstanceStatus, acts.EmitProvisioningEvent,
 		acts.RollbackRegisterTenant, acts.RollbackRegisterInstance, acts.RollbackCreateTenantDatabase,
@@ -122,6 +124,15 @@ func (s *tdScenario) run(t *testing.T) sagaRun {
 	if hash == "" {
 		hash = "plan-hash"
 	}
+	resolved := s.resolved
+	if resolved == "" {
+		resolved = goldTemplate
+	}
+	if err := fail("ResolveStructureTemplate"); err != nil {
+		env.OnActivity(acts.ResolveStructureTemplate, mock.Anything, mock.Anything).Run(record("ResolveStructureTemplate")).Return("", err)
+	} else {
+		env.OnActivity(acts.ResolveStructureTemplate, mock.Anything, mock.Anything).Run(record("ResolveStructureTemplate")).Return(resolved, nil)
+	}
 	if err := fail("PlanTenantStructure"); err != nil {
 		env.OnActivity(acts.PlanTenantStructure, mock.Anything, mock.Anything).Run(record("PlanTenantStructure")).
 			Return(provisioning.StructurePlan{}, err)
@@ -142,7 +153,7 @@ func (s *tdScenario) run(t *testing.T) sagaRun {
 	env.ExecuteWorkflow(workflows.TenantInstanceProvisioningWorkflowFn, provisioning.ProvisioningWorkflowInput{
 		TenantName: "Acme", TenantCode: "acme", InstanceName: "prod", GoldCopyDatabase: "gold",
 		DatabaseName: "orm_acme", LakekeeperNS: "acme", App: s.app, BaselineThrough: "0001_x.up.sql",
-		TemplateDatasourceID: s.template,
+		TemplateDatasourceID: s.template, StructureFromGoldCopy: s.fromMarker,
 	})
 	require.True(t, env.IsWorkflowCompleted())
 	mu.Lock()
@@ -271,6 +282,33 @@ func TestStructureSaga_PlansBeforeAnythingIsCreatedAndNeverClonesTheGoldCopy(t *
 	require.Equal(t, "ds-42", apply.DatasourceID)
 	require.Equal(t, goldTemplate, s.stepInputs["PlanTenantStructure"].TemplateDatasourceID)
 	require.Equal(t, "orm_acme", s.stepInputs["PlanTenantStructure"].DatabaseName)
+}
+
+func TestStructureSaga_TheMarkerIsResolvedBeforeThePlanAndTheResolvedIdIsUsedThroughout(t *testing.T) {
+	s := &tdScenario{app: "orm", fromMarker: true, state: freshState, bindResult: "ds-42", resolved: "22222222-2222-4222-8222-222222222222"}
+	r := s.run(t)
+	require.NoError(t, r.err)
+	require.NotEqual(t, -1, index(r.calls, "ResolveStructureTemplate"))
+	require.Less(t, index(r.calls, "ResolveStructureTemplate"), index(r.calls, "PlanTenantStructure"))
+	require.Less(t, index(r.calls, "PlanTenantStructure"), index(r.calls, "CreateTenantDatabase"))
+	for _, step := range []string{"PlanTenantStructure", "BindTenantDatabase", "ApplyTenantStructure"} {
+		require.Equal(t, "22222222-2222-4222-8222-222222222222", s.stepInputs[step].TemplateDatasourceID, step)
+	}
+}
+
+func TestStructureSaga_AnExplicitIdNeedsNoResolution(t *testing.T) {
+	r := (&tdScenario{app: "orm", template: goldTemplate, state: freshState}).run(t)
+	require.NoError(t, r.err)
+	require.Equal(t, -1, index(r.calls, "ResolveStructureTemplate"))
+}
+
+func TestStructureSaga_ZeroOrSeveralMarkedTemplatesCreateNothing(t *testing.T) {
+	r := (&tdScenario{app: "orm", fromMarker: true, state: freshState, failStep: "ResolveStructureTemplate"}).run(t)
+	require.Error(t, r.err)
+	for _, never := range []string{"PlanTenantStructure", "CreateTenantDatabase", "CloneGoldCopyProducts", "BindTenantDatabase", "ApplyTenantStructure"} {
+		require.Equal(t, -1, index(r.calls, never), never)
+	}
+	require.NotEqual(t, -1, index(r.calls, "RollbackRegisterTenant"))
 }
 
 func TestStructureSaga_ARefusedPlanCreatesNothingAndUndoesOnlyTheRows(t *testing.T) {

@@ -1487,6 +1487,14 @@ partitioned index also has `relispartition` set and no bound, so the partitionin
 `template_datasource_id` (with `app`; an admin-only request, a uuid, validated before a workflow starts). With it, behind
 `workflow.GetVersion("saga-tenant-structure-v1")`, the saga changes in three places and in no other:
 
+**The template is marked, not configured.** Naming a template datasource by a setting would make a config string the source of truth
+(the same drift that put `crims` in the repository while the deployment runs `alpha`). Instead
+`tenant_product_datasource.structure_template_app` marks the one datasource that is the template for an app; a partial unique index
+allows at most one per app, and a trigger refuses the mark on any datasource that is not the gold-copy tenant's. A request with
+`structure_from_gold_copy` (exclusive with an explicit `template_datasource_id`) runs `ResolveStructureTemplate` first, which refuses
+(non-retryable, before anything is created) when none or more than one is marked, listing the ids. The plan result carries the
+template id and the plan hash, which is the record of what a run deployed.
+
 1. **`PlanTenantStructure` runs before anything is created.** It loads the template from `alpha` (the datasource's owner
    must be the gold-copy tenant, checked before any metadata is read), compiles it, and returns a hash, a table count and a
    statement count (never the SQL, which belongs in no workflow history). A template that cannot be deployed (incomplete or

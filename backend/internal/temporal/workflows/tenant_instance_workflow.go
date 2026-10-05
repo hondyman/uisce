@@ -356,16 +356,24 @@ func tenantInstanceProvisioning(ctx workflow.Context, input provisioning.Provisi
 	// 3b. Plan the structure (ADR-048), before anything is created: a template that cannot be deployed (an incomplete or
 	// unsupported scan, or a datasource that is not the gold copy's) refuses the run here, with nothing but the two rows
 	// above to undo.
-	structureMode := input.App != "" && input.TemplateDatasourceID != "" &&
+	structureMode := input.App != "" && (input.TemplateDatasourceID != "" || input.StructureFromGoldCopy) &&
 		workflow.GetVersion(ctx, sagaTenantStructureVersion, workflow.DefaultVersion, 1) == 1
 	var structure provisioning.StructurePlan
+	templateID := input.TemplateDatasourceID
 	if structureMode {
 		planIn := provisioning.TenantDatabaseInput{TenantID: input.TenantID, InstanceID: input.InstanceID, App: input.App,
-			DatabaseName: input.DatabaseName, TemplateDatasourceID: input.TemplateDatasourceID}
+			DatabaseName: input.DatabaseName, TemplateDatasourceID: templateID}
+		if templateID == "" {
+			// The template is whatever the gold copy marks for this app; zero or several refuse the run here.
+			if e := workflow.ExecuteActivity(ctx, acts.ResolveStructureTemplate, planIn).Get(ctx, &templateID); e != nil {
+				return fail("ResolveStructureTemplate", e)
+			}
+			planIn.TemplateDatasourceID = templateID
+		}
 		if e := workflow.ExecuteActivity(ctx, acts.PlanTenantStructure, planIn).Get(ctx, &structure); e != nil {
 			return fail("PlanTenantStructure", e)
 		}
-		logger.Info("Tenant structure planned", "hash", structure.Hash, "tables", structure.Tables, "statements", structure.Statements)
+		logger.Info("Tenant structure planned", "template", structure.TemplateDatasourceID, "hash", structure.Hash, "tables", structure.Tables, "statements", structure.Statements)
 	}
 
 	// 4. Tenant database.
@@ -427,7 +435,7 @@ func tenantInstanceProvisioning(ctx workflow.Context, input provisioning.Provisi
 			DatabaseName:     input.DatabaseName,
 			GoldCopyDatabase: input.GoldCopyDatabase,
 			BaselineThrough:  input.BaselineThrough,
-			TemplateDatasourceID: input.TemplateDatasourceID,
+			TemplateDatasourceID: templateID,
 			StructureHash:        structure.Hash,
 		}
 		var bound provisioning.TenantDatabaseBinding

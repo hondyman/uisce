@@ -1,0 +1,4 @@
+DROP TRIGGER IF EXISTS tenant_product_datasource_template_is_gold ON public.tenant_product_datasource;
+DROP FUNCTION IF EXISTS public.tenant_product_datasource_template_is_gold();
+DROP INDEX IF EXISTS public.tenant_product_datasource_structure_template_app;
+ALTER TABLE public.tenant_product_datasource DROP COLUMN IF EXISTS structure_template_app;

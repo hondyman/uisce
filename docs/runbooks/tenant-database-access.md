@@ -91,17 +91,24 @@ the datasource row (which holds only `secret_path`); **rotation is manual**; a l
 
 ## The first request
 
-Look the template up; do not copy an id from a document:
+The template is a property of the gold copy: **one datasource is marked as the template for an app**
+(`tenant_product_datasource.structure_template_app`), with a unique index behind it, and only the gold-copy tenant's datasources can
+carry the mark. The request names no id; the saga resolves the template by the mark and **refuses when none, or more than one, is
+marked**, listing the ids it found.
 
 ```sql
--- the gold-copy tenant's datasources that declare a schema list, which is what makes one a template
-SELECT d.id, d.source_name, d.config->>'database' AS database, d.config->>'schema' AS schemas
-  FROM public.tenant_product_datasource d JOIN public.tenants t ON t.id = d.tenant_id
- WHERE t.gold_copy AND d.config->>'schema' IS NOT NULL ORDER BY d.source_name;
+-- what is marked today (expect exactly one row per app)
+SELECT d.id, d.structure_template_app AS app, d.source_name, d.config->>'database' AS database, d.config->>'schema' AS schemas
+  FROM public.tenant_product_datasource d
+ WHERE d.structure_template_app IS NOT NULL;
 ```
 
-If more than one row declares the same schemas, decide which is canonical. The saga binds the tenant's copy of the one you name; a
-tenant's copy of any other gold datasource is cloned as before but is not bound, and fails closed.
+Marking is a deliberate act by the owner, on the datasource the deployed backend's gold-copy provisioning actually uses (not a
+decision this document makes):
+
+```sql
+UPDATE public.tenant_product_datasource SET structure_template_app = '<app>' WHERE id = '<the gold-copy datasource>';
+```
 
 ```json
 POST /system/tenants/provision        (global admin; bp_queue)
@@ -110,8 +117,12 @@ POST /system/tenants/provision        (global admin; bp_queue)
   "instance_name": "<instance>",
   "tenant_code": "<lower-case code>",
   "app": "<application label, a plain lower-case identifier>",
-  "template_datasource_id": "<the canonical gold-copy template datasource id from the query above>"
+  "structure_from_gold_copy": true
 }
 ```
+
+`template_datasource_id` (an explicit gold-copy datasource id) is still accepted for a run that must name one; it is exclusive with
+`structure_from_gold_copy`. The plan the saga records (in the workflow's history) carries the template id and the plan hash, so a
+run states what it deployed.
 
 `app` no longer chooses the datasource in this mode (the template does); it must still be a plain identifier.

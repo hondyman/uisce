@@ -431,3 +431,36 @@ func TestStructureBind_WithoutATemplateTheAppCodeStillChoosesTheDatasource(t *te
 	require.Error(t, err, "two datasources carry the code orm now, so the app-code path correctly refuses as ambiguous")
 	require.Empty(t, b.DatasourceID)
 }
+
+// The marker, against the real migration: one template per app, gold copy only.
+func TestStructure_TemplateMarkerIsGoldCopyOnlyAndOnePerApp(t *testing.T) {
+	r := newSagaRig(t)
+
+	mark := func(ds string) error {
+		_, err := r.admin.Exec(`UPDATE tenant_product_datasource SET structure_template_app = 'orm' WHERE id = $1`, ds)
+		return err
+	}
+	require.ErrorContains(t, mark(r.dsOrm), "gold-copy", "a tenant that is not the gold copy cannot nominate its own datasource")
+
+	_, err := r.admin.Exec(`UPDATE tenants SET gold_copy = true WHERE id = $1`, r.tenant)
+	require.NoError(t, err)
+	require.NoError(t, mark(r.dsOrm))
+	require.ErrorContains(t, mark(r.dsOther), "tenant_product_datasource_structure_template_app", "a second template for the same app is refused by the index")
+
+	_, err = r.admin.Exec(`UPDATE tenant_product_datasource SET structure_template_app = 'Orm; drop' WHERE id = $1`, r.dsOther)
+	require.Error(t, err, "the marker is an app code")
+
+	store := &tenantschema.AlphaStore{DB: r.app}
+	ids, err := store.Marked(context.Background(), "orm")
+	require.NoError(t, err)
+	require.Equal(t, []string{r.dsOrm}, ids)
+	ids, err = store.Marked(context.Background(), "other")
+	require.NoError(t, err)
+	require.Empty(t, ids)
+
+	got, err := tenantschema.Loader{Store: store}.Resolve(context.Background(), "orm")
+	require.NoError(t, err)
+	require.Equal(t, r.dsOrm, got)
+	_, err = tenantschema.Loader{Store: store}.Resolve(context.Background(), "other")
+	require.ErrorIs(t, err, tenantschema.ErrNoTemplateMarked)
+}

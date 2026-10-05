@@ -34,7 +34,7 @@ func TestRegisterTenantDatabaseActivities_RegistersWhatTheSagaCalls(t *testing.T
 	sort.Strings(rec.names)
 	require.Equal(t, []string{
 		"ActivateTenantDatabase", "ApplyTenantMigrations", "ApplyTenantStructure", "BindTenantDatabase", "InspectProvisioningState",
-		"PlanTenantStructure", "ProbeTenantDatabase", "ProvisionTenantDatabaseAccess", "RollbackTenantDatabase",
+		"PlanTenantStructure", "ProbeTenantDatabase", "ProvisionTenantDatabaseAccess", "ResolveStructureTemplate", "RollbackTenantDatabase",
 	}, rec.names)
 }
 
@@ -53,7 +53,7 @@ func TestBothWorkersRegisterTheTenantDatabaseActivitiesAndNeverAsBPSafe(t *testi
 				continue
 			}
 			for _, name := range []string{"BindTenantDatabase", "ProvisionTenantDatabaseAccess", "ApplyTenantMigrations",
-				"PlanTenantStructure", "ApplyTenantStructure", "ProbeTenantDatabase", "ActivateTenantDatabase", "RollbackTenantDatabase", "InspectProvisioningState"} {
+				"PlanTenantStructure", "ResolveStructureTemplate", "ApplyTenantStructure", "ProbeTenantDatabase", "ActivateTenantDatabase", "RollbackTenantDatabase", "InspectProvisioningState"} {
 				if !strings.Contains(line, name) {
 					continue
 				}

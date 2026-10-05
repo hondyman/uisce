@@ -54,6 +54,22 @@ func (a *TenantProvisioningActivities) compileStructure(ctx context.Context, tem
 	return plan, tpl.Schemas, nil
 }
 
+// ResolveStructureTemplate returns the datasource the gold copy marks as the template for the request's app. Zero or more
+// than one marked datasource refuses the run (non-retryable, ids listed), before anything is created.
+func (a *TenantProvisioningActivities) ResolveStructureTemplate(ctx context.Context, in provisioning.TenantDatabaseInput) (string, error) {
+	if a.Templates == nil {
+		return "", nonRetryable(errTypeTenantDBInput, errors.New("no template loader configured"))
+	}
+	id, err := a.Templates.Resolve(ctx, in.App)
+	switch {
+	case errors.Is(err, tenantschema.ErrNoTemplateMarked), errors.Is(err, tenantschema.ErrTemplateAmbiguous):
+		return "", nonRetryable(errTypeTenantStructureRefused, err)
+	case err != nil:
+		return "", fmt.Errorf("resolve the template: %w", err)
+	}
+	return id, nil
+}
+
 // PlanTenantStructure compiles the template and reports its hash. It creates nothing.
 func (a *TenantProvisioningActivities) PlanTenantStructure(ctx context.Context, in provisioning.TenantDatabaseInput) (provisioning.StructurePlan, error) {
 	if in.TemplateDatasourceID == "" {
@@ -67,7 +83,7 @@ func (a *TenantProvisioningActivities) PlanTenantStructure(ctx context.Context, 
 	if err != nil {
 		return provisioning.StructurePlan{}, err
 	}
-	return provisioning.StructurePlan{Hash: plan.Hash(), Tables: plan.Tables, Statements: len(plan.Statements), Schemas: schemas}, nil
+	return provisioning.StructurePlan{TemplateDatasourceID: in.TemplateDatasourceID, Hash: plan.Hash(), Tables: plan.Tables, Statements: len(plan.Statements), Schemas: schemas}, nil
 }
 
 // ApplyTenantStructure applies the planned structure to the tenant's database in one transaction, through the same
