@@ -55,6 +55,7 @@ describe('AppRuntime - Variable Refresh Semantics', () => {
         {
           id: 'accountQuery',
           kind: 'savedQuery',
+          operation: '',
           savedQueryId: 'sq-acc-1',
           paramBindings: {
             accountId: { mode: 'pageVar', varName: 'selectedAccountId' },

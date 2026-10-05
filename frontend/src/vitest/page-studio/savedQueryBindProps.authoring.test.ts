@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { savedQueryBindProps, subjectFromSavedQuery } from '../../features/analytical-subject';
 import { cubeSubject } from '../../features/analytical-subject/types';
-import type { SavedQuery } from '../../features/query-builder/types/queryDef';
 
 /** Authoring contract: PropertiesPanel / QueryBuilderModal must use these patches. */
 describe('PR1b authoring bind contract', () => {
@@ -12,8 +11,7 @@ describe('PR1b authoring bind contract', () => {
     bindingId: '',
     subject: cubeSubject('cube-aaa', 3),
     name: 'Cube KPI',
-    state: { dimensions: [], measures: [], filters: [], parameters: [] },
-  } satisfies Partial<SavedQuery> & { id: string };
+  };
 
   it('cube bind writes savedQueryId + mirrored numeric subject', () => {
     const patch = savedQueryBindProps(cubeQuery);

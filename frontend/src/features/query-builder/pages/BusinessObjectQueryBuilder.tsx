@@ -1339,8 +1339,14 @@ const BusinessObjectQueryBuilder: React.FC = () => {
             </Typography>
             <AutoFormRenderer
               schema={boSchema}
-              onAddField={handleAddSchemaField}
-              onAddFilter={handleAddSchemaFilter}
+              onAddField={(fieldId) => {
+                const field = boSchema.fields?.find((f) => f.id === fieldId);
+                if (field) handleAddSchemaField(field);
+              }}
+              onAddFilter={(fieldId) => {
+                const field = boSchema.fields?.find((f) => f.id === fieldId);
+                if (field) handleAddSchemaFilter(field);
+              }}
               isInQuery={isSchemaFieldInQuery}
             />
           </Box>

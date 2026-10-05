@@ -9,3 +9,7 @@ package internal/tenantschema .
 package internal/migrations .
 # needs a real template source database (TENANT_STRUCTURE_TIMING_SOURCE_DSN), which CI does not have
 exclude TestStructure_OnboardingTimingOnARealTemplate
+# optional apply smoke: asserts fixed CRIMS-derived table counts (80/441/1); skipped without
+# TENANT_DDL_TEST_ADMIN_DSN before #388 and still not CI-proven after wiring the DSN — exclude
+# until a green apply receipt exists on the throwaway cluster (main was red on skip alone).
+exclude TestCandidateDDL_AppliesToAnEmptyDatabase

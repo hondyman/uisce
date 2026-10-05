@@ -278,14 +278,16 @@ export default function QueryBuilderModal({
         tags: [],
       });
 
-      // Pass saved query as PageQuery (mirror subject for cube pins — PR1b)
+      // Pass saved query as PageQuery (mirror subject for cube pins — PR1b).
+      // operation: '' satisfies the required field; AppRuntime branches on kind.
       onSave({
         id: queryName,
         kind: 'savedQuery',
+        operation: '',
         savedQueryId: sq.id,
         subject: subjectFromSavedQuery(sq),
         paramBindings: {},
-      } as PageQuery);
+      });
       onClose();
     } catch (e: any) {
       setRunError(e.message);
@@ -300,7 +302,7 @@ export default function QueryBuilderModal({
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
   const [loadingQueries, setLoadingQueries] = useState(false);
   const [selectedQueryId, setSelectedQueryId] = useState<string>(
-    initialQuery?.kind === 'savedQuery' ? initialQuery.savedQueryId : ''
+    initialQuery?.kind === 'savedQuery' ? (initialQuery.savedQueryId ?? '') : ''
   );
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -377,10 +379,11 @@ export default function QueryBuilderModal({
     onSave({
       id: editingQueryId || selectedQuery.name.replace(/[^\w]/g, '_').toLowerCase(),
       kind: 'savedQuery',
+      operation: '',
       savedQueryId: selectedQuery.id,
       subject: subjectFromSavedQuery(selectedQuery),
       paramBindings,
-    } as PageQuery);
+    });
     onClose();
   };
 

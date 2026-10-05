@@ -72,6 +72,12 @@ export function checkPage(page: Pick<CorePageDefinition, 'components' | 'layout'
 
   // --- queries: operations exist and get their required params ----------------------------------
   for (const q of app.queries ?? []) {
+    if (q.kind === 'savedQuery') {
+      if (!q.savedQueryId) {
+        add('error', 'missing-saved-query', `Query "${q.id}" is savedQuery-backed but has no savedQueryId.`, `query ${q.id}`);
+      }
+      continue;
+    }
     const op = getOperation(q.operation);
     if (!op) {
       add('error', 'unknown-operation', `Query "${q.id}" uses operation "${q.operation}", which is not registered.`, `query ${q.id}`);

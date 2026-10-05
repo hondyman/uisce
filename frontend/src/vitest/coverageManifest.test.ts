@@ -59,7 +59,7 @@ const WIDEN_TARGET = 164; // 164 from the damage run, 0 documented excludes (wav
  *                   AND tenantContextStub.identity.test.ts, 6 tests, the
  *                   identity + shape guard for the fixture extensions)
  */
-const RUNNING_FILE_BASELINE = 120; // 119 prior; +1 page-studio/cubeDesignerSeedParity (PR6)
+const RUNNING_FILE_BASELINE = 122; // 120 prior; +1 cubes/studio; +1 page-studio/cubesCatalogSeedParity (Track A / unify)
 const EXECUTED_TEST_BASELINE = 709; // 699 prior; +1 cubes.patchDraft; +9 cubeDesignerSeedParity
 
 function globFiles(roots: string[], patterns: string[]): string[] {

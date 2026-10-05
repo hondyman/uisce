@@ -208,6 +208,7 @@ describe('QueryBuilderModal - Component Integration', () => {
     expect(onSave).toHaveBeenCalledWith({
       id: 'core_aum_query',
       kind: 'savedQuery',
+      operation: '',
       savedQueryId: 'core-aum',
       paramBindings: {},
     });
