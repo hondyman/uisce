@@ -346,11 +346,13 @@ const PageComponentRendererInner: React.FC<PageComponentRendererProps> = ({
         <SavedQueryWidget
           widgetId={component.id}
           savedQueryId={component.props.savedQueryId as string}
+          subject={(component.props.subject as import('../../features/analytical-subject').QuerySubject | undefined) ?? null}
           widgetType={widgetType as 'slicer' | 'chart' | 'gauge'}
           paramBindings={component.props.savedQueryParams as Record<string, SavedQueryParamBinding> | undefined}
           style={widgetStyle}
           crossFilterConfig={component.props.crossFilterConfig as any}
           drillThroughTargets={component.props.drillThroughTargets as any}
+          queryTerms={component.props.queryTerms as string[] | undefined}
         />
       </Box>
     );

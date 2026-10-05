@@ -13,6 +13,11 @@ export {
   businessObjectSubject,
   cubeSubject,
 } from './types';
+export {
+  assertCubeSubjectMirror,
+  isNumericCubePin,
+} from './subjectPin';
+export type { SubjectPinCheck } from './subjectPin';
 export { SubjectPicker } from './SubjectPicker';
 export type { SubjectPickerProps } from './SubjectPicker';
 export { RouteBadge, routeBadgeFromPreview } from './RouteBadge';

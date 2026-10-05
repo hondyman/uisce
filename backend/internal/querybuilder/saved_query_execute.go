@@ -448,12 +448,19 @@ func (h *SavedQueryHandler) HandleExecuteSavedQuery(w http.ResponseWriter, r *ht
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+	out := map[string]interface{}{
 		"columns":   resp.Columns,
 		"rows":      resp.Rows,
 		"rowCount":  resp.RowCount,
 		"chartType": sq.ChartType,
 		"name":      sq.Name,
-	})
+	}
+	if resp.CubeHit != nil {
+		out["cubeHit"] = resp.CubeHit
+	}
+	if resp.CubeMiss != "" {
+		out["cubeMiss"] = resp.CubeMiss
+	}
+	h.writeJSON(w, http.StatusOK, out)
 }
 

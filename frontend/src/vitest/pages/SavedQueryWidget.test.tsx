@@ -12,12 +12,15 @@ import type { SavedQueryRunResult } from '../../features/query-builder/services/
 // functions, so a future refactor that moves or removes that guard would
 // fail this test by actually crashing during render.
 
-const { mockRunSavedQuery } = vi.hoisted(() => ({ mockRunSavedQuery: vi.fn() }));
+const { mockRunSavedQuery, mockGetSavedQuery } = vi.hoisted(() => ({
+  mockRunSavedQuery: vi.fn(),
+  mockGetSavedQuery: vi.fn(),
+}));
 vi.mock('../../features/query-builder/services/savedQueryApi', async () => {
   const actual = await vi.importActual<typeof import('../../features/query-builder/services/savedQueryApi')>(
     '../../features/query-builder/services/savedQueryApi',
   );
-  return { ...actual, runSavedQuery: mockRunSavedQuery };
+  return { ...actual, runSavedQuery: mockRunSavedQuery, getSavedQuery: mockGetSavedQuery };
 });
 
 describe('SavedQueryWidget - empty result guard', () => {
@@ -193,5 +196,75 @@ describe('SavedQueryWidget - rollup-safety gate composition', () => {
       expect(screen.getByText('300')).toBeInTheDocument();
     });
     expect(screen.queryByText('Needs review')).not.toBeInTheDocument();
+  });
+});
+
+describe('SavedQueryWidget - cube subject mirror (PR1a)', () => {
+  beforeEach(() => {
+    mockRunSavedQuery.mockReset();
+    mockGetSavedQuery.mockReset();
+  });
+
+  it('fail-closes without executing when mirrored pin drifts from saved query', async () => {
+    mockGetSavedQuery.mockResolvedValueOnce({
+      id: 'q1',
+      sourceKind: 'cube',
+      boId: 'cube-other',
+      subject: { kind: 'cube', cubeId: 'cube-other', contractVersion: 1 },
+      state: { dimensions: [], measures: [], filters: [], parameters: [] },
+    });
+
+    render(
+      <SavedQueryWidget
+        savedQueryId="q1"
+        widgetType="gauge"
+        subject={{ kind: 'cube', cubeId: 'cube-page', contractVersion: 1 }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('saved-query-pin-error')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('saved-query-pin-error').textContent).toMatch(/cubeId mismatch/);
+    expect(mockRunSavedQuery).not.toHaveBeenCalled();
+  });
+
+  it('runs when mirrored pin matches saved cube subject', async () => {
+    mockGetSavedQuery.mockResolvedValueOnce({
+      id: 'q1',
+      sourceKind: 'cube',
+      boId: 'cube-1',
+      subject: { kind: 'cube', cubeId: 'cube-1', contractVersion: 2 },
+      state: {
+        dimensions: [],
+        measures: [],
+        filters: [],
+        parameters: [],
+        subject: { kind: 'cube', cubeId: 'cube-1', contractVersion: 2 },
+      },
+    });
+    mockRunSavedQuery.mockResolvedValueOnce({
+      columns: [{ name: 'total', type: 'number', aggregation: 'sum' }],
+      rows: [{ total: 10 }],
+      rowCount: 1,
+      chartType: 'bar',
+      name: 'cube-q',
+      hasRelatedBOs: false,
+      cubeHit: { cubeId: 'cube-1', servedFrom: 'hot', contractVersion: 2 },
+    });
+
+    render(
+      <SavedQueryWidget
+        savedQueryId="q1"
+        widgetType="gauge"
+        subject={{ kind: 'cube', cubeId: 'cube-1', contractVersion: 2 }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('10')).toBeInTheDocument();
+    });
+    expect(mockRunSavedQuery).toHaveBeenCalled();
+    expect(screen.getByTestId('saved-query-route-badge')).toBeInTheDocument();
   });
 });

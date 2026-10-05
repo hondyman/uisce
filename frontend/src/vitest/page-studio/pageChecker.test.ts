@@ -59,6 +59,38 @@ describe('page checker finds what would break a page', () => {
   });
 });
 
+describe('page checker cube subject pin (PR1a)', () => {
+  const pageWithCube = (subject: unknown, savedQueryId?: string) => ({
+    layout: { root: 'root', nodes: { root: { id: 'root', type: 'Column', children: ['tile'] } } },
+    components: {
+      tile: {
+        id: 'tile',
+        type: 'Tile',
+        props: {
+          savedQueryId,
+          subject,
+        },
+      },
+    },
+    app: {},
+  }) as never;
+
+  it('errors when cube subject uses contractVersion latest', () => {
+    const issues = checkPage(pageWithCube({ kind: 'cube', cubeId: 'c1', contractVersion: 'latest' }, 'sq-1'));
+    expect(issues.some((i) => i.code === 'cube-pin-latest' && i.severity === 'error')).toBe(true);
+  });
+
+  it('passes numeric cube pin with savedQueryId', () => {
+    const issues = checkPage(pageWithCube({ kind: 'cube', cubeId: 'c1', contractVersion: 2 }, 'sq-1'));
+    expect(issues.filter((i) => i.code.startsWith('cube-pin'))).toEqual([]);
+  });
+
+  it('errors when cube subject has no savedQueryId', () => {
+    const issues = checkPage(pageWithCube({ kind: 'cube', cubeId: 'c1', contractVersion: 1 }));
+    expect(issues.some((i) => i.code === 'cube-pin-no-saved-query')).toBe(true);
+  });
+});
+
 describe('page checker and conditions', () => {
   const page = (when: unknown) => ({
     layout: { root: 'root', nodes: { root: { id: 'root', type: 'Column', children: ['t'] } } },

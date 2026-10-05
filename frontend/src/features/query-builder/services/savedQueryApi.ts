@@ -254,6 +254,16 @@ export interface SavedQueryRunResultColumn {
   aggregation?: string;
 }
 
+export interface SavedQueryCubeHit {
+  cubeId?: string;
+  cubeName?: string;
+  materialization?: string;
+  servedFrom?: string;
+  contractVersion?: number;
+  grain?: string[];
+  stale?: boolean;
+}
+
 export interface SavedQueryRunResult {
   columns: SavedQueryRunResultColumn[];
   rows: Record<string, unknown>[];
@@ -277,6 +287,9 @@ export interface SavedQueryRunResult {
    * to infer it from an absence.
    */
   hasRelatedBOs?: boolean;
+  /** Present when Execute/Preview routed via CubeRouter (PR1a RouteBadge). */
+  cubeHit?: SavedQueryCubeHit | null;
+  cubeMiss?: string | null;
 }
 
 /**

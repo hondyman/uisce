@@ -814,7 +814,7 @@ func (h *SavedQueryHandler) HandleGetPreview(w http.ResponseWriter, r *http.Requ
 		h.writeError(w, err, http.StatusBadRequest)
 		return
 	}
-	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+	out := map[string]interface{}{
 		"columns":   resp.Columns,
 		"rows":      resp.Rows,
 		"rowCount":  resp.RowCount,
@@ -833,7 +833,14 @@ func (h *SavedQueryHandler) HandleGetPreview(w http.ResponseWriter, r *http.Requ
 		// through the generator - it is a fact about the QUERY, not
 		// about any column.
 		"hasRelatedBOs": len(sq.RelatedBOIDs) > 0,
-	})
+	}
+	if resp.CubeHit != nil {
+		out["cubeHit"] = resp.CubeHit
+	}
+	if resp.CubeMiss != "" {
+		out["cubeMiss"] = resp.CubeMiss
+	}
+	h.writeJSON(w, http.StatusOK, out)
 }
 
 // HandleGetDuplicates handles GET /api/explorer/saved-queries/duplicates -
