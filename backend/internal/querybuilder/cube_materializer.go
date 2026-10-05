@@ -25,7 +25,8 @@ type CubeMaterializeRequest struct {
 	AttemptID   string   `json:"attempt_id,omitempty"`
 	Force       bool     `json:"force,omitempty"` // skip content_hash noop
 	// FederationKeySamples optional CUBE-2.1 orphan-gate fixtures. Required
-	// (fail-closed) when the cube declares federation; live sampling is CUBE-2.2.
+	// (fail-closed) when the cube declares federation; live source sampling
+	// remains a later datapipeline concern.
 	FederationKeySamples []FederationKeySample `json:"federation_key_samples,omitempty"`
 }
 
@@ -81,7 +82,8 @@ type CubeColdWriter interface {
 	ApplyCold(ctx context.Context, plan *CubeMaterializePlan, hot *CubeMaterializeHotResult) (*CubeMaterializeColdResult, error)
 }
 
-// CubeMaterializer validates, plans, and applies single-BO cube grains to StarRocks + Iceberg.
+// CubeMaterializer validates, plans, and applies cube grains to StarRocks + Iceberg.
+// Federated cubes (CUBE-2.2) compile JOIN SQL via FederationBindingResolver.
 type CubeMaterializer struct {
 	db          *sqlx.DB
 	registry    *CubeMaterializationRegistry
@@ -89,6 +91,7 @@ type CubeMaterializer struct {
 	ddl         *CubeDDLGenerator
 	cold        CubeColdWriter
 	icebergCat  string
+	fedResolver FederationBindingResolver
 }
 
 // NewCubeMaterializer wires Postgres control plane + optional StarRocks hot/cold plane.
@@ -119,6 +122,23 @@ func (m *CubeMaterializer) SetColdWriter(w CubeColdWriter) {
 	}
 }
 
+// SetFederationResolver replaces the term→column binding resolver (tests inject a map fixture).
+func (m *CubeMaterializer) SetFederationResolver(r FederationBindingResolver) {
+	if m != nil {
+		m.fedResolver = r
+	}
+}
+
+func (m *CubeMaterializer) federationResolver() FederationBindingResolver {
+	if m != nil && m.fedResolver != nil {
+		return m.fedResolver
+	}
+	if m != nil && m.db != nil {
+		return dbFederationBindingResolver{db: m.db}
+	}
+	return nil
+}
+
 // ValidateAndPlan loads the cube, ensures the grain catalog node, compiles DDL,
 // and reports content_hash noop when the Active grain already matches.
 func (m *CubeMaterializer) ValidateAndPlan(ctx context.Context, req CubeMaterializeRequest) (*CubeMaterializePlan, error) {
@@ -142,15 +162,24 @@ func (m *CubeMaterializer) ValidateAndPlan(ctx context.Context, req CubeMaterial
 	if err := ValidateCubeStructural(*cube); err != nil {
 		return nil, err
 	}
+
+	var fedJoin *CompiledFederationJoinSQL
 	if !cube.Federation.Empty() {
-		// CUBE-2.1 owns orphan/transform validation; CUBE-2.2 owns multi-source
-		// extract + join materialize. Fail closed without samples; with passing
-		// samples still refuse until 2.2 join extract exists.
+		// CUBE-2.1 orphan/transform gate (fail-closed without samples).
 		metricIDSet := map[string]bool{}
 		if _, _, fedErr := EvaluateFederationPlan(cube.Federation, metricIDSet, req.FederationKeySamples, true); fedErr != nil {
 			return nil, fmt.Errorf("cube materializer: federation gate: %w", fedErr)
 		}
-		return nil, fmt.Errorf("cube materializer: federated cubes require CUBE-2.2 multi-source materialize; cube %s passed CUBE-2.1 orphan gate but has no join extract yet", cube.ID)
+		// CUBE-2.2: compile StarRocks JOIN FROM via semantic term bindings.
+		resolver := m.federationResolver()
+		compiled, fedErr := CompileFederationJoinSQL(ctx, tenantID, cube.Federation, resolver)
+		if fedErr != nil {
+			return nil, fmt.Errorf("cube materializer: federation join compile: %w", fedErr)
+		}
+		if err := compiled.EnrichGrainTerms(ctx, tenantID, cube.BOID, grain, resolver); err != nil {
+			return nil, fmt.Errorf("cube materializer: federation grain bind: %w", err)
+		}
+		fedJoin = compiled
 	}
 	if !grainCovered(cube.Grains, grain) {
 		return nil, fmt.Errorf("cube materializer: grain %v is not declared on cube %s", grain, cube.ID)
@@ -181,16 +210,27 @@ func (m *CubeMaterializer) ValidateAndPlan(ctx context.Context, req CubeMaterial
 	}
 
 	sourceTable := strings.TrimSpace(req.SourceTable)
-	if sourceTable == "" {
+	var dimExprs map[string]string
+	if fedJoin != nil {
+		sourceTable = fedJoin.FromSQL
+		dimExprs = fedJoin.DimExprsForGrain(grain, cube.BOID)
+	} else if sourceTable == "" {
 		sourceTable, err = m.resolveSourceTable(ctx, tenantID, cube.BOID)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	generated, err := m.ddl.GenerateCubeMaterializationDDL(
-		tenantID, cube.IsCore, *cube, grain, sourceTable, metrics, nil,
-	)
+	var generated *GeneratedCubeDDL
+	if fedJoin != nil {
+		generated, err = m.ddl.GenerateFederatedCubeMaterializationDDL(
+			tenantID, cube.IsCore, *cube, grain, sourceTable, dimExprs, metrics, nil,
+		)
+	} else {
+		generated, err = m.ddl.GenerateCubeMaterializationDDL(
+			tenantID, cube.IsCore, *cube, grain, sourceTable, metrics, nil,
+		)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("compile cube DDL: %w", err)
 	}

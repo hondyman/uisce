@@ -95,6 +95,36 @@ func (g *CubeDDLGenerator) GenerateCubeMaterializationDDL(
 	metricLookup map[string]MetricDefinition,
 	varBindings map[string]interface{},
 ) (*GeneratedCubeDDL, error) {
+	return g.generateCubeMaterializationDDL(tenantID, isGoldCopy, cube, grain, sourceTable, nil, metricLookup, varBindings)
+}
+
+// GenerateFederatedCubeMaterializationDDL renders the MV for a federated cube
+// grain. fromSQL is the compiled JOIN expression (CUBE-2.2); dimExprs maps
+// sanitized grain column names to qualified SQL expressions (alias.col) so
+// multi-table FROM clauses stay unambiguous.
+func (g *CubeDDLGenerator) GenerateFederatedCubeMaterializationDDL(
+	tenantID string,
+	isGoldCopy bool,
+	cube CubeDefinition,
+	grain []string,
+	fromSQL string,
+	dimExprs map[string]string,
+	metricLookup map[string]MetricDefinition,
+	varBindings map[string]interface{},
+) (*GeneratedCubeDDL, error) {
+	return g.generateCubeMaterializationDDL(tenantID, isGoldCopy, cube, grain, fromSQL, dimExprs, metricLookup, varBindings)
+}
+
+func (g *CubeDDLGenerator) generateCubeMaterializationDDL(
+	tenantID string,
+	isGoldCopy bool,
+	cube CubeDefinition,
+	grain []string,
+	sourceTable string,
+	dimExprs map[string]string,
+	metricLookup map[string]MetricDefinition,
+	varBindings map[string]interface{},
+) (*GeneratedCubeDDL, error) {
 
 	if err := ValidateCubeStructural(cube); err != nil {
 		return nil, err
@@ -140,10 +170,28 @@ func (g *CubeDDLGenerator) GenerateCubeMaterializationDDL(
 	}
 	sort.Strings(keyCols)
 
+	selectDims := make([]string, 0, len(keyCols))
+	groupByDims := make([]string, 0, len(keyCols))
+	for _, col := range keyCols {
+		expr := col
+		if dimExprs != nil {
+			if q, ok := dimExprs[col]; ok && strings.TrimSpace(q) != "" {
+				expr = strings.TrimSpace(q)
+			}
+		}
+		if expr == col {
+			selectDims = append(selectDims, col)
+			groupByDims = append(groupByDims, col)
+		} else {
+			selectDims = append(selectDims, fmt.Sprintf("%s AS %s", expr, col))
+			groupByDims = append(groupByDims, expr)
+		}
+	}
+
 	// One measure column per governed metric, named from the metric ID so the
 	// router can map a requested measure back to it unambiguously.
 	measureExprs := make([]string, 0, len(keyCols)+len(cube.MetricIDs))
-	measureExprs = append(measureExprs, keyCols...)
+	measureExprs = append(measureExprs, selectDims...)
 	measureColumns := make(map[string]string, len(cube.MetricIDs))
 
 	// Iterate metric IDs in sorted order for determinism.
@@ -188,6 +236,12 @@ func (g *CubeDDLGenerator) GenerateCubeMaterializationDDL(
 	}
 
 	name := CubeMaterializationName(tenantID, isGoldCopy, cube, keyCols)
+	partitionCol := timeColumnOf(keyCols)
+	if dimExprs != nil {
+		if q, ok := dimExprs[partitionCol]; ok && strings.TrimSpace(q) != "" {
+			partitionCol = strings.TrimSpace(q)
+		}
+	}
 	ddl := fmt.Sprintf(`CREATE MATERIALIZED VIEW %s
 PARTITION BY date_trunc('day', %s)
 PROPERTIES (
@@ -198,10 +252,10 @@ AS SELECT
 FROM %s
 GROUP BY %s;`,
 		name,
-		timeColumnOf(keyCols),
+		partitionCol,
 		strings.Join(measureExprs, ",\n  "),
 		strings.TrimSpace(sourceTable),
-		strings.Join(keyCols, ", "),
+		strings.Join(groupByDims, ", "),
 	)
 
 	hash := sha256.Sum256([]byte(ddl))

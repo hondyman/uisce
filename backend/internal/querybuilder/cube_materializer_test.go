@@ -60,8 +60,18 @@ func TestCubeMaterializer_RejectsFederation(t *testing.T) {
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
 
-	t.Run("passing samples still require CUBE-2.2 materialize", func(t *testing.T) {
+	t.Run("passing samples unlock join compile via bindings", func(t *testing.T) {
 		expectFedCube()
+		m.SetFederationResolver(MapFederationBindingResolver{
+			Tables: map[string]string{
+				"account":  "oms.account",
+				"position": "oms.position",
+			},
+			Columns: map[string]string{
+				"account|account_id":  "account_id",
+				"position|account_id": "account_id",
+			},
+		})
 		_, err = m.ValidateAndPlan(context.Background(), CubeMaterializeRequest{
 			TenantID: tenantID,
 			CubeID:   cubeID,
@@ -72,8 +82,10 @@ func TestCubeMaterializer_RejectsFederation(t *testing.T) {
 			}},
 		})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "CUBE-2.2")
-		require.NoError(t, mock.ExpectationsWereMet())
+		// Past orphan gate + join compile; next step hits metrics/nodes (sqlmock).
+		assert.NotContains(t, err.Error(), "CUBE-2.2")
+		assert.NotContains(t, err.Error(), "no join extract")
+		assert.Contains(t, err.Error(), "load metrics")
 	})
 }
 
