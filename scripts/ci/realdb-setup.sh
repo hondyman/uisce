@@ -24,6 +24,7 @@ SAGA_TEST_ALPHA_APP_DSN=postgres://saga_app:saga_app@${PGHOST}:${PGPORT}/saga_al
 SAGA_TEST_PG_HOST=${PGHOST}
 SAGA_TEST_PG_PORT=${PGPORT}
 SAGA_TEST_PG_USER=${PGUSER}
+SAGA_TEST_PG_PASSWORD=${PGPASSWORD}
 SCANNER_TEST_ADMIN_DSN=${base}/postgres?sslmode=disable
 TENANTSCHEMA_TEST_ADMIN_DSN=${base}/postgres?sslmode=disable
 TENANT_MIGRATE_TEST_DSN=${base}/tdb_migrate?sslmode=disable
