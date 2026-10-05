@@ -12,6 +12,9 @@ import (
 
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/require"
+
+	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
 )
 
 func TestRedpanda_RealBrokerDurabilityAndPostgresIntegration(t *testing.T) {
@@ -37,6 +40,10 @@ func TestRedpanda_RealBrokerDurabilityAndPostgresIntegration(t *testing.T) {
 	// Measure synchronous produce latency with acks=all
 	tenantID := uuid.New()
 	ruleID := uuid.New()
+	contentHash, err := canonical.ComputeRuleContentHashFromRaw([]byte("{}"), []byte("{}"), "Test")
+	require.NoError(t, err)
+	bytecodeHash := canonical.ComputeBytecodeHash(nil)
+
 	numEvents := 20
 	var producedLineageIDs []uuid.UUID
 
@@ -46,16 +53,17 @@ func TestRedpanda_RealBrokerDurabilityAndPostgresIntegration(t *testing.T) {
 	for i := 0; i < numEvents; i++ {
 		lineageID := uuid.New()
 		ev := EvaluationEventPayload{
-			ID:             uuid.New(),
-			LineageID:      lineageID,
-			TenantID:       tenantID,
-			RuleID:         ruleID,
-			RuleVersion:    1,
-			Passed:         true,
-			ActionTaken:    "APPROVED",
-			LatencyMicros:  180,
-			EvaluationHash: "eval_hash_" + lineageID.String(),
-			EvaluatedAt:    time.Now().UTC(),
+			ID:              uuid.New(),
+			LineageID:       lineageID,
+			TenantID:        tenantID,
+			RuleID:          ruleID,
+			RuleVersion:     1,
+			RuleContentHash: contentHash,
+			Passed:          true,
+			ActionTaken:     "APPROVED",
+			LatencyMicros:   180,
+			EvaluationHash:  "eval_hash_" + lineageID.String(),
+			EvaluatedAt:     time.Now().UTC(),
 		}
 
 		err := emitter.EmitEvaluation(context.Background(), ev)
@@ -112,22 +120,23 @@ func TestRedpanda_RealBrokerDurabilityAndPostgresIntegration(t *testing.T) {
 
 		// Pre-insert a dummy rule and snapshot version so FK is satisfied
 		_, _ = db.Exec("INSERT INTO compliance.compliance_rule (id, tenant_id, inherit_mode, rule_code, name, rule_phase, severity) VALUES ($1, $2, 'custom', 'REDPANDA_TEST', 'Redpanda Live Test', 'PRE_TRADE', 'HARD_BLOCK') ON CONFLICT DO NOTHING", ruleID, tenantID)
-		_, _ = db.Exec("INSERT INTO compliance.compliance_rule_version (rule_id, version, tenant_id, resolved_ast, parameter_thresholds, citation, effective_from, content_hash, compiled_bytecode_hash, created_by) VALUES ($1, 1, $2, '{}'::jsonb, '{}'::jsonb, 'Test', now(), 'hash_dummy', 'hash_dummy', 'test') ON CONFLICT DO NOTHING", ruleID, tenantID)
+		_, _ = db.Exec("INSERT INTO compliance.compliance_rule_version (rule_id, version, tenant_id, resolved_ast, parameter_thresholds, citation, effective_from, content_hash, compiled_bytecode_hash, created_by) VALUES ($1, 1, $2, '{}'::jsonb, '{}'::jsonb, 'Test', now(), $3, $4, 'test') ON CONFLICT DO NOTHING", ruleID, tenantID, contentHash, bytecodeHash)
 
 		consumer := NewHotTierAuditConsumer(db, broker, topic)
 		var eventBatch []EvaluationEventPayload
 		for _, lid := range producedLineageIDs {
 			eventBatch = append(eventBatch, EvaluationEventPayload{
-				ID:             uuid.New(),
-				LineageID:      lid,
-				TenantID:       tenantID,
-				RuleID:         ruleID,
-				RuleVersion:    1,
-				Passed:         true,
-				ActionTaken:    "APPROVED",
-				LatencyMicros:  180,
-				EvaluationHash: "hash_" + lid.String(),
-				EvaluatedAt:    time.Now().UTC(),
+				ID:              uuid.New(),
+				LineageID:       lid,
+				TenantID:        tenantID,
+				RuleID:          ruleID,
+				RuleVersion:     1,
+				RuleContentHash: contentHash,
+				Passed:          true,
+				ActionTaken:     "APPROVED",
+				LatencyMicros:   180,
+				EvaluationHash:  "hash_" + lid.String(),
+				EvaluatedAt:     time.Now().UTC(),
 			})
 		}
 

@@ -14,6 +14,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 
+	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
 	"github.com/hondyman/uisce/backend/internal/compliance/cold"
 	"github.com/hondyman/uisce/backend/internal/compliance/jobs"
 )
@@ -57,16 +58,20 @@ func TestCompliance_EndToEndCryptographicAuditHotWarmColdCLI(t *testing.T) {
 	_, err = pgDB.Exec(ruleQ, ruleID, tenantID)
 	require.NoError(t, err)
 
+	expectedContentHash, err := canonical.ComputeRuleContentHashFromRaw([]byte("{}"), []byte("{}"), "E2E Test Citation")
+	require.NoError(t, err)
+	expectedBytecodeHash := canonical.ComputeBytecodeHash(nil)
+
 	ruleVerQ := `
 		INSERT INTO compliance.compliance_rule_version (
 			rule_id, version, tenant_id, resolved_ast, parameter_thresholds,
 			citation, effective_from, content_hash, compiled_bytecode_hash, created_by
 		) VALUES (
 			$1, 1, $2, '{}'::jsonb, '{}'::jsonb,
-			'E2E Test Citation', NOW(), 'content_hash_e2e', 'bytecode_hash_e2e', 'test'
+			'E2E Test Citation', NOW(), $3, $4, 'test'
 		) ON CONFLICT (rule_id, version) DO NOTHING
 	`
-	_, err = pgDB.Exec(ruleVerQ, ruleID, tenantID)
+	_, err = pgDB.Exec(ruleVerQ, ruleID, tenantID, expectedContentHash, expectedBytecodeHash)
 	require.NoError(t, err)
 
 	defer func() {
@@ -85,8 +90,8 @@ func TestCompliance_EndToEndCryptographicAuditHotWarmColdCLI(t *testing.T) {
 				passed, action_taken, latency_micros, evaluation_hash,
 				input_params, metric_snapshots, evaluated_at, created_at, ingest_lsn
 			) VALUES (
-				$1, $2, $3, $4, $5, 1, 'content_hash_e2e',
-				true, 'APPROVED', 140, $6,
+				$1, $2, $3, $4, $5, 1, $6,
+				true, 'APPROVED', 140, $7,
 				'{"price":"185.500000","qty":"500.000000"}'::jsonb, '{"exposure":"92750.000000"}'::jsonb,
 				NOW(), NOW(), (pg_current_wal_lsn() - '0/0'::pg_lsn)::bigint
 			)
@@ -94,7 +99,7 @@ func TestCompliance_EndToEndCryptographicAuditHotWarmColdCLI(t *testing.T) {
 		lineageID := uuid.New()
 		orderID := uuid.New()
 		evalHash := fmt.Sprintf("eval_hash_%s", lineageID.String())
-		_, err := pgDB.Exec(insertQ, uuid.New(), lineageID, tenantID, orderID, ruleID, evalHash)
+		_, err := pgDB.Exec(insertQ, uuid.New(), lineageID, tenantID, orderID, ruleID, expectedContentHash, evalHash)
 		require.NoError(t, err)
 	}
 
@@ -168,8 +173,9 @@ func TestCompliance_EndToEndCryptographicAuditHotWarmColdCLI(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ruleReport.RootMatch, "Rule registry Merkle root must match signed manifest root 100%%")
 	require.True(t, ruleReport.InclusionProofs, "Rule registry leaf inclusion proofs must verify")
+	require.True(t, ruleReport.ContentHashesVerified, "Rule registry content hashes MUST derive 100%% from underlying Parquet AST bytes")
 	require.Equal(t, "VERIFIED_TAMPER_EVIDENT_MATCH", ruleReport.AuditStatus)
 	require.Equal(t, int64(1), ruleReport.RecordCount)
 
-	t.Logf("END-TO-END CRYPTOGRAPHIC AUDIT PASSED: 100%% Merkle Match (Evaluations + Rule Registry), Status = %s", report.AuditStatus)
+	t.Logf("END-TO-END CRYPTOGRAPHIC AUDIT PASSED: 100%% Merkle Match (Evaluations + Rule Registry) & 100%% Content Hash Derivation, Status = %s", report.AuditStatus)
 }

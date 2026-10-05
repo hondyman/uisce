@@ -181,6 +181,35 @@ func ComputeRuleContentHash(astCondition, parameterThresholds map[string]interfa
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// ComputeRuleContentHashFromRaw calculates the canonical SHA-256 hash directly from raw JSON AST and params bytes.
+func ComputeRuleContentHashFromRaw(astJSON, paramsJSON []byte, citation string) (string, error) {
+	if len(astJSON) == 0 {
+		astJSON = []byte("{}")
+	}
+	if len(paramsJSON) == 0 {
+		paramsJSON = []byte("{}")
+	}
+
+	canonAST, err := Transform(astJSON)
+	if err != nil {
+		return "", fmt.Errorf("transform AST to JCS: %w", err)
+	}
+	canonParams, err := Transform(paramsJSON)
+	if err != nil {
+		return "", fmt.Errorf("transform params to JCS: %w", err)
+	}
+
+	h := sha256.New()
+	h.Write([]byte("v1|"))
+	h.Write(canonAST)
+	h.Write([]byte("|"))
+	h.Write(canonParams)
+	h.Write([]byte("|"))
+	h.Write([]byte(citation))
+
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
 // ComputeBytecodeHash calculates the SHA-256 digest of compiled bytecode.
 func ComputeBytecodeHash(bytecode []byte) string {
 	if len(bytecode) == 0 {
@@ -190,3 +219,4 @@ func ComputeBytecodeHash(bytecode []byte) string {
 	h := sha256.Sum256(bytecode)
 	return hex.EncodeToString(h[:])
 }
+

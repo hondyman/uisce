@@ -14,6 +14,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/hondyman/uisce/backend/internal/compliance"
+	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
 	"github.com/hondyman/uisce/backend/internal/compliance/drift"
 	"github.com/hondyman/uisce/backend/internal/compliance/reservation"
 )
@@ -425,3 +426,244 @@ func TestCoreLibrary_RepinProvisionalRejection(t *testing.T) {
 		t.Fatalf("Expected PROVISIONAL rejection error message, got: %v", err)
 	}
 }
+
+// 8. 50-Rule Canonical Content Hash 3-Way Agreement (Go == PostgreSQL == Database)
+func TestCoreLibrary_All50CoreRules_ContentHashAgreement(t *testing.T) {
+	db := getAlphaTestDB(t)
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	loader := compliance.NewMultiTenantRuleLoader(db)
+	goldTenant, err := loader.GetGoldCopyTenantID(ctx)
+	if err != nil {
+		t.Fatalf("get gold tenant: %v", err)
+	}
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT 
+			r.rule_code,
+			r.ast_condition::text,
+			r.parameter_thresholds::text,
+			COALESCE(r.citation, ''),
+			v.content_hash,
+			compliance.compute_rule_content_hash(r.ast_condition, r.parameter_thresholds, r.citation) AS sql_hash
+		FROM compliance.compliance_rule r
+		JOIN compliance.compliance_rule_version v 
+		  ON r.id = v.rule_id AND COALESCE(r.pinned_core_version, 1) = v.version
+		WHERE r.tenant_id = $1
+		ORDER BY r.rule_code
+	`, goldTenant)
+	if err != nil {
+		t.Fatalf("query core rules and version hashes: %v", err)
+	}
+	defer rows.Close()
+
+	checkedCount := 0
+	for rows.Next() {
+		var ruleCode, astStr, paramStr, citation, storedHash, sqlHash string
+		if err := rows.Scan(&ruleCode, &astStr, &paramStr, &citation, &storedHash, &sqlHash); err != nil {
+			t.Fatalf("scan row: %v", err)
+		}
+
+		// Compute hash in Go via JCS transform
+		goHash, err := canonical.ComputeRuleContentHashFromRaw([]byte(astStr), []byte(paramStr), citation)
+		if err != nil {
+			t.Fatalf("rule %s: ComputeRuleContentHashFromRaw failed: %v", ruleCode, err)
+		}
+
+		if len(storedHash) != 64 {
+			t.Fatalf("rule %s: stored hash is not 64 chars (%q)", ruleCode, storedHash)
+		}
+		if sqlHash != storedHash {
+			t.Fatalf("rule %s: SQL computed hash %s does not match stored snapshot hash %s", ruleCode, sqlHash, storedHash)
+		}
+		if goHash != storedHash {
+			t.Fatalf("rule %s: Go JCS computed hash %s does not match stored snapshot hash %s", ruleCode, goHash, storedHash)
+		}
+
+		checkedCount++
+	}
+
+	if checkedCount != 50 {
+		t.Fatalf("Expected to verify 50 core rules, verified %d", checkedCount)
+	}
+
+	t.Logf("100%% 3-Way Hash Agreement Verified across all %d Gold-Copy Core Rules (Go JCS == SQL JCS == Stored ContentHash)", checkedCount)
+}
+
+// 9. Rule Version Evolution Positive Path (Snapshot v1 -> Snapshot v2 in Transaction + Evaluation Event)
+func TestCoreLibrary_RuleVersionEvolution_PositivePath(t *testing.T) {
+	db := getAlphaTestDB(t)
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	testTenant := uuid.New()
+	ruleID := uuid.New()
+	ruleCode := "TEST_EVOLVE_5"
+	citationV1 := "UCITS Directive 2009/65/EC - Test Version 1"
+	astV1 := `{"left":{"path":"position.issuer_exposure_pct","type":"METRIC"},"operator":"GREATER_THAN","right":{"name":"issuer_limit_pct","type":"PARAM"},"type":"COMPARISON"}`
+	paramsV1 := `{"aggregate_across_accounts":true,"issuer_limit_pct":"0.050000","lookthrough":true}`
+
+	hashV1, err := canonical.ComputeRuleContentHashFromRaw([]byte(astV1), []byte(paramsV1), citationV1)
+	if err != nil {
+		t.Fatalf("compute hash v1: %v", err)
+	}
+	bytecodeHash := canonical.ComputeBytecodeHash(nil)
+
+	// Phase 1: Insert Rule V1 and Snapshot V1 in a Transaction
+	tx1, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin tx1: %v", err)
+	}
+
+	_, err = tx1.ExecContext(ctx, `
+		INSERT INTO compliance.compliance_rule (
+			id, tenant_id, rule_code, name, rule_phase, severity, priority,
+			is_active, source_version, inherit_mode, pinned_core_version,
+			ast_condition, parameter_thresholds, citation, compiled_bytecode
+		) VALUES (
+			$1, $2, $3, 'Evolving Test Rule', 'PRE_TRADE', 'HARD_BLOCK', 100,
+			true, 'TENANT_CUSTOM', 'custom', 1,
+			$4::jsonb, $5::jsonb, $6, ''::bytea
+		)
+	`, ruleID, testTenant, ruleCode, astV1, paramsV1, citationV1)
+	if err != nil {
+		tx1.Rollback()
+		t.Fatalf("insert rule v1: %v", err)
+	}
+
+	_, err = tx1.ExecContext(ctx, `
+		INSERT INTO compliance.compliance_rule_version (
+			rule_id, version, tenant_id, resolved_ast, parameter_thresholds,
+			citation, effective_from, effective_to, content_hash, compiled_bytecode_hash,
+			created_by, created_at
+		) VALUES (
+			$1, 1, $2, $3::jsonb, $4::jsonb,
+			$5, now(), null, $6, $7,
+			'test_steward', now()
+		)
+	`, ruleID, testTenant, astV1, paramsV1, citationV1, hashV1, bytecodeHash)
+	if err != nil {
+		tx1.Rollback()
+		t.Fatalf("insert rule version 1: %v", err)
+	}
+
+	if err := tx1.Commit(); err != nil {
+		t.Fatalf("commit tx1: %v", err)
+	}
+
+	defer func() {
+		// Clean up in reverse FK order
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_evaluation_event WHERE tenant_id = $1", testTenant)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_rule WHERE id = $1", ruleID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_rule_version WHERE rule_id = $1", ruleID)
+	}()
+
+	// Phase 2: Evolve to Version 2 in Transaction (Insert Version Snapshot V2 + Update Rule)
+	paramsV2 := `{"aggregate_across_accounts":true,"issuer_limit_pct":"0.040000","lookthrough":true}`
+	citationV2 := "UCITS Directive 2009/65/EC - Test Version 2 Tightened"
+	hashV2, err := canonical.ComputeRuleContentHashFromRaw([]byte(astV1), []byte(paramsV2), citationV2)
+	if err != nil {
+		t.Fatalf("compute hash v2: %v", err)
+	}
+
+	tx2, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin tx2: %v", err)
+	}
+
+	// 1. Insert Version 2 Snapshot
+	_, err = tx2.ExecContext(ctx, `
+		INSERT INTO compliance.compliance_rule_version (
+			rule_id, version, tenant_id, resolved_ast, parameter_thresholds,
+			citation, effective_from, effective_to, content_hash, compiled_bytecode_hash,
+			created_by, created_at
+		) VALUES (
+			$1, 2, $2, $3::jsonb, $4::jsonb,
+			$5, now(), null, $6, $7,
+			'test_steward', now()
+		)
+	`, ruleID, testTenant, astV1, paramsV2, citationV2, hashV2, bytecodeHash)
+	if err != nil {
+		tx2.Rollback()
+		t.Fatalf("insert rule version 2: %v", err)
+	}
+
+	// 2. Update Rule to Version 2
+	_, err = tx2.ExecContext(ctx, `
+		UPDATE compliance.compliance_rule
+		SET 
+			parameter_thresholds = $1::jsonb,
+			citation = $2,
+			pinned_core_version = 2,
+			updated_at = now()
+		WHERE id = $3
+	`, paramsV2, citationV2, ruleID)
+	if err != nil {
+		tx2.Rollback()
+		t.Fatalf("update rule to v2 (trigger should allow this because v2 snapshot was inserted): %v", err)
+	}
+
+	if err := tx2.Commit(); err != nil {
+		t.Fatalf("commit tx2: %v", err)
+	}
+	t.Logf("Rule evolution V1 -> V2 succeeded in transaction with structural trigger validation!")
+
+	// Phase 3: Emit Evaluation Event referencing Rule Version 2 and Hash V2
+	lineageID := uuid.New()
+	evalHashInput := canonical.EvaluationHashInput{
+		LineageID:       lineageID,
+		TenantID:        testTenant,
+		RuleID:          ruleID,
+		RuleVersion:     2,
+		RuleContentHash: hashV2,
+		ActionTaken:     "APPROVED",
+		Passed:          true,
+		InputParams: map[string]interface{}{
+			"accountId": "acc-evolve-1",
+		},
+		MetricSnapshots: map[string]interface{}{
+			"proposedWeight": decimal.RequireFromString("0.035000"),
+		},
+	}
+	evalHash, err := canonical.ComputeEvaluationHash(evalHashInput)
+	if err != nil {
+		t.Fatalf("compute evaluation hash: %v", err)
+	}
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO compliance.compliance_evaluation_event (
+			id, lineage_id, tenant_id, rule_id, rule_version, rule_content_hash,
+			action_taken, passed, latency_micros, evaluation_hash, evaluated_at,
+			input_params, metric_snapshots
+		) VALUES (
+			gen_random_uuid(), $1, $2, $3, 2, $4,
+			'APPROVED', true, 120, $5, now(),
+			'{"accountId":"acc-evolve-1"}'::jsonb, '{"proposedWeight":"0.035000"}'::jsonb
+		)
+	`, lineageID, testTenant, ruleID, hashV2, evalHash)
+	if err != nil {
+		t.Fatalf("insert evaluation event referencing v2 and content hash v2: %v", err)
+	}
+	t.Logf("Evaluation event referencing V2 and 64-char ContentHash V2 inserted successfully with FK verification!")
+
+	// Phase 4: Verify FK violation when attempting to insert evaluation event for nonexistent version
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO compliance.compliance_evaluation_event (
+			id, lineage_id, tenant_id, rule_id, rule_version, rule_content_hash,
+			action_taken, passed, latency_micros, evaluation_hash, evaluated_at
+		) VALUES (
+			gen_random_uuid(), gen_random_uuid(), $1, $2, 999, $3,
+			'APPROVED', true, 120, $4, now()
+		)
+	`, testTenant, ruleID, hashV2, evalHash)
+	if err == nil {
+		t.Fatalf("Expected FK constraint violation for nonexistent version 999, but insert succeeded")
+	}
+	t.Logf("FK RESTRICT constraint correctly rejected nonexistent rule version 999: %v", err)
+}
+

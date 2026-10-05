@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
 	"github.com/hondyman/uisce/backend/internal/compliance/cold"
 )
 
@@ -246,6 +247,17 @@ func (w *ColdArchivalWorker) ArchiveTenantSlice(ctx context.Context, tenantID uu
 		rr.EffectiveFrom = effFrom.UTC().Format(time.RFC3339Nano)
 		rr.EffectiveTo = effTo.UTC().Format(time.RFC3339Nano)
 		rr.CreatedAt = rCreatedAt.UTC().Format(time.RFC3339Nano)
+
+		// Ensure ResolvedAST and ParameterThresholds are strictly canonical JCS strings
+		canonAST, err := canonical.Transform([]byte(rr.ResolvedAST))
+		if err == nil {
+			rr.ResolvedAST = string(canonAST)
+		}
+		canonParams, err := canonical.Transform([]byte(rr.ParameterThresholds))
+		if err == nil {
+			rr.ParameterThresholds = string(canonParams)
+		}
+
 		ruleRecords = append(ruleRecords, rr)
 	}
 

@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
 )
 
 func TestWarmTierLoader_EndToEndBatchSyncAndIdempotency(t *testing.T) {
@@ -126,16 +128,20 @@ func TestWarmTierLoader_EndToEndBatchSyncAndIdempotency(t *testing.T) {
 	_, err = pgDB.Exec(ruleQ, ruleID, tenantID)
 	require.NoError(t, err)
 
+	warmContentHash, err := canonical.ComputeRuleContentHashFromRaw([]byte("{}"), []byte("{}"), "Warm Tier Test Citation")
+	require.NoError(t, err)
+	warmBytecodeHash := canonical.ComputeBytecodeHash(nil)
+
 	ruleVerQ := `
 		INSERT INTO compliance.compliance_rule_version (
 			rule_id, version, tenant_id, resolved_ast, parameter_thresholds,
 			citation, effective_from, content_hash, compiled_bytecode_hash, created_by
 		) VALUES (
 			$1, 1, $2, '{}'::jsonb, '{}'::jsonb,
-			'Warm Tier Test Citation', NOW(), 'content_hash_warm_1', 'bytecode_hash_warm_1', 'test'
+			'Warm Tier Test Citation', NOW(), $3, $4, 'test'
 		) ON CONFLICT (rule_id, version) DO NOTHING
 	`
-	_, err = pgDB.Exec(ruleVerQ, ruleID, tenantID)
+	_, err = pgDB.Exec(ruleVerQ, ruleID, tenantID, warmContentHash, warmBytecodeHash)
 	require.NoError(t, err)
 
 	defer func() {
@@ -157,14 +163,14 @@ func TestWarmTierLoader_EndToEndBatchSyncAndIdempotency(t *testing.T) {
 				passed, action_taken, latency_micros, evaluation_hash,
 				input_params, metric_snapshots, evaluated_at, created_at, ingest_lsn
 			) VALUES (
-				$1, $2, $3, $4, $5, 1, 'content_hash_warm_1',
-				true, 'APPROVED', 150, $6,
+				$1, $2, $3, $4, $5, 1, $6,
+				true, 'APPROVED', 150, $7,
 				'{"test": true}'::jsonb, '{"metric": 100}'::jsonb,
 				NOW(), NOW(), (pg_current_wal_lsn() - '0/0'::pg_lsn)::bigint
 			)
 		`
 		evalHash := fmt.Sprintf("hash_%s", lineageIDs[i].String())
-		_, err := pgDB.Exec(insertQ, uuid.New(), lineageIDs[i], tenantID, orderID, ruleID, evalHash)
+		_, err := pgDB.Exec(insertQ, uuid.New(), lineageIDs[i], tenantID, orderID, ruleID, warmContentHash, evalHash)
 		require.NoError(t, err)
 	}
 

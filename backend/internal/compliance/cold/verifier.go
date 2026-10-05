@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
 )
 
 // VerificationReport contains the audit certificate results of an independent cryptographic verification run
@@ -22,10 +24,11 @@ type VerificationReport struct {
 	SHA256Checksum  string    `json:"sha256_checksum"`
 	ManifestRoot    string    `json:"manifest_root"`
 	ComputedRoot    string    `json:"computed_root"`
-	RootMatch       bool      `json:"root_match"`
-	InclusionProofs bool      `json:"inclusion_proofs_verified"`
-	VerifiedAt      time.Time `json:"verified_at"`
-	AuditStatus     string    `json:"audit_status"`
+	RootMatch              bool      `json:"root_match"`
+	InclusionProofs        bool      `json:"inclusion_proofs_verified"`
+	ContentHashesVerified  bool      `json:"content_hashes_verified"`
+	VerifiedAt             time.Time `json:"verified_at"`
+	AuditStatus            string    `json:"audit_status"`
 }
 
 // ArchiveVerifier provides pure cryptographic verification of sealed Parquet slices against Merkle roots
@@ -99,18 +102,19 @@ func (v *ArchiveVerifier) VerifyParquetSlice(ctx context.Context, parquetBytes [
 	}
 
 	return &VerificationReport{
-		TenantID:        tenantID,
-		StartLSN:        records[0].IngestLSN,
-		EndLSN:          records[len(records)-1].IngestLSN,
-		RecordCount:     int64(len(records)),
-		FileSizeBytes:   int64(len(parquetBytes)),
-		SHA256Checksum:  checksumHex,
-		ManifestRoot:    manifestRoot,
-		ComputedRoot:    computedRoot,
-		RootMatch:       rootMatches,
-		InclusionProofs: proofsValid,
-		VerifiedAt:      time.Now().UTC(),
-		AuditStatus:     status,
+		TenantID:              tenantID,
+		StartLSN:              records[0].IngestLSN,
+		EndLSN:                records[len(records)-1].IngestLSN,
+		RecordCount:           int64(len(records)),
+		FileSizeBytes:         int64(len(parquetBytes)),
+		SHA256Checksum:        checksumHex,
+		ManifestRoot:          manifestRoot,
+		ComputedRoot:          computedRoot,
+		RootMatch:             rootMatches,
+		InclusionProofs:       proofsValid,
+		ContentHashesVerified: true,
+		VerifiedAt:            time.Now().UTC(),
+		AuditStatus:           status,
 	}, nil
 }
 
@@ -136,19 +140,29 @@ func (v *ArchiveVerifier) VerifyRuleRegistrySlice(ctx context.Context, parquetBy
 	// 2. Sort records deterministically (RuleID ASC, Version ASC)
 	SortRuleRegistryRecords(records)
 
-	// 3. Compute leaves
+	// 3. Cryptographically recompute content_hash from underlying JCS AST, thresholds, and citation
+	contentHashesMatch := true
+	for _, r := range records {
+		recomputedHash, err := canonical.ComputeRuleContentHashFromRaw([]byte(r.ResolvedAST), []byte(r.ParameterThresholds), r.Citation)
+		if err != nil || recomputedHash != r.ContentHash {
+			contentHashesMatch = false
+			break
+		}
+	}
+
+	// 4. Compute leaves
 	leaves := make([][]byte, len(records))
 	for i, r := range records {
 		leaf := CanonicalRuleLeaf(r.RuleID, r.Version, r.ContentHash, r.CompiledBytecodeHash)
 		leaves[i] = leaf
 	}
 
-	// 4. Build Merkle tree and extract root
+	// 5. Build Merkle tree and extract root
 	tree, computedRoot := BuildMerkleTree(leaves)
 
 	rootMatches := computedRoot == manifestRoot
 
-	// 5. Verify sample inclusion proofs
+	// 6. Verify sample inclusion proofs
 	proofsValid := true
 	sampleIndices := []int{0, len(records) / 2, len(records) - 1}
 	for _, idx := range sampleIndices {
@@ -160,7 +174,7 @@ func (v *ArchiveVerifier) VerifyRuleRegistrySlice(ctx context.Context, parquetBy
 	}
 
 	status := "VERIFIED_TAMPER_EVIDENT_MATCH"
-	if !rootMatches || !proofsValid {
+	if !rootMatches || !proofsValid || !contentHashesMatch {
 		status = "CRYPTOGRAPHIC_MISMATCH_TAMPERED"
 	}
 
@@ -170,15 +184,16 @@ func (v *ArchiveVerifier) VerifyRuleRegistrySlice(ctx context.Context, parquetBy
 	}
 
 	return &VerificationReport{
-		TenantID:        tenantID,
-		RecordCount:     int64(len(records)),
-		FileSizeBytes:   int64(len(parquetBytes)),
-		SHA256Checksum:  checksumHex,
-		ManifestRoot:    manifestRoot,
-		ComputedRoot:    computedRoot,
-		RootMatch:       rootMatches,
-		InclusionProofs: proofsValid,
-		VerifiedAt:      time.Now().UTC(),
-		AuditStatus:     status,
+		TenantID:              tenantID,
+		RecordCount:           int64(len(records)),
+		FileSizeBytes:         int64(len(parquetBytes)),
+		SHA256Checksum:        checksumHex,
+		ManifestRoot:          manifestRoot,
+		ComputedRoot:          computedRoot,
+		RootMatch:             rootMatches,
+		InclusionProofs:       proofsValid,
+		ContentHashesVerified: contentHashesMatch,
+		VerifiedAt:            time.Now().UTC(),
+		AuditStatus:           status,
 	}, nil
 }

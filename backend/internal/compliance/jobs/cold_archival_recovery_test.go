@@ -13,6 +13,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 
+	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
 	"github.com/hondyman/uisce/backend/internal/compliance/cold"
 )
 
@@ -73,16 +74,20 @@ func TestColdArchivalWorker_MultiBatchContiguityAndQuarantineRecovery(t *testing
 	_, err = pgDB.Exec(ruleQ, ruleID, tenantID)
 	require.NoError(t, err)
 
+	contentHash1, err := canonical.ComputeRuleContentHashFromRaw([]byte("{}"), []byte("{}"), "Test Citation")
+	require.NoError(t, err)
+	bytecodeHash1 := canonical.ComputeBytecodeHash(nil)
+
 	ruleVerQ := `
 		INSERT INTO compliance.compliance_rule_version (
 			rule_id, version, tenant_id, resolved_ast, parameter_thresholds,
 			citation, effective_from, content_hash, compiled_bytecode_hash, created_by
 		) VALUES (
 			$1, 1, $2, '{}'::jsonb, '{}'::jsonb,
-			'Test Citation', NOW(), 'content_hash_cold_1', 'bytecode_hash_cold_1', 'test'
+			'Test Citation', NOW(), $3, $4, 'test'
 		) ON CONFLICT (rule_id, version) DO NOTHING
 	`
-	_, err = pgDB.Exec(ruleVerQ, ruleID, tenantID)
+	_, err = pgDB.Exec(ruleVerQ, ruleID, tenantID, contentHash1, bytecodeHash1)
 	require.NoError(t, err)
 
 	defer func() {
@@ -113,17 +118,17 @@ func TestColdArchivalWorker_MultiBatchContiguityAndQuarantineRecovery(t *testing
 				passed, action_taken, latency_micros, evaluation_hash,
 				input_params, metric_snapshots, evaluated_at, created_at, ingest_lsn
 			) VALUES (
-				$1, $2, $3, $4, $5, 1, 'content_hash_cold_1',
-				true, 'APPROVED', 150, $6,
+				$1, $2, $3, $4, $5, 1, $6,
+				true, 'APPROVED', 150, $7,
 				'{"batch": 1}'::jsonb, '{"metric": 100}'::jsonb,
-				NOW(), NOW(), $7
+				NOW(), NOW(), $8
 			)
 		`
 		lineageID := uuid.New()
 		orderID := uuid.New()
 		evalHash := fmt.Sprintf("hash_%s", lineageID.String())
 		lsn := baseLSN + int64(i)
-		_, err := pgDB.Exec(insertQ, uuid.New(), lineageID, tenantID, orderID, ruleID, evalHash, lsn)
+		_, err := pgDB.Exec(insertQ, uuid.New(), lineageID, tenantID, orderID, ruleID, contentHash1, evalHash, lsn)
 		require.NoError(t, err)
 	}
 
@@ -156,17 +161,17 @@ func TestColdArchivalWorker_MultiBatchContiguityAndQuarantineRecovery(t *testing
 				passed, action_taken, latency_micros, evaluation_hash,
 				input_params, metric_snapshots, evaluated_at, created_at, ingest_lsn
 			) VALUES (
-				$1, $2, $3, $4, $5, 1, 'content_hash_cold_1',
-				true, 'APPROVED', 150, $6,
+				$1, $2, $3, $4, $5, 1, $6,
+				true, 'APPROVED', 150, $7,
 				'{"batch": 2}'::jsonb, '{"metric": 200}'::jsonb,
-				NOW(), NOW(), $7
+				NOW(), NOW(), $8
 			)
 		`
 		lineageID := uuid.New()
 		orderID := uuid.New()
 		evalHash := fmt.Sprintf("hash_%s", lineageID.String())
 		lsn := baseLSN + int64(i)
-		_, err := pgDB.Exec(insertQ, uuid.New(), lineageID, tenantID, orderID, ruleID, evalHash, lsn)
+		_, err := pgDB.Exec(insertQ, uuid.New(), lineageID, tenantID, orderID, ruleID, contentHash1, evalHash, lsn)
 		require.NoError(t, err)
 	}
 
@@ -273,16 +278,20 @@ func TestColdArchivalWorker_CrashBeforeManifestCommit_RecoveryResumeAndCLIVerifi
 	_, err = pgDB.Exec(ruleQ, ruleID, tenantID)
 	require.NoError(t, err)
 
+	contentHash2, err := canonical.ComputeRuleContentHashFromRaw([]byte("{}"), []byte("{}"), "Crash Recovery Citation")
+	require.NoError(t, err)
+	bytecodeHash2 := canonical.ComputeBytecodeHash(nil)
+
 	ruleVerQ := `
 		INSERT INTO compliance.compliance_rule_version (
 			rule_id, version, tenant_id, resolved_ast, parameter_thresholds,
 			citation, effective_from, content_hash, compiled_bytecode_hash, created_by
 		) VALUES (
 			$1, 1, $2, '{}'::jsonb, '{}'::jsonb,
-			'Crash Recovery Citation', NOW(), 'content_hash_crash_rec', 'bytecode_hash_crash_rec', 'test'
+			'Crash Recovery Citation', NOW(), $3, $4, 'test'
 		) ON CONFLICT (rule_id, version) DO NOTHING
 	`
-	_, err = pgDB.Exec(ruleVerQ, ruleID, tenantID)
+	_, err = pgDB.Exec(ruleVerQ, ruleID, tenantID, contentHash2, bytecodeHash2)
 	require.NoError(t, err)
 
 	defer func() {
@@ -315,17 +324,17 @@ func TestColdArchivalWorker_CrashBeforeManifestCommit_RecoveryResumeAndCLIVerifi
 				passed, action_taken, latency_micros, evaluation_hash,
 				input_params, metric_snapshots, evaluated_at, created_at, ingest_lsn
 			) VALUES (
-				$1, $2, $3, $4, $5, 1, 'content_hash_crash_rec',
-				true, 'APPROVED', 150, $6,
+				$1, $2, $3, $4, $5, 1, $6,
+				true, 'APPROVED', 150, $7,
 				'{"recovery_test": true}'::jsonb, '{"metric": 500}'::jsonb,
-				NOW(), NOW(), $7
+				NOW(), NOW(), $8
 			)
 		`
 		lineageID := uuid.New()
 		orderID := uuid.New()
 		evalHash := fmt.Sprintf("hash_%s", lineageID.String())
 		lsn := baseLSN + int64(i)
-		_, err := pgDB.Exec(insertQ, uuid.New(), lineageID, tenantID, orderID, ruleID, evalHash, lsn)
+		_, err := pgDB.Exec(insertQ, uuid.New(), lineageID, tenantID, orderID, ruleID, contentHash2, evalHash, lsn)
 		require.NoError(t, err)
 
 		records = append(records, cold.CanonicalRecord{
@@ -335,7 +344,7 @@ func TestColdArchivalWorker_CrashBeforeManifestCommit_RecoveryResumeAndCLIVerifi
 			OrderID:         orderID.String(),
 			RuleID:          ruleID.String(),
 			RuleVersion:     1,
-			RuleContentHash: "content_hash_crash_rec",
+			RuleContentHash: contentHash2,
 			ActionTaken:     "APPROVED",
 			Passed:          true,
 			LatencyMicros:   150,
@@ -405,17 +414,17 @@ func TestColdArchivalWorker_CrashBeforeManifestCommit_RecoveryResumeAndCLIVerifi
 				passed, action_taken, latency_micros, evaluation_hash,
 				input_params, metric_snapshots, evaluated_at, created_at, ingest_lsn
 			) VALUES (
-				$1, $2, $3, $4, $5, 1, 'content_hash_crash_rec',
-				true, 'APPROVED', 150, $6,
+				$1, $2, $3, $4, $5, 1, $6,
+				true, 'APPROVED', 150, $7,
 				'{"batch": 2}'::jsonb, '{"metric": 600}'::jsonb,
-				NOW(), NOW(), $7
+				NOW(), NOW(), $8
 			)
 		`
 		lineageID := uuid.New()
 		orderID := uuid.New()
 		evalHash := fmt.Sprintf("hash_%s", lineageID.String())
 		lsn := baseLSN + int64(i)
-		_, err := pgDB.Exec(insertQ, uuid.New(), lineageID, tenantID, orderID, ruleID, evalHash, lsn)
+		_, err := pgDB.Exec(insertQ, uuid.New(), lineageID, tenantID, orderID, ruleID, contentHash2, evalHash, lsn)
 		require.NoError(t, err)
 	}
 

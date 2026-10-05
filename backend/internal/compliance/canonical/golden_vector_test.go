@@ -107,3 +107,129 @@ print(hashlib.sha256(preimage).hexdigest(), end="")
 		t.Logf("Cross-implementation verified: Go and Python agree 100%% on hash %s", pyHash)
 	}
 }
+
+func TestRuleContentHashGoldenVector_NestedAndUnicode(t *testing.T) {
+	// Complex input containing nested AST, arrays, decimals, unicode in citation and keys
+	astCondition := map[string]interface{}{
+		"type":     "LOGICAL_AND",
+		"operator": "AND",
+		"conditions": []interface{}{
+			map[string]interface{}{
+				"type":     "COMPARISON",
+				"operator": "GREATER_THAN",
+				"left": map[string]interface{}{
+					"type": "METRIC",
+					"path": "position.issuer_exposure_pct",
+				},
+				"right": map[string]interface{}{
+					"type": "PARAM",
+					"name": "issuer_limit_pct",
+				},
+			},
+			map[string]interface{}{
+				"type":     "COMPARISON",
+				"operator": "EQUAL",
+				"left": map[string]interface{}{
+					"type": "METRIC",
+					"path": "instrument.currency",
+				},
+				"right": map[string]interface{}{
+					"type":  "LITERAL",
+					"value": "EUR € / USD $",
+				},
+			},
+		},
+	}
+
+	parameterThresholds := map[string]interface{}{
+		"issuer_limit_pct": decimal.RequireFromString("0.050000"),
+		"lookthrough":      true,
+		"tags":             []interface{}{"UCITS_V", "Régulation_2026", "Tier-1"},
+		"nested_config": map[string]interface{}{
+			"buffer_bps": decimal.NewFromInt(25),
+			"enabled":    true,
+			"sub_limits": []interface{}{
+				decimal.RequireFromString("0.100000"),
+				decimal.RequireFromString("0.400000"),
+			},
+		},
+	}
+
+	citation := "UCITS Directive 2009/65/EC Art. 52 § 1 — Concentration (5%/10%/40% & € / $ rules)"
+
+	hashFromMap, err := ComputeRuleContentHash(astCondition, parameterThresholds, citation)
+	if err != nil {
+		t.Fatalf("ComputeRuleContentHash failed: %v", err)
+	}
+
+	// Also compute directly from raw JCS JSON bytes
+	rawASTJSON := `{"type":"LOGICAL_AND","operator":"AND","conditions":[{"type":"COMPARISON","operator":"GREATER_THAN","left":{"type":"METRIC","path":"position.issuer_exposure_pct"},"right":{"type":"PARAM","name":"issuer_limit_pct"}},{"type":"COMPARISON","operator":"EQUAL","left":{"type":"METRIC","path":"instrument.currency"},"right":{"type":"LITERAL","value":"EUR € / USD $"}}]}`
+	rawParamsJSON := `{"issuer_limit_pct":"0.050000","lookthrough":true,"nested_config":{"buffer_bps":"25.000000","enabled":true,"sub_limits":["0.100000","0.400000"]},"tags":["UCITS_V","Régulation_2026","Tier-1"]}`
+
+	hashFromRaw, err := ComputeRuleContentHashFromRaw([]byte(rawASTJSON), []byte(rawParamsJSON), citation)
+	if err != nil {
+		t.Fatalf("ComputeRuleContentHashFromRaw failed: %v", err)
+	}
+
+	if hashFromMap != hashFromRaw {
+		t.Fatalf("Discrepancy between Map and Raw! Map: %s, Raw: %s", hashFromMap, hashFromRaw)
+	}
+
+	t.Logf("Golden Rule Content Hash: %s", hashFromMap)
+
+	// Cross-check against Python canonical JCS + SHA-256
+	pyScript := `
+import json, hashlib
+
+ast = {
+    "type": "LOGICAL_AND",
+    "operator": "AND",
+    "conditions": [
+        {
+            "type": "COMPARISON",
+            "operator": "GREATER_THAN",
+            "left": {"type": "METRIC", "path": "position.issuer_exposure_pct"},
+            "right": {"type": "PARAM", "name": "issuer_limit_pct"}
+        },
+        {
+            "type": "COMPARISON",
+            "operator": "EQUAL",
+            "left": {"type": "METRIC", "path": "instrument.currency"},
+            "right": {"type": "LITERAL", "value": "EUR \u20ac / USD $"}
+        }
+    ]
+}
+
+params = {
+    "issuer_limit_pct": "0.050000",
+    "lookthrough": True,
+    "tags": ["UCITS_V", "R\u00e9gulation_2026", "Tier-1"],
+    "nested_config": {
+        "buffer_bps": "25.000000",
+        "enabled": True,
+        "sub_limits": ["0.100000", "0.400000"]
+    }
+}
+
+citation = "UCITS Directive 2009/65/EC Art. 52 \u00a7 1 \u2014 Concentration (5%/10%/40% & \u20ac / $ rules)"
+
+jcs_ast = json.dumps(ast, ensure_ascii=False, separators=(',', ':'), sort_keys=True).encode('utf-8')
+jcs_params = json.dumps(params, ensure_ascii=False, separators=(',', ':'), sort_keys=True).encode('utf-8')
+
+preimage = b"v1|" + jcs_ast + b"|" + jcs_params + b"|" + citation.encode('utf-8')
+print(hashlib.sha256(preimage).hexdigest(), end="")
+`
+	cmd := exec.Command("python3", "-c", pyScript)
+	pyOutput, pyErr := cmd.Output()
+	if pyErr != nil {
+		t.Fatalf("Python execution failed: %v", pyErr)
+	}
+
+	pyHash := strings.TrimSpace(string(pyOutput))
+	if pyHash != hashFromMap {
+		t.Fatalf("Python vs Go RuleContentHash mismatch!\n Go:     %s\n Python: %s", hashFromMap, pyHash)
+	}
+
+	t.Logf("Cross-implementation verified: Go and Python agree 100%% on rule content hash %s", pyHash)
+}
+

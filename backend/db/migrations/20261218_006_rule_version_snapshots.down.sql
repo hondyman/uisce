@@ -24,3 +24,7 @@ DROP TRIGGER IF EXISTS trg_prevent_rule_version_mutation ON compliance.complianc
 DROP TRIGGER IF EXISTS trg_prevent_rule_version_truncate ON compliance.compliance_rule_version;
 
 DROP TABLE IF EXISTS compliance.compliance_rule_version;
+
+-- 4. Drop SQL JCS and Hash calculation functions
+DROP FUNCTION IF EXISTS compliance.compute_rule_content_hash(jsonb, jsonb, text);
+DROP FUNCTION IF EXISTS compliance.to_jcs(jsonb);
