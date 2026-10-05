@@ -153,7 +153,10 @@ func (h *ProvisioningHandler) ProvisionTenant(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	goldCopyTenantID, goldCopyInstanceID, goldCopyDatabase, err := h.resolveGoldCopy()
+	// Structure-from-scan (ADR-050) never reads the gold copy's database; only tenant/instance ids are required.
+	// Legacy clone still needs a dedicated database_name so we never fall back to cloning alpha.
+	requireGoldDB := !req.StructureFromGoldCopy && req.TemplateDatasourceID == ""
+	goldCopyTenantID, goldCopyInstanceID, goldCopyDatabase, err := h.resolveGoldCopy(requireGoldDB)
 	if err != nil {
 		h.logger.Errorf("Failed to resolve gold copy: %v", err)
 		http.Error(w, "failed to resolve gold copy configuration: "+err.Error(), http.StatusInternalServerError)
@@ -311,7 +314,7 @@ func (h *ProvisioningHandler) ProvisionInstance(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	goldCopyTenantID, goldCopyInstanceID, goldCopyDatabase, err := h.resolveGoldCopy()
+	goldCopyTenantID, goldCopyInstanceID, goldCopyDatabase, err := h.resolveGoldCopy(true)
 	if err != nil {
 		h.logger.Errorf("Failed to resolve gold copy: %v", err)
 		http.Error(w, "failed to resolve gold copy: "+err.Error(), http.StatusInternalServerError)
@@ -390,7 +393,26 @@ func (h *ProvisioningHandler) checkExistingTenantName(name string) string {
 	return exists
 }
 
-func (h *ProvisioningHandler) resolveGoldCopy() (tenantID, instanceID, database string, err error) {
+// resolveGoldCopy locates the gold-copy tenant and one of its instances.
+// When requireDedicatedDB is true (legacy clone path), it also requires tenants.database_name
+// to be set to something other than the control plane ("alpha"). When false (structure-from-scan /
+// template datasource), only the ids are returned — the gold copy's OLTP database is never read.
+func (h *ProvisioningHandler) resolveGoldCopy(requireDedicatedDB bool) (tenantID, instanceID, database string, err error) {
+	if !requireDedicatedDB {
+		query := `
+			SELECT t.id, ti.id
+			FROM public.tenants t
+			JOIN public.tenant_instance ti ON ti.tenant_id = t.id
+			WHERE t.gold_copy = true
+			LIMIT 1
+		`
+		err = h.controlDB.QueryRowContext(context.Background(), query).Scan(&tenantID, &instanceID)
+		if err != nil {
+			return "", "", "", fmt.Errorf("failed to resolve gold copy: %w", err)
+		}
+		return tenantID, instanceID, "", nil
+	}
+
 	// No fallback: a gold copy with no database_name used to resolve to "alpha", which would
 	// have cloned the control plane's own schema into a new tenant's database.
 	query := `

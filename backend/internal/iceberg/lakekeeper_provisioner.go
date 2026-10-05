@@ -12,11 +12,13 @@ import (
 )
 
 type LakekeeperProvisioner struct {
-	baseURL    string
-	s3Bucket   string
-	s3Endpoint string
-	httpClient *http.Client
-	tokenMgr   *TokenManager
+	baseURL       string
+	s3Bucket      string
+	s3Endpoint    string
+	warehouseID   string // Iceberg REST catalog prefix; Lakekeeper warehouse UUID
+	warehouseName string // used to resolve warehouseID when unset
+	httpClient    *http.Client
+	tokenMgr      *TokenManager
 }
 
 func NewLakekeeperProvisioner(baseURL, s3Bucket, s3Endpoint string) *LakekeeperProvisioner {
@@ -40,22 +42,54 @@ func NewLakekeeperProvisioner(baseURL, s3Bucket, s3Endpoint string) *LakekeeperP
 	}
 	tm := newDefaultTokenManager(baseURL)
 	return &LakekeeperProvisioner{
-		baseURL:    baseURL,
-		s3Bucket:   s3Bucket,
-		s3Endpoint: s3Endpoint,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
-		tokenMgr:   tm,
+		baseURL:       baseURL,
+		s3Bucket:      s3Bucket,
+		s3Endpoint:    s3Endpoint,
+		warehouseID:   os.Getenv("LAKEKEEPER_WAREHOUSE_ID"),
+		warehouseName: envOr("LAKEKEEPER_WAREHOUSE_NAME", "uisce-raw"),
+		httpClient:    &http.Client{Timeout: 30 * time.Second},
+		tokenMgr:      tm,
 	}
 }
 
 func NewAuthedLakekeeperProvisioner(baseURL, s3Bucket, s3Endpoint string, tokenMgr *TokenManager) *LakekeeperProvisioner {
 	return &LakekeeperProvisioner{
-		baseURL:    baseURL,
-		s3Bucket:   s3Bucket,
-		s3Endpoint: s3Endpoint,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
-		tokenMgr:   tokenMgr,
+		baseURL:       baseURL,
+		s3Bucket:      s3Bucket,
+		s3Endpoint:    s3Endpoint,
+		warehouseID:   os.Getenv("LAKEKEEPER_WAREHOUSE_ID"),
+		warehouseName: envOr("LAKEKEEPER_WAREHOUSE_NAME", "uisce-raw"),
+		httpClient:    &http.Client{Timeout: 30 * time.Second},
+		tokenMgr:      tokenMgr,
 	}
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// catalogPrefix is the Iceberg REST {prefix} for namespace/table routes:
+// /catalog/v1/{prefix}/namespaces. Lakekeeper uses the warehouse UUID.
+func (p *LakekeeperProvisioner) catalogPrefix(ctx context.Context) (string, error) {
+	if p.warehouseID != "" {
+		return p.warehouseID, nil
+	}
+	name := p.warehouseName
+	if name == "" {
+		name = "uisce-raw"
+	}
+	id, status, err := p.GetWarehouseByName(ctx, name)
+	if err != nil {
+		return "", fmt.Errorf("resolve warehouse %q: %w", name, err)
+	}
+	if id == "" {
+		return "", fmt.Errorf("resolve warehouse %q: not found (status %d); set LAKEKEEPER_WAREHOUSE_ID or create the warehouse", name, status)
+	}
+	p.warehouseID = id
+	return id, nil
 }
 
 func newDefaultTokenManager(baseURL string) *TokenManager {
@@ -108,7 +142,11 @@ func (p *LakekeeperProvisioner) doRequest(ctx context.Context, method, path stri
 }
 
 func (p *LakekeeperProvisioner) NamespaceExists(ctx context.Context, namespace string) (bool, error) {
-	resp, err := p.doRequest(ctx, http.MethodGet, fmt.Sprintf("/v1/namespaces/%s", namespace), nil)
+	prefix, err := p.catalogPrefix(ctx)
+	if err != nil {
+		return false, err
+	}
+	resp, err := p.doRequest(ctx, http.MethodGet, fmt.Sprintf("/catalog/v1/%s/namespaces/%s", prefix, namespace), nil)
 	if err != nil {
 		return false, err
 	}
@@ -125,14 +163,18 @@ func (p *LakekeeperProvisioner) NamespaceExists(ctx context.Context, namespace s
 }
 
 func (p *LakekeeperProvisioner) CreateNamespace(ctx context.Context, tenantCode string) error {
+	prefix, err := p.catalogPrefix(ctx)
+	if err != nil {
+		return err
+	}
 	namespace := NamespaceConfig{
 		Namespace: []string{tenantCode},
 		Properties: map[string]string{
-			"default-base-location": fmt.Sprintf("s3://%s/%s", p.s3Bucket, tenantCode),
+			"default-base-location": fmt.Sprintf("s3://%s/%s/%s", p.s3Bucket, p.warehouseName, tenantCode),
 		},
 	}
 
-	resp, err := p.doRequest(ctx, http.MethodPost, "/v1/namespaces", namespace)
+	resp, err := p.doRequest(ctx, http.MethodPost, fmt.Sprintf("/catalog/v1/%s/namespaces", prefix), namespace)
 	if err != nil {
 		return fmt.Errorf("create namespace request: %w", err)
 	}
@@ -150,7 +192,11 @@ func (p *LakekeeperProvisioner) CreateNamespace(ctx context.Context, tenantCode 
 }
 
 func (p *LakekeeperProvisioner) DeleteNamespace(ctx context.Context, tenantCode string) error {
-	resp, err := p.doRequest(ctx, http.MethodDelete, fmt.Sprintf("/v1/namespaces/%s", tenantCode), nil)
+	prefix, err := p.catalogPrefix(ctx)
+	if err != nil {
+		return err
+	}
+	resp, err := p.doRequest(ctx, http.MethodDelete, fmt.Sprintf("/catalog/v1/%s/namespaces/%s", prefix, tenantCode), nil)
 	if err != nil {
 		return fmt.Errorf("delete namespace request: %w", err)
 	}
@@ -165,7 +211,11 @@ func (p *LakekeeperProvisioner) DeleteNamespace(ctx context.Context, tenantCode 
 }
 
 func (p *LakekeeperProvisioner) GetNamespace(ctx context.Context, tenantCode string) (*NamespaceConfig, error) {
-	resp, err := p.doRequest(ctx, http.MethodGet, fmt.Sprintf("/v1/namespaces/%s", tenantCode), nil)
+	prefix, err := p.catalogPrefix(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := p.doRequest(ctx, http.MethodGet, fmt.Sprintf("/catalog/v1/%s/namespaces/%s", prefix, tenantCode), nil)
 	if err != nil {
 		return nil, err
 	}
