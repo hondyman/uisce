@@ -20,12 +20,22 @@ type PreAggProperties struct {
 	// Lifecycle fields
 	LifecycleStatus      string     `json:"lifecycle_status,omitempty"` // idle, materializing, active, refreshing, stale, failed
 	LastMaterializedAt   *time.Time `json:"last_materialized_at,omitempty"`
-	LastRefreshedAt      *time.Time `json:"last_refreshed_at,omitempty"`
+	LastRefreshedAt      *time.Time `json:"last_refreshed_at,omitempty"` // freshness clock = refresh completion (CUBE-1.1)
 	LastRefreshStatus    string     `json:"last_refresh_status,omitempty"` // success, failed
 	LastRefreshError     string     `json:"last_refresh_error,omitempty"`
 	NextScheduledRefresh *time.Time `json:"next_scheduled_refresh,omitempty"`
 	RowCount             *int64     `json:"row_count,omitempty"`
 	SizeBytes            *int64     `json:"size_bytes,omitempty"`
+
+	// Cube materialization attempt metadata (CUBE-1.1). Reuses the
+	// pre_aggregation catalog node type; CubeRouter resolves by node_name.
+	AttemptID       string   `json:"attempt_id,omitempty"`
+	CubeID          string   `json:"cube_id,omitempty"`
+	ContractVersion int      `json:"contract_version,omitempty"`
+	Grain           []string `json:"grain,omitempty"`
+	GrainHash       string   `json:"grain_hash,omitempty"`
+	CubeContentHash string   `json:"cube_content_hash,omitempty"`
+
 	// Usage tracking (persisted snapshot)
 	UsageCount            int64   `json:"usage_count,omitempty"`
 	AvgLatencyReductionMs float64 `json:"avg_latency_reduction_ms,omitempty"`
