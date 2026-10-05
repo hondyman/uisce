@@ -85,8 +85,9 @@ func registerWorkflows(w worker.Worker) {
 	w.RegisterWorkflow(workflows.RuleHealthCheckWorkflow)
 	w.RegisterWorkflow(workflows.ViolationAuditAnchorWorkflow)
 	w.RegisterWorkflow(querybuilder.CubeMaterializeWorkflow)
+	w.RegisterWorkflow(querybuilder.CubeReconcileWorkflow)
 
-	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow, CustomizationIntelligenceWorkflow, TenantInstanceProvisioningWorkflowFn, ReportGenerationWorkflow, ClientBurstReportWorkflow, RuleReviewWorkflow, RuleHealthCheckWorkflow, ViolationAuditAnchorWorkflow, CubeMaterializeWorkflow")
+	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow, CustomizationIntelligenceWorkflow, TenantInstanceProvisioningWorkflowFn, ReportGenerationWorkflow, ClientBurstReportWorkflow, RuleReviewWorkflow, RuleHealthCheckWorkflow, ViolationAuditAnchorWorkflow, CubeMaterializeWorkflow, CubeReconcileWorkflow")
 }
 
 // registerActivities registers all activity definitions
@@ -168,7 +169,8 @@ func registerActivities(w worker.Worker, db *sql.DB, controlDB *sql.DB, logger *
 	// standalone temporal-worker process can run the same workflow type.
 	if db != nil {
 		sqlxDB := sqlx.NewDb(db, "postgres")
-		cubeActs := querybuilder.NewCubeMaterializeActivities(sqlxDB, analytics.OpenStarRocksDB())
+		starrocksDB := analytics.OpenStarRocksDB()
+		cubeActs := querybuilder.NewCubeMaterializeActivities(sqlxDB, starrocksDB)
 		w.RegisterActivityWithOptions(cubeActs.CubeValidateAndPlan, activity.RegisterOptions{Name: querybuilder.ActCubeValidateAndPlan})
 		w.RegisterActivityWithOptions(cubeActs.CubeBeginAttempt, activity.RegisterOptions{Name: querybuilder.ActCubeBeginAttempt})
 		w.RegisterActivityWithOptions(cubeActs.CubeApplyHot, activity.RegisterOptions{Name: querybuilder.ActCubeApplyHot})
@@ -176,7 +178,9 @@ func registerActivities(w worker.Worker, db *sql.DB, controlDB *sql.DB, logger *
 		w.RegisterActivityWithOptions(cubeActs.CubeCompensateHot, activity.RegisterOptions{Name: querybuilder.ActCubeCompensateHot})
 		w.RegisterActivityWithOptions(cubeActs.CubeCompleteDualCommit, activity.RegisterOptions{Name: querybuilder.ActCubeCompleteDualCommit})
 		w.RegisterActivityWithOptions(cubeActs.CubeFailAttempt, activity.RegisterOptions{Name: querybuilder.ActCubeFailAttempt})
+		reconcileActs := querybuilder.NewCubeReconcileActivities(querybuilder.NewCubeReconciler(sqlxDB, starrocksDB))
+		w.RegisterActivityWithOptions(reconcileActs.CubeReconcile, activity.RegisterOptions{Name: querybuilder.ActCubeReconcile})
 	}
 
-	log.Println("Activities registered: RunDataFusionQueryActivity, RunSparkJobActivity, RunPythonScriptActivity, PublishEventActivity, TenantActivities, TenantProvisioningActivities, ReportActivities, CubeMaterializeActivities")
+	log.Println("Activities registered: RunDataFusionQueryActivity, RunSparkJobActivity, RunPythonScriptActivity, PublishEventActivity, TenantActivities, TenantProvisioningActivities, ReportActivities, CubeMaterializeActivities, CubeReconcileActivities")
 }

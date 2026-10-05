@@ -32,10 +32,16 @@ func (s *Server) registerCubeMaterializeWorker(sqlxDB *sqlx.DB, tc temporalclien
 	starrocksDB := analytics.OpenStarRocksDB()
 	acts := querybuilder.NewCubeMaterializeActivities(sqlxDB, starrocksDB)
 	s.cubeMaterializeActs = acts
+	reconcileActs := querybuilder.NewCubeReconcileActivities(
+		querybuilder.NewCubeReconciler(sqlxDB, starrocksDB),
+	)
 
 	w := worker.New(tc, querybuilder.CubeTaskQueue, worker.Options{})
 	w.RegisterWorkflowWithOptions(querybuilder.CubeMaterializeWorkflow, workflow.RegisterOptions{
 		Name: querybuilder.CubeMaterializeWorkflowName,
+	})
+	w.RegisterWorkflowWithOptions(querybuilder.CubeReconcileWorkflow, workflow.RegisterOptions{
+		Name: querybuilder.CubeReconcileWorkflowName,
 	})
 	w.RegisterActivityWithOptions(acts.CubeValidateAndPlan, activity.RegisterOptions{Name: querybuilder.ActCubeValidateAndPlan})
 	w.RegisterActivityWithOptions(acts.CubeBeginAttempt, activity.RegisterOptions{Name: querybuilder.ActCubeBeginAttempt})
@@ -44,6 +50,7 @@ func (s *Server) registerCubeMaterializeWorker(sqlxDB *sqlx.DB, tc temporalclien
 	w.RegisterActivityWithOptions(acts.CubeCompensateHot, activity.RegisterOptions{Name: querybuilder.ActCubeCompensateHot})
 	w.RegisterActivityWithOptions(acts.CubeCompleteDualCommit, activity.RegisterOptions{Name: querybuilder.ActCubeCompleteDualCommit})
 	w.RegisterActivityWithOptions(acts.CubeFailAttempt, activity.RegisterOptions{Name: querybuilder.ActCubeFailAttempt})
+	w.RegisterActivityWithOptions(reconcileActs.CubeReconcile, activity.RegisterOptions{Name: querybuilder.ActCubeReconcile})
 
 	if err := w.Start(); err != nil {
 		log.Errorf("cubes: CubeMaterialize worker did not start: %v", err)
