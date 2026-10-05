@@ -238,6 +238,7 @@ func (r *CubeMaterializationRegistry) BeginAttempt(ctx context.Context, nodeID u
 }
 
 // CompleteAttempt marks Active and sets LastRefreshedAt (freshness clock).
+// Prefer CompleteDualCommitAttempt for cube deploys (CUBE-1.3).
 func (r *CubeMaterializationRegistry) CompleteAttempt(ctx context.Context, nodeID uuid.UUID, attemptID string, stats *models.PreAggStats) error {
 	if r == nil || r.lifecycle == nil {
 		return fmt.Errorf("cube materialization registry: lifecycle not configured")
@@ -246,6 +247,24 @@ func (r *CubeMaterializationRegistry) CompleteAttempt(ctx context.Context, nodeI
 		return fmt.Errorf("cube materialization registry: attempt_id is required")
 	}
 	return r.lifecycle.MarkActiveAttempt(ctx, nodeID, attemptID, stats)
+}
+
+// CompleteDualCommitAttempt marks Active only after hot+cold both succeeded and
+// stamps DualCommitWatermark (CUBE-1.3).
+func (r *CubeMaterializationRegistry) CompleteDualCommitAttempt(
+	ctx context.Context,
+	nodeID uuid.UUID,
+	attemptID string,
+	stats *models.PreAggStats,
+	meta analytics.DualCommitMeta,
+) error {
+	if r == nil || r.lifecycle == nil {
+		return fmt.Errorf("cube materialization registry: lifecycle not configured")
+	}
+	if strings.TrimSpace(attemptID) == "" {
+		return fmt.Errorf("cube materialization registry: attempt_id is required")
+	}
+	return r.lifecycle.MarkActiveDualCommitAttempt(ctx, nodeID, attemptID, stats, meta)
 }
 
 // FailAttempt marks Failed for the attempt without advancing LastRefreshedAt.

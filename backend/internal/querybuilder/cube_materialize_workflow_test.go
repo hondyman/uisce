@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -17,11 +18,13 @@ func registerCubeMaterializeTestActs(env *testsuite.TestWorkflowEnvironment, act
 	env.RegisterActivityWithOptions(acts.CubeValidateAndPlan, activity.RegisterOptions{Name: ActCubeValidateAndPlan})
 	env.RegisterActivityWithOptions(acts.CubeBeginAttempt, activity.RegisterOptions{Name: ActCubeBeginAttempt})
 	env.RegisterActivityWithOptions(acts.CubeApplyHot, activity.RegisterOptions{Name: ActCubeApplyHot})
-	env.RegisterActivityWithOptions(acts.CubeCompleteAttempt, activity.RegisterOptions{Name: ActCubeCompleteAttempt})
+	env.RegisterActivityWithOptions(acts.CubeApplyCold, activity.RegisterOptions{Name: ActCubeApplyCold})
+	env.RegisterActivityWithOptions(acts.CubeCompensateHot, activity.RegisterOptions{Name: ActCubeCompensateHot})
+	env.RegisterActivityWithOptions(acts.CubeCompleteDualCommit, activity.RegisterOptions{Name: ActCubeCompleteDualCommit})
 	env.RegisterActivityWithOptions(acts.CubeFailAttempt, activity.RegisterOptions{Name: ActCubeFailAttempt})
 }
 
-func TestCubeMaterializeWorkflow_HappyPath(t *testing.T) {
+func TestCubeMaterializeWorkflow_HappyPathDualCommit(t *testing.T) {
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
 
@@ -40,13 +43,23 @@ func TestCubeMaterializeWorkflow_HappyPath(t *testing.T) {
 		AttemptID:           "attempt-1",
 		MaterializationName: "cube_t_account_smoke",
 		TargetDatabase:      "tenant_99e99e99",
+		IcebergTable:        "iceberg_catalog.cubes.cube_t_account_smoke",
 		DDL:                 "CREATE MATERIALIZED VIEW cube_t_account_smoke AS SELECT 1;",
 	}
+	hotAt := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	coldAt := time.Date(2026, 10, 5, 12, 0, 5, 0, time.UTC)
 	hot := &CubeMaterializeHotResult{
 		MaterializationName: plan.MaterializationName,
 		TargetDatabase:      plan.TargetDatabase,
 		AppliedDDL:          true,
 		RowCount:            42,
+		CommittedAt:         hotAt,
+	}
+	cold := &CubeMaterializeColdResult{
+		IcebergTable: plan.IcebergTable,
+		Applied:      true,
+		RowCount:     42,
+		CommittedAt:  coldAt,
 	}
 
 	acts := &CubeMaterializeActivities{}
@@ -55,7 +68,8 @@ func TestCubeMaterializeWorkflow_HappyPath(t *testing.T) {
 	env.OnActivity(ActCubeValidateAndPlan, mock.Anything, req).Return(plan, nil)
 	env.OnActivity(ActCubeBeginAttempt, mock.Anything, plan).Return(nil)
 	env.OnActivity(ActCubeApplyHot, mock.Anything, plan).Return(hot, nil)
-	env.OnActivity(ActCubeCompleteAttempt, mock.Anything, plan, hot).Return(nil)
+	env.OnActivity(ActCubeApplyCold, mock.Anything, plan, hot).Return(cold, nil)
+	env.OnActivity(ActCubeCompleteDualCommit, mock.Anything, plan, hot, cold).Return(nil)
 
 	env.ExecuteWorkflow(CubeMaterializeWorkflow, req)
 	require.True(t, env.IsWorkflowCompleted())
@@ -64,10 +78,13 @@ func TestCubeMaterializeWorkflow_HappyPath(t *testing.T) {
 	var result CubeMaterializeWorkflowResult
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.True(t, result.HotApplied)
+	require.True(t, result.ColdCommitted)
 	require.Equal(t, int64(42), result.RowCount)
 	require.Equal(t, plan.AttemptID, result.AttemptID)
+	require.Equal(t, plan.IcebergTable, result.IcebergTable)
+	require.Equal(t, coldAt.Format(time.RFC3339Nano), result.DualCommitWatermark)
 	require.False(t, result.Noop)
-	require.False(t, result.ColdCommitted) // CUBE-1.3
+	require.False(t, result.CompensatedHot)
 }
 
 func TestCubeMaterializeWorkflow_NoopSkipsLoad(t *testing.T) {
@@ -87,7 +104,7 @@ func TestCubeMaterializeWorkflow_NoopSkipsLoad(t *testing.T) {
 		NodeID:          "22222222-2222-2222-2222-222222222222",
 		AttemptID:       "attempt-noop",
 		Noop:            true,
-		NoopReason:      "content_hash unchanged and grain already Active",
+		NoopReason:      "content_hash unchanged and grain already dual-committed Active",
 	}
 
 	acts := &CubeMaterializeActivities{}
@@ -103,7 +120,58 @@ func TestCubeMaterializeWorkflow_NoopSkipsLoad(t *testing.T) {
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.True(t, result.Noop)
 	require.False(t, result.HotApplied)
+	require.False(t, result.ColdCommitted)
 	require.Equal(t, plan.NoopReason, result.NoopReason)
+}
+
+func TestCubeMaterializeWorkflow_ColdFailureCompensatesHot(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+
+	req := CubeMaterializeRequest{
+		TenantID: "t1",
+		CubeID:   "c1",
+		Grain:    []string{"day"},
+	}
+	plan := &CubeMaterializePlan{
+		TenantID:            req.TenantID,
+		CubeID:              req.CubeID,
+		ContractVersion:     1,
+		GrainHash:           GrainHash(req.Grain),
+		NodeID:              "33333333-3333-3333-3333-333333333333",
+		AttemptID:           "attempt-fail-cold",
+		MaterializationName: "cube_fail",
+		TargetDatabase:      "tenant_t1",
+		IcebergTable:        "iceberg_catalog.cubes.cube_fail",
+	}
+	hot := &CubeMaterializeHotResult{
+		MaterializationName: plan.MaterializationName,
+		TargetDatabase:      plan.TargetDatabase,
+		AppliedDDL:          true,
+		RowCount:            7,
+		CommittedAt:         time.Now().UTC(),
+	}
+
+	acts := &CubeMaterializeActivities{}
+	registerCubeMaterializeTestActs(env, acts)
+
+	env.OnActivity(ActCubeValidateAndPlan, mock.Anything, req).Return(plan, nil)
+	env.OnActivity(ActCubeBeginAttempt, mock.Anything, plan).Return(nil)
+	env.OnActivity(ActCubeApplyHot, mock.Anything, plan).Return(hot, nil)
+	env.OnActivity(ActCubeApplyCold, mock.Anything, plan, hot).Return(nil, errors.New("iceberg catalog unavailable"))
+	env.OnActivity(ActCubeCompensateHot, mock.Anything, plan).Return(nil)
+	env.OnActivity(ActCubeFailAttempt, mock.Anything, mock.MatchedBy(func(in CubeFailAttemptInput) bool {
+		return in.Plan != nil && in.Plan.AttemptID == "attempt-fail-cold" &&
+			containsStr(in.ErrorMessage, "iceberg catalog unavailable")
+	})).Return(nil)
+
+	env.ExecuteWorkflow(CubeMaterializeWorkflow, req)
+	require.True(t, env.IsWorkflowCompleted())
+	require.Error(t, env.GetWorkflowError())
+	// Temporal discards the workflow return value on error; the proof that cold
+	// failure compensated hot is that CompensateHot + FailAttempt were invoked
+	// (mocks would fail the test otherwise) and CompleteDualCommit was not.
+	env.AssertExpectations(t)
 }
 
 func TestCubeMaterializeWorkflow_HotFailureMarksFailed(t *testing.T) {
@@ -134,7 +202,7 @@ func TestCubeMaterializeWorkflow_HotFailureMarksFailed(t *testing.T) {
 	env.OnActivity(ActCubeApplyHot, mock.Anything, plan).Return(nil, errors.New("starrocks down"))
 	env.OnActivity(ActCubeFailAttempt, mock.Anything, mock.MatchedBy(func(in CubeFailAttemptInput) bool {
 		return in.Plan != nil && in.Plan.AttemptID == "attempt-fail" &&
-			(in.ErrorMessage == "starrocks down" || containsStr(in.ErrorMessage, "starrocks down"))
+			containsStr(in.ErrorMessage, "starrocks down")
 	})).Return(nil)
 
 	env.ExecuteWorkflow(CubeMaterializeWorkflow, req)

@@ -18,15 +18,17 @@ type CubeMaterializeWorkflowResult struct {
 	NodeID              string `json:"node_id"`
 	MaterializationName string `json:"materialization_name"`
 	TargetDatabase      string `json:"target_database"`
+	IcebergTable        string `json:"iceberg_table,omitempty"`
 	Noop                bool   `json:"noop"`
 	NoopReason          string `json:"noop_reason,omitempty"`
 	HotApplied          bool   `json:"hot_applied"`
+	ColdCommitted       bool   `json:"cold_committed"`
 	RowCount            int64  `json:"row_count,omitempty"`
-	// ColdCommitted is reserved for CUBE-1.3 dual-commit.
-	ColdCommitted bool `json:"cold_committed"`
+	DualCommitWatermark string `json:"dual_commit_watermark,omitempty"` // RFC3339 when set
+	CompensatedHot      bool   `json:"compensated_hot,omitempty"`
 }
 
-// CubeMaterializeWorkflow validates → plans DDL → loads StarRocks hot grain.
+// CubeMaterializeWorkflow validates → hot StarRocks → cold Iceberg → dual-commit Active.
 //
 // Lives in querybuilder (with schedule-style co-location) because
 // handlers → temporal/workflows → querybuilder would form an import cycle.
@@ -34,7 +36,8 @@ type CubeMaterializeWorkflowResult struct {
 // Workflow ID: cube-materialize-{tenant}-{cube}-v{ver}-{grain_hash}
 // with REJECT_DUPLICATE (see CubeMaterializeStartOptions).
 //
-// Cold Iceberg commit + dual-commit watermark are CUBE-1.3 on the same attempt_id.
+// Dual-commit (CUBE-1.3): Active + DualCommitWatermark only after both tiers OK.
+// Cold failure compensates by dropping the hot MV and marking Failed.
 func CubeMaterializeWorkflow(ctx workflow.Context, req CubeMaterializeRequest) (*CubeMaterializeWorkflowResult, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("CubeMaterializeWorkflow started",
@@ -55,7 +58,7 @@ func CubeMaterializeWorkflow(ctx workflow.Context, req CubeMaterializeRequest) (
 		StartToCloseTimeout: 30 * time.Minute,
 		HeartbeatTimeout:    2 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts: 1, // partial StarRocks apply must not auto-retry
+			MaximumAttempts: 1, // partial physical apply must not auto-retry
 		},
 	})
 	bookkeeping := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
@@ -81,6 +84,7 @@ func CubeMaterializeWorkflow(ctx workflow.Context, req CubeMaterializeRequest) (
 		NodeID:              plan.NodeID,
 		MaterializationName: plan.MaterializationName,
 		TargetDatabase:      plan.TargetDatabase,
+		IcebergTable:        plan.IcebergTable,
 		Noop:                plan.Noop,
 		NoopReason:          plan.NoopReason,
 	}
@@ -102,16 +106,36 @@ func CubeMaterializeWorkflow(ctx workflow.Context, req CubeMaterializeRequest) (
 		}).Get(ctx, nil)
 		return nil, err
 	}
-
-	if err := workflow.ExecuteActivity(bookkeeping, ActCubeCompleteAttempt, &plan, &hot).Get(ctx, nil); err != nil {
-		return nil, fmt.Errorf("hot load succeeded but lifecycle Active failed: %w", err)
-	}
-
 	out.HotApplied = hot.AppliedDDL
 	out.RowCount = hot.RowCount
+
+	var cold CubeMaterializeColdResult
+	if err := workflow.ExecuteActivity(long, ActCubeApplyCold, &plan, &hot).Get(ctx, &cold); err != nil {
+		_ = workflow.ExecuteActivity(bookkeeping, ActCubeCompensateHot, &plan).Get(ctx, nil)
+		out.CompensatedHot = true
+		_ = workflow.ExecuteActivity(bookkeeping, ActCubeFailAttempt, CubeFailAttemptInput{
+			Plan:         &plan,
+			ErrorMessage: err.Error(),
+		}).Get(ctx, nil)
+		return out, err
+	}
+	out.ColdCommitted = cold.Applied
+	out.IcebergTable = cold.IcebergTable
+	if cold.RowCount > 0 {
+		out.RowCount = cold.RowCount
+	}
+
+	if err := workflow.ExecuteActivity(bookkeeping, ActCubeCompleteDualCommit, &plan, &hot, &cold).Get(ctx, nil); err != nil {
+		return nil, fmt.Errorf("hot+cold succeeded but dual-commit Active failed: %w", err)
+	}
+	if !cold.CommittedAt.IsZero() {
+		out.DualCommitWatermark = cold.CommittedAt.UTC().Format(time.RFC3339Nano)
+	}
+
 	logger.Info("CubeMaterializeWorkflow complete",
 		"materialization", hot.MaterializationName,
-		"rowCount", hot.RowCount,
+		"iceberg", cold.IcebergTable,
+		"rowCount", out.RowCount,
 	)
 	return out, nil
 }

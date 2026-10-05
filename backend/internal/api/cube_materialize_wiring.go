@@ -40,7 +40,9 @@ func (s *Server) registerCubeMaterializeWorker(sqlxDB *sqlx.DB, tc temporalclien
 	w.RegisterActivityWithOptions(acts.CubeValidateAndPlan, activity.RegisterOptions{Name: querybuilder.ActCubeValidateAndPlan})
 	w.RegisterActivityWithOptions(acts.CubeBeginAttempt, activity.RegisterOptions{Name: querybuilder.ActCubeBeginAttempt})
 	w.RegisterActivityWithOptions(acts.CubeApplyHot, activity.RegisterOptions{Name: querybuilder.ActCubeApplyHot})
-	w.RegisterActivityWithOptions(acts.CubeCompleteAttempt, activity.RegisterOptions{Name: querybuilder.ActCubeCompleteAttempt})
+	w.RegisterActivityWithOptions(acts.CubeApplyCold, activity.RegisterOptions{Name: querybuilder.ActCubeApplyCold})
+	w.RegisterActivityWithOptions(acts.CubeCompensateHot, activity.RegisterOptions{Name: querybuilder.ActCubeCompensateHot})
+	w.RegisterActivityWithOptions(acts.CubeCompleteDualCommit, activity.RegisterOptions{Name: querybuilder.ActCubeCompleteDualCommit})
 	w.RegisterActivityWithOptions(acts.CubeFailAttempt, activity.RegisterOptions{Name: querybuilder.ActCubeFailAttempt})
 
 	if err := w.Start(); err != nil {

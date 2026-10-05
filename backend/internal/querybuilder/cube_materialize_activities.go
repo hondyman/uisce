@@ -10,11 +10,14 @@ import (
 
 // Activity names for CubeMaterializeWorkflow (stable for registration + tests).
 const (
-	ActCubeValidateAndPlan = "CubeValidateAndPlan"
-	ActCubeBeginAttempt    = "CubeBeginAttempt"
-	ActCubeApplyHot        = "CubeApplyHot"
-	ActCubeCompleteAttempt = "CubeCompleteAttempt"
-	ActCubeFailAttempt     = "CubeFailAttempt"
+	ActCubeValidateAndPlan     = "CubeValidateAndPlan"
+	ActCubeBeginAttempt        = "CubeBeginAttempt"
+	ActCubeApplyHot            = "CubeApplyHot"
+	ActCubeApplyCold           = "CubeApplyCold"
+	ActCubeCompensateHot       = "CubeCompensateHot"
+	ActCubeCompleteDualCommit  = "CubeCompleteDualCommit"
+	ActCubeCompleteAttempt     = "CubeCompleteAttempt" // legacy hot-only; prefer dual-commit
+	ActCubeFailAttempt         = "CubeFailAttempt"
 )
 
 // CubeMaterializeActivities wraps CubeMaterializer for Temporal.
@@ -55,7 +58,36 @@ func (a *CubeMaterializeActivities) CubeApplyHot(ctx context.Context, plan *Cube
 	return a.Materializer.ApplyHot(ctx, plan)
 }
 
-// CubeCompleteAttempt flips lifecycle Active and sets LastRefreshedAt.
+// CubeApplyCold commits Iceberg cold via StarRocks INSERT/CTAS (CUBE-1.3).
+func (a *CubeMaterializeActivities) CubeApplyCold(ctx context.Context, plan *CubeMaterializePlan, hot *CubeMaterializeHotResult) (*CubeMaterializeColdResult, error) {
+	if a == nil || a.Materializer == nil {
+		return nil, fmt.Errorf("cube materialize activities: not configured")
+	}
+	return a.Materializer.ApplyCold(ctx, plan, hot)
+}
+
+// CubeCompensateHot drops the hot MV after a cold failure (CUBE-1.3).
+func (a *CubeMaterializeActivities) CubeCompensateHot(ctx context.Context, plan *CubeMaterializePlan) error {
+	if a == nil || a.Materializer == nil {
+		return fmt.Errorf("cube materialize activities: not configured")
+	}
+	return a.Materializer.CompensateHot(ctx, plan)
+}
+
+// CubeCompleteDualCommit flips Active and stamps DualCommitWatermark (CUBE-1.3).
+func (a *CubeMaterializeActivities) CubeCompleteDualCommit(
+	ctx context.Context,
+	plan *CubeMaterializePlan,
+	hot *CubeMaterializeHotResult,
+	cold *CubeMaterializeColdResult,
+) error {
+	if a == nil || a.Materializer == nil {
+		return fmt.Errorf("cube materialize activities: not configured")
+	}
+	return a.Materializer.CompleteDualCommit(ctx, plan, hot, cold)
+}
+
+// CubeCompleteAttempt flips lifecycle Active (legacy hot-only path).
 func (a *CubeMaterializeActivities) CubeCompleteAttempt(ctx context.Context, plan *CubeMaterializePlan, hot *CubeMaterializeHotResult) error {
 	if a == nil || a.Materializer == nil {
 		return fmt.Errorf("cube materialize activities: not configured")
@@ -69,7 +101,7 @@ type CubeFailAttemptInput struct {
 	ErrorMessage string               `json:"error_message"`
 }
 
-// CubeFailAttempt marks Failed without advancing freshness.
+// CubeFailAttempt marks Failed without advancing freshness or dual-commit watermark.
 func (a *CubeMaterializeActivities) CubeFailAttempt(ctx context.Context, in CubeFailAttemptInput) error {
 	if a == nil || a.Materializer == nil {
 		return fmt.Errorf("cube materialize activities: not configured")

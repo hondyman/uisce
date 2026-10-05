@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
@@ -23,10 +24,13 @@ func newLifecycleFixture(t *testing.T) (*PreAggLifecycleService, sqlmock.Sqlmock
 }
 
 type lifecyclePropsMatcher struct {
-	wantStatus  string
-	wantAttempt string
-	wantFresh   bool
-	forbidFresh bool
+	wantStatus       string
+	wantAttempt      string
+	wantFresh        bool
+	forbidFresh      bool
+	wantDualCommit   bool
+	forbidDualCommit bool
+	wantIceberg      string
 }
 
 func (m lifecyclePropsMatcher) Match(v driver.Value) bool {
@@ -53,6 +57,15 @@ func (m lifecyclePropsMatcher) Match(v driver.Value) bool {
 		return false
 	}
 	if m.forbidFresh && p.LastRefreshedAt != nil {
+		return false
+	}
+	if m.wantDualCommit && (p.DualCommitWatermark == nil || p.HotCommittedAt == nil || p.ColdCommittedAt == nil) {
+		return false
+	}
+	if m.forbidDualCommit && p.DualCommitWatermark != nil {
+		return false
+	}
+	if m.wantIceberg != "" && p.IcebergTable != m.wantIceberg {
 		return false
 	}
 	return true
@@ -134,4 +147,80 @@ func TestLifecycle_MaterializingToFailed_DoesNotAdvanceFreshness(t *testing.T) {
 
 	require.NoError(t, svc.MarkFailedAttempt(context.Background(), id, attempt, errors.New("cold sink failed")))
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestLifecycle_DualCommit_SetsWatermarkOnlyWhenBothTiersOK(t *testing.T) {
+	svc, mock := newLifecycleFixture(t)
+	id := uuid.New()
+	attempt := "att-dual-1"
+
+	mat := models.PreAggProperties{
+		BOName:          "account",
+		TenantID:        "t1",
+		LifecycleStatus: models.LifecycleMaterializing,
+		AttemptID:       attempt,
+		CubeID:          "cube-1",
+	}
+	matJSON, err := json.Marshal(mat)
+	require.NoError(t, err)
+
+	mock.ExpectQuery(`SELECT properties FROM catalog_node WHERE id = \$1`).
+		WithArgs(id).
+		WillReturnRows(sqlmock.NewRows([]string{"properties"}).AddRow(matJSON))
+	mock.ExpectExec(`UPDATE catalog_node SET properties = \$1, updated_at = NOW\(\) WHERE id = \$2`).
+		WithArgs(lifecyclePropsMatcher{
+			wantStatus:     models.LifecycleActive,
+			wantAttempt:    attempt,
+			wantFresh:      true,
+			wantDualCommit: true,
+			wantIceberg:    "iceberg_catalog.cubes.cube_t_account",
+		}, id).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	hotAt := mustParseTime(t, "2026-10-05T12:00:00Z")
+	coldAt := mustParseTime(t, "2026-10-05T12:00:05Z")
+	require.NoError(t, svc.MarkActiveDualCommitAttempt(context.Background(), id, attempt,
+		&models.PreAggStats{RowCount: 42},
+		DualCommitMeta{
+			IcebergTable:    "iceberg_catalog.cubes.cube_t_account",
+			HotCommittedAt:  hotAt,
+			ColdCommittedAt: coldAt,
+		},
+	))
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestLifecycle_Failed_DoesNotStampDualCommitWatermark(t *testing.T) {
+	svc, mock := newLifecycleFixture(t)
+	id := uuid.New()
+	attempt := "att-fail-dual"
+
+	mat := models.PreAggProperties{
+		LifecycleStatus: models.LifecycleMaterializing,
+		AttemptID:       attempt,
+	}
+	matJSON, err := json.Marshal(mat)
+	require.NoError(t, err)
+
+	mock.ExpectQuery(`SELECT properties FROM catalog_node WHERE id = \$1`).
+		WithArgs(id).
+		WillReturnRows(sqlmock.NewRows([]string{"properties"}).AddRow(matJSON))
+	mock.ExpectExec(`UPDATE catalog_node SET properties = \$1, updated_at = NOW\(\) WHERE id = \$2`).
+		WithArgs(lifecyclePropsMatcher{
+			wantStatus:       models.LifecycleFailed,
+			wantAttempt:      attempt,
+			forbidFresh:      true,
+			forbidDualCommit: true,
+		}, id).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	require.NoError(t, svc.MarkFailedAttempt(context.Background(), id, attempt, errors.New("cold failed after hot")))
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func mustParseTime(t *testing.T, s string) time.Time {
+	t.Helper()
+	ts, err := time.Parse(time.RFC3339, s)
+	require.NoError(t, err)
+	return ts
 }

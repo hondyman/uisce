@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
@@ -15,8 +16,7 @@ import (
 	"github.com/lib/pq"
 )
 
-// CubeMaterializeRequest is one grain deploy/refresh (CUBE-1.2 hot path).
-// Iceberg cold commit lands in CUBE-1.3 on the same attempt_id.
+// CubeMaterializeRequest is one grain deploy/refresh (hot + cold dual-commit).
 type CubeMaterializeRequest struct {
 	TenantID    string   `json:"tenant_id"`
 	CubeID      string   `json:"cube_id"`
@@ -26,7 +26,7 @@ type CubeMaterializeRequest struct {
 	Force       bool     `json:"force,omitempty"` // skip content_hash noop
 }
 
-// CubeMaterializePlan is the validated, compiled hot-tier plan for one grain.
+// CubeMaterializePlan is the validated, compiled dual-tier plan for one grain.
 type CubeMaterializePlan struct {
 	TenantID            string            `json:"tenant_id"`
 	CubeID              string            `json:"cube_id"`
@@ -45,6 +45,9 @@ type CubeMaterializePlan struct {
 	DDL                 string            `json:"ddl"`
 	DDLContentHash      string            `json:"ddl_content_hash"`
 	MaterializationName string            `json:"materialization_name"`
+	IcebergCatalog      string            `json:"iceberg_catalog"`
+	IcebergDatabase     string            `json:"iceberg_database"`
+	IcebergTable        string            `json:"iceberg_table"` // catalog.db.table
 	Noop                bool              `json:"noop"`
 	NoopReason          string            `json:"noop_reason,omitempty"`
 	MeasureColumns      map[string]string `json:"measure_columns,omitempty"`
@@ -54,21 +57,38 @@ type CubeMaterializePlan struct {
 
 // CubeMaterializeHotResult is the outcome of applying the hot StarRocks step.
 type CubeMaterializeHotResult struct {
-	MaterializationName string `json:"materialization_name"`
-	TargetDatabase      string `json:"target_database"`
-	AppliedDDL          bool   `json:"applied_ddl"`
-	RowCount            int64  `json:"row_count"`
+	MaterializationName string    `json:"materialization_name"`
+	TargetDatabase      string    `json:"target_database"`
+	AppliedDDL          bool      `json:"applied_ddl"`
+	RowCount            int64     `json:"row_count"`
+	CommittedAt         time.Time `json:"committed_at"`
 }
 
-// CubeMaterializer validates, plans, and applies single-BO cube grains to StarRocks.
+// CubeMaterializeColdResult is the outcome of the Iceberg cold commit (CUBE-1.3).
+type CubeMaterializeColdResult struct {
+	IcebergTable string    `json:"iceberg_table"`
+	Applied      bool      `json:"applied"`
+	RowCount     int64     `json:"row_count"`
+	CommittedAt  time.Time `json:"committed_at"`
+}
+
+// CubeColdWriter writes the cold Iceberg tier from the hot StarRocks object.
+// The default implementation uses INSERT/CTAS through the StarRocks FE.
+type CubeColdWriter interface {
+	ApplyCold(ctx context.Context, plan *CubeMaterializePlan, hot *CubeMaterializeHotResult) (*CubeMaterializeColdResult, error)
+}
+
+// CubeMaterializer validates, plans, and applies single-BO cube grains to StarRocks + Iceberg.
 type CubeMaterializer struct {
 	db          *sqlx.DB
 	registry    *CubeMaterializationRegistry
 	starrocksDB *sql.DB
 	ddl         *CubeDDLGenerator
+	cold        CubeColdWriter
+	icebergCat  string
 }
 
-// NewCubeMaterializer wires Postgres control plane + optional StarRocks hot plane.
+// NewCubeMaterializer wires Postgres control plane + optional StarRocks hot/cold plane.
 func NewCubeMaterializer(db *sqlx.DB, starrocksDB *sql.DB) *CubeMaterializer {
 	var lifecycle *analytics.PreAggLifecycleService
 	if db != nil {
@@ -78,11 +98,21 @@ func NewCubeMaterializer(db *sqlx.DB, starrocksDB *sql.DB) *CubeMaterializer {
 	// Deploy path: authoring already validated metrics; gate must be present
 	// (CubeDDLGenerator fails closed without one) but does not re-litigate PII.
 	gen.SetTermGate(func(termNodeID string, field *boresolver.BOField) error { return nil })
-	return &CubeMaterializer{
+	m := &CubeMaterializer{
 		db:          db,
 		registry:    NewCubeMaterializationRegistry(db, lifecycle),
 		starrocksDB: starrocksDB,
 		ddl:         gen,
+		icebergCat:  defaultIcebergCatalog(),
+	}
+	m.cold = &starRocksColdWriter{m: m}
+	return m
+}
+
+// SetColdWriter replaces the Iceberg writer (tests inject a failing writer).
+func (m *CubeMaterializer) SetColdWriter(w CubeColdWriter) {
+	if m != nil {
+		m.cold = w
 	}
 }
 
@@ -165,6 +195,16 @@ func (m *CubeMaterializer) ValidateAndPlan(ctx context.Context, req CubeMaterial
 		targetDB = "gold"
 	}
 
+	icebergDB := "cubes"
+	if cube.IsCore {
+		icebergDB = "cubes_gold"
+	}
+	icebergTable := fmt.Sprintf("%s.%s.%s",
+		sanitizeIdentifier(m.icebergCat),
+		sanitizeIdentifier(icebergDB),
+		sanitizeIdentifier(generated.MaterializationName),
+	)
+
 	plan := &CubeMaterializePlan{
 		TenantID:            tenantID,
 		CubeID:              cube.ID,
@@ -183,6 +223,9 @@ func (m *CubeMaterializer) ValidateAndPlan(ctx context.Context, req CubeMaterial
 		DDL:                 generated.DDL,
 		DDLContentHash:      generated.ContentHash,
 		MaterializationName: generated.MaterializationName,
+		IcebergCatalog:      sanitizeIdentifier(m.icebergCat),
+		IcebergDatabase:     sanitizeIdentifier(icebergDB),
+		IcebergTable:        icebergTable,
 		MeasureColumns:      generated.MeasureColumns,
 		GroupByColumns:      generated.GroupByColumns,
 		LifecycleBefore:     node.Properties.LifecycleStatus,
@@ -190,10 +233,11 @@ func (m *CubeMaterializer) ValidateAndPlan(ctx context.Context, req CubeMaterial
 
 	if !req.Force &&
 		node.Properties.LifecycleStatus == models.LifecycleActive &&
+		node.Properties.DualCommitWatermark != nil &&
 		strings.TrimSpace(node.Properties.CubeContentHash) != "" &&
 		node.Properties.CubeContentHash == cube.ContentHash {
 		plan.Noop = true
-		plan.NoopReason = "content_hash unchanged and grain already Active"
+		plan.NoopReason = "content_hash unchanged and grain already dual-committed Active"
 	}
 	return plan, nil
 }
@@ -252,10 +296,71 @@ func (m *CubeMaterializer) ApplyHot(ctx context.Context, plan *CubeMaterializePl
 		TargetDatabase:      plan.TargetDatabase,
 		AppliedDDL:          true,
 		RowCount:            rowCount,
+		CommittedAt:         time.Now().UTC(),
 	}, nil
 }
 
-// CompleteAttempt marks Active and advances LastRefreshedAt.
+// ApplyCold commits the Iceberg cold tier from the hot StarRocks object (CUBE-1.3).
+func (m *CubeMaterializer) ApplyCold(ctx context.Context, plan *CubeMaterializePlan, hot *CubeMaterializeHotResult) (*CubeMaterializeColdResult, error) {
+	if plan == nil {
+		return nil, fmt.Errorf("cube materializer: plan is required")
+	}
+	if m.cold == nil {
+		return nil, fmt.Errorf("cube materializer: cold writer not configured")
+	}
+	return m.cold.ApplyCold(ctx, plan, hot)
+}
+
+// CompensateHot drops the attempt-scoped hot MV after a cold failure so Active
+// is never reached with only one tier present (CUBE-1.3 dual-commit).
+func (m *CubeMaterializer) CompensateHot(ctx context.Context, plan *CubeMaterializePlan) error {
+	if plan == nil {
+		return fmt.Errorf("cube materializer: plan is required")
+	}
+	if m.starrocksDB == nil {
+		return fmt.Errorf("starrocks connection is not available (check STARROCKS_HOST/PORT/USER/PASSWORD)")
+	}
+	qualified := fmt.Sprintf("%s.%s",
+		quoteStarRocksIdent(plan.TargetDatabase),
+		quoteStarRocksIdent(plan.MaterializationName),
+	)
+	if _, err := m.starrocksDB.ExecContext(ctx, fmt.Sprintf("DROP MATERIALIZED VIEW IF EXISTS %s", qualified)); err != nil {
+		return fmt.Errorf("compensate hot drop %s: %w", qualified, err)
+	}
+	return nil
+}
+
+// CompleteDualCommit marks Active + DualCommitWatermark only after hot and cold both OK.
+func (m *CubeMaterializer) CompleteDualCommit(
+	ctx context.Context,
+	plan *CubeMaterializePlan,
+	hot *CubeMaterializeHotResult,
+	cold *CubeMaterializeColdResult,
+) error {
+	if plan == nil {
+		return fmt.Errorf("cube materializer: plan is required")
+	}
+	if hot == nil || cold == nil || !cold.Applied {
+		return fmt.Errorf("cube materializer: dual-commit requires successful hot and cold results")
+	}
+	nodeID, err := uuid.Parse(plan.NodeID)
+	if err != nil {
+		return fmt.Errorf("cube materializer: invalid node_id: %w", err)
+	}
+	stats := &models.PreAggStats{RowCount: hot.RowCount}
+	if cold.RowCount > 0 {
+		stats.RowCount = cold.RowCount
+	}
+	meta := analytics.DualCommitMeta{
+		IcebergTable:    cold.IcebergTable,
+		HotCommittedAt:  hot.CommittedAt,
+		ColdCommittedAt: cold.CommittedAt,
+	}
+	return m.registry.CompleteDualCommitAttempt(ctx, nodeID, plan.AttemptID, stats, meta)
+}
+
+// CompleteAttempt is retained for callers that only need Active+freshness.
+// CubeMaterializeWorkflow uses CompleteDualCommit (CUBE-1.3).
 func (m *CubeMaterializer) CompleteAttempt(ctx context.Context, plan *CubeMaterializePlan, hot *CubeMaterializeHotResult) error {
 	if plan == nil {
 		return fmt.Errorf("cube materializer: plan is required")

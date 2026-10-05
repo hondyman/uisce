@@ -36,6 +36,16 @@ type PreAggProperties struct {
 	GrainHash       string   `json:"grain_hash,omitempty"`
 	CubeContentHash string   `json:"cube_content_hash,omitempty"`
 
+	// Dual-commit watermark (CUBE-1.3). DualCommitWatermark is set only when
+	// both StarRocks hot and Iceberg cold succeed for the same attempt_id.
+	// HotCommittedAt / ColdCommittedAt record per-tier completion; a missing
+	// DualCommitWatermark means the grain must not be treated as dual-committed
+	// even if LifecycleStatus is active from a legacy single-tier path.
+	DualCommitWatermark *time.Time `json:"dual_commit_watermark,omitempty"`
+	HotCommittedAt      *time.Time `json:"hot_committed_at,omitempty"`
+	ColdCommittedAt     *time.Time `json:"cold_committed_at,omitempty"`
+	IcebergTable        string     `json:"iceberg_table,omitempty"` // qualified cold table name
+
 	// Usage tracking (persisted snapshot)
 	UsageCount            int64   `json:"usage_count,omitempty"`
 	AvgLatencyReductionMs float64 `json:"avg_latency_reduction_ms,omitempty"`

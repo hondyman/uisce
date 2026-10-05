@@ -91,6 +91,59 @@ func (s *PreAggLifecycleService) MarkActiveAttempt(ctx context.Context, id uuid.
 	})
 }
 
+// DualCommitMeta is stamped only after both hot (StarRocks) and cold (Iceberg)
+// succeed for the same attempt (CUBE-1.3).
+type DualCommitMeta struct {
+	IcebergTable    string
+	HotCommittedAt  time.Time
+	ColdCommittedAt time.Time
+}
+
+// MarkActiveDualCommitAttempt marks Active, advances LastRefreshedAt, and sets
+// DualCommitWatermark. Call only after both tiers succeeded; a hot-only success
+// must not reach this path.
+func (s *PreAggLifecycleService) MarkActiveDualCommitAttempt(
+	ctx context.Context,
+	id uuid.UUID,
+	attemptID string,
+	stats *models.PreAggStats,
+	meta DualCommitMeta,
+) error {
+	return s.updateProps(ctx, id, func(p *models.PreAggProperties) {
+		p.LifecycleStatus = models.LifecycleActive
+		now := time.Now().UTC()
+		p.LastRefreshedAt = &now
+		p.LastRefreshStatus = "success"
+		p.LastRefreshError = ""
+		if strings.TrimSpace(attemptID) != "" {
+			p.AttemptID = strings.TrimSpace(attemptID)
+		}
+		if stats != nil {
+			p.RowCount = &stats.RowCount
+			p.SizeBytes = &stats.SizeBytes
+		}
+		hotAt := meta.HotCommittedAt.UTC()
+		coldAt := meta.ColdCommittedAt.UTC()
+		if hotAt.IsZero() {
+			hotAt = now
+		}
+		if coldAt.IsZero() {
+			coldAt = now
+		}
+		p.HotCommittedAt = &hotAt
+		p.ColdCommittedAt = &coldAt
+		// Watermark is the later of the two tier commits (both must have finished).
+		wm := coldAt
+		if hotAt.After(coldAt) {
+			wm = hotAt
+		}
+		p.DualCommitWatermark = &wm
+		if t := strings.TrimSpace(meta.IcebergTable); t != "" {
+			p.IcebergTable = t
+		}
+	})
+}
+
 func (s *PreAggLifecycleService) MarkRefreshing(ctx context.Context, id uuid.UUID) error {
 	return s.updateProps(ctx, id, func(p *models.PreAggProperties) {
 		p.LifecycleStatus = models.LifecycleRefreshing

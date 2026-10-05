@@ -172,7 +172,9 @@ func registerActivities(w worker.Worker, db *sql.DB, controlDB *sql.DB, logger *
 		w.RegisterActivityWithOptions(cubeActs.CubeValidateAndPlan, activity.RegisterOptions{Name: querybuilder.ActCubeValidateAndPlan})
 		w.RegisterActivityWithOptions(cubeActs.CubeBeginAttempt, activity.RegisterOptions{Name: querybuilder.ActCubeBeginAttempt})
 		w.RegisterActivityWithOptions(cubeActs.CubeApplyHot, activity.RegisterOptions{Name: querybuilder.ActCubeApplyHot})
-		w.RegisterActivityWithOptions(cubeActs.CubeCompleteAttempt, activity.RegisterOptions{Name: querybuilder.ActCubeCompleteAttempt})
+		w.RegisterActivityWithOptions(cubeActs.CubeApplyCold, activity.RegisterOptions{Name: querybuilder.ActCubeApplyCold})
+		w.RegisterActivityWithOptions(cubeActs.CubeCompensateHot, activity.RegisterOptions{Name: querybuilder.ActCubeCompensateHot})
+		w.RegisterActivityWithOptions(cubeActs.CubeCompleteDualCommit, activity.RegisterOptions{Name: querybuilder.ActCubeCompleteDualCommit})
 		w.RegisterActivityWithOptions(cubeActs.CubeFailAttempt, activity.RegisterOptions{Name: querybuilder.ActCubeFailAttempt})
 	}
 
