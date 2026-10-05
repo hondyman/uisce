@@ -3505,6 +3505,7 @@ func (s *Server) registerExplorerRoutes(r chi.Router) {
 		r.Route("/cubes", func(r chi.Router) {
 			r.Get("/", s.CubeHandler.HandleListCubes)
 			r.Post("/", s.CubeHandler.HandleCreateCube)
+			r.Get("/metrics", s.CubeHandler.HandleListCubeMetrics)
 			r.Get("/{id}", s.CubeHandler.HandleGetCube)
 			r.Patch("/{id}", s.CubeHandler.HandlePatchCube)
 			r.Post("/{id}/validate", s.CubeHandler.HandleValidateCube)

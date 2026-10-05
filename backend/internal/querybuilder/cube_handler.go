@@ -842,6 +842,71 @@ func (h *CubeHandler) HandlePublishCubeVersion(w http.ResponseWriter, r *http.Re
 	})
 }
 
+// cubeMetricOption is the governed-metric picker row for Cube Designer.
+type cubeMetricOption struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Description  string `json:"description,omitempty"`
+	BOID         string `json:"boId"`
+	ContentHash  string `json:"contentHash,omitempty"`
+	Decomposable bool   `json:"decomposable"`
+	IsCore       bool   `json:"isCore"`
+	Status       string `json:"status"`
+}
+
+// HandleListCubeMetrics handles GET /api/cubes/metrics?boId=
+//
+// Returns active governed metrics (own-tenant + core) for the cube metric
+// picker. Optional boId filters to metrics declared on that business object.
+func (h *CubeHandler) HandleListCubeMetrics(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
+	if err != nil {
+		h.writeError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	boID := strings.TrimSpace(r.URL.Query().Get("boId"))
+	args := []interface{}{secCtx.TenantID}
+	where := `(tenant_id = $1 OR is_core = true) AND status = 'active' AND archived_at IS NULL`
+	if boID != "" {
+		args = append(args, boID)
+		where += fmt.Sprintf(` AND bo_id = $%d`, len(args))
+	}
+
+	q := `
+		SELECT id::text, name, COALESCE(description,'') AS description, bo_id,
+		       COALESCE(content_hash,'') AS content_hash, decomposable, is_core, status
+		FROM data_explorer.metric_definition
+		WHERE ` + where + `
+		ORDER BY name ASC
+		LIMIT 500`
+
+	type row struct {
+		ID           string `db:"id"`
+		Name         string `db:"name"`
+		Description  string `db:"description"`
+		BOID         string `db:"bo_id"`
+		ContentHash  string `db:"content_hash"`
+		Decomposable bool   `db:"decomposable"`
+		IsCore       bool   `db:"is_core"`
+		Status       string `db:"status"`
+	}
+	var rows []row
+	if err := h.db.SelectContext(r.Context(), &rows, q, args...); err != nil {
+		h.writeError(w, fmt.Errorf("list metrics: %w", err), http.StatusInternalServerError)
+		return
+	}
+	out := make([]cubeMetricOption, 0, len(rows))
+	for _, rw := range rows {
+		out = append(out, cubeMetricOption{
+			ID: rw.ID, Name: rw.Name, Description: rw.Description, BOID: rw.BOID,
+			ContentHash: rw.ContentHash, Decomposable: rw.Decomposable,
+			IsCore: rw.IsCore, Status: rw.Status,
+		})
+	}
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{"metrics": out})
+}
+
 func readLimitedBody(r *http.Request, max int64) ([]byte, error) {
 	if r.Body == nil {
 		return nil, nil

@@ -2,6 +2,7 @@ import apiClient from '../../utils/apiClient';
 import type {
   CubeDefinition,
   CubeListResponse,
+  CubeMetricOption,
   CubeScope,
   CubeValidateResponse,
 } from './types';
@@ -12,6 +13,14 @@ export type ListCubesParams = {
   limit?: number;
   boId?: string;
 };
+
+export async function listCubeMetrics(boId?: string): Promise<CubeMetricOption[]> {
+  const q = new URLSearchParams();
+  if (boId) q.set('boId', boId);
+  const qs = q.toString();
+  const res = await apiClient<{ metrics: CubeMetricOption[] }>(`cubes/metrics${qs ? `?${qs}` : ''}`);
+  return res.metrics ?? [];
+}
 
 export async function listCubes(params: ListCubesParams = {}): Promise<CubeListResponse> {
   const q = new URLSearchParams();

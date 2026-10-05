@@ -83,3 +83,24 @@ export type CubeValidateResponse = {
   contractVersion?: number;
   orphanRateMaxPct?: number;
 };
+
+export type CubeMetricOption = {
+  id: string;
+  name: string;
+  description?: string;
+  boId: string;
+  contentHash?: string;
+  decomposable: boolean;
+  isCore: boolean;
+  status: string;
+};
+
+export type CubeDraft = {
+  name: string;
+  description: string;
+  boId: string;
+  dimensions: CubeDimension[];
+  metricIds: string[];
+  grains: string[][];
+  materialization: CubeMaterialization;
+};
