@@ -13,7 +13,7 @@ import (
 )
 
 // A tenant's structure is compiled from what alpha holds after the gold copy's scan, not cloned from the gold copy's
-// database (ADR-048). Two steps: PlanTenantStructure runs first, before anything is created, so a scan that is not
+// database (ADR-050). Two steps: PlanTenantStructure runs first, before anything is created, so a scan that is not
 // deployable (incomplete, stale in a way the scan itself shows, unsupported, not the gold copy's) refuses the run with
 // nothing to undo; ApplyTenantStructure then applies exactly what was planned, and refuses if the template has changed.
 

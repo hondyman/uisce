@@ -16,11 +16,11 @@ type ProvisionTenantRequest struct {
 	// When set, the tenant also gets its own role, binding, migrations and a probe (ADR-030).
 	App string `json:"app,omitempty"`
 	// TemplateDatasourceID, with App, builds the tenant's structure from what alpha holds for this datasource after its
-	// scan, instead of cloning the gold copy's database (ADR-048). It must be the gold-copy tenant's datasource; the
+	// scan, instead of cloning the gold copy's database (ADR-050). It must be the gold-copy tenant's datasource; the
 	// saga checks that before it creates anything. Empty keeps the clone.
 	TemplateDatasourceID string `json:"template_datasource_id,omitempty"`
 	// StructureFromGoldCopy, with App, builds the structure from the datasource the gold copy marks as the template for App
-	// (ADR-048), so the request names no id. The saga refuses when none, or more than one, is marked. Exclusive with
+	// (ADR-050), so the request names no id. The saga refuses when none, or more than one, is marked. Exclusive with
 	// TemplateDatasourceID.
 	StructureFromGoldCopy bool `json:"structure_from_gold_copy,omitempty"`
 }
@@ -176,7 +176,7 @@ type TenantDatabaseInput struct {
 	// DatasourceID is set from BindTenantDatabase's result for every later step.
 	DatasourceID    string
 	BaselineThrough string
-	// TemplateDatasourceID and StructureHash drive the structure steps (ADR-048). The hash is what the planning step
+	// TemplateDatasourceID and StructureHash drive the structure steps (ADR-050). The hash is what the planning step
 	// compiled; applying refuses if the template compiles to something else by then.
 	TemplateDatasourceID string
 	StructureHash        string

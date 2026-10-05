@@ -1,6 +1,6 @@
 # Letting tenants' application roles connect to their own databases
 
-**Owner: platform. Applies to:** any Postgres cluster that hosts tenant databases (ADR-030, ADR-048).
+**Owner: platform. Applies to:** any Postgres cluster that hosts tenant databases (ADR-030, ADR-050).
 
 A tenant's database is reached by its own role, `<database>_app`, with a password the saga stores in the secrets store. That
 role has to be allowed in by `pg_hba.conf`. On a cluster whose `pg_hba.conf` has been tightened to specific roles (the dev
@@ -85,7 +85,7 @@ on any other (the saga's isolation probe checks the same from the worker).
 ## The tenant password is the credential of record
 
 Over `hostssl` with scram, each tenant database's access is **one password per tenant role**: where it lives, how it changes and what
-a leak costs are recorded in ADR-048 ("The tenant password is the credential of record"). In short: stored in the secrets store, not in
+a leak costs are recorded in ADR-050 ("The tenant password is the credential of record"). In short: stored in the secrets store, not in
 the datasource row (which holds only `secret_path`); **rotation is manual**; a leaked one exposes one tenant's data to anyone the
 `pg_hba` rule admits, and nothing else.
 

@@ -17,7 +17,7 @@ import (
 )
 
 // The template is not a directory of files. It is the gold-copy tenant's datasource and what alpha holds for it after
-// that datasource was scanned (ADR-048). A datasource declares, in its config, the schemas a tenant's copy contains.
+// that datasource was scanned (ADR-050). A datasource declares, in its config, the schemas a tenant's copy contains.
 
 var (
 	// ErrNotGoldCopy: the datasource is not the gold-copy tenant's. Only the gold copy owns templates; a tenant's own

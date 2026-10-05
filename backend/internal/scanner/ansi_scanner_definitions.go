@@ -12,7 +12,7 @@ import (
 )
 
 // A scan has to record enough to rebuild the structure it scanned, because a tenant structure is built from what
-// alpha holds after the gold copy's scan is synced, never straight from the source (ADR-048). Columns, primary and
+// alpha holds after the gold copy's scan is synced, never straight from the source (ADR-050). Columns, primary and
 // unique keys and foreign keys were already recorded. This records the rest, so nothing a deploy needs lives only in
 // the source database:
 //

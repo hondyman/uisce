@@ -1,6 +1,6 @@
 -- 20261217_001_structure_template_marker.up.sql
 --
--- ADR-048. The gold copy's template datasource is a property of the gold copy, not a setting.
+-- ADR-050. The gold copy's template datasource is a property of the gold copy, not a setting.
 --
 -- structure_template_app marks the ONE datasource a new tenant's structure for that app is compiled
 -- from. NULL means "not a template". The partial unique index is the guarantee: at most one marked

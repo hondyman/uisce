@@ -187,7 +187,7 @@ const sagaCompensationVersion = "saga-compensation-v2"
 // request that does not name an app takes exactly the path it took before.
 const sagaTenantDatabaseVersion = "saga-tenant-database-v1"
 
-// sagaTenantStructureVersion gates the compiled-structure path (ADR-048): the tenant's structure is compiled from what
+// sagaTenantStructureVersion gates the compiled-structure path (ADR-050): the tenant's structure is compiled from what
 // alpha holds after the gold copy's scan instead of being cloned from the gold copy's database. It also requires App and
 // TemplateDatasourceID, so a request that names no template takes exactly the path it took before.
 const sagaTenantStructureVersion = "saga-tenant-structure-v1"
@@ -353,7 +353,7 @@ func tenantInstanceProvisioning(ctx workflow.Context, input provisioning.Provisi
 			"tenantOwned", state.TenantOwned, "instanceOwned", state.InstanceOwned)
 	}
 
-	// 3b. Plan the structure (ADR-048), before anything is created: a template that cannot be deployed (an incomplete or
+	// 3b. Plan the structure (ADR-050), before anything is created: a template that cannot be deployed (an incomplete or
 	// unsupported scan, or a datasource that is not the gold copy's) refuses the run here, with nothing but the two rows
 	// above to undo.
 	structureMode := input.App != "" && (input.TemplateDatasourceID != "" || input.StructureFromGoldCopy) &&

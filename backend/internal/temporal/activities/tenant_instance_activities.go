@@ -34,7 +34,7 @@ type TenantProvisioningActivities struct {
 	TenantDB   TenantDatabaseAdmin
 	Migrations *migrations.TenantRunner
 	Creds      *dscreds.Resolver
-	// Templates loads the gold copy's scan for the structure steps (tenant_structure_activities.go, ADR-048). Unset, those
+	// Templates loads the gold copy's scan for the structure steps (tenant_structure_activities.go, ADR-050). Unset, those
 	// steps fail closed.
 	Templates *tenantschema.Loader
 	// RoleGroup, when set, is a cluster role every tenant's role is made a member of, so one pg_hba.conf line
