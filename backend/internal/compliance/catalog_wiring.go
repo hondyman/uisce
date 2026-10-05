@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/hondyman/uisce/backend/internal/catalog"
 )
 
@@ -23,6 +24,7 @@ const (
 	EdgeTypeExtendsCoreRule = "EXTENDS_CORE_RULE"
 	EdgeTypeAppliedTo       = "IS_APPLIED_TO"
 	EdgeTypeClassifiedAs    = "IS_CLASSIFIED_AS"
+	EdgeTypeMemberOf        = "MEMBER_OF"
 )
 
 // InheritMode represents rule inheritance mode
@@ -102,6 +104,12 @@ type ComplianceRuleRecord struct {
 	CompiledBytecode    []byte                 `json:"-"` // Kept separate from graph JSON payload
 	Priority            int                    `json:"priority"`
 	IsActive            bool                   `json:"isActive"`
+	EffectiveFrom       time.Time              `json:"effectiveFrom"`
+	EffectiveTo         *time.Time             `json:"effectiveTo,omitempty"`
+	Citation            string                 `json:"citation,omitempty"`
+	Jurisdictions       []string               `json:"jurisdictions,omitempty"`
+	SourceVersion       string                 `json:"sourceVersion,omitempty"`
+	LibraryStatus       string                 `json:"libraryStatus,omitempty"`
 	CreatedAt           time.Time              `json:"createdAt"`
 	UpdatedAt           time.Time              `json:"updatedAt"`
 }
@@ -119,6 +127,15 @@ func (r *ComplianceRuleRecord) ToCatalogNode() catalog.CatalogNode {
 		"priority":              r.Priority,
 		"is_active":             r.IsActive,
 		"has_compiled_bytecode": len(r.CompiledBytecode) > 0,
+		"effective_from":        r.EffectiveFrom.Format(time.RFC3339),
+		"citation":              r.Citation,
+		"jurisdictions":         r.Jurisdictions,
+		"source_version":        r.SourceVersion,
+		"library_status":        r.LibraryStatus,
+	}
+
+	if r.EffectiveTo != nil {
+		props["effective_to"] = r.EffectiveTo.Format(time.RFC3339)
 	}
 
 	if r.CoreRuleID != nil {
@@ -139,7 +156,7 @@ func (r *ComplianceRuleRecord) ToCatalogNode() catalog.CatalogNode {
 	}
 }
 
-// MultiTenantRuleLoader loads and merges Core and Tenant compliance rules.
+// MultiTenantRuleLoader loads and merges Core and Tenant compliance rules with point-in-time effective dating.
 type MultiTenantRuleLoader struct {
 	db *sql.DB
 }
@@ -149,32 +166,49 @@ func NewMultiTenantRuleLoader(db *sql.DB) *MultiTenantRuleLoader {
 	return &MultiTenantRuleLoader{db: db}
 }
 
-// LoadTenantActiveRules loads all active compliance rules for a tenant, resolving inheritance from Core.
-func (l *MultiTenantRuleLoader) LoadTenantActiveRules(ctx context.Context, tenantID uuid.UUID, isGoldCopy bool) ([]ComplianceRuleRecord, error) {
-	// 1. If this tenant is gold_copy, return its direct core rules
+// LoadTenantActiveRules loads active compliance rules for a tenant as of now.
+func (l *MultiTenantRuleLoader) LoadTenantActiveRules(ctx context.Context, tenantID uuid.UUID) ([]ComplianceRuleRecord, error) {
+	return l.LoadTenantActiveRulesAsOf(ctx, tenantID, time.Now().UTC())
+}
+
+// LoadTenantActiveRulesAsOf loads active compliance rules for a tenant as of a specific evaluation timestamp.
+// Dynamically derives whether the tenant is gold_copy from the database.
+func (l *MultiTenantRuleLoader) LoadTenantActiveRulesAsOf(ctx context.Context, tenantID uuid.UUID, asOf time.Time) ([]ComplianceRuleRecord, error) {
+	isGoldCopy, err := l.IsGoldCopyTenant(ctx, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("check gold copy tenant: %w", err)
+	}
+
+	// 1. If this tenant is gold_copy, return its direct core rules in effect
 	if isGoldCopy {
-		return l.loadDirectRules(ctx, tenantID)
+		return l.loadDirectRulesAsOf(ctx, tenantID, asOf)
 	}
 
 	// 2. Otherwise:
-	// a) Fetch core rules from the gold copy tenant
-	goldTenantID, err := l.getGoldCopyTenantID(ctx)
+	// a) Fetch core rules from the gold copy tenant in effect as of asOf
+	goldTenantID, err := l.GetGoldCopyTenantID(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get gold copy tenant: %w", err)
 	}
 
-	coreRules, err := l.loadDirectRules(ctx, goldTenantID)
+	coreRules, err := l.loadDirectRulesAsOf(ctx, goldTenantID, asOf)
 	if err != nil {
 		return nil, fmt.Errorf("load core rules: %w", err)
 	}
 
 	// b) Fetch tenant-specific custom / extended / overridden rules
-	tenantRules, err := l.loadDirectRules(ctx, tenantID)
+	tenantRules, err := l.loadDirectRulesAsOf(ctx, tenantID, asOf)
 	if err != nil {
 		return nil, fmt.Errorf("load tenant rules: %w", err)
 	}
 
-	// c) Merge: Index tenant rules by CoreRuleID and RuleCode
+	// c) Fetch tenant activation matrix
+	activations, err := l.loadTenantActivations(ctx, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("load tenant activations: %w", err)
+	}
+
+	// d) Merge: Index tenant rules by CoreRuleID and RuleCode
 	tenantByCoreID := make(map[uuid.UUID]ComplianceRuleRecord)
 	tenantByCode := make(map[string]ComplianceRuleRecord)
 	customRules := make([]ComplianceRuleRecord, 0)
@@ -192,8 +226,13 @@ func (l *MultiTenantRuleLoader) LoadTenantActiveRules(ctx context.Context, tenan
 
 	merged := make([]ComplianceRuleRecord, 0, len(coreRules)+len(customRules))
 
-	// Resolve Core rules
+	// Resolve Core rules against tenant activation matrix (opt-in by default)
 	for _, cr := range coreRules {
+		act, active := activations[cr.ID]
+		if !active || !act.Enabled {
+			continue // Opt-in: core rules are inactive by default until tenant activates them
+		}
+
 		if override, exists := tenantByCoreID[cr.ID]; exists {
 			switch override.InheritMode {
 			case Extend:
@@ -227,17 +266,52 @@ func (l *MultiTenantRuleLoader) LoadTenantActiveRules(ctx context.Context, tenan
 	return merged, nil
 }
 
-func (l *MultiTenantRuleLoader) loadDirectRules(ctx context.Context, tenantID uuid.UUID) ([]ComplianceRuleRecord, error) {
+func (l *MultiTenantRuleLoader) loadTenantActivations(ctx context.Context, tenantID uuid.UUID) (map[uuid.UUID]TenantRuleActivation, error) {
+	query := `
+		SELECT rule_id, enabled, inherit_mode, activated_by, activated_at, audit_required, created_at, updated_at
+		FROM compliance.tenant_rule_activation
+		WHERE tenant_id = $1
+	`
+	rows, err := l.db.QueryContext(ctx, query, tenantID)
+	if err != nil {
+		// If table does not exist or empty, return empty map
+		return map[uuid.UUID]TenantRuleActivation{}, nil
+	}
+	defer rows.Close()
+
+	activations := make(map[uuid.UUID]TenantRuleActivation)
+	for rows.Next() {
+		var a TenantRuleActivation
+		a.TenantID = tenantID
+		err := rows.Scan(
+			&a.RuleID, &a.Enabled, &a.InheritMode, &a.ActivatedBy, &a.ActivatedAt,
+			&a.AuditRequired, &a.CreatedAt, &a.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan tenant activation: %w", err)
+		}
+		activations[a.RuleID] = a
+	}
+	return activations, rows.Err()
+}
+
+func (l *MultiTenantRuleLoader) loadDirectRulesAsOf(ctx context.Context, tenantID uuid.UUID, asOf time.Time) ([]ComplianceRuleRecord, error) {
 	query := `
 		SELECT id, tenant_id, core_rule_id, inherit_mode, pinned_core_version, drift_status,
 		       rule_code, name, coalesce(description, ''), rule_phase, severity,
 		       ast_condition, parameter_thresholds, compiled_bytecode, priority, is_active,
+		       effective_from, effective_to, coalesce(citation, ''), jurisdictions,
+		       coalesce(source_version, ''), coalesce(library_status, 'ACTIVE'),
 		       created_at, updated_at
 		FROM compliance.compliance_rule
-		WHERE tenant_id = $1 AND is_active = true AND valid_to IS NULL
+		WHERE tenant_id = $1
+		  AND is_active = true
+		  AND valid_to IS NULL
+		  AND effective_from <= $2
+		  AND (effective_to IS NULL OR $2 < effective_to)
 		ORDER BY priority ASC, rule_code ASC
 	`
-	rows, err := l.db.QueryContext(ctx, query, tenantID)
+	rows, err := l.db.QueryContext(ctx, query, tenantID, asOf)
 	if err != nil {
 		return nil, err
 	}
@@ -248,11 +322,14 @@ func (l *MultiTenantRuleLoader) loadDirectRules(ctx context.Context, tenantID uu
 		var r ComplianceRuleRecord
 		var astBytes, paramBytes []byte
 		var inheritModeStr, driftStatusStr string
+		var jurisdictions []string
 
 		err := rows.Scan(
 			&r.ID, &r.TenantID, &r.CoreRuleID, &inheritModeStr, &r.PinnedCoreVersion, &driftStatusStr,
 			&r.RuleCode, &r.Name, &r.Description, &r.RulePhase, &r.Severity,
 			&astBytes, &paramBytes, &r.CompiledBytecode, &r.Priority, &r.IsActive,
+			&r.EffectiveFrom, &r.EffectiveTo, &r.Citation, pq.Array(&jurisdictions),
+			&r.SourceVersion, &r.LibraryStatus,
 			&r.CreatedAt, &r.UpdatedAt,
 		)
 		if err != nil {
@@ -261,6 +338,7 @@ func (l *MultiTenantRuleLoader) loadDirectRules(ctx context.Context, tenantID uu
 
 		r.InheritMode = InheritMode(inheritModeStr)
 		r.DriftStatus = DriftStatus(driftStatusStr)
+		r.Jurisdictions = jurisdictions
 
 		if len(astBytes) > 0 {
 			_ = json.Unmarshal(astBytes, &r.ASTCondition)
@@ -275,15 +353,42 @@ func (l *MultiTenantRuleLoader) loadDirectRules(ctx context.Context, tenantID uu
 	return rules, rows.Err()
 }
 
-func (l *MultiTenantRuleLoader) getGoldCopyTenantID(ctx context.Context) (uuid.UUID, error) {
-	var id uuid.UUID
-	err := l.db.QueryRowContext(ctx, "SELECT uisce_gold_copy_tenant_id()").Scan(&id)
-	if err != nil {
-		// Fallback query if stored in tenants table
-		err = l.db.QueryRowContext(ctx, "SELECT id FROM tenants WHERE gold_copy = true LIMIT 1").Scan(&id)
-		if err != nil {
-			return uuid.Nil, fmt.Errorf("gold copy tenant not found: %w", err)
-		}
+// IsGoldCopyTenant checks whether a given tenant is the master gold-copy tenant.
+// It queries public.tenants.gold_copy and compares with public.uisce_gold_copy_tenant_id().
+func (l *MultiTenantRuleLoader) IsGoldCopyTenant(ctx context.Context, tenantID uuid.UUID) (bool, error) {
+	var isGold bool
+	err := l.db.QueryRowContext(ctx, "SELECT COALESCE(gold_copy, false) FROM public.tenants WHERE id = $1", tenantID).Scan(&isGold)
+	if err == nil {
+		return isGold, nil
 	}
-	return id, nil
+
+	goldID, err := l.GetGoldCopyTenantID(ctx)
+	if err == nil && goldID != uuid.Nil {
+		return goldID == tenantID, nil
+	}
+	return false, nil
+}
+
+// GetGoldCopyTenantID resolves the master gold-copy tenant UUID from the system.
+func (l *MultiTenantRuleLoader) GetGoldCopyTenantID(ctx context.Context) (uuid.UUID, error) {
+	var id uuid.UUID
+	// 1. Check SQL function uisce_gold_copy_tenant_id()
+	err := l.db.QueryRowContext(ctx, "SELECT public.uisce_gold_copy_tenant_id()").Scan(&id)
+	if err == nil && id != uuid.Nil {
+		return id, nil
+	}
+
+	// 2. Query public.tenants for gold_copy = true
+	err = l.db.QueryRowContext(ctx, "SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1").Scan(&id)
+	if err == nil && id != uuid.Nil {
+		return id, nil
+	}
+
+	// 3. Check if compliance rules exist under core library source_version
+	err = l.db.QueryRowContext(ctx, "SELECT tenant_id FROM compliance.compliance_rule WHERE source_version = 'CORE_LIB_V1' LIMIT 1").Scan(&id)
+	if err == nil && id != uuid.Nil {
+		return id, nil
+	}
+
+	return uuid.Nil, errors.New("no gold copy master tenant configured")
 }

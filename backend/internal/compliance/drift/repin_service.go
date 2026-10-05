@@ -67,9 +67,8 @@ func (s *RepinService) RepinTenantRule(ctx context.Context, req RepinRuleRequest
 	}
 	defer tx.Rollback()
 
-	// 2. Fetch the updated Core AST
+	// 2. Fetch the updated Core AST and verify library status
 	var coreRuleID uuid.UUID
-	var newASTBytes []byte
 	err = tx.QueryRowContext(ctx, `
 		SELECT core_rule_id
 		FROM compliance.compliance_rule
@@ -79,13 +78,19 @@ func (s *RepinService) RepinTenantRule(ctx context.Context, req RepinRuleRequest
 		return nil, fmt.Errorf("fetch tenant rule: %w", err)
 	}
 
+	var newASTBytes []byte
+	var coreStatus string
 	err = tx.QueryRowContext(ctx, `
-		SELECT ast_condition
+		SELECT ast_condition, coalesce(library_status, 'ACTIVE')
 		FROM compliance.compliance_rule
 		WHERE id = $1 AND valid_to IS NULL
-	`, coreRuleID).Scan(&newASTBytes)
+	`, coreRuleID).Scan(&newASTBytes, &coreStatus)
 	if err != nil {
 		return nil, fmt.Errorf("fetch core AST: %w", err)
+	}
+
+	if coreStatus == "PROVISIONAL" {
+		return nil, fmt.Errorf("repinning rejected: core rule %s has PROVISIONAL library status and cannot be repinned without scenario corpus coverage", coreRuleID)
 	}
 
 	// 3. Update Tenant rule with new pinned version and status = RECONCILED
@@ -187,3 +192,64 @@ func toFloat(v interface{}) (float64, bool) {
 		return 0, false
 	}
 }
+
+// SetTenantRuleActivation enables or disables a compliance rule for a tenant and writes an immutable audit record
+func (s *RepinService) SetTenantRuleActivation(
+	ctx context.Context,
+	tenantID, ruleID uuid.UUID,
+	enabled bool,
+	inheritMode, stewardID, stewardNotes string,
+) error {
+	if stewardID == "" {
+		return errors.New("stewardId is required for rule activation audit trail")
+	}
+	if inheritMode == "" {
+		inheritMode = "inherit"
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Upsert tenant rule activation record
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO compliance.tenant_rule_activation (
+			tenant_id, rule_id, enabled, inherit_mode, activated_by, activated_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, now(), now()
+		)
+		ON CONFLICT (tenant_id, rule_id) DO UPDATE SET
+			enabled = EXCLUDED.enabled,
+			inherit_mode = EXCLUDED.inherit_mode,
+			activated_by = EXCLUDED.activated_by,
+			activated_at = EXCLUDED.activated_at,
+			updated_at = now()
+	`, tenantID, ruleID, enabled, inheritMode, stewardID)
+	if err != nil {
+		return fmt.Errorf("upsert tenant rule activation: %w", err)
+	}
+
+	// 2. Emit governance audit event
+	eventType := "RULE_ACTIVATED"
+	if !enabled {
+		eventType = "RULE_DEACTIVATED"
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO compliance.governance_audit_event (
+			id, tenant_id, rule_id, event_type, old_pinned_version, new_pinned_version,
+			steward_id, steward_notes, corpus_run_results, created_at
+		) VALUES (
+			gen_random_uuid(), $1, $2, $3, 1, 1,
+			$4, $5, '{}'::jsonb, now()
+		)
+	`, tenantID, ruleID, eventType, stewardID, stewardNotes)
+	if err != nil {
+		return fmt.Errorf("insert governance audit event: %w", err)
+	}
+
+	return tx.Commit()
+}
+
