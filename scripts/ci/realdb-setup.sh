@@ -4,6 +4,12 @@
 # scratch databases. Prints the env file the tests read on stdout (KEY=VALUE lines).
 set -euo pipefail
 : "${PGHOST:?}" "${PGPORT:?}" "${PGUSER:?}" "${PGPASSWORD:?}"
+# The superuser password is rotated to a random one for this run, and masked in CI logs, so no fixed credential is
+# ever used by the tests. PGPASSWORD is the bootstrap password the cluster was started with.
+pw="$(python3 -c 'import secrets;print(secrets.token_hex(16))')"
+[ -z "${GITHUB_ACTIONS:-}" ] || echo "::add-mask::${pw}" >&2
+psql -v ON_ERROR_STOP=1 -X -q -d postgres -c "ALTER ROLE ${PGUSER} PASSWORD '${pw}'"
+export PGPASSWORD="${pw}"
 q() { psql -v ON_ERROR_STOP=1 -X -q -d postgres "$@"; }
 
 # Provisioning proves a tenant role can reach no other database, so nothing may be open to PUBLIC.

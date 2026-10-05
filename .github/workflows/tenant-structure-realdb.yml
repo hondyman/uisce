@@ -5,8 +5,8 @@ name: Tenant Structure (Real Database)
 # wherever no database was configured, so CI was green without proving any of it (ADR-048).
 #
 # There is no skip path in this job. scripts/ci/realdb-check.py fails it when a database test
-# skipped, failed, or ran fewer tests than scripts/ci/realdb-minimums.txt requires, so "no
-# database reachable" and "zero tests matched" are failures. Lowering a minimum is a visible edit
+# skipped or failed, or when any test that `go test -list` finds (scripts/ci/realdb-packages.txt) did not pass, so "no
+# database reachable" and "zero tests matched" are failures. Excluding a test is a visible edit
 # to that file in review.
 #
 # No paths filter: this check is required, and a required check that a path filter leaves
@@ -53,22 +53,6 @@ jobs:
           echo "Postgres never became ready: failing, not skipping" >&2
           exit 1
 
-      - name: Prepare the throwaway cluster
-        run: bash scripts/ci/realdb-setup.sh > "$RUNNER_TEMP/realdb.env"
-
-      - name: Run the real-database tests
-        working-directory: backend
-        run: |
-          set -a; . "$RUNNER_TEMP/realdb.env"; set +a
-          {
-            go test -json -count=1 -p 1 -timeout 20m \
-              -run '^(TestTenantDatabase_|TestIsolation_|TestStructure_|TestStructureBind_|TestRoleGroup_|TestConcurrentProvision_|TestConfigureFromEnv_)' \
-              -skip '^TestStructure_OnboardingTimingOnARealTemplate$' \
-              ./internal/temporal/activities/
-            go test -json -count=1 -p 1 -timeout 20m \
-              ./internal/scanner/ ./internal/tenantschema/ ./internal/migrations/
-          } > "$RUNNER_TEMP/realdb.json" || true
-          # The verdict comes from the checker, which also fails on a go test failure.
-
-      - name: Fail unless every real-database test ran and passed
-        run: python3 scripts/ci/realdb-check.py "$RUNNER_TEMP/realdb.json" scripts/ci/realdb-minimums.txt
+      - name: Run the real-database gate
+        # The same script a developer runs locally (scripts/ci/realdb-local.sh): setup, tests and checker in one path.
+        run: bash scripts/ci/realdb-run.sh

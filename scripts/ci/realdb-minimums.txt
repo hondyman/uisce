@@ -1,4 +1,0 @@
-internal/temporal/activities 40
-internal/migrations 27
-internal/tenantschema 26
-internal/scanner 16
