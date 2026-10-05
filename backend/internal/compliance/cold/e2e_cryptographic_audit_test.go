@@ -42,7 +42,7 @@ func TestCompliance_EndToEndCryptographicAuditHotWarmColdCLI(t *testing.T) {
 	tenantID := uuid.New()
 	ruleID := uuid.New()
 
-	// 1. Insert rule for tenant
+	// 1. Insert rule for tenant and rule version snapshot
 	ruleQ := `
 		INSERT INTO compliance.compliance_rule (
 			id, tenant_id, inherit_mode, pinned_core_version, drift_status,
@@ -57,10 +57,23 @@ func TestCompliance_EndToEndCryptographicAuditHotWarmColdCLI(t *testing.T) {
 	_, err = pgDB.Exec(ruleQ, ruleID, tenantID)
 	require.NoError(t, err)
 
+	ruleVerQ := `
+		INSERT INTO compliance.compliance_rule_version (
+			rule_id, version, tenant_id, resolved_ast, parameter_thresholds,
+			citation, effective_from, content_hash, compiled_bytecode_hash, created_by
+		) VALUES (
+			$1, 1, $2, '{}'::jsonb, '{}'::jsonb,
+			'E2E Test Citation', NOW(), 'content_hash_e2e', 'bytecode_hash_e2e', 'test'
+		) ON CONFLICT (rule_id, version) DO NOTHING
+	`
+	_, err = pgDB.Exec(ruleVerQ, ruleID, tenantID)
+	require.NoError(t, err)
+
 	defer func() {
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_evaluation_event WHERE tenant_id = $1", tenantID)
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_watermark_checkpoint WHERE tenant_id = $1", tenantID)
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_archive_manifest WHERE tenant_id = $1", tenantID)
+		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_rule_version WHERE rule_id = $1", ruleID)
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_rule WHERE id = $1", ruleID)
 	}()
 
@@ -68,11 +81,11 @@ func TestCompliance_EndToEndCryptographicAuditHotWarmColdCLI(t *testing.T) {
 	for i := 1; i <= 10; i++ {
 		insertQ := `
 			INSERT INTO compliance.compliance_evaluation_event (
-				id, lineage_id, tenant_id, order_id, rule_id, rule_version,
+				id, lineage_id, tenant_id, order_id, rule_id, rule_version, rule_content_hash,
 				passed, action_taken, latency_micros, evaluation_hash,
 				input_params, metric_snapshots, evaluated_at, created_at, ingest_lsn
 			) VALUES (
-				$1, $2, $3, $4, $5, 1,
+				$1, $2, $3, $4, $5, 1, 'content_hash_e2e',
 				true, 'APPROVED', 140, $6,
 				'{"price":"185.500000","qty":"500.000000"}'::jsonb, '{"exposure":"92750.000000"}'::jsonb,
 				NOW(), NOW(), (pg_current_wal_lsn() - '0/0'::pg_lsn)::bigint
@@ -128,9 +141,11 @@ func TestCompliance_EndToEndCryptographicAuditHotWarmColdCLI(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(10), coldResult.RowsArchived)
 	require.NotEmpty(t, coldResult.MerkleRootHash)
+	require.NotEmpty(t, coldResult.RuleRegistryMerkleRoot)
+	require.NotEmpty(t, coldResult.RuleRegistryS3Key)
 	require.NotEmpty(t, coldResult.ETag)
-	t.Logf("Warm -> Cold WORM Archive PASSED: S3Key=%s, MerkleRoot=%s, ETag=%s",
-		coldResult.S3Key, coldResult.MerkleRootHash, coldResult.ETag)
+	t.Logf("Warm -> Cold WORM Archive PASSED: S3Key=%s, MerkleRoot=%s, RuleRegistryKey=%s, RuleRegistryMerkleRoot=%s, ETag=%s",
+		coldResult.S3Key, coldResult.MerkleRootHash, coldResult.RuleRegistryS3Key, coldResult.RuleRegistryMerkleRoot, coldResult.ETag)
 
 	// 5. Cold -> Verification CLI: Independently download Parquet and verify Merkle root
 	downloadedParquet, err := s3Client.DownloadObject(ctx, coldResult.S3Bucket, coldResult.S3Key)
@@ -145,5 +160,16 @@ func TestCompliance_EndToEndCryptographicAuditHotWarmColdCLI(t *testing.T) {
 	require.Equal(t, "VERIFIED_TAMPER_EVIDENT_MATCH", report.AuditStatus)
 	require.Equal(t, int64(10), report.RecordCount)
 
-	t.Logf("END-TO-END CRYPTOGRAPHIC AUDIT PASSED: 100%% Merkle Match, Status = %s", report.AuditStatus)
+	// Verify Companion Rule Registry slice
+	downloadedRuleParquet, err := s3Client.DownloadObject(ctx, coldResult.S3Bucket, coldResult.RuleRegistryS3Key)
+	require.NoError(t, err)
+
+	ruleReport, err := verifier.VerifyRuleRegistrySlice(ctx, downloadedRuleParquet, coldResult.RuleRegistryMerkleRoot)
+	require.NoError(t, err)
+	require.True(t, ruleReport.RootMatch, "Rule registry Merkle root must match signed manifest root 100%%")
+	require.True(t, ruleReport.InclusionProofs, "Rule registry leaf inclusion proofs must verify")
+	require.Equal(t, "VERIFIED_TAMPER_EVIDENT_MATCH", ruleReport.AuditStatus)
+	require.Equal(t, int64(1), ruleReport.RecordCount)
+
+	t.Logf("END-TO-END CRYPTOGRAPHIC AUDIT PASSED: 100%% Merkle Match (Evaluations + Rule Registry), Status = %s", report.AuditStatus)
 }

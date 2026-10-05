@@ -62,7 +62,7 @@ func (v *ArchiveVerifier) VerifyParquetSlice(ctx context.Context, parquetBytes [
 	leaves := make([][]byte, len(records))
 	for i, r := range records {
 		leaf, err := CanonicalEvaluationLeaf(
-			r.LineageID, r.TenantID, r.RuleID, int(r.RuleVersion),
+			r.LineageID, r.TenantID, r.RuleID, int(r.RuleVersion), r.RuleContentHash,
 			r.ActionTaken, r.IngestLSN,
 			json.RawMessage(r.InputParams), json.RawMessage(r.MetricSnapshots),
 		)
@@ -102,6 +102,75 @@ func (v *ArchiveVerifier) VerifyParquetSlice(ctx context.Context, parquetBytes [
 		TenantID:        tenantID,
 		StartLSN:        records[0].IngestLSN,
 		EndLSN:          records[len(records)-1].IngestLSN,
+		RecordCount:     int64(len(records)),
+		FileSizeBytes:   int64(len(parquetBytes)),
+		SHA256Checksum:  checksumHex,
+		ManifestRoot:    manifestRoot,
+		ComputedRoot:    computedRoot,
+		RootMatch:       rootMatches,
+		InclusionProofs: proofsValid,
+		VerifiedAt:      time.Now().UTC(),
+		AuditStatus:     status,
+	}, nil
+}
+
+// VerifyRuleRegistrySlice independently reads companion rule registry Parquet bytes and recomputes the Merkle Root
+func (v *ArchiveVerifier) VerifyRuleRegistrySlice(ctx context.Context, parquetBytes []byte, manifestRoot string) (*VerificationReport, error) {
+	if len(parquetBytes) == 0 {
+		return nil, fmt.Errorf("cannot verify empty rule registry parquet bytes")
+	}
+
+	checksum := sha256.Sum256(parquetBytes)
+	checksumHex := hex.EncodeToString(checksum[:])
+
+	// 1. Read records from raw Parquet
+	records, err := ReadCanonicalRuleRegistryParquet(bytes.NewReader(parquetBytes), int64(len(parquetBytes)))
+	if err != nil {
+		return nil, fmt.Errorf("read canonical rule registry parquet bytes: %w", err)
+	}
+
+	if len(records) == 0 {
+		return nil, fmt.Errorf("rule registry parquet file contains 0 records")
+	}
+
+	// 2. Sort records deterministically (RuleID ASC, Version ASC)
+	SortRuleRegistryRecords(records)
+
+	// 3. Compute leaves
+	leaves := make([][]byte, len(records))
+	for i, r := range records {
+		leaf := CanonicalRuleLeaf(r.RuleID, r.Version, r.ContentHash, r.CompiledBytecodeHash)
+		leaves[i] = leaf
+	}
+
+	// 4. Build Merkle tree and extract root
+	tree, computedRoot := BuildMerkleTree(leaves)
+
+	rootMatches := computedRoot == manifestRoot
+
+	// 5. Verify sample inclusion proofs
+	proofsValid := true
+	sampleIndices := []int{0, len(records) / 2, len(records) - 1}
+	for _, idx := range sampleIndices {
+		proof, err := tree.GenerateProof(idx)
+		if err != nil || !VerifyInclusionProof(tree.Leaves[idx], proof, computedRoot) {
+			proofsValid = false
+			break
+		}
+	}
+
+	status := "VERIFIED_TAMPER_EVIDENT_MATCH"
+	if !rootMatches || !proofsValid {
+		status = "CRYPTOGRAPHIC_MISMATCH_TAMPERED"
+	}
+
+	tenantID := ""
+	if len(records) > 0 {
+		tenantID = records[0].TenantID
+	}
+
+	return &VerificationReport{
+		TenantID:        tenantID,
 		RecordCount:     int64(len(records)),
 		FileSizeBytes:   int64(len(parquetBytes)),
 		SHA256Checksum:  checksumHex,

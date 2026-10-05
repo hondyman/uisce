@@ -58,7 +58,7 @@ func TestColdArchivalWorker_MultiBatchContiguityAndQuarantineRecovery(t *testing
 	tenantID := uuid.New()
 	ruleID := uuid.New()
 
-	// Insert test compliance rule
+	// Insert test compliance rule and version snapshot
 	ruleQ := `
 		INSERT INTO compliance.compliance_rule (
 			id, tenant_id, inherit_mode, pinned_core_version, drift_status,
@@ -73,10 +73,23 @@ func TestColdArchivalWorker_MultiBatchContiguityAndQuarantineRecovery(t *testing
 	_, err = pgDB.Exec(ruleQ, ruleID, tenantID)
 	require.NoError(t, err)
 
+	ruleVerQ := `
+		INSERT INTO compliance.compliance_rule_version (
+			rule_id, version, tenant_id, resolved_ast, parameter_thresholds,
+			citation, effective_from, content_hash, compiled_bytecode_hash, created_by
+		) VALUES (
+			$1, 1, $2, '{}'::jsonb, '{}'::jsonb,
+			'Test Citation', NOW(), 'content_hash_cold_1', 'bytecode_hash_cold_1', 'test'
+		) ON CONFLICT (rule_id, version) DO NOTHING
+	`
+	_, err = pgDB.Exec(ruleVerQ, ruleID, tenantID)
+	require.NoError(t, err)
+
 	defer func() {
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_evaluation_event WHERE tenant_id = $1", tenantID)
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_watermark_checkpoint WHERE tenant_id = $1", tenantID)
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_archive_manifest WHERE tenant_id = $1", tenantID)
+		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_rule_version WHERE rule_id = $1", ruleID)
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_rule WHERE id = $1", ruleID)
 	}()
 
@@ -96,11 +109,11 @@ func TestColdArchivalWorker_MultiBatchContiguityAndQuarantineRecovery(t *testing
 	for i := 1; i <= 5; i++ {
 		insertQ := `
 			INSERT INTO compliance.compliance_evaluation_event (
-				id, lineage_id, tenant_id, order_id, rule_id, rule_version,
+				id, lineage_id, tenant_id, order_id, rule_id, rule_version, rule_content_hash,
 				passed, action_taken, latency_micros, evaluation_hash,
 				input_params, metric_snapshots, evaluated_at, created_at, ingest_lsn
 			) VALUES (
-				$1, $2, $3, $4, $5, 1,
+				$1, $2, $3, $4, $5, 1, 'content_hash_cold_1',
 				true, 'APPROVED', 150, $6,
 				'{"batch": 1}'::jsonb, '{"metric": 100}'::jsonb,
 				NOW(), NOW(), $7
@@ -139,11 +152,11 @@ func TestColdArchivalWorker_MultiBatchContiguityAndQuarantineRecovery(t *testing
 	for i := 6; i <= 10; i++ {
 		insertQ := `
 			INSERT INTO compliance.compliance_evaluation_event (
-				id, lineage_id, tenant_id, order_id, rule_id, rule_version,
+				id, lineage_id, tenant_id, order_id, rule_id, rule_version, rule_content_hash,
 				passed, action_taken, latency_micros, evaluation_hash,
 				input_params, metric_snapshots, evaluated_at, created_at, ingest_lsn
 			) VALUES (
-				$1, $2, $3, $4, $5, 1,
+				$1, $2, $3, $4, $5, 1, 'content_hash_cold_1',
 				true, 'APPROVED', 150, $6,
 				'{"batch": 2}'::jsonb, '{"metric": 200}'::jsonb,
 				NOW(), NOW(), $7
@@ -245,7 +258,7 @@ func TestColdArchivalWorker_CrashBeforeManifestCommit_RecoveryResumeAndCLIVerifi
 	tenantID := uuid.New()
 	ruleID := uuid.New()
 
-	// Insert test compliance rule
+	// Insert test compliance rule and version snapshot
 	ruleQ := `
 		INSERT INTO compliance.compliance_rule (
 			id, tenant_id, inherit_mode, pinned_core_version, drift_status,
@@ -260,11 +273,24 @@ func TestColdArchivalWorker_CrashBeforeManifestCommit_RecoveryResumeAndCLIVerifi
 	_, err = pgDB.Exec(ruleQ, ruleID, tenantID)
 	require.NoError(t, err)
 
+	ruleVerQ := `
+		INSERT INTO compliance.compliance_rule_version (
+			rule_id, version, tenant_id, resolved_ast, parameter_thresholds,
+			citation, effective_from, content_hash, compiled_bytecode_hash, created_by
+		) VALUES (
+			$1, 1, $2, '{}'::jsonb, '{}'::jsonb,
+			'Crash Recovery Citation', NOW(), 'content_hash_crash_rec', 'bytecode_hash_crash_rec', 'test'
+		) ON CONFLICT (rule_id, version) DO NOTHING
+	`
+	_, err = pgDB.Exec(ruleVerQ, ruleID, tenantID)
+	require.NoError(t, err)
+
 	defer func() {
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_evaluation_event WHERE tenant_id = $1", tenantID)
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_watermark_checkpoint WHERE tenant_id = $1", tenantID)
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_archive_manifest WHERE tenant_id = $1", tenantID)
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_orphan_object WHERE tenant_id = $1", tenantID)
+		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_rule_version WHERE rule_id = $1", ruleID)
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_rule WHERE id = $1", ruleID)
 	}()
 
@@ -285,11 +311,11 @@ func TestColdArchivalWorker_CrashBeforeManifestCommit_RecoveryResumeAndCLIVerifi
 	for i := 1; i <= 5; i++ {
 		insertQ := `
 			INSERT INTO compliance.compliance_evaluation_event (
-				id, lineage_id, tenant_id, order_id, rule_id, rule_version,
+				id, lineage_id, tenant_id, order_id, rule_id, rule_version, rule_content_hash,
 				passed, action_taken, latency_micros, evaluation_hash,
 				input_params, metric_snapshots, evaluated_at, created_at, ingest_lsn
 			) VALUES (
-				$1, $2, $3, $4, $5, 1,
+				$1, $2, $3, $4, $5, 1, 'content_hash_crash_rec',
 				true, 'APPROVED', 150, $6,
 				'{"recovery_test": true}'::jsonb, '{"metric": 500}'::jsonb,
 				NOW(), NOW(), $7
@@ -309,6 +335,7 @@ func TestColdArchivalWorker_CrashBeforeManifestCommit_RecoveryResumeAndCLIVerifi
 			OrderID:         orderID.String(),
 			RuleID:          ruleID.String(),
 			RuleVersion:     1,
+			RuleContentHash: "content_hash_crash_rec",
 			ActionTaken:     "APPROVED",
 			Passed:          true,
 			LatencyMicros:   150,
@@ -374,11 +401,11 @@ func TestColdArchivalWorker_CrashBeforeManifestCommit_RecoveryResumeAndCLIVerifi
 	for i := 6; i <= 10; i++ {
 		insertQ := `
 			INSERT INTO compliance.compliance_evaluation_event (
-				id, lineage_id, tenant_id, order_id, rule_id, rule_version,
+				id, lineage_id, tenant_id, order_id, rule_id, rule_version, rule_content_hash,
 				passed, action_taken, latency_micros, evaluation_hash,
 				input_params, metric_snapshots, evaluated_at, created_at, ingest_lsn
 			) VALUES (
-				$1, $2, $3, $4, $5, 1,
+				$1, $2, $3, $4, $5, 1, 'content_hash_crash_rec',
 				true, 'APPROVED', 150, $6,
 				'{"batch": 2}'::jsonb, '{"metric": 600}'::jsonb,
 				NOW(), NOW(), $7

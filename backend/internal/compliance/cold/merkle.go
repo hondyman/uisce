@@ -24,8 +24,8 @@ type MerkleTree struct {
 	Root   string
 }
 
-// CanonicalEvaluationLeaf computes a deterministic SHA-256 leaf hash for an evaluation record
-func CanonicalEvaluationLeaf(lineageID, tenantID, ruleID string, ruleVersion int, actionTaken string, ingestLSN int64, inputParams, metricSnapshots json.RawMessage) ([]byte, error) {
+// CanonicalEvaluationLeaf computes a deterministic SHA-256 leaf hash for an evaluation record under schema v2
+func CanonicalEvaluationLeaf(lineageID, tenantID, ruleID string, ruleVersion int, ruleContentHash, actionTaken string, ingestLSN int64, inputParams, metricSnapshots json.RawMessage) ([]byte, error) {
 	// Canonicalize input_params and metric_snapshots using RFC 8785 JCS
 	canonInput, err := canonical.Transform(inputParams)
 	if err != nil {
@@ -37,6 +37,7 @@ func CanonicalEvaluationLeaf(lineageID, tenantID, ruleID string, ruleVersion int
 	}
 
 	h := sha256.New()
+	h.Write([]byte("leaf_v2:"))
 	h.Write([]byte(lineageID))
 	h.Write([]byte(":"))
 	h.Write([]byte(tenantID))
@@ -44,6 +45,8 @@ func CanonicalEvaluationLeaf(lineageID, tenantID, ruleID string, ruleVersion int
 	h.Write([]byte(ruleID))
 	h.Write([]byte(":"))
 	h.Write([]byte(strconv.Itoa(ruleVersion)))
+	h.Write([]byte(":"))
+	h.Write([]byte(ruleContentHash))
 	h.Write([]byte(":"))
 	h.Write([]byte(actionTaken))
 	h.Write([]byte(":"))
@@ -55,6 +58,20 @@ func CanonicalEvaluationLeaf(lineageID, tenantID, ruleID string, ruleVersion int
 
 	sum := h.Sum(nil)
 	return sum, nil
+}
+
+// CanonicalRuleLeaf computes a deterministic SHA-256 leaf hash for a companion rule registry record
+func CanonicalRuleLeaf(ruleID string, version int32, contentHash, bytecodeHash string) []byte {
+	h := sha256.New()
+	h.Write([]byte("rule_leaf_v1:"))
+	h.Write([]byte(ruleID))
+	h.Write([]byte(":"))
+	h.Write([]byte(strconv.Itoa(int(version))))
+	h.Write([]byte(":"))
+	h.Write([]byte(contentHash))
+	h.Write([]byte(":"))
+	h.Write([]byte(bytecodeHash))
+	return h.Sum(nil)
 }
 
 // BuildMerkleTree constructs a binary Merkle tree from a sequence of leaf hashes
@@ -184,6 +201,16 @@ func SortEvaluationRecords(records []CanonicalRecord) {
 	})
 }
 
+// SortRuleRegistryRecords deterministically sorts rule registry records by (RuleID ASC, Version ASC)
+func SortRuleRegistryRecords(records []RuleRegistryRecord) {
+	sort.Slice(records, func(i, j int) bool {
+		if records[i].RuleID != records[j].RuleID {
+			return records[i].RuleID < records[j].RuleID
+		}
+		return records[i].Version < records[j].Version
+	})
+}
+
 // CanonicalRecord is the standard structure for cold tier Parquet and Merkle processing
 type CanonicalRecord struct {
 	LineageID       string `parquet:"lineage_id"`
@@ -192,6 +219,7 @@ type CanonicalRecord struct {
 	OrderID         string `parquet:"order_id"`
 	RuleID          string `parquet:"rule_id"`
 	RuleVersion     int32  `parquet:"rule_version"`
+	RuleContentHash string `parquet:"rule_content_hash"`
 	ActionTaken     string `parquet:"action_taken"`
 	Passed          bool   `parquet:"passed"`
 	LatencyMicros   int64  `parquet:"latency_micros"`
@@ -200,4 +228,19 @@ type CanonicalRecord struct {
 	InputParams     string `parquet:"input_params"`     // Canonical RFC 8785 JCS string
 	MetricSnapshots string `parquet:"metric_snapshots"` // Canonical RFC 8785 JCS string
 	CreatedAt       string `parquet:"created_at"`
+}
+
+// RuleRegistryRecord represents a deduplicated rule version definition stored in the companion parquet slice
+type RuleRegistryRecord struct {
+	RuleID               string `parquet:"rule_id"`
+	Version              int32  `parquet:"version"`
+	TenantID             string `parquet:"tenant_id"`
+	ContentHash          string `parquet:"content_hash"`
+	CompiledBytecodeHash string `parquet:"compiled_bytecode_hash"`
+	ResolvedAST          string `parquet:"resolved_ast"`          // JCS canonical string
+	ParameterThresholds  string `parquet:"parameter_thresholds"`  // JCS canonical string
+	Citation             string `parquet:"citation"`
+	EffectiveFrom        string `parquet:"effective_from"`
+	EffectiveTo          string `parquet:"effective_to"`
+	CreatedAt            string `parquet:"created_at"`
 }

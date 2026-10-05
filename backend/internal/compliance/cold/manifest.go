@@ -31,19 +31,21 @@ const (
 
 // ArchiveManifestRecord models the database row in compliance.compliance_archive_manifest
 type ArchiveManifestRecord struct {
-	ID             uuid.UUID      `json:"id"`
-	TenantID       uuid.UUID      `json:"tenant_id"`
-	LWMStartLSN    int64          `json:"lwm_start_lsn"`
-	LWMEndLSN      int64          `json:"lwm_end_lsn"`
-	MerkleRootHash string         `json:"merkle_root_hash"`
-	S3Bucket       string         `json:"s3_bucket"`
-	S3Key          string         `json:"s3_key"`
-	ETag           string         `json:"etag"`
-	RecordCount    int64          `json:"record_count"`
-	FileSizeBytes  int64          `json:"file_size_bytes"`
-	Status         ManifestStatus `json:"status"`
-	SealedAt       time.Time      `json:"sealed_at"`
-	CreatedAt      time.Time      `json:"created_at"`
+	ID                     uuid.UUID      `json:"id"`
+	TenantID               uuid.UUID      `json:"tenant_id"`
+	LWMStartLSN            int64          `json:"lwm_start_lsn"`
+	LWMEndLSN              int64          `json:"lwm_end_lsn"`
+	MerkleRootHash         string         `json:"merkle_root_hash"`
+	RuleRegistryMerkleRoot string         `json:"rule_registry_merkle_root,omitempty"`
+	S3Bucket               string         `json:"s3_bucket"`
+	S3Key                  string         `json:"s3_key"`
+	RuleRegistryS3Key      string         `json:"rule_registry_s3_key,omitempty"`
+	ETag                   string         `json:"etag"`
+	RecordCount            int64          `json:"record_count"`
+	FileSizeBytes          int64          `json:"file_size_bytes"`
+	Status                 ManifestStatus `json:"status"`
+	SealedAt               time.Time      `json:"sealed_at"`
+	CreatedAt              time.Time      `json:"created_at"`
 }
 
 // OrphanObjectRecord models the database row in compliance.compliance_orphan_object
@@ -77,7 +79,9 @@ func (r *ManifestRepository) GetLastManifest(ctx context.Context, tenantID uuid.
 			id, tenant_id, 
 			(lwm_start_lsn - '0/0'::pg_lsn)::bigint, 
 			(lwm_end_lsn - '0/0'::pg_lsn)::bigint,
-			merkle_root_hash, s3_bucket, s3_key, etag, record_count, file_size_bytes,
+			merkle_root_hash, COALESCE(rule_registry_merkle_root, ''),
+			s3_bucket, s3_key, COALESCE(rule_registry_s3_key, ''),
+			etag, record_count, file_size_bytes,
 			status, sealed_at, created_at
 		FROM compliance.compliance_archive_manifest
 		WHERE tenant_id = $1 AND status IN ('SEALED', 'VERIFIED')
@@ -89,7 +93,9 @@ func (r *ManifestRepository) GetLastManifest(ctx context.Context, tenantID uuid.
 
 	err := r.db.QueryRowContext(ctx, query, tenantID).Scan(
 		&m.ID, &m.TenantID, &m.LWMStartLSN, &m.LWMEndLSN,
-		&m.MerkleRootHash, &m.S3Bucket, &m.S3Key, &m.ETag, &m.RecordCount, &m.FileSizeBytes,
+		&m.MerkleRootHash, &m.RuleRegistryMerkleRoot,
+		&m.S3Bucket, &m.S3Key, &m.RuleRegistryS3Key,
+		&m.ETag, &m.RecordCount, &m.FileSizeBytes,
 		&statusStr, &m.SealedAt, &m.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -143,18 +149,18 @@ func (r *ManifestRepository) InsertManifest(ctx context.Context, m *ArchiveManif
 
 	query := `
 		INSERT INTO compliance.compliance_archive_manifest (
-			id, tenant_id, lwm_start_lsn, lwm_end_lsn, merkle_root_hash,
-			s3_bucket, s3_key, etag, record_count, file_size_bytes,
+			id, tenant_id, lwm_start_lsn, lwm_end_lsn, merkle_root_hash, rule_registry_merkle_root,
+			s3_bucket, s3_key, rule_registry_s3_key, etag, record_count, file_size_bytes,
 			status, sealed_at, created_at
 		) VALUES (
-			$1, $2, '0/0'::pg_lsn + $3, '0/0'::pg_lsn + $4, $5,
-			$6, $7, $8, $9, $10,
-			$11, $12, $13
+			$1, $2, '0/0'::pg_lsn + $3, '0/0'::pg_lsn + $4, $5, $6,
+			$7, $8, $9, $10, $11, $12,
+			$13, $14, $15
 		)
 	`
 	_, err := r.db.ExecContext(ctx, query,
-		m.ID, m.TenantID, m.LWMStartLSN, m.LWMEndLSN, m.MerkleRootHash,
-		m.S3Bucket, m.S3Key, m.ETag, m.RecordCount, m.FileSizeBytes,
+		m.ID, m.TenantID, m.LWMStartLSN, m.LWMEndLSN, m.MerkleRootHash, m.RuleRegistryMerkleRoot,
+		m.S3Bucket, m.S3Key, m.RuleRegistryS3Key, m.ETag, m.RecordCount, m.FileSizeBytes,
 		string(m.Status), m.SealedAt, m.CreatedAt,
 	)
 	if err != nil {

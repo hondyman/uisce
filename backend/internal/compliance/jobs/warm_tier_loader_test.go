@@ -111,7 +111,7 @@ func TestWarmTierLoader_EndToEndBatchSyncAndIdempotency(t *testing.T) {
 	tenantID := uuid.New()
 	ruleID := uuid.New()
 
-	// Insert test compliance rule for this isolated tenant
+	// Insert test compliance rule and version snapshot for this isolated tenant
 	ruleQ := `
 		INSERT INTO compliance.compliance_rule (
 			id, tenant_id, inherit_mode, pinned_core_version, drift_status,
@@ -126,9 +126,22 @@ func TestWarmTierLoader_EndToEndBatchSyncAndIdempotency(t *testing.T) {
 	_, err = pgDB.Exec(ruleQ, ruleID, tenantID)
 	require.NoError(t, err)
 
+	ruleVerQ := `
+		INSERT INTO compliance.compliance_rule_version (
+			rule_id, version, tenant_id, resolved_ast, parameter_thresholds,
+			citation, effective_from, content_hash, compiled_bytecode_hash, created_by
+		) VALUES (
+			$1, 1, $2, '{}'::jsonb, '{}'::jsonb,
+			'Warm Tier Test Citation', NOW(), 'content_hash_warm_1', 'bytecode_hash_warm_1', 'test'
+		) ON CONFLICT (rule_id, version) DO NOTHING
+	`
+	_, err = pgDB.Exec(ruleVerQ, ruleID, tenantID)
+	require.NoError(t, err)
+
 	defer func() {
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_evaluation_event WHERE tenant_id = $1", tenantID)
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_watermark_checkpoint WHERE tenant_id = $1", tenantID)
+		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_rule_version WHERE rule_id = $1", ruleID)
 		_, _ = pgDB.Exec("DELETE FROM compliance.compliance_rule WHERE id = $1", ruleID)
 		_, _ = srDB.Exec("DELETE FROM oms.compliance_evaluations WHERE tenant_id = ?", tenantID.String())
 	}()
@@ -140,11 +153,11 @@ func TestWarmTierLoader_EndToEndBatchSyncAndIdempotency(t *testing.T) {
 		orderID := uuid.New()
 		insertQ := `
 			INSERT INTO compliance.compliance_evaluation_event (
-				id, lineage_id, tenant_id, order_id, rule_id, rule_version,
+				id, lineage_id, tenant_id, order_id, rule_id, rule_version, rule_content_hash,
 				passed, action_taken, latency_micros, evaluation_hash,
 				input_params, metric_snapshots, evaluated_at, created_at, ingest_lsn
 			) VALUES (
-				$1, $2, $3, $4, $5, 1,
+				$1, $2, $3, $4, $5, 1, 'content_hash_warm_1',
 				true, 'APPROVED', 150, $6,
 				'{"test": true}'::jsonb, '{"metric": 100}'::jsonb,
 				NOW(), NOW(), (pg_current_wal_lsn() - '0/0'::pg_lsn)::bigint

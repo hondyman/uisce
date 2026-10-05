@@ -14,19 +14,20 @@ import (
 
 // EvaluationEventPayload represents the wire format of an evaluation event sent to Redpanda
 type EvaluationEventPayload struct {
-	ID             uuid.UUID              `json:"id"`
-	LineageID      uuid.UUID              `json:"lineageId"`
-	TenantID       uuid.UUID              `json:"tenantId"`
-	OrderID        *uuid.UUID             `json:"orderId,omitempty"`
-	RuleID         uuid.UUID              `json:"ruleId"`
-	RuleVersion    int                    `json:"ruleVersion"`
-	Passed         bool                   `json:"passed"`
-	ActionTaken    string                 `json:"actionTaken"`
-	LatencyMicros  int64                  `json:"latencyMicros"`
-	EvaluationHash string                 `json:"evaluationHash"`
-	InputParams    map[string]interface{} `json:"inputParams"`
+	ID              uuid.UUID              `json:"id"`
+	LineageID       uuid.UUID              `json:"lineageId"`
+	TenantID        uuid.UUID              `json:"tenantId"`
+	OrderID         *uuid.UUID             `json:"orderId,omitempty"`
+	RuleID          uuid.UUID              `json:"ruleId"`
+	RuleVersion     int                    `json:"ruleVersion"`
+	RuleContentHash string                 `json:"ruleContentHash"`
+	Passed          bool                   `json:"passed"`
+	ActionTaken     string                 `json:"actionTaken"`
+	LatencyMicros   int64                  `json:"latencyMicros"`
+	EvaluationHash  string                 `json:"evaluationHash"`
+	InputParams     map[string]interface{} `json:"inputParams"`
 	MetricSnapshots map[string]interface{} `json:"metricSnapshots"`
-	EvaluatedAt    time.Time              `json:"evaluatedAt"`
+	EvaluatedAt     time.Time              `json:"evaluatedAt"`
 }
 
 // MessageBroker defines the interface for durable Redpanda/Kafka message producing & consuming
@@ -100,10 +101,10 @@ func (c *HotTierAuditConsumer) ProcessBatch(ctx context.Context, events []Evalua
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO compliance.compliance_evaluation_event (
-			id, lineage_id, tenant_id, order_id, rule_id, rule_version, passed, action_taken,
+			id, lineage_id, tenant_id, order_id, rule_id, rule_version, rule_content_hash, passed, action_taken,
 			latency_micros, evaluation_hash, input_params, metric_snapshots, evaluated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 		) ON CONFLICT (lineage_id, evaluated_at) DO NOTHING
 	`)
 	if err != nil {
@@ -123,7 +124,7 @@ func (c *HotTierAuditConsumer) ProcessBatch(ctx context.Context, events []Evalua
 		}
 
 		_, err := stmt.ExecContext(ctx,
-			ev.ID, ev.LineageID, ev.TenantID, ev.OrderID, ev.RuleID, ev.RuleVersion, ev.Passed, ev.ActionTaken,
+			ev.ID, ev.LineageID, ev.TenantID, ev.OrderID, ev.RuleID, ev.RuleVersion, ev.RuleContentHash, ev.Passed, ev.ActionTaken,
 			ev.LatencyMicros, ev.EvaluationHash, string(inputBytes), string(metricBytes), ev.EvaluatedAt,
 		)
 		if err != nil {

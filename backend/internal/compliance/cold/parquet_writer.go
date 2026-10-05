@@ -36,7 +36,7 @@ func WriteCanonicalParquet(records []CanonicalRecord) ([]byte, *ParquetArchiveSu
 	leaves := make([][]byte, len(sortedRecords))
 	for i, r := range sortedRecords {
 		leaf, err := CanonicalEvaluationLeaf(
-			r.LineageID, r.TenantID, r.RuleID, int(r.RuleVersion),
+			r.LineageID, r.TenantID, r.RuleID, int(r.RuleVersion), r.RuleContentHash,
 			r.ActionTaken, r.IngestLSN,
 			json.RawMessage(r.InputParams), json.RawMessage(r.MetricSnapshots),
 		)
@@ -85,6 +85,58 @@ func WriteCanonicalParquet(records []CanonicalRecord) ([]byte, *ParquetArchiveSu
 	return parquetBytes, summary, merkleTree, nil
 }
 
+// WriteCanonicalRuleRegistryParquet writes companion rule registry records into a deterministic Parquet byte stream
+func WriteCanonicalRuleRegistryParquet(records []RuleRegistryRecord) ([]byte, *ParquetArchiveSummary, *MerkleTree, error) {
+	if len(records) == 0 {
+		return nil, nil, nil, fmt.Errorf("cannot write empty rule registry records slice")
+	}
+
+	// 1. Deterministic sort by RuleID ASC, Version ASC
+	sortedRecords := make([]RuleRegistryRecord, len(records))
+	copy(sortedRecords, records)
+	SortRuleRegistryRecords(sortedRecords)
+
+	// 2. Generate canonical Merkle leaves & build Merkle tree
+	leaves := make([][]byte, len(sortedRecords))
+	for i, r := range sortedRecords {
+		leaf := CanonicalRuleLeaf(r.RuleID, r.Version, r.ContentHash, r.CompiledBytecodeHash)
+		leaves[i] = leaf
+	}
+
+	merkleTree, merkleRoot := BuildMerkleTree(leaves)
+
+	// 3. Write Parquet stream deterministically using parquet-go
+	var buf bytes.Buffer
+	writer := parquet.NewGenericWriter[RuleRegistryRecord](
+		&buf,
+		parquet.Compression(&parquet.Snappy),
+		parquet.PageBufferSize(64*1024),
+	)
+
+	for _, rec := range sortedRecords {
+		if _, err := writer.Write([]RuleRegistryRecord{rec}); err != nil {
+			return nil, nil, nil, fmt.Errorf("write parquet rule registry record: %w", err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, nil, nil, fmt.Errorf("close parquet writer: %w", err)
+	}
+
+	parquetBytes := buf.Bytes()
+	fileChecksum := sha256.Sum256(parquetBytes)
+	checksumHex := hex.EncodeToString(fileChecksum[:])
+
+	summary := &ParquetArchiveSummary{
+		RowCount:       int64(len(sortedRecords)),
+		FileSizeBytes:  int64(len(parquetBytes)),
+		SHA256Checksum: checksumHex,
+		MerkleRoot:     merkleRoot,
+	}
+
+	return parquetBytes, summary, merkleTree, nil
+}
+
 // ReadCanonicalParquet reads all CanonicalRecord rows from a Parquet reader
 func ReadCanonicalParquet(r io.ReaderAt, size int64) ([]CanonicalRecord, error) {
 	file, err := parquet.OpenFile(r, size)
@@ -99,6 +151,25 @@ func ReadCanonicalParquet(r io.ReaderAt, size int64) ([]CanonicalRecord, error) 
 	n, err := reader.Read(records)
 	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("read parquet records: %w", err)
+	}
+
+	return records[:n], nil
+}
+
+// ReadCanonicalRuleRegistryParquet reads all RuleRegistryRecord rows from a Parquet reader
+func ReadCanonicalRuleRegistryParquet(r io.ReaderAt, size int64) ([]RuleRegistryRecord, error) {
+	file, err := parquet.OpenFile(r, size)
+	if err != nil {
+		return nil, fmt.Errorf("open parquet file: %w", err)
+	}
+
+	reader := parquet.NewGenericReader[RuleRegistryRecord](file)
+	defer reader.Close()
+
+	records := make([]RuleRegistryRecord, file.NumRows())
+	n, err := reader.Read(records)
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("read parquet rule registry records: %w", err)
 	}
 
 	return records[:n], nil

@@ -88,20 +88,21 @@ func normalizeValue(v interface{}) (interface{}, error) {
 	}
 }
 
-// EvaluationHashInput contains the fields needed to compute a deterministic EvaluationHash.
+// EvaluationHashInput contains the fields needed to compute a deterministic EvaluationHash under schema v2.
 type EvaluationHashInput struct {
 	LineageID       uuid.UUID              `json:"lineageId"`
 	TenantID        uuid.UUID              `json:"tenantId"`
 	RuleID          uuid.UUID              `json:"ruleId"`
 	RuleVersion     int                    `json:"ruleVersion"`
+	RuleContentHash string                 `json:"ruleContentHash"`
 	ActionTaken     string                 `json:"actionTaken"`
 	Passed          bool                   `json:"passed"`
 	InputParams     map[string]interface{} `json:"inputParams"`
 	MetricSnapshots map[string]interface{} `json:"metricSnapshots"`
 }
 
-// ComputeEvaluationHash generates an RFC 8785 canonical hash of the evaluation event.
-// EvaluationHash = SHA256(LineageID || TenantID || RuleID || RuleVersion || JCS(InputParams) || JCS(MetricSnapshots) || Outcome)
+// ComputeEvaluationHash generates an RFC 8785 canonical hash of the evaluation event under schema v2.
+// EvaluationHash = SHA256( "v2|" || LineageID || "|" || TenantID || "|" || RuleID || "|" || RuleVersion || "|" || RuleContentHash || "|" || ActionTaken || "|" || Passed || "|" || JCS(InputParams) || "|" || JCS(MetricSnapshots) )
 func ComputeEvaluationHash(input EvaluationHashInput) (string, error) {
 	normInputs, err := CanonicalDecimalMap(input.InputParams)
 	if err != nil {
@@ -123,6 +124,7 @@ func ComputeEvaluationHash(input EvaluationHashInput) (string, error) {
 	}
 
 	h := sha256.New()
+	h.Write([]byte("v2|"))
 	h.Write([]byte(input.LineageID.String()))
 	h.Write([]byte("|"))
 	h.Write([]byte(input.TenantID.String()))
@@ -130,6 +132,8 @@ func ComputeEvaluationHash(input EvaluationHashInput) (string, error) {
 	h.Write([]byte(input.RuleID.String()))
 	h.Write([]byte("|"))
 	h.Write([]byte(fmt.Sprintf("%d", input.RuleVersion)))
+	h.Write([]byte("|"))
+	h.Write([]byte(input.RuleContentHash))
 	h.Write([]byte("|"))
 	h.Write([]byte(input.ActionTaken))
 	h.Write([]byte("|"))
@@ -144,4 +148,45 @@ func ComputeEvaluationHash(input EvaluationHashInput) (string, error) {
 	h.Write(canonicalMetricBytes)
 
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// ComputeRuleContentHash calculates the canonical SHA-256 hash of a rule version's logic, thresholds, and citation.
+func ComputeRuleContentHash(astCondition, parameterThresholds map[string]interface{}, citation string) (string, error) {
+	normAST, err := CanonicalDecimalMap(astCondition)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize AST: %w", err)
+	}
+	normParams, err := CanonicalDecimalMap(parameterThresholds)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize params: %w", err)
+	}
+
+	astBytes, err := Marshal(normAST)
+	if err != nil {
+		return "", fmt.Errorf("marshal AST: %w", err)
+	}
+	paramBytes, err := Marshal(normParams)
+	if err != nil {
+		return "", fmt.Errorf("marshal params: %w", err)
+	}
+
+	h := sha256.New()
+	h.Write([]byte("v1|"))
+	h.Write(astBytes)
+	h.Write([]byte("|"))
+	h.Write(paramBytes)
+	h.Write([]byte("|"))
+	h.Write([]byte(citation))
+
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// ComputeBytecodeHash calculates the SHA-256 digest of compiled bytecode.
+func ComputeBytecodeHash(bytecode []byte) string {
+	if len(bytecode) == 0 {
+		h := sha256.Sum256([]byte{})
+		return hex.EncodeToString(h[:])
+	}
+	h := sha256.Sum256(bytecode)
+	return hex.EncodeToString(h[:])
 }

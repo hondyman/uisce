@@ -110,8 +110,9 @@ func TestRedpanda_RealBrokerDurabilityAndPostgresIntegration(t *testing.T) {
 	if err == nil {
 		defer db.Close()
 
-		// Pre-insert a dummy rule so FK is satisfied
+		// Pre-insert a dummy rule and snapshot version so FK is satisfied
 		_, _ = db.Exec("INSERT INTO compliance.compliance_rule (id, tenant_id, inherit_mode, rule_code, name, rule_phase, severity) VALUES ($1, $2, 'custom', 'REDPANDA_TEST', 'Redpanda Live Test', 'PRE_TRADE', 'HARD_BLOCK') ON CONFLICT DO NOTHING", ruleID, tenantID)
+		_, _ = db.Exec("INSERT INTO compliance.compliance_rule_version (rule_id, version, tenant_id, resolved_ast, parameter_thresholds, citation, effective_from, content_hash, compiled_bytecode_hash, created_by) VALUES ($1, 1, $2, '{}'::jsonb, '{}'::jsonb, 'Test', now(), 'hash_dummy', 'hash_dummy', 'test') ON CONFLICT DO NOTHING", ruleID, tenantID)
 
 		consumer := NewHotTierAuditConsumer(db, broker, topic)
 		var eventBatch []EvaluationEventPayload

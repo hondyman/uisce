@@ -22,16 +22,18 @@ type ColdArchivalWorkerConfig struct {
 
 // ArchiveResult contains metadata describing a sealed archival slice
 type ArchiveResult struct {
-	TenantID       uuid.UUID `json:"tenant_id"`
-	RowsArchived   int64     `json:"rows_archived"`
-	StartLSN       int64     `json:"start_lsn"`
-	EndLSN         int64     `json:"end_lsn"`
-	MerkleRootHash string    `json:"merkle_root_hash"`
-	S3Bucket       string    `json:"s3_bucket"`
-	S3Key          string    `json:"s3_key"`
-	ETag           string    `json:"etag"`
-	FileSizeBytes  int64     `json:"file_size_bytes"`
-	DurationMs     int64     `json:"duration_ms"`
+	TenantID               uuid.UUID `json:"tenant_id"`
+	RowsArchived           int64     `json:"rows_archived"`
+	StartLSN               int64     `json:"start_lsn"`
+	EndLSN                 int64     `json:"end_lsn"`
+	MerkleRootHash         string    `json:"merkle_root_hash"`
+	RuleRegistryMerkleRoot string    `json:"rule_registry_merkle_root"`
+	S3Bucket               string    `json:"s3_bucket"`
+	S3Key                  string    `json:"s3_key"`
+	RuleRegistryS3Key      string    `json:"rule_registry_s3_key"`
+	ETag                   string    `json:"etag"`
+	FileSizeBytes          int64     `json:"file_size_bytes"`
+	DurationMs             int64     `json:"duration_ms"`
 }
 
 // ColdArchivalWorker coordinates the LSN-watermarked assembly of immutable WORM cold archive slices
@@ -134,7 +136,7 @@ func (w *ColdArchivalWorker) ArchiveTenantSlice(ctx context.Context, tenantID uu
 	// 3. Query records from Hot/Warm database strictly within (coldLWM, warmLWM]
 	query := `
 		SELECT 
-			lineage_id, evaluated_at, tenant_id, order_id, rule_id, rule_version,
+			lineage_id, evaluated_at, tenant_id, order_id, rule_id, rule_version, rule_content_hash,
 			action_taken, passed, latency_micros, evaluation_hash, ingest_lsn,
 			COALESCE(input_params, '{}'::jsonb), COALESCE(metric_snapshots, '{}'::jsonb), created_at
 		FROM compliance.compliance_evaluation_event
@@ -160,7 +162,7 @@ func (w *ColdArchivalWorker) ArchiveTenantSlice(ctx context.Context, tenantID uu
 		var inputParams, metricSnapshots []byte
 
 		if err := rows.Scan(
-			&lineageID, &evaluatedAt, &tenantIDStr, &orderID, &ruleID, &r.RuleVersion,
+			&lineageID, &evaluatedAt, &tenantIDStr, &orderID, &ruleID, &r.RuleVersion, &r.RuleContentHash,
 			&r.ActionTaken, &r.Passed, &r.LatencyMicros, &r.EvaluationHash, &r.IngestLSN,
 			&inputParams, &metricSnapshots, &createdAt,
 		); err != nil {
@@ -207,15 +209,62 @@ func (w *ColdArchivalWorker) ArchiveTenantSlice(ctx context.Context, tenantID uu
 		return nil, fmt.Errorf("manifest contiguity verification failed: %w", err)
 	}
 
-	// 5. Assemble deterministic Parquet file and Merkle Root
-	parquetBytes, summary, _, err := cold.WriteCanonicalParquet(records)
-	if err != nil {
-		return nil, fmt.Errorf("assemble canonical parquet: %w", err)
+	// 5. Query and Assemble companion rule registry slice
+	type ruleKey struct {
+		ruleID  string
+		version int32
+	}
+	seenRules := make(map[ruleKey]struct{})
+	for _, rec := range records {
+		seenRules[ruleKey{ruleID: rec.RuleID, version: rec.RuleVersion}] = struct{}{}
 	}
 
-	// 6. Format deterministic S3 object key
+	var ruleRecords []cold.RuleRegistryRecord
+	for k := range seenRules {
+		ruleQuery := `
+			SELECT 
+				rule_id, version, tenant_id, resolved_ast::text, parameter_thresholds::text,
+				COALESCE(citation, ''), effective_from, COALESCE(effective_to, effective_from),
+				content_hash, compiled_bytecode_hash, created_at
+			FROM compliance.compliance_rule_version
+			WHERE rule_id = $1 AND version = $2
+		`
+		var rr cold.RuleRegistryRecord
+		var rTenantID uuid.UUID
+		var effFrom, effTo, rCreatedAt time.Time
+		var rRuleID uuid.UUID
+		err := w.cfg.PostgresDB.QueryRowContext(ctx, ruleQuery, k.ruleID, k.version).Scan(
+			&rRuleID, &rr.Version, &rTenantID, &rr.ResolvedAST, &rr.ParameterThresholds,
+			&rr.Citation, &effFrom, &effTo,
+			&rr.ContentHash, &rr.CompiledBytecodeHash, &rCreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("query rule version (%s, %d): %w", k.ruleID, k.version, err)
+		}
+		rr.RuleID = rRuleID.String()
+		rr.TenantID = rTenantID.String()
+		rr.EffectiveFrom = effFrom.UTC().Format(time.RFC3339Nano)
+		rr.EffectiveTo = effTo.UTC().Format(time.RFC3339Nano)
+		rr.CreatedAt = rCreatedAt.UTC().Format(time.RFC3339Nano)
+		ruleRecords = append(ruleRecords, rr)
+	}
+
+	// 6. Assemble deterministic Parquet files and Merkle Roots
+	evalParquetBytes, evalSummary, _, err := cold.WriteCanonicalParquet(records)
+	if err != nil {
+		return nil, fmt.Errorf("assemble canonical evaluation parquet: %w", err)
+	}
+
+	ruleParquetBytes, ruleSummary, _, err := cold.WriteCanonicalRuleRegistryParquet(ruleRecords)
+	if err != nil {
+		return nil, fmt.Errorf("assemble companion rule registry parquet: %w", err)
+	}
+
+	// 7. Format deterministic S3 object keys
 	evalTime, _ := time.Parse(time.RFC3339Nano, records[0].EvaluatedAt)
-	s3Key := fmt.Sprintf("cold-archive/tenant_%s/year=%04d/month=%02d/evaluations_%d_%d.parquet",
+	evalS3Key := fmt.Sprintf("cold-archive/tenant_%s/year=%04d/month=%02d/evaluations_%d_%d.parquet",
+		tenantID.String(), evalTime.Year(), int(evalTime.Month()), batchStartLSN, batchEndLSN)
+	ruleS3Key := fmt.Sprintf("cold-archive/tenant_%s/year=%04d/month=%02d/rules_%d_%d.parquet",
 		tenantID.String(), evalTime.Year(), int(evalTime.Month()), batchStartLSN, batchEndLSN)
 
 	// Ensure bucket exists
@@ -223,49 +272,58 @@ func (w *ColdArchivalWorker) ArchiveTenantSlice(ctx context.Context, tenantID uu
 		return nil, fmt.Errorf("ensure archive bucket: %w", err)
 	}
 
-	// 7. Upload to S3/MinIO with WORM Compliance Mode Object Lock
-	etag, err := w.cfg.S3Client.UploadWORMObject(ctx, w.cfg.BucketName, s3Key, parquetBytes)
+	// 8. Upload to S3/MinIO with WORM Compliance Mode Object Lock
+	etag, err := w.cfg.S3Client.UploadWORMObject(ctx, w.cfg.BucketName, evalS3Key, evalParquetBytes)
 	if err != nil {
-		return nil, fmt.Errorf("upload worm object to s3: %w", err)
+		return nil, fmt.Errorf("upload worm evaluations object to s3: %w", err)
 	}
 
-	// 8. Atomically insert Manifest Record
+	_, err = w.cfg.S3Client.UploadWORMObject(ctx, w.cfg.BucketName, ruleS3Key, ruleParquetBytes)
+	if err != nil {
+		return nil, fmt.Errorf("upload worm rule registry object to s3: %w", err)
+	}
+
+	// 9. Atomically insert Manifest Record with Dual Merkle Roots
 	manifestID := uuid.New()
 	manifestRecord := &cold.ArchiveManifestRecord{
-		ID:             manifestID,
-		TenantID:       tenantID,
-		LWMStartLSN:    batchStartLSN,
-		LWMEndLSN:      batchEndLSN,
-		MerkleRootHash: summary.MerkleRoot,
-		S3Bucket:       w.cfg.BucketName,
-		S3Key:          s3Key,
-		ETag:           etag,
-		RecordCount:    summary.RowCount,
-		FileSizeBytes:  summary.FileSizeBytes,
-		Status:         cold.ManifestStatusSealed,
-		SealedAt:       time.Now().UTC(),
-		CreatedAt:      time.Now().UTC(),
+		ID:                     manifestID,
+		TenantID:               tenantID,
+		LWMStartLSN:            batchStartLSN,
+		LWMEndLSN:              batchEndLSN,
+		MerkleRootHash:         evalSummary.MerkleRoot,
+		RuleRegistryMerkleRoot: ruleSummary.MerkleRoot,
+		S3Bucket:               w.cfg.BucketName,
+		S3Key:                  evalS3Key,
+		RuleRegistryS3Key:      ruleS3Key,
+		ETag:                   etag,
+		RecordCount:            evalSummary.RowCount,
+		FileSizeBytes:          evalSummary.FileSizeBytes + ruleSummary.FileSizeBytes,
+		Status:                 cold.ManifestStatusSealed,
+		SealedAt:               time.Now().UTC(),
+		CreatedAt:              time.Now().UTC(),
 	}
 
 	if err := w.manifestRepo.InsertManifest(ctx, manifestRecord); err != nil {
 		return nil, fmt.Errorf("commit archive manifest: %w", err)
 	}
 
-	// 9. Update certified COLD watermark
+	// 10. Update certified COLD watermark
 	if err := w.UpdateColdWatermark(ctx, tenantID, batchEndLSN); err != nil {
 		return nil, fmt.Errorf("checkpoint cold watermark: %w", err)
 	}
 
 	return &ArchiveResult{
-		TenantID:       tenantID,
-		RowsArchived:   summary.RowCount,
-		StartLSN:       batchStartLSN,
-		EndLSN:         batchEndLSN,
-		MerkleRootHash: summary.MerkleRoot,
-		S3Bucket:       w.cfg.BucketName,
-		S3Key:          s3Key,
-		ETag:           etag,
-		FileSizeBytes:  summary.FileSizeBytes,
-		DurationMs:     time.Since(start).Milliseconds(),
+		TenantID:               tenantID,
+		RowsArchived:           evalSummary.RowCount,
+		StartLSN:               batchStartLSN,
+		EndLSN:                 batchEndLSN,
+		MerkleRootHash:         evalSummary.MerkleRoot,
+		RuleRegistryMerkleRoot: ruleSummary.MerkleRoot,
+		S3Bucket:               w.cfg.BucketName,
+		S3Key:                  evalS3Key,
+		RuleRegistryS3Key:      ruleS3Key,
+		ETag:                   etag,
+		FileSizeBytes:          evalSummary.FileSizeBytes + ruleSummary.FileSizeBytes,
+		DurationMs:             time.Since(start).Milliseconds(),
 	}, nil
 }
