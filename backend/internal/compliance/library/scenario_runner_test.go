@@ -297,6 +297,13 @@ func TestCoreLibrary_EffectiveDating(t *testing.T) {
 		t.Fatalf("get gold tenant: %v", err)
 	}
 
+	// Clean up any future-dated test records or old v2 test records for seed rules
+	_, _ = db.ExecContext(ctx, `
+		UPDATE compliance.compliance_rule 
+		SET valid_to = NULL, effective_from = '2026-01-01T00:00:00Z', is_active = true
+		WHERE tenant_id = $1 AND rule_code NOT LIKE 'TEST_%' AND (valid_to IS NOT NULL OR effective_from > now());
+	`, goldTenant)
+
 	// Current time (2026+) -> all 50 rules are effective
 	asOfNow := time.Now().UTC()
 	rulesNow, err := loader.LoadTenantActiveRulesAsOf(ctx, goldTenant, asOfNow)
@@ -451,8 +458,8 @@ func TestCoreLibrary_All50CoreRules_ContentHashAgreement(t *testing.T) {
 			compliance.compute_rule_content_hash(r.ast_condition, r.parameter_thresholds, r.citation) AS sql_hash
 		FROM compliance.compliance_rule r
 		JOIN compliance.compliance_rule_version v 
-		  ON r.id = v.rule_id AND COALESCE(r.pinned_core_version, 1) = v.version
-		WHERE r.tenant_id = $1
+		  ON r.id = v.rule_id AND COALESCE(r.current_version, 1) = v.version
+		WHERE r.tenant_id = $1 AND r.valid_to IS NULL AND r.rule_code NOT LIKE 'TEST_%'
 		ORDER BY r.rule_code
 	`, goldTenant)
 	if err != nil {
@@ -599,6 +606,7 @@ func TestCoreLibrary_RuleVersionEvolution_PositivePath(t *testing.T) {
 		SET 
 			parameter_thresholds = $1::jsonb,
 			citation = $2,
+			current_version = 2,
 			pinned_core_version = 2,
 			updated_at = now()
 		WHERE id = $3

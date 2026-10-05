@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
 
 // ScenarioTestCase represents a test case in the tenant's simulation corpus
@@ -153,15 +155,32 @@ func (s *RepinService) ExecuteTestCorpus(testCases []ScenarioTestCase) *CorpusRu
 
 	for _, tc := range testCases {
 		// Mock/simulated evaluation of rule logic against case inputs
-		// Checks if inputParams & metricSnapshots meet expected assertion
 		passed := true
+
+		// Check proposedWeight vs maxAllowedWeight
 		if val, exists := tc.MetricSnapshots["proposedWeight"]; exists {
-			// If proposedWeight > maxAllowedWeight, rule fails
 			if maxVal, maxExists := tc.MetricSnapshots["maxAllowedWeight"]; maxExists {
 				fWeight, ok1 := toFloat(val)
 				fMax, ok2 := toFloat(maxVal)
 				if ok1 && ok2 && fWeight > fMax {
 					passed = false
+				}
+			}
+		}
+
+		// Check general exposure percentage vs limit percentage
+		for k, val := range tc.MetricSnapshots {
+			if strings.HasSuffix(k, "_exposure_pct") || strings.HasSuffix(k, "_pct") {
+				fExposure, ok1 := toFloat(val)
+				if ok1 {
+					for lk, lval := range tc.MetricSnapshots {
+						if strings.HasSuffix(lk, "_limit_pct") || strings.HasSuffix(lk, "maxAllowedWeight") {
+							fLim, ok2 := toFloat(lval)
+							if ok2 && fExposure > fLim {
+								passed = false
+							}
+						}
+					}
 				}
 			}
 		}
@@ -188,6 +207,22 @@ func toFloat(v interface{}) (float64, bool) {
 		return float64(val), true
 	case int64:
 		return float64(val), true
+	case decimal.Decimal:
+		f, _ := val.Float64()
+		return f, true
+	case *decimal.Decimal:
+		if val != nil {
+			f, _ := val.Float64()
+			return f, true
+		}
+		return 0, false
+	case string:
+		d, err := decimal.NewFromString(val)
+		if err == nil {
+			f, _ := d.Float64()
+			return f, true
+		}
+		return 0, false
 	default:
 		return 0, false
 	}
