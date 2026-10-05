@@ -224,11 +224,11 @@ func CloneGoldCopyInstance(
 
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO public.tenant_product_datasource 
-				(id, tenant_product_id, alpha_datasource_id, source_name, is_active, 
+				(id, tenant_id, tenant_product_id, alpha_datasource_id, source_name, is_active, 
 				 connection_id, datasource_id, core_id, config, created_at, updated_at)
 			VALUES 
-				($1, $2, $3, $4, false, $5, $6, $7, $8, NOW(), NOW())
-		`, newDatasourceID, newProductID, gd.AlphaDatasourceID, gd.SourceName,
+				($1, $2, $3, $4, $5, false, $6, $7, $8, $9, NOW(), NOW())
+		`, newDatasourceID, targetTenantID, newProductID, gd.AlphaDatasourceID, gd.SourceName,
 			// The gold copy's credentials (inline, or its secret_path) never
 			// travel to another tenant; the clone gets its own later.
 			newConnectionID, targetInstanceID, gd.ID, dscreds.StripForClone(gd.Config))
@@ -519,7 +519,7 @@ func syncConnectionToInstance(
 	var existingConnectionID uuid.UUID
 	err := tx.GetContext(ctx, &existingConnectionID, `
 		SELECT id FROM public.connections 
-		WHERE tenant_id = $1 AND core_id = $2 AND datasource_id = $3
+		WHERE tenant_id = $1 AND core_id = $2 AND tenant_instance_id = $3
 	`, targetTenantID, gc.ID, targetInstanceID)
 
 	if err == nil {
@@ -532,7 +532,7 @@ func syncConnectionToInstance(
 
 		_, err = tx.ExecContext(ctx, `
 			UPDATE public.connections
-			SET name = $1, type = $2, schema = $3, port = $4, metadata = $5, datasource_id = $6, tenant_product_id = $7, updated_at = NOW()
+			SET name = $1, type = $2, schema = $3, port = $4, metadata = $5, tenant_instance_id = $6, tenant_product_id = $7, updated_at = NOW()
 			WHERE id = $8
 		`, gc.Name, gc.Type, gc.Schema, gc.Port, sanitizedMetadata, targetInstanceID, targetProductID, existingConnectionID)
 		if err != nil {
@@ -555,7 +555,7 @@ func syncConnectionToInstance(
 	// Host, Database, BaseURL, AuthType (in metadata), Username, Password must be populated independently
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO public.connections 
-			(id, tenant_id, datasource_id, name, type, host, port, database, schema, username, password, 
+			(id, tenant_id, tenant_instance_id, name, type, host, port, database, schema, username, password, 
 			 api_key, base_url, metadata, is_active, core_id, tenant_product_id, created_at, updated_at)
 		VALUES 
 			($1, $2, $3, $4, $5, NULL, $6, NULL, $7, NULL, NULL, NULL, NULL, $8, false, $9, $10, NOW(), NOW())
@@ -818,7 +818,7 @@ func DeleteClonedProducts(ctx context.Context, db *sqlx.DB, tenantID, instanceID
 	}
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM public.connections
-		WHERE tenant_id = $1 AND datasource_id = $2
+		WHERE tenant_id = $1 AND tenant_instance_id = $2
 	`, tenantID, instanceID); err != nil {
 		logger.Warnf("Failed to delete cloned connections: %v", err)
 		if _, rbErr := tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT delete_connections"); rbErr != nil {

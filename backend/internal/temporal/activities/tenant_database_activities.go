@@ -179,9 +179,28 @@ func (a *TenantProvisioningActivities) BindTenantDatabase(ctx context.Context, i
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE public.tenant_product_datasource
 			SET config = COALESCE(config, '{}'::jsonb)
-			    || jsonb_build_object('host', $2::text, 'port', $3::int, 'database', $4::text, 'secret_path', $5::text)
+			    || jsonb_build_object('host', $2::text, 'port', $3::int, 'database', $4::text, 'secret_path', $5::text),
+			    is_active = true
 			WHERE id = $1`, out.DatasourceID, a.TenantDB.Host, a.TenantDB.Port, in.DatabaseName, out.SecretPath); err != nil {
 			return fmt.Errorf("repoint datasource: %w", err)
+		}
+		// ProbeTenantDatabase resolves through security.DBDatasourceResolver, which
+		// requires tpd/tp/ti is_active=true. Gold-copy clone inserts them inactive;
+		// ActivateTenant only flips the binding lifecycle, so enable the row here.
+		// Touch only is_active: real-DB test fixtures (and some alpha snapshots) have
+		// no updated_at on tenant_product / tenant_instance.
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE public.tenant_product tp
+			SET is_active = true
+			FROM public.tenant_product_datasource tpd
+			WHERE tpd.id = $1 AND tp.id = tpd.tenant_product_id`, out.DatasourceID); err != nil {
+			return fmt.Errorf("activate product for probe: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE public.tenant_instance
+			SET is_active = true
+			WHERE id = $1`, in.InstanceID); err != nil {
+			return fmt.Errorf("activate instance for probe: %w", err)
 		}
 		if in.GoldCopyDatabase != "" {
 			if _, err := tx.ExecContext(ctx, `
@@ -654,10 +673,17 @@ func (a *TenantProvisioningActivities) ConfigureTenantDatabaseFromEnv() {
 	}
 	if p, err := dscreds.ProviderFromEnv(); err != nil {
 		a.Logger.Warnf("tenant database credentials cannot be stored: %v", err)
+		a.Creds = dscreds.Default()
+	} else if p == nil {
+		a.Creds = dscreds.Default()
 	} else {
+		// One provider instance for Put (Provision) and Hydrate (Probe).
+		// SECRETS_PROVIDER=memory creates a fresh map per NewProvider call;
+		// Default() used to build a second map, so Probe never saw PutMap.
 		a.Secrets = p
+		a.Creds = dscreds.NewResolver(p)
+		dscreds.SetDefault(a.Creds)
 	}
-	a.Creds = dscreds.Default()
 	// Set means set: a malformed value is KEPT, so every tenant-database step refuses (checkRoleGroup) with the value in the
 	// message, instead of the gate quietly switching itself off. Unset is a legitimate no-op (a cluster whose
 	// pg_hba.conf already admits every tenant role).
