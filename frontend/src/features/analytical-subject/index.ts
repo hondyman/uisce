@@ -20,6 +20,20 @@ export {
   savedQueryBindProps,
 } from './subjectPin';
 export type { SubjectPinCheck, SavedQuerySubjectSource } from './subjectPin';
+export {
+  migrateLegacyCubeName,
+  resolveReportCubeBinding,
+  rewriteDataBindingsWithSubject,
+  extractLegacyCubeName,
+  isPinnedContractVersion,
+} from './legacyCubeMigrate';
+export type {
+  LegacyCubeLookup,
+  LegacyCubeBinding,
+  LegacyCubeMigrateResult,
+  LegacyCubeMigrateOk,
+  LegacyCubeMigrateErr,
+} from './legacyCubeMigrate';
 export { SubjectPicker } from './SubjectPicker';
 export type { SubjectPickerProps } from './SubjectPicker';
 export { RouteBadge, routeBadgeFromPreview } from './RouteBadge';

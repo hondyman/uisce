@@ -1,3 +1,5 @@
+import type { QuerySubject } from '../../features/analytical-subject';
+
 export interface BOBinding {
   qualifiedPath: string;
   alias?: string;
@@ -22,20 +24,40 @@ interface BuilderDefinition {
   parameters?: unknown[];
 }
 
+export type BuildSavePayloadOptions = {
+  /** PR7 / CUBE-3.3 pinned QuerySubject (business_object | cube). */
+  subject?: QuerySubject | null;
+};
+
 export function buildSavePayload(
   def: BuilderDefinition,
   selectedBO: BOBinding | null,
   reportId?: string,
-  tenantId?: string
+  tenantId?: string,
+  options?: BuildSavePayloadOptions,
 ): Record<string, unknown> {
   const title = def.reportTitle || 'Untitled Report';
-  const layoutConfig = {
+  const subject = options?.subject ?? null;
+  const layoutConfig: Record<string, unknown> = {
     elements: def.elements,
     sectionConfig: def.sectionConfig || {},
     layoutSettings: def.layoutSettings || {},
     reportTitle: title,
     parameters: def.parameters || [],
   };
+  // Persist pin on layout so reloads do not depend on name-only cube strings.
+  if (subject) {
+    layoutConfig.subject = subject;
+  }
+
+  const dataBindings =
+    selectedBO && subject?.kind !== 'cube'
+      ? [{ bo_path: selectedBO.qualifiedPath, alias: selectedBO.alias, boId: selectedBO.boId }]
+      : subject?.kind === 'cube'
+        ? [{ subject }]
+        : selectedBO
+          ? [{ bo_path: selectedBO.qualifiedPath, alias: selectedBO.alias, boId: selectedBO.boId }]
+          : [];
 
   const payload: Record<string, unknown> = {
     id: reportId,
@@ -51,14 +73,16 @@ export function buildSavePayload(
     },
     metadata: {
       version: 2,
-      data_bindings: selectedBO ? [{ bo_path: selectedBO.qualifiedPath, alias: selectedBO.alias }] : [],
+      data_bindings: dataBindings,
+      ...(subject ? { subject } : {}),
       sectionConfig: def.sectionConfig || {},
       layoutSettings: def.layoutSettings || {},
       parameters: def.parameters || [],
     },
     elements: def.elements,
     parameters: def.parameters || [],
-    primary_business_object_id: selectedBO?.boId,
+    primary_business_object_id:
+      subject?.kind === 'business_object' ? subject.boId : selectedBO?.boId,
   };
 
   return payload;
