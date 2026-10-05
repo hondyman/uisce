@@ -464,3 +464,102 @@ func TestCubeRouter_PrefersTightestGrain(t *testing.T) {
 	assert.Equal(t, CubeMaterializationName(routerTenant, false, cube, tight), d.Route.Materialization,
 		"the tightest covering grain must win")
 }
+
+// expectCubeByIDQuery wires the pinned-subject cube_definition lookup by id.
+func expectCubeByIDQuery(t *testing.T, mock sqlmock.Sqlmock, cube *CubeDefinition) {
+	t.Helper()
+	rows := sqlmock.NewRows([]string{
+		"id", "tenant_id", "name", "description", "bo_id", "dimensions",
+		"time_dimension", "metric_ids", "grains", "materialization",
+		"federation", "contract_version",
+		"content_hash", "is_core", "status", "archived_at", "created_by",
+		"created_at", "updated_at",
+	})
+	if cube != nil {
+		ver := cube.ContractVersion
+		if ver < 1 {
+			ver = 1
+		}
+		rows.AddRow(
+			cube.ID, routerTenant, cube.Name, cube.Description, cube.BOID,
+			mustJSON(t, cube.Dimensions), nullJSON(cube.TimeDimension),
+			mustJSON(t, cube.MetricIDs), mustJSON(t, cube.Grains),
+			mustJSON(t, cube.Materialization), mustJSON(t, cube.Federation), ver,
+			nullStr(cube.ContentHash),
+			cube.IsCore, cube.Status, nil, nil,
+			time.Now().UTC(), time.Now().UTC(),
+		)
+	}
+	mock.ExpectQuery(`FROM data_explorer.cube_definition`).
+		WithArgs(routerTenant, cube.ID).
+		WillReturnRows(rows)
+}
+
+// TestCubeRouter_RoutePinned_Hit sets ServedFrom=hot on an explicit cube subject.
+func TestCubeRouter_RoutePinned_Hit(t *testing.T) {
+	r, mock := routerFixture(t)
+	cube := routedCube()
+	cube.ContractVersion = 3
+	r.SetClock(func() time.Time { return time.Now().UTC() })
+
+	expectCubeByIDQuery(t, mock, &cube)
+	expectMetricQuery(t, mock, revenueMetric(), unitsMetric())
+	expectMaterialization(t, mock, CubeMaterializationName(routerTenant, false, cube, []string{"country", "order_date"}),
+		models.LifecycleActive, freshClock())
+
+	d := r.RoutePinned(context.Background(), routerTenant, cube.ID, 3, countryMonthQuery(), nil)
+	require.NotNil(t, d.Route, "expected pinned hit, got miss=%s detail=%s", d.MissReason, d.Detail)
+	assert.Equal(t, ServedFromHot, d.Route.ServedFrom)
+	assert.Equal(t, 3, d.Route.ContractVersion)
+	assert.Equal(t, cube.ID, d.Route.CubeID)
+}
+
+// TestCubeRouter_RoutePinned_ContractMismatch refuses a wrong version pin.
+func TestCubeRouter_RoutePinned_ContractMismatch(t *testing.T) {
+	r, mock := routerFixture(t)
+	cube := routedCube()
+	cube.ContractVersion = 2
+	expectCubeByIDQuery(t, mock, &cube)
+
+	d := r.RoutePinned(context.Background(), routerTenant, cube.ID, 9, countryMonthQuery(), nil)
+	assert.Nil(t, d.Route)
+	assert.Equal(t, CubeMissContractMismatch, d.MissReason)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestCubeRouter_RoutePinned_NotFound declines an unknown cube id.
+func TestCubeRouter_RoutePinned_NotFound(t *testing.T) {
+	r, mock := routerFixture(t)
+	missingID := uuid.New().String()
+	mock.ExpectQuery(`FROM data_explorer.cube_definition`).
+		WithArgs(routerTenant, missingID).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "tenant_id", "name", "description", "bo_id", "dimensions",
+			"time_dimension", "metric_ids", "grains", "materialization",
+			"federation", "contract_version",
+			"content_hash", "is_core", "status", "archived_at", "created_by",
+			"created_at", "updated_at",
+		}))
+
+	d := r.RoutePinned(context.Background(), routerTenant, missingID, 0, countryMonthQuery(), nil)
+	assert.Nil(t, d.Route)
+	assert.Equal(t, CubeMissCubeNotFound, d.MissReason)
+}
+
+// TestCubeRouter_HitSetsServedFromHot covers opportunistic Route badge metadata.
+func TestCubeRouter_HitSetsServedFromHot(t *testing.T) {
+	r, mock := routerFixture(t)
+	cube := routedCube()
+	cube.ContractVersion = 1
+	r.SetClock(func() time.Time { return time.Now().UTC() })
+
+	expectCubeQuery(t, mock, &cube)
+	expectMetricQuery(t, mock, revenueMetric(), unitsMetric())
+	expectMaterialization(t, mock, CubeMaterializationName(routerTenant, false, cube, []string{"country", "order_date"}),
+		models.LifecycleActive, freshClock())
+
+	d := r.Route(context.Background(), routerTenant, countryMonthQuery(), nil)
+	require.NotNil(t, d.Route)
+	assert.Equal(t, ServedFromHot, d.Route.ServedFrom)
+	assert.Equal(t, 1, d.Route.ContractVersion)
+}

@@ -26,10 +26,18 @@ type CubeRoute struct {
 	CubeName        string   `json:"cubeName"`
 	Materialization string   `json:"materialization"`
 	ServedFrom      string   `json:"servedFrom"`
+	ContractVersion int      `json:"contractVersion,omitempty"`
 	Grain           []string `json:"grain"`
 	Stale           bool     `json:"stale"`
 	ContentHash     string   `json:"-"`
 }
+
+// ServedFrom values for CubeRoute / CubeHitInfo (dual-tier badge).
+const (
+	ServedFromHot  = "hot"
+	ServedFromCold = "cold"
+	ServedFromRaw  = "raw"
+)
 
 // CubeMissReason explains why no materialization was served. It exists so
 // routing decisions are observable rather than opaque, and so the "no cube
@@ -37,14 +45,16 @@ type CubeRoute struct {
 type CubeMissReason string
 
 const (
-	CubeMissNoCube         CubeMissReason = "no_cube_for_bo"
-	CubeMissMetricSubset   CubeMissReason = "requested_metric_not_in_cube"
-	CubeMissNoGrainMatch   CubeMissReason = "no_grain_superset"
-	CubeMissNotDecomposed  CubeMissReason = "metric_not_decomposable_for_rollup"
-	CubeMissABACBelowGrain CubeMissReason = "abac_below_grain"
-	CubeMissStale          CubeMissReason = "stale_and_force_raw"
-	CubeMissNotActive      CubeMissReason = "materialization_not_active"
-	CubeMissError          CubeMissReason = "router_error"
+	CubeMissNoCube            CubeMissReason = "no_cube_for_bo"
+	CubeMissCubeNotFound      CubeMissReason = "cube_not_found"
+	CubeMissContractMismatch  CubeMissReason = "contract_version_mismatch"
+	CubeMissMetricSubset      CubeMissReason = "requested_metric_not_in_cube"
+	CubeMissNoGrainMatch      CubeMissReason = "no_grain_superset"
+	CubeMissNotDecomposed     CubeMissReason = "metric_not_decomposable_for_rollup"
+	CubeMissABACBelowGrain    CubeMissReason = "abac_below_grain"
+	CubeMissStale             CubeMissReason = "stale_and_force_raw"
+	CubeMissNotActive         CubeMissReason = "materialization_not_active"
+	CubeMissError             CubeMissReason = "router_error"
 )
 
 // CubeRouteDecision is the full result of a routing attempt. Exactly one of
@@ -89,7 +99,9 @@ type cubeCandidate struct {
 	metrics map[string]MetricDefinition
 }
 
-// Route decides whether qd can be served from a cube materialization.
+// Route decides whether qd can be served from a cube materialization for the
+// query's primary BO (opportunistic acceleration). A miss never fails the
+// query — the base BO path remains correct.
 //
 // abacRestrictedGrains lists dimension terms the caller is row-restricted on.
 // It is a required input: the caller cannot know it implicitly, and defaulting
@@ -117,7 +129,63 @@ func (r *CubeRouter) Route(
 		return CubeRouteDecision{MissReason: CubeMissNoCube}
 	}
 
-	// Step 2: every requested measure must be a governed metric of the cube.
+	return r.decideRoute(ctx, tenantID, *cube, metrics, qd, abacRestrictedGrains)
+}
+
+// RoutePinned decides whether qd can be served from a specific cube + contract
+// version (explicit cube QuerySubject). Unlike Route, it never substitutes a
+// different cube. Contract pin: version<=0 means latest (current row version).
+func (r *CubeRouter) RoutePinned(
+	ctx context.Context,
+	tenantID string,
+	cubeID string,
+	contractVersion int,
+	qd *boresolver.QueryDef,
+	abacRestrictedGrains []string,
+) CubeRouteDecision {
+
+	if r == nil || r.db == nil || qd == nil {
+		return CubeRouteDecision{MissReason: CubeMissCubeNotFound, Detail: "router unavailable"}
+	}
+	if strings.TrimSpace(cubeID) == "" {
+		return CubeRouteDecision{MissReason: CubeMissCubeNotFound, Detail: "cubeId required"}
+	}
+
+	cube, err := r.loadCubeDefByID(ctx, tenantID, cubeID)
+	if err != nil {
+		log.Printf("[CubeRouter] load cube id=%s: %v", cubeID, err)
+		return CubeRouteDecision{MissReason: CubeMissError, Detail: err.Error()}
+	}
+	if cube == nil {
+		return CubeRouteDecision{MissReason: CubeMissCubeNotFound,
+			Detail: fmt.Sprintf("cube %q not found or not active", cubeID)}
+	}
+	if contractVersion > 0 && cube.ContractVersion != contractVersion {
+		return CubeRouteDecision{MissReason: CubeMissContractMismatch,
+			Detail: fmt.Sprintf("cube contract_version=%d does not match pin=%d",
+				cube.ContractVersion, contractVersion)}
+	}
+
+	metrics, err := r.loadMetrics(ctx, tenantID, cube.MetricIDs)
+	if err != nil {
+		log.Printf("[CubeRouter] load metrics for cube id=%s: %v", cubeID, err)
+		return CubeRouteDecision{MissReason: CubeMissError, Detail: err.Error()}
+	}
+	return r.decideRoute(ctx, tenantID, *cube, metrics, qd, abacRestrictedGrains)
+}
+
+// decideRoute runs metric/grain/ABAC/freshness checks against an already-loaded
+// cube. Shared by Route (BO acceleration) and RoutePinned (explicit subject).
+func (r *CubeRouter) decideRoute(
+	ctx context.Context,
+	tenantID string,
+	cube CubeDefinition,
+	metrics map[string]MetricDefinition,
+	qd *boresolver.QueryDef,
+	abacRestrictedGrains []string,
+) CubeRouteDecision {
+
+	// Every requested measure must be a governed metric of the cube.
 	requested := requestedMeasureTerms(qd)
 	if len(requested) == 0 {
 		return CubeRouteDecision{MissReason: CubeMissMetricSubset,
@@ -134,29 +202,22 @@ func (r *CubeRouter) Route(
 		}
 	}
 
-	// Step 3/4: grain matching (plain set-subset, ADR-015) and decomposability.
+	// Grain matching (plain set-subset, ADR-015) and decomposability.
 	requestedDims := requestedDimensionTerms(qd)
-	grain, matName, matNodeID, decision := r.selectGrain(*cube, tenantID, requestedDims, requested, metrics)
+	grain, matName, matNodeID, decision := r.selectGrain(cube, tenantID, requestedDims, requested, metrics)
 	if decision != nil {
 		return *decision
 	}
 
-	// Step 5: ABAC. A materialization has already aggregated away dimensions
-	// below its grain, so serving it to a caller restricted below that grain
-	// would return data they are not cleared to see. This is a hard stop.
+	// ABAC. A materialization has already aggregated away dimensions below its
+	// grain, so serving it to a caller restricted below that grain would return
+	// data they are not cleared to see. This is a hard stop.
 	canRoute, reason := EvaluateABACMVCompatibility(grain, abacRestrictedGrains)
 	if !canRoute {
 		return CubeRouteDecision{MissReason: CubeMissABACBelowGrain, Detail: reason}
 	}
 
-	// Step 6: freshness.
-	//
-	// A materialization is stale when the scheduler has marked it stale, or
-	// when it has never been refreshed. It is NOT stale merely because the
-	// clock has moved on: EvaluateMVWatermarkStaleness compares against a
-	// source watermark, and PreAggProperties carries no watermark column, so
-	// passing "now" would mark every materialization stale on sight. The
-	// scheduler is the component that decides staleness as it refreshes.
+	// Freshness. Staleness is status-driven (scheduler), not clock-driven.
 	_, isStale, active, err := r.materializationState(ctx, matNodeID)
 	if err != nil {
 		log.Printf("[CubeRouter] materialization state %s: %v", matNodeID, err)
@@ -171,10 +232,14 @@ func (r *CubeRouter) Route(
 			Detail: "stale materialization under force_raw_fallback policy"}
 	}
 
+	// Active StarRocks MV is the hot tier. Cold (Iceberg) selection is a later
+	// router extension; today a successful route is always hot.
 	return CubeRouteDecision{Route: &CubeRoute{
 		CubeID:          cube.ID,
 		CubeName:        cube.Name,
 		Materialization: matName,
+		ServedFrom:      ServedFromHot,
+		ContractVersion: cube.ContractVersion,
 		Grain:           grain,
 		Stale:           isStale,
 		ContentHash:     cube.ContentHash,
@@ -404,6 +469,34 @@ func (r *CubeRouter) loadCube(ctx context.Context, tenantID, boID string) (*Cube
 		return nil, nil, err
 	}
 	return &cube, metrics, nil
+}
+
+// loadCubeDefByID loads one active cube row by primary key (no metrics).
+func (r *CubeRouter) loadCubeDefByID(ctx context.Context, tenantID, cubeID string) (*CubeDefinition, error) {
+	if strings.TrimSpace(tenantID) == "" || strings.TrimSpace(cubeID) == "" {
+		return nil, nil
+	}
+
+	var rows []cubeDefRow
+	err := r.db.SelectContext(ctx, &rows, `
+		SELECT id, tenant_id, name, COALESCE(description,'') AS description, bo_id,
+		       dimensions, time_dimension, metric_ids, grains, materialization,
+		       COALESCE(federation, '{}'::jsonb) AS federation,
+		       COALESCE(contract_version, 1) AS contract_version,
+		       COALESCE(content_hash,'') AS content_hash, is_core, status, archived_at,
+		       created_by, created_at, updated_at
+		FROM data_explorer.cube_definition
+		WHERE tenant_id = $1 AND id::text = $2
+		  AND status = 'active' AND archived_at IS NULL
+	`, tenantID, cubeID)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	cube := rows[0].toCubeDefinition()
+	return &cube, nil
 }
 
 // metricDefRowColumns is the projection used to hydrate metricDefRow, kept

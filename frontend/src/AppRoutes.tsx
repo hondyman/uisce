@@ -61,6 +61,7 @@ import TemporalOpsPage from "./features/admin/pages/TemporalOpsPage";
 import SeedingPage from "./features/admin/pages/SeedingPage";
 const QueryLibrary = React.lazy(() => import("./features/query-builder/pages/QueryLibrary"));
 const SavedQueryEditor = React.lazy(() => import("./features/query-builder/pages/SavedQueryEditor"));
+const BusinessObjectQueryBuilder = React.lazy(() => import("./features/query-builder/pages/BusinessObjectQueryBuilder"));
 const SqlStudioPage = React.lazy(() => import("./pages/analytical/SqlStudioPage"));
 const SemanticCatalogDetailPage = React.lazy(() => import("./pages/analytical/SemanticCatalogDetailPage"));
 const PipelinesPage = React.lazy(() => import("./pages/analytical/PipelinesPage"));
@@ -298,6 +299,7 @@ function ProtectedApp() {
         <Route path="core/calculated-fields" element={<ProtectedRoute><CalculatedFieldBuilderPage /></ProtectedRoute>} />
         <Route path="core/flow-builder" element={<ProtectedRoute><UisceBuilder /></ProtectedRoute>} />
         <Route path="core/validation" element={<ProtectedRoute><InvestmentValidationPage /></ProtectedRoute>} />
+        <Route path="query-builder" element={<ProtectedRoute><BusinessObjectQueryBuilder /></ProtectedRoute>} />
         <Route path="query-builder/editor/:id?" element={<ProtectedRoute><SavedQueryEditor /></ProtectedRoute>} />
         <Route path="sql-studio" element={<ProtectedRoute><SqlStudioPage /></ProtectedRoute>} />
         <Route path="semantic-catalog" element={<ProtectedRoute><SemanticCatalogDetailPage /></ProtectedRoute>} />

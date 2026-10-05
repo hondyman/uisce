@@ -36,6 +36,23 @@ export type FilterOperator =
   | 'between';
 
 /**
+ * Shared analytical subject (CUBE-1.6). Mirrored in
+ * `features/analytical-subject/types.ts` for Report Builder reuse.
+ */
+export type QuerySubject =
+  | {
+      kind: 'business_object';
+      boId: string;
+      bindingId: string;
+      relatedBoIds?: string[];
+    }
+  | {
+      kind: 'cube';
+      cubeId: string;
+      contractVersion: number | 'latest';
+    };
+
+/**
  * Security + binding context. The backend must resolve the binding and
  * enforce tenant ownership before translating or executing the query.
  */
@@ -52,6 +69,11 @@ export interface QueryContext {
    * UI only ever sends BO ids, never join SQL.
    */
   relatedBoIds?: string[];
+  /**
+   * Optional QuerySubject. When omitted, the query is treated as a legacy
+   * business_object subject synthesized from boId/bindingId.
+   */
+  subject?: QuerySubject;
 }
 
 export interface DimensionDef {
@@ -251,11 +273,23 @@ export interface FederatedPlan {
   warnings?: string[];
 }
 
+export interface CubeHitInfo {
+  cubeId: string;
+  cubeName: string;
+  materialization: string;
+  grain?: string[];
+  servedFrom?: 'hot' | 'cold' | 'raw' | string;
+  contractVersion?: number;
+  stale?: boolean;
+}
+
 export interface PreviewResult {
   sql: string;
   dialect?: string;
   parameters?: Array<string | number | boolean | null>;
   plan?: FederatedPlan;
+  cubeHit?: CubeHitInfo | null;
+  cubeMiss?: string;
 }
 
 // Meta-API schema types (mirror backend boresolver.BODefinition)
@@ -312,6 +346,8 @@ export interface QueryExecuteResult {
   rows: Record<string, unknown>[];
   rowCount?: number;
   executionTimeMs?: number;
+  cubeHit?: CubeHitInfo | null;
+  cubeMiss?: string;
 }
 
 /**
