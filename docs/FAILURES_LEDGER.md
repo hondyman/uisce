@@ -4,7 +4,7 @@
 
 This ledger differs from `AGENTS.md` rules: rules are policy (what not to do); this ledger is history with lessons attached. A ledger that only records failures teaches avoidance. One that records what the countermeasures *produced* teaches the behavior worth repeating.
 
-**Nine standing rules about artifacts, gates and procedures, because each has cost real
+**Ten standing rules about artifacts, gates and procedures, because each has cost real
 time here.**
 
 **Every procedure has exactly one authoritative home, and every other mention is a link.** A
@@ -184,6 +184,31 @@ And the corollary for reading a red main: a red merge push is not automatically 
 merge was wrong. It is evidence that *something* is red, and attributing it requires the
 intermittency table, not a plausible story — the story is how the underlying issue got two wrong
 diagnoses before it was measured.
+
+**"Merge on green" requires the merge push's required-set, not just the PR's.** A clean PR-side
+required-set is necessary but not sufficient for the merge itself. `push_all=true` on the merge
+push fires every backend/frontend job regardless of the path filter the PR-side used to skip
+them — so a check that the PR-side *correctly* skipped (path filter excludes the PR's diff) is
+one the merge push runs and may fail. PR #402 was MERGEABLE with 8/8 required-set clean
+(6 SUCCESS + 2 correct SKIPPED), the merge was called immediately, and the merge push subsequently
+reported FAILURE on `Build Frontend` and the `Backend Tests` matrix. The fix is procedural,
+not a discipline slap:
+
+> Before merging, the merge push must be accounted for. If the merge push will fire checks the
+> PR-side skipped (path-filter asymmetry), either (a) wait for the merge push to complete before
+> declaring the merge done — the merge call is not the end of the operation, the verified merge
+> push is — or (b) accept in advance that merge-push failures require immediate triage
+> (flake-table or revert), declared at merge time. Never merge and walk away.
+
+Operationally: before calling `gh pr merge`, look at the LATEST check-runs on the merge commit
+(or the most recent push to base) — those are what the merge push will re-run with `push_all=true`.
+If ANY required-set check is still `in_progress` or `queued`, wait. After merging, watch the
+merge push's required-set to completion before reporting the merge as verified. The cheapest
+flake-vs-regression attribution once the merge push has reported red is `gh run rerun <run-id>`:
+a same-SHA rerun pass is the discriminator; a same-SHA rerun fail is reproducible and points at
+either a code regression (test step) or infrastructure (upload / scanner step). The full
+failure-mode taxonomy — flake / coverage / test / scanner — and the same-SHA rerun pattern are
+recorded in the dated entry below.
 
 ---
 
@@ -958,3 +983,127 @@ include the test suite.
 `Build Docker Images` remains excluded on the original reasoning and was not re-tested: it is
 gated on `github.event_name != 'pull_request'`, so it can never report on a pull request at
 all, which is the absent case.
+
+## Entry 2026-10-04 — Rule-9 violation: `d022abc3f` was merged while the merge push's required-set was still pending
+
+A PR-side clean required-set is necessary but NOT sufficient for the merge
+itself. The merge push GitHub generates after `gh pr merge` runs a
+DIFFERENT required-set: `push_all=true` forces all backend/frontend jobs
+to actually execute regardless of the path filter the PR-side used to skip
+them. PR #402 was MERGEABLE with 8/8 required-set clean
+(6 SUCCESS + 2 correct SKIPPED on path filter), the merge was called
+immediately, and the merge push subsequently reported FAILURE on
+`Build Frontend` and the `Backend Tests` matrix. Two of those eight checks
+were still `in_progress` on the merge push when the merge landed.
+
+The full rule this incident surfaced is now the ninth preamble rule and
+replaces the ambiguous "merge on green" instruction.
+
+### What this incident is, mechanically
+
+The PR-side required-set reflects `changes.outputs.backend || push_all.outputs.backend`
+(or the equivalent for `frontend`), gated by the path filter. The merge push's
+required-set reflects `push_all` only: every path-filtered check that the PR-side
+skipped actually runs on the merge commit. A PR-side "Build Backend" + SKIPPED is
+correct; a merge-push "Build Backend" + FAILURE is *additionally* possible because
+the check actually executed.
+
+| Surface | What gates it | What runs |
+|---|---|---|
+| PR-side | `changes` filter output (`backend` / `frontend`) | jobs that match the PR's diff |
+| Merge-push | `push_all` (`backend=true` / `frontend=true` on every push) | all jobs, full execution |
+
+A check that the PR-side path filter skips *and* that the merge-push `push_all`
+would run is the case the rule names.
+
+### The structural fix, replacing "merge on green"
+
+The phrase was ambiguous about *which* green. The full procedural version,
+now the tenth preamble rule:
+
+> **Before merging, the merge push must be accounted for. If the merge push
+> will fire checks the PR-side skipped (path-filter asymmetry), either (a)
+> wait for the merge push to complete before declaring the merge done — the
+> merge call is not the end of the operation, the verified merge push is
+> — or (b) accept in advance that merge-push failures require immediate
+> triage (flake-table or revert), declared at merge time. Never merge and
+> walk away.**
+
+Operationally: before calling `gh pr merge`, look at the LATEST check-runs on
+the merge commit (or the most recent push to base) — those are what the merge
+push will re-run with `push_all=true`. If ANY required-set check is still
+`in_progress` or `queued`, wait. After merging, watch the merge push's
+required-set to completion before reporting the merge as verified.
+
+### The same-SHA discriminator table — flake-vs-regression template
+
+The cheapest flake-vs-regression test is `gh run rerun <run-id>` on the
+failing workflow. For `d022abc3f`:
+
+| Check | First run | Same-SHA rerun | Verdict | Step-level cause |
+|---|---|---|---|---|
+| Build Backend | SUCCESS | SUCCESS | clean | — |
+| **Build Frontend** | **FAILURE** | **SUCCESS** at 00:15:28Z | **flake** | `Run Tests` exit 1; rerun pass = no causal link to the PR's diff |
+| Build Workspace Modules | SUCCESS | SUCCESS | clean | — |
+| **Backend Tests (1-4)** | **FAILURE** | **FAILURE** | **reproducible** | `Run Tests` SUCCESS, `Upload Coverage` FAILURE on every shard, both runs |
+| Backend Tests Summary | FAILURE | FAILURE | cascade | aggregation of matrix failures |
+
+The two failure modes are distinct in shape and remediation. The flake
+should be added to the intermittency table on #337 (documented signature,
+uncorrelated with content). The reproducible one is infrastructure
+(codecov upload step lacking a token) and is addressed by ADR-049 + adding
+`CODECOV_TOKEN` to the repo secrets.
+
+### Failure-mode taxonomy for CI required-set failures
+
+The discriminator above generalises. Each failure class has a different
+characteristic on the same-SHA rerun and a different remediation.
+
+- **Flake** (test-runner timeout, race, env): same-SHA rerun usually passes;
+  add the SHA + signature to the intermittency table. No code change.
+- **Coverage / upload step**: same-SHA rerun reproduces. Tests passed; the
+  *upload* failed. The cause is a token, secret, or front-end change, not
+  the diff. Remediation is infrastructure.
+- **Test failure**: same-SHA rerun may pass. If consistent, the diff is
+  implicated — read the step diagnostics to find which test.
+- **Scanner failure** (Gosec, Snyk, Trivy): usually reproducible; treat as
+  signal worth reading, not as a build-blocker to be ignored.
+
+Reading *which sub-step failed* is what separates these cleanly. A check
+that exits non-zero on the test step is a different problem from one that
+exits non-zero on the upload step, and conflating them is how a
+token-missing incident becomes a 30-minute investigation instead of a
+five-minute one.
+
+### The PR's diff was not implicated
+
+`d022abc3f`'s diff is 4 files, 1 insertion, 523 deletions: three `.sh`
+deletions at the repo root, plus a comment edit on `rebalancing/api/pool.go`.
+The 18 hits for "rebalancing" in `frontend/src` are all business-domain
+strings (`'Portfolio Rebalancing'`, `'PORTFOLIO_REBALANCE'`, etc.) —
+portfolio rebalancing logic, unrelated to the removed `rebalancing/worker`
+module. The PR cannot be the cause of the Build Frontend failure; the
+empirical proof is the same-SHA rerun pass.
+
+The codecov issue is similarly independent of the PR's diff — it has been
+reproducible on every merge push since, on branches whose diff has no
+business touching coverage upload.
+
+### The branch was not reverted. Why.
+
+Reverting `d022abc3f` would not turn main green: the codecov issue is
+reproducible on every merge push regardless of diff. The PR's diff is
+correct and serves its purpose. Main was red because of an infrastructure
+gap (codecov token), not because of a PR defect, and the fix is the token
+(or — once #405's decoupling lands — the surfaced coverage check).
+
+### Cross-references
+
+- `#337` — Build Frontend flake, intermittency table. `d022abc3f` merge-push
+  `Build Frontend` FAIL + same-SHA rerun PASS is the empirical data point.
+- `docs/ARCHITECTURAL_DECISIONS.md` ADR-049 — coverage-upload failure
+  semantics. The reproducible-failure mode above is exactly what ADR-049
+  addresses.
+- PR #405 — the actual implementation of the ADR-049 B-option (a retry-
+  with-backoff on `Upload Backend Coverage`). PR #406 had a parallel
+  design that was closed as a duplicate of #405.

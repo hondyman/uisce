@@ -2181,3 +2181,78 @@ pointing at the staging item that will complete it.
 speculatively. Both are alpha DDL staging work. The incremental-refresh controls were removed
 outright rather than refused, because that capability has no validated design to point at
 (watermark-bounded population), so there was nothing to register.
+
+### ADR-049: Coverage-Upload Failure Surfaces But Does Not Gate
+
+**Decision: option B (warn with surfaced status check).** The `Upload Coverage`
+step in `backend-tests` matrix carries `continue-on-error: true`; the matrix
+result therefore reflects tests only, never telemetry. A separate, always-
+reported-by-construction sentinel surfaces the upload state independently.
+
+This is not a configuration toggle — it is the implemented semantic, and it
+matters because every alternative either hides a regression or re-couples
+telemetry to deploy gating.
+
+### What the alternative couplings are, and why each is wrong
+
+| Coupling | What it means | Cost |
+|---|---|---|
+| **A — fail the build** | coverage is critical, missing upload = red | every codecov outage, token expiry, or front-end TLS change freezes the platform. The freeze we just lived. |
+| **B — warn with a surfaced check (chosen)** | tests gate deploys; coverage is telemetry that *informs* | one stable, *non-required* check (`Upload Backend Coverage` in #405, or `Backend Tests Coverage Status` in the rejected #406 design) reports success/failure by construction. No path filter. The signal is always visible; it is not always blocking. |
+| **C — fail silently** | the status quo: nothing explicit, only a cascade through `Backend Tests Summary` | the matrix reports failure when tests passed, and the failure mode is indistinguishable from real breakage. Two weeks of intermittent red was caused by exactly this — main was red on `Backend Tests Summary` for what was, in fact, a codecov front-end TLS change. |
+
+The principle: **a test suite's pass/fail is independent of telemetry's success.**
+Coupling coverage-upload reliability to deploy gating is structural fragility,
+not a feature.
+
+### What the chosen implementation does
+
+The implementation is `Continue-on-error` on the upload step (so the matrix
+result reflects tests only) and a separate check that reports by
+construction. In the merged change (#405), the surface is an
+`Upload Backend Coverage` job that runs after the matrix, retries on failure
+with backoff, and warns on all-attempts-failed. The rejected #406 design
+used an `if: always()` sentinel that counted upload misses from per-shard
+matrix outputs and reported FAILURE if any missed. Both decouple; both
+surface the signal; neither gates.
+
+### What the chosen implementation does NOT do
+
+- It does not block merges on upload failure. A missing codecov token
+  produces a red sentinel but does not produce a red required set; the
+  merge can still proceed once tests pass.
+- It does not change the required check list. Adding the coverage-status
+  check to the required set would re-couple telemetry to gating through
+  the back door — "informs rather than blocks" is the decided semantic.
+  If a future reader sees the always-reported check and considers it for
+  the required set, this ADR is the place to point them at: **do not**.
+
+### Rollout sequence
+
+- Apply the decoupling PR (done via #405: codecov-action v4 → v7 + retry on
+  `Upload Backend Coverage`). The matrix passed on the merge push and
+  every subsequent push since, regardless of whether the upload succeeded.
+- Observe the next several merge pushes: the surfaced check should report
+  the upload state independently of the matrix.
+- Add the codecov token (P2, hygiene) to clear the surfaced check on all
+  pushes.
+
+### Cross-references
+
+- `docs/FAILURES_LEDGER.md` — the rule-9 violation entry (the `d022abc3f`
+  merge push on 2026-10-04 that surfaced the design question this ADR
+  answers), the same-SHA rerun discriminator table, and the failure-mode
+  taxonomy (flake / upload / test / scanner).
+- `backend/internal/archguard/workspace_build_test.go` — same required-
+  checks-by-construction discipline applied to workspace modules. The
+  pattern is the same: a stable, always-reported check that fails if its
+  contract is violated, but is never *required* if its role is
+  informational.
+
+### Trade-off, named honestly
+
+Silent loss of coverage data is possible under option B — a coverage check
+that fails to upload is no longer a build-blocker. The mitigation is the
+surfaced status check: the failure is visible. If the team later wants
+stronger guarantees, the answer is *better telemetry*, not "block deploys
+on telemetry outages" — which is the regression this ADR moved out of.
