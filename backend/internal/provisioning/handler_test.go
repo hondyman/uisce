@@ -82,6 +82,14 @@ func (g *rig) expectFree(goldDB string) {
 		sqlmock.NewRows([]string{"id", "id", "db"}).AddRow("gold-t", "gold-i", goldDB))
 }
 
+// expectFreeStructure mocks the structure/template gold-copy lookup (tenant+instance ids only).
+func (g *rig) expectFreeStructure() {
+	g.mock.ExpectQuery(`SELECT code FROM public.tenants`).WillReturnRows(sqlmock.NewRows([]string{"code"}))
+	g.mock.ExpectQuery(`SELECT name FROM public.tenants`).WillReturnRows(sqlmock.NewRows([]string{"name"}))
+	g.mock.ExpectQuery(`FROM public.tenants t`).WillReturnRows(
+		sqlmock.NewRows([]string{"id", "id"}).AddRow("gold-t", "gold-i"))
+}
+
 func (g *rig) do(method, path, body string, auth *security.AuthInfo) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	if auth != nil {
@@ -125,23 +133,25 @@ func TestProvision_AppAndQueueReachTheWorkflow(t *testing.T) {
 
 func TestProvision_TheTemplateDatasourceReachesTheWorkflow(t *testing.T) {
 	g := newRig(t)
-	g.expectFree("gold_copy_db")
+	g.expectFreeStructure()
 	w := g.do("POST", provPath,
 		`{"tenant_name":"Acme Corp","instance_name":"prod","tenant_code":"acme","app":"orm","template_datasource_id":"441f62c9-aad1-481d-9aab-62943fa11cd3"}`, globalAdmin)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Equal(t, "441f62c9-aad1-481d-9aab-62943fa11cd3", g.tc.inputs[0].TemplateDatasourceID)
 	require.Equal(t, "orm", g.tc.inputs[0].App)
+	require.Empty(t, g.tc.inputs[0].GoldCopyDatabase, "structure/template path does not load gold database_name")
 	require.NoError(t, g.mock.ExpectationsWereMet())
 }
 
 func TestProvision_TheMarkerRequestNamesNoIdAndReachesTheWorkflow(t *testing.T) {
 	g := newRig(t)
-	g.expectFree("gold_copy_db")
+	g.expectFreeStructure()
 	w := g.do("POST", provPath,
 		`{"tenant_name":"Acme Corp","instance_name":"prod","tenant_code":"acme","app":"orm","structure_from_gold_copy":true}`, globalAdmin)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.True(t, g.tc.inputs[0].StructureFromGoldCopy)
 	require.Empty(t, g.tc.inputs[0].TemplateDatasourceID, "the saga resolves the template; the request carries no id")
+	require.Empty(t, g.tc.inputs[0].GoldCopyDatabase, "structure path does not load gold database_name")
 	require.NoError(t, g.mock.ExpectationsWereMet())
 }
 

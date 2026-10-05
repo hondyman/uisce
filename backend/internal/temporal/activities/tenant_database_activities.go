@@ -187,16 +187,18 @@ func (a *TenantProvisioningActivities) BindTenantDatabase(ctx context.Context, i
 		// ProbeTenantDatabase resolves through security.DBDatasourceResolver, which
 		// requires tpd/tp/ti is_active=true. Gold-copy clone inserts them inactive;
 		// ActivateTenant only flips the binding lifecycle, so enable the row here.
+		// Touch only is_active: real-DB test fixtures (and some alpha snapshots) have
+		// no updated_at on tenant_product / tenant_instance.
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE public.tenant_product tp
-			SET is_active = true, updated_at = NOW()
+			SET is_active = true
 			FROM public.tenant_product_datasource tpd
 			WHERE tpd.id = $1 AND tp.id = tpd.tenant_product_id`, out.DatasourceID); err != nil {
 			return fmt.Errorf("activate product for probe: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE public.tenant_instance
-			SET is_active = true, updated_at = NOW()
+			SET is_active = true
 			WHERE id = $1`, in.InstanceID); err != nil {
 			return fmt.Errorf("activate instance for probe: %w", err)
 		}
