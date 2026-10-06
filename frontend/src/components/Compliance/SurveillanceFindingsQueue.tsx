@@ -54,7 +54,7 @@ export const SurveillanceFindingsQueue: React.FC = () => {
   const [findings, setFindings] = useState<SurveillanceFinding[]>([]);
   const [loading, setLoading] = useState(false);
   const [detectorFilter, setDetectorFilter] = useState('ALL');
-  const [severityFilter, setSeverityFilter] = useState('ALL');
+  const [severityFilter, setSeverityFilter] = useState('HIGH_AND_CRITICAL');
   const [statusFilter, setStatusFilter] = useState('UNADDRESSED');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -164,7 +164,11 @@ export const SurveillanceFindingsQueue: React.FC = () => {
 
   const filteredFindings = findings.filter(f => {
     if (detectorFilter !== 'ALL' && f.detector_type !== detectorFilter) return false;
-    if (severityFilter !== 'ALL' && f.severity !== severityFilter) return false;
+    if (severityFilter === 'HIGH_AND_CRITICAL') {
+      if (f.severity !== 'HIGH' && f.severity !== 'CRITICAL') return false;
+    } else if (severityFilter !== 'ALL' && f.severity !== severityFilter) {
+      return false;
+    }
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -264,6 +268,19 @@ export const SurveillanceFindingsQueue: React.FC = () => {
                 <option value="WASH_SALE">Wash Sale (1091)</option>
                 <option value="PRO_RATA_ALLOCATION_FAIRNESS">Allocation Fairness</option>
                 <option value="CROSS_ACCOUNT_CONFLICT">Cross-Account Conflict</option>
+              </select>
+
+              <select
+                value={severityFilter}
+                onChange={e => setSeverityFilter(e.target.value)}
+                className="bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-rose-500"
+              >
+                <option value="HIGH_AND_CRITICAL">High & Critical (Default)</option>
+                <option value="CRITICAL">Critical Only</option>
+                <option value="HIGH">High Only</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+                <option value="ALL">All Severities</option>
               </select>
 
               <select

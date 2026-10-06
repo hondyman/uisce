@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/require"
 
 	"github.com/hondyman/uisce/backend/internal/compliance"
 	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
@@ -297,13 +298,6 @@ func TestCoreLibrary_EffectiveDating(t *testing.T) {
 		t.Fatalf("get gold tenant: %v", err)
 	}
 
-	// Clean up any future-dated test records or old v2 test records for seed rules
-	_, _ = db.ExecContext(ctx, `
-		UPDATE compliance.compliance_rule 
-		SET valid_to = NULL, effective_from = '2026-01-01T00:00:00Z', is_active = true
-		WHERE tenant_id = $1 AND rule_code NOT LIKE 'TEST_%' AND rule_code NOT LIKE 'JOIN_TEST_%' AND (valid_to IS NOT NULL OR effective_from > now());
-	`, goldTenant)
-
 	// Current time (2026+) -> all 50 rules are effective
 	asOfNow := time.Now().UTC()
 	rulesNow, err := loader.LoadTenantActiveRulesAsOf(ctx, goldTenant, asOfNow)
@@ -458,7 +452,7 @@ func TestCoreLibrary_All50CoreRules_ContentHashAgreement(t *testing.T) {
 		FROM compliance.compliance_rule r
 		JOIN compliance.compliance_rule_version v 
 		  ON r.id = v.rule_id AND COALESCE(r.current_version, 1) = v.version
-		WHERE r.tenant_id = $1 AND r.valid_to IS NULL AND r.rule_code NOT LIKE 'TEST_%' AND r.rule_code NOT LIKE 'JOIN_TEST_%'
+		WHERE r.tenant_id = $1 AND r.valid_to IS NULL
 		ORDER BY r.rule_code
 	`, goldTenant)
 	if err != nil {
@@ -517,13 +511,21 @@ func TestCoreLibrary_RuleVersionEvolution_PositivePath(t *testing.T) {
 	}
 	bytecodeHash := canonical.ComputeBytecodeHash(nil)
 
-	// Phase 1: Insert Rule V1 and Snapshot V1 in a Transaction
-	tx1, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		t.Fatalf("begin tx1: %v", err)
-	}
+	// Run entire test inside an isolated transaction that rolls back at end
+	tx, err := db.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer tx.Rollback()
 
-	_, err = tx1.ExecContext(ctx, `
+	// Register tenant in transaction
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO public.tenants (id, name, display_name, gold_copy)
+		VALUES ($1, 'test_evolve_tenant', 'Test Evolve Tenant', false)
+		ON CONFLICT (id) DO NOTHING
+	`, testTenant)
+	require.NoError(t, err)
+
+	// Phase 1: Insert Rule V1 and Snapshot V1
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO compliance.compliance_rule (
 			id, tenant_id, rule_code, name, rule_phase, severity, priority,
 			is_active, source_version, inherit_mode, pinned_core_version,
@@ -534,12 +536,9 @@ func TestCoreLibrary_RuleVersionEvolution_PositivePath(t *testing.T) {
 			$4::jsonb, $5::jsonb, $6, ''::bytea
 		)
 	`, ruleID, testTenant, ruleCode, astV1, paramsV1, citationV1)
-	if err != nil {
-		tx1.Rollback()
-		t.Fatalf("insert rule v1: %v", err)
-	}
+	require.NoError(t, err)
 
-	_, err = tx1.ExecContext(ctx, `
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO compliance.compliance_rule_version (
 			rule_id, version, tenant_id, resolved_ast, parameter_thresholds,
 			citation, effective_from, effective_to, content_hash, compiled_bytecode_hash,
@@ -550,37 +549,16 @@ func TestCoreLibrary_RuleVersionEvolution_PositivePath(t *testing.T) {
 			'test_steward', now()
 		)
 	`, ruleID, testTenant, astV1, paramsV1, citationV1, hashV1, bytecodeHash)
-	if err != nil {
-		tx1.Rollback()
-		t.Fatalf("insert rule version 1: %v", err)
-	}
+	require.NoError(t, err)
 
-	if err := tx1.Commit(); err != nil {
-		t.Fatalf("commit tx1: %v", err)
-	}
-
-	defer func() {
-		// Clean up in reverse FK order
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_evaluation_event WHERE tenant_id = $1", testTenant)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_rule WHERE id = $1", ruleID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_rule_version WHERE rule_id = $1", ruleID)
-	}()
-
-	// Phase 2: Evolve to Version 2 in Transaction (Insert Version Snapshot V2 + Update Rule)
+	// Phase 2: Evolve to Version 2 (Insert Version Snapshot V2 + Update Rule)
 	paramsV2 := `{"aggregate_across_accounts":true,"issuer_limit_pct":"0.040000","lookthrough":true}`
 	citationV2 := "UCITS Directive 2009/65/EC - Test Version 2 Tightened"
 	hashV2, err := canonical.ComputeRuleContentHashFromRaw([]byte(astV1), []byte(paramsV2), citationV2)
-	if err != nil {
-		t.Fatalf("compute hash v2: %v", err)
-	}
-
-	tx2, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		t.Fatalf("begin tx2: %v", err)
-	}
+	require.NoError(t, err)
 
 	// 1. Insert Version 2 Snapshot
-	_, err = tx2.ExecContext(ctx, `
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO compliance.compliance_rule_version (
 			rule_id, version, tenant_id, resolved_ast, parameter_thresholds,
 			citation, effective_from, effective_to, content_hash, compiled_bytecode_hash,
@@ -591,13 +569,10 @@ func TestCoreLibrary_RuleVersionEvolution_PositivePath(t *testing.T) {
 			'test_steward', now()
 		)
 	`, ruleID, testTenant, astV1, paramsV2, citationV2, hashV2, bytecodeHash)
-	if err != nil {
-		tx2.Rollback()
-		t.Fatalf("insert rule version 2: %v", err)
-	}
+	require.NoError(t, err)
 
 	// 2. Update Rule to Version 2
-	_, err = tx2.ExecContext(ctx, `
+	_, err = tx.ExecContext(ctx, `
 		UPDATE compliance.compliance_rule
 		SET 
 			parameter_thresholds = $1::jsonb,
@@ -607,14 +582,8 @@ func TestCoreLibrary_RuleVersionEvolution_PositivePath(t *testing.T) {
 			updated_at = now()
 		WHERE id = $3
 	`, paramsV2, citationV2, ruleID)
-	if err != nil {
-		tx2.Rollback()
-		t.Fatalf("update rule to v2 (trigger should allow this because v2 snapshot was inserted): %v", err)
-	}
+	require.NoError(t, err)
 
-	if err := tx2.Commit(); err != nil {
-		t.Fatalf("commit tx2: %v", err)
-	}
 	t.Logf("Rule evolution V1 -> V2 succeeded in transaction with structural trigger validation!")
 
 	// Phase 3: Emit Evaluation Event referencing Rule Version 2 and Hash V2
@@ -635,11 +604,9 @@ func TestCoreLibrary_RuleVersionEvolution_PositivePath(t *testing.T) {
 		},
 	}
 	evalHash, err := canonical.ComputeEvaluationHash(evalHashInput)
-	if err != nil {
-		t.Fatalf("compute evaluation hash: %v", err)
-	}
+	require.NoError(t, err)
 
-	_, err = db.ExecContext(ctx, `
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO compliance.compliance_evaluation_event (
 			id, lineage_id, tenant_id, rule_id, rule_version, rule_content_hash,
 			action_taken, passed, latency_micros, evaluation_hash, evaluated_at,
@@ -650,13 +617,11 @@ func TestCoreLibrary_RuleVersionEvolution_PositivePath(t *testing.T) {
 			'{"accountId":"acc-evolve-1"}'::jsonb, '{"proposedWeight":"0.035000"}'::jsonb
 		)
 	`, lineageID, testTenant, ruleID, hashV2, evalHash)
-	if err != nil {
-		t.Fatalf("insert evaluation event referencing v2 and content hash v2: %v", err)
-	}
+	require.NoError(t, err)
 	t.Logf("Evaluation event referencing V2 and 64-char ContentHash V2 inserted successfully with FK verification!")
 
 	// Phase 4: Verify FK violation when attempting to insert evaluation event for nonexistent version
-	_, err = db.ExecContext(ctx, `
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO compliance.compliance_evaluation_event (
 			id, lineage_id, tenant_id, rule_id, rule_version, rule_content_hash,
 			action_taken, passed, latency_micros, evaluation_hash, evaluated_at
@@ -665,9 +630,7 @@ func TestCoreLibrary_RuleVersionEvolution_PositivePath(t *testing.T) {
 			'APPROVED', true, 120, $4, now()
 		)
 	`, testTenant, ruleID, hashV2, evalHash)
-	if err == nil {
-		t.Fatalf("Expected FK constraint violation for nonexistent version 999, but insert succeeded")
-	}
+	require.Error(t, err, "Expected FK constraint violation for nonexistent version 999")
 	t.Logf("FK RESTRICT constraint correctly rejected nonexistent rule version 999: %v", err)
 }
 

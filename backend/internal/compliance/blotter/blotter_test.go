@@ -172,22 +172,26 @@ func TestBlotterService_JoinIntegrity_VersionAnchoringAndTamperRejection(t *test
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	loader := compliance.NewMultiTenantRuleLoader(db)
-	goldTenant, err := loader.GetGoldCopyTenantID(ctx)
-	require.NoError(t, err)
-
 	hub := NewWebSocketHub()
 	go hub.Run()
 	svc := NewService(db, hub)
-
+	testTenant := uuid.New()
 	testRuleID := uuid.New()
 	testRuleCode := fmt.Sprintf("JOIN_TEST_%s", uuid.New().String()[:8])
+
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO public.tenants (id, name, display_name, gold_copy)
+		VALUES ($1, 'join_test_tenant', 'Join Test Tenant', false)
+		ON CONFLICT (id) DO NOTHING
+	`, testTenant)
+	require.NoError(t, err)
 
 	// Clean up all inserted test artifacts
 	var lineageV1, lineageV2, lineageTampered uuid.UUID
 	defer func() {
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_evaluation_event WHERE lineage_id IN ($1, $2, $3)", lineageV1, lineageV2, lineageTampered)
-		_, _ = db.ExecContext(context.Background(), "UPDATE compliance.compliance_rule SET valid_to = now() WHERE id = $1", testRuleID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_rule_version WHERE tenant_id = $1", testTenant)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_rule WHERE tenant_id = $1", testTenant)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM public.tenants WHERE id = $1", testTenant)
 	}()
 
 	// 1. Seed Rule V1 (Limit: 5%)
@@ -208,7 +212,7 @@ func TestBlotterService_JoinIntegrity_VersionAnchoringAndTamperRejection(t *test
 			$1, $2, 'inherit', $3, 'Join Integrity Rule', 'PRE_TRADE', 'HARD_BLOCK',
 			100, true, 1, $4::jsonb, $5::jsonb, $6, '\x00'::bytea, 'ACTIVE'
 		)
-	`, testRuleID, goldTenant, testRuleCode, astV1, paramsV1, citationV1)
+	`, testRuleID, testTenant, testRuleCode, astV1, paramsV1, citationV1)
 	require.NoError(t, err)
 
 	_, err = tx.ExecContext(ctx, `
@@ -220,7 +224,7 @@ func TestBlotterService_JoinIntegrity_VersionAnchoringAndTamperRejection(t *test
 			$1, 1, $2, $3::jsonb, $4::jsonb,
 			$5, now() - interval '10 days', null, $6, $7, 'seed', now() - interval '10 days'
 		)
-	`, testRuleID, goldTenant, astV1, paramsV1, citationV1, hashV1, canonical.ComputeBytecodeHash(nil))
+	`, testRuleID, testTenant, astV1, paramsV1, citationV1, hashV1, canonical.ComputeBytecodeHash(nil))
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
 
@@ -242,7 +246,7 @@ func TestBlotterService_JoinIntegrity_VersionAnchoringAndTamperRejection(t *test
 			$1, 2, $2, $3::jsonb, $4::jsonb,
 			$5, now(), null, $6, $7, 'seed', now()
 		)
-	`, testRuleID, goldTenant, astV2, paramsV2, citationV2, hashV2, canonical.ComputeBytecodeHash(nil))
+	`, testRuleID, testTenant, astV2, paramsV2, citationV2, hashV2, canonical.ComputeBytecodeHash(nil))
 	require.NoError(t, err)
 
 	_, err = tx2.ExecContext(ctx, `
@@ -269,11 +273,11 @@ func TestBlotterService_JoinIntegrity_VersionAnchoringAndTamperRejection(t *test
 			'{"pos.issuer_pct": "0.042000", "issuer_limit_pct": "0.050000"}'::jsonb,
 			now() - interval '5 days', now() - interval '5 days'
 		)
-	`, lineageV1, goldTenant, testRuleID, hashV1)
+	`, lineageV1, testTenant, testRuleID, hashV1)
 	require.NoError(t, err)
 
 	// 4. Assert Evidence Bundle for V1 Event: MUST return exact V1 snapshot, NOT V2!
-	bundleV1, err := svc.GetEvidenceBundleByLineageID(ctx, goldTenant, lineageV1)
+	bundleV1, err := svc.GetEvidenceBundleByLineageID(ctx, testTenant, lineageV1)
 	require.NoError(t, err)
 	require.NotNil(t, bundleV1)
 	require.Equal(t, 1, bundleV1.RuleSnapshot.Version, "Evidence bundle MUST anchor strictly to historical version 1")
@@ -297,10 +301,10 @@ func TestBlotterService_JoinIntegrity_VersionAnchoringAndTamperRejection(t *test
 			'{"pos.issuer_pct": "0.038000", "issuer_limit_pct": "0.030000"}'::jsonb,
 			now(), now()
 		)
-	`, lineageV2, goldTenant, testRuleID, hashV2)
+	`, lineageV2, testTenant, testRuleID, hashV2)
 	require.NoError(t, err)
 
-	bundleV2, err := svc.GetEvidenceBundleByLineageID(ctx, goldTenant, lineageV2)
+	bundleV2, err := svc.GetEvidenceBundleByLineageID(ctx, testTenant, lineageV2)
 	require.NoError(t, err)
 	require.Equal(t, 2, bundleV2.RuleSnapshot.Version)
 	require.Equal(t, hashV2, bundleV2.RuleSnapshot.ContentHash)
@@ -321,11 +325,11 @@ func TestBlotterService_JoinIntegrity_VersionAnchoringAndTamperRejection(t *test
 			'{"pos.issuer_pct": "0.040000"}'::jsonb,
 			now(), now()
 		)
-	`, lineageTampered, goldTenant, testRuleID, spoofedHash)
+	`, lineageTampered, testTenant, testRuleID, spoofedHash)
 	require.NoError(t, err)
 
 	// MUST fail loudly with ErrProvenanceVerificationFailed! Never degrade silently!
-	bundleTampered, err := svc.GetEvidenceBundleByLineageID(ctx, goldTenant, lineageTampered)
+	bundleTampered, err := svc.GetEvidenceBundleByLineageID(ctx, testTenant, lineageTampered)
 	require.Error(t, err, "Spoofed content hash on evaluation event MUST be rejected loudly")
 	require.ErrorIs(t, err, ErrProvenanceVerificationFailed, "Error must wrap ErrProvenanceVerificationFailed")
 	require.Nil(t, bundleTampered)

@@ -204,8 +204,14 @@ func (e *PostTradeSurveillanceEngine) persistWashSaleFinding(ctx context.Context
 		severity = "HIGH"
 	}
 
-	windowStart := v.DetectedAt.Add(-time.Duration(v.WindowDays*24) * time.Hour)
-	windowEnd := v.DetectedAt
+	windowStart := v.LossExecutedAt
+	if windowStart.IsZero() {
+		windowStart = v.DetectedAt.Add(-time.Duration(v.WindowDays*24) * time.Hour)
+	}
+	windowEnd := v.ReplacementExecutedAt
+	if windowEnd.IsZero() {
+		windowEnd = v.DetectedAt
+	}
 
 	metadata, _ := json.Marshal(map[string]any{
 		"loss_execution_id":        v.LossExecutionID,

@@ -187,12 +187,14 @@ func TestRegulatoryWorkflow_FullHappyPathPublish(t *testing.T) {
 	defer cancel()
 
 	svc := NewService(db)
-	loader := compliance.NewMultiTenantRuleLoader(db)
-
-	goldTenant, err := loader.GetGoldCopyTenantID(ctx)
+	testCoreTenant := uuid.New()
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO public.tenants (id, name, display_name, gold_copy)
+		VALUES ($1, $2, $2, false)
+	`, testCoreTenant, fmt.Sprintf("e2e_core_%s", testCoreTenant.String()[:8]))
 	require.NoError(t, err)
 
-	// Create an isolated Test Core Rule under goldTenant
+	// Create an isolated Test Core Rule under testCoreTenant
 	depRuleID := uuid.New()
 	testRuleCode := fmt.Sprintf("TEST_UCITS_DEP_%d", time.Now().UnixNano()%1000000)
 	origAST := []byte(`{"left":{"path":"position.depository_exposure_pct","type":"METRIC"},"operator":"GREATER_THAN","right":{"name":"single_depository_limit_pct","type":"PARAM"},"type":"COMPARISON"}`)
@@ -200,16 +202,30 @@ func TestRegulatoryWorkflow_FullHappyPathPublish(t *testing.T) {
 	origCitation := "UCITS Directive 2009/65/EC Art. 52 § 1(b) Deposit Limit 20%"
 	curVer := 1
 
+	// Set up an extend tenant rule to assert drift flag fanout
+	extendTenant := uuid.New()
+	extendRuleID := uuid.New()
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO public.tenants (id, name, display_name, gold_copy)
+		VALUES ($1, $2, $2, false)
+	`, extendTenant, fmt.Sprintf("e2e_extend_%s", extendTenant.String()[:8]))
+	require.NoError(t, err)
+
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "UPDATE compliance.compliance_rule SET valid_to = now(), is_active = false WHERE id IN ($1, $2)", depRuleID, extendRuleID)
+		_, _ = db.ExecContext(context.Background(), "UPDATE public.tenants SET is_active = false WHERE id IN ($1, $2)", testCoreTenant, extendTenant)
+	}()
+
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO compliance.compliance_rule (
 			id, tenant_id, inherit_mode, rule_code, name, rule_phase, severity,
 			priority, is_active, current_version, ast_condition, parameter_thresholds,
 			citation, compiled_bytecode, library_status, effective_from
 		) VALUES (
-			$1, $2, 'inherit', $3, 'Test Deposit Limit', 'PRE_TRADE', 'HARD_BLOCK',
+			$1, $2, 'custom', $3, 'Test Deposit Limit', 'PRE_TRADE', 'HARD_BLOCK',
 			100, true, 1, $4::jsonb, $5::jsonb, $6, ''::bytea, 'ACTIVE', '2026-01-01T00:00:00Z'
 		)
-	`, depRuleID, goldTenant, testRuleCode, string(origAST), string(origParams), origCitation)
+	`, depRuleID, testCoreTenant, testRuleCode, string(origAST), string(origParams), origCitation)
 	require.NoError(t, err)
 
 	coreHashV1, err := canonical.ComputeRuleContentHashFromRaw(origAST, origParams, origCitation)
@@ -224,12 +240,9 @@ func TestRegulatoryWorkflow_FullHappyPathPublish(t *testing.T) {
 			$1, 1, $2, $3::jsonb, $4::jsonb,
 			$5, '2026-01-01T00:00:00Z', null, $6, $7, 'seed', now()
 		)
-	`, depRuleID, goldTenant, string(origAST), string(origParams), origCitation, coreHashV1, canonical.ComputeBytecodeHash(nil))
+	`, depRuleID, testCoreTenant, string(origAST), string(origParams), origCitation, coreHashV1, canonical.ComputeBytecodeHash(nil))
 	require.NoError(t, err)
 
-	// Set up an extend tenant rule to assert drift flag fanout
-	extendTenant := uuid.New()
-	extendRuleID := uuid.New()
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO compliance.compliance_rule (
 			id, tenant_id, core_rule_id, inherit_mode, pinned_core_version, drift_status,
@@ -256,12 +269,19 @@ func TestRegulatoryWorkflow_FullHappyPathPublish(t *testing.T) {
 	`, extendRuleID, extendTenant, string(origAST), string(origParams), origCitation, extendHash, canonical.ComputeBytecodeHash(nil))
 	require.NoError(t, err)
 
-	defer func() {
-		_, _ = db.ExecContext(context.Background(), "UPDATE compliance.compliance_rule SET valid_to = now() WHERE rule_code = $1 OR id IN ($2, $3)", testRuleCode, extendRuleID, depRuleID)
-	}()
+	caseCode := fmt.Sprintf("RCC-2027-%s", uuid.New().String()[:8])
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_notification WHERE payload->>'case_code' = $1", caseCode)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_case_event WHERE case_id IN (SELECT id FROM compliance.regulatory_change_case WHERE case_code = $1)", caseCode)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_draft_rule WHERE rule_id IN ($1, $2)", extendRuleID, depRuleID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_change_case WHERE case_code = $1", caseCode)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.governance_audit_event WHERE rule_id IN ($1, $2) OR steward_notes LIKE '%' || $3 || '%'", extendRuleID, depRuleID, caseCode)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_rule_version WHERE rule_id IN ($1, $2)", extendRuleID, depRuleID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_rule WHERE id IN ($1, $2) OR rule_code = $3", extendRuleID, depRuleID, testRuleCode)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM public.tenants WHERE id IN ($1, $2)", extendTenant, testCoreTenant)
+	})
 
 	// 1. Intake Case
-	caseCode := fmt.Sprintf("RCC-2027-%s", uuid.New().String()[:8])
 	c, err := svc.CreateCase(ctx, IntakeRequest{
 		CaseCode:        caseCode,
 		Source:          SourceRegulatorPublication,
@@ -271,14 +291,6 @@ func TestRegulatoryWorkflow_FullHappyPathPublish(t *testing.T) {
 		CreatedBy:       "steward_alice",
 	})
 	require.NoError(t, err)
-
-	defer func() {
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_case_event WHERE case_id = $1", c.ID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_draft_rule WHERE case_id = $1", c.ID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_change_case WHERE id = $1", c.ID)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_notification WHERE payload->>'case_code' = $1", caseCode)
-		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.governance_audit_event WHERE steward_notes LIKE '%' || $1 || '%'", caseCode)
-	}()
 
 	// 2. Triage Case
 	err = svc.TriageCase(ctx, TriageRequest{
@@ -375,11 +387,19 @@ func TestRegulatoryWorkflow_FullHappyPathPublish(t *testing.T) {
 	extendNotifs, err := notifSvc.GetUnreadNotifications(ctx, extendTenant)
 	require.NoError(t, err)
 	require.NotEmpty(t, extendNotifs)
-	require.Equal(t, NotificationDriftFlag, extendNotifs[0].Kind)
-	t.Logf("Extend tenant received unread DRIFT_FLAG notification: %q", extendNotifs[0].Title)
+	var foundDriftNotif bool
+	for _, n := range extendNotifs {
+		if n.Kind == NotificationDriftFlag {
+			foundDriftNotif = true
+			t.Logf("Extend tenant received unread DRIFT_FLAG notification: %q", n.Title)
+			break
+		}
+	}
+	require.True(t, foundDriftNotif, "Extend tenant should receive DRIFT_FLAG notification")
 
 	// 10. Verify Point-in-Time Rule Loading
-	rulesNow, err := loader.LoadTenantActiveRulesAsOf(ctx, goldTenant, time.Now().UTC())
+	loader := compliance.NewMultiTenantRuleLoader(db)
+	rulesNow, err := loader.LoadTenantActiveRulesAsOf(ctx, testCoreTenant, time.Now().UTC())
 	require.NoError(t, err)
 	var foundDepRuleNow *compliance.ComplianceRuleRecord
 	for i := range rulesNow {
@@ -390,7 +410,7 @@ func TestRegulatoryWorkflow_FullHappyPathPublish(t *testing.T) {
 	}
 	require.Nil(t, foundDepRuleNow, "Future rule should NOT be active before effective_from")
 
-	rulesFuture, err := loader.LoadTenantActiveRulesAsOf(ctx, goldTenant, futureEffective.Add(time.Hour))
+	rulesFuture, err := loader.LoadTenantActiveRulesAsOf(ctx, testCoreTenant, futureEffective.Add(time.Hour))
 	require.NoError(t, err)
 	var foundDepRuleFuture *compliance.ComplianceRuleRecord
 	for i := range rulesFuture {
@@ -463,7 +483,10 @@ func TestRegulatoryWorkflow_ApprovalContentBinding_AdversarialTamper(t *testing.
 	require.NoError(t, err)
 
 	defer func() {
-		_, _ = db.ExecContext(context.Background(), "UPDATE compliance.compliance_rule SET valid_to = now() WHERE id = $1", ruleID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.governance_audit_event WHERE rule_id = $1", ruleID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_draft_rule WHERE rule_id = $1", ruleID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_rule_version WHERE rule_id = $1", ruleID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_rule WHERE id = $1", ruleID)
 	}()
 
 	_ = svc.TriageCase(ctx, TriageRequest{CaseID: c.ID, Classification: ClassificationParameterChange, TriagedBy: "steward"})
@@ -1023,11 +1046,15 @@ func TestRuleSnapshotReconciler_DetectsTamperedHash(t *testing.T) {
 	require.Equal(t, 0, initialReport.Mismatched, "Initial baseline should have 0 hash mismatches")
 	t.Logf("Baseline snapshot reconciler sweep verified: %d/%d rules match Go canonical hash!", initialReport.Matched, initialReport.TotalScanned)
 
-	// 2. Insert test rule with deliberately tampered snapshot hash
+	// 2. Insert test rule with deliberately tampered snapshot hash on an isolated test tenant
+	testTenant := uuid.New()
 	testRuleID := uuid.New()
 	testRuleCode := fmt.Sprintf("TEST_RECON_%d", time.Now().UnixNano()%100000)
-	loader := compliance.NewMultiTenantRuleLoader(db)
-	goldTenant, err := loader.GetGoldCopyTenantID(ctx)
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO public.tenants (id, name, display_name, gold_copy)
+		VALUES ($1, $2, $2, false)
+	`, testTenant, fmt.Sprintf("recon_%s", testTenant.String()[:8]))
 	require.NoError(t, err)
 
 	_, err = db.ExecContext(ctx, `
@@ -1039,11 +1066,13 @@ func TestRuleSnapshotReconciler_DetectsTamperedHash(t *testing.T) {
 			$1, $2, 'inherit', $3, 'Reconcile Test Rule', 'PRE_TRADE', 'HARD_BLOCK',
 			100, true, 1, '{"type":"METRIC","path":"pos.weight"}'::jsonb, '{"limit":"0.100000"}'::jsonb, 'Citation', '\x00'::bytea, 'ACTIVE'
 		)
-	`, testRuleID, goldTenant, testRuleCode)
+	`, testRuleID, testTenant, testRuleCode)
 	require.NoError(t, err)
 
 	defer func() {
-		_, _ = db.ExecContext(context.Background(), "UPDATE compliance.compliance_rule SET valid_to = now() WHERE id = $1", testRuleID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_notification WHERE kind = 'SYSTEM' AND title LIKE '%CRITICAL: Rule Version Hash Mismatch%'")
+		_, _ = db.ExecContext(context.Background(), "UPDATE compliance.compliance_rule SET valid_to = now(), is_active = false WHERE id = $1", testRuleID)
+		_, _ = db.ExecContext(context.Background(), "UPDATE public.tenants SET is_active = false WHERE id = $1", testTenant)
 	}()
 
 	tamperedHash := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
@@ -1055,7 +1084,7 @@ func TestRuleSnapshotReconciler_DetectsTamperedHash(t *testing.T) {
 			$1, 1, $2, '{"type":"METRIC","path":"pos.weight"}'::jsonb, '{"limit":"0.100000"}'::jsonb,
 			'Citation', now(), $3, $3, 'tester'
 		)
-	`, testRuleID, goldTenant, tamperedHash)
+	`, testRuleID, testTenant, tamperedHash)
 	require.NoError(t, err)
 
 	// 3. Re-run sweep and assert detection of injected divergence
@@ -1146,7 +1175,10 @@ func TestRegulatoryWorkflow_CorpusApprovalBinding_Tamper(t *testing.T) {
 	require.NoError(t, err)
 
 	defer func() {
-		_, _ = db.ExecContext(context.Background(), "UPDATE compliance.compliance_rule SET valid_to = now() WHERE id = $1", ruleID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.governance_audit_event WHERE rule_id = $1", ruleID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.regulatory_draft_rule WHERE rule_id = $1", ruleID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_rule_version WHERE rule_id = $1", ruleID)
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_rule WHERE id = $1", ruleID)
 	}()
 
 	_ = svc.TriageCase(ctx, TriageRequest{CaseID: c.ID, Classification: ClassificationParameterChange, TriagedBy: "steward"})

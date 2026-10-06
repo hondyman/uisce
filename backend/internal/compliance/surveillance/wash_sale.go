@@ -25,16 +25,18 @@ type TradeRecord struct {
 
 // WashSaleViolation records an identified wash-sale event under IRS 1091 rules (30-day window)
 type WashSaleViolation struct {
-	TenantID          uuid.UUID
-	BeneficialOwnerID uuid.UUID
-	LossExecutionID   uuid.UUID
-	LossAccountID     uuid.UUID
-	LossAmount        decimal.Decimal
-	ReplacementExecID uuid.UUID
-	ReplacementAcctID uuid.UUID
-	SecurityID        uuid.UUID
-	WindowDays        int
-	DetectedAt        time.Time
+	TenantID              uuid.UUID
+	BeneficialOwnerID     uuid.UUID
+	LossExecutionID       uuid.UUID
+	LossAccountID         uuid.UUID
+	LossExecutedAt        time.Time
+	LossAmount            decimal.Decimal
+	ReplacementExecID     uuid.UUID
+	ReplacementAcctID     uuid.UUID
+	ReplacementExecutedAt time.Time
+	SecurityID            uuid.UUID
+	WindowDays            int
+	DetectedAt            time.Time
 }
 
 // WashSaleDetector scans trade history for loss-harvesting accompanied by replacement purchases within ±30 days
@@ -83,16 +85,18 @@ func (d *WashSaleDetector) DetectWashSales(ctx context.Context, trades []TradeRe
 				// Post-sale repurchase within 30 days
 				if buy.ExecutedAt.After(sale.ExecutedAt) && buy.ExecutedAt.Sub(sale.ExecutedAt) <= windowDuration {
 					violations = append(violations, WashSaleViolation{
-						TenantID:          sale.TenantID,
-						BeneficialOwnerID: k.ownerID,
-						LossExecutionID:   sale.ExecutionID,
-						LossAccountID:     sale.AccountID,
-						LossAmount:        sale.RealizedGainLoss.Abs(),
-						ReplacementExecID: buy.ExecutionID,
-						ReplacementAcctID: buy.AccountID,
-						SecurityID:        k.securityID,
-						WindowDays:        d.windowDays,
-						DetectedAt:        time.Now().UTC(),
+						TenantID:              sale.TenantID,
+						BeneficialOwnerID:     k.ownerID,
+						LossExecutionID:       sale.ExecutionID,
+						LossAccountID:         sale.AccountID,
+						LossExecutedAt:        sale.ExecutedAt,
+						LossAmount:            sale.RealizedGainLoss.Abs(),
+						ReplacementExecID:     buy.ExecutionID,
+						ReplacementAcctID:     buy.AccountID,
+						ReplacementExecutedAt: buy.ExecutedAt,
+						SecurityID:            k.securityID,
+						WindowDays:            d.windowDays,
+						DetectedAt:            time.Now().UTC(),
 					})
 					break
 				}
