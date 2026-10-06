@@ -193,13 +193,17 @@ export const ComplianceDecisionBlotter: React.FC = () => {
   // Track newest evaluated timestamp for reconnect gap-filling
   const lastEvaluatedAtRef = useRef<string | null>(null);
 
-  // Gap-fill missed evaluations during disconnection
+  // Gap-fill missed evaluations during disconnection (with 10-second overlap safety margin for out-of-order delivery)
   const performGapFill = useCallback(async (sinceIso: string) => {
     try {
       const tenantId = localStorage.getItem('tenant_id') || '99e99e99-99e9-49e9-89e9-99e99e99e999';
       const token = localStorage.getItem('AUTH_TOKEN') || localStorage.getItem('auth_token') || '';
 
-      const resp = await fetch(`/api/compliance/evaluations?from=${encodeURIComponent(sinceIso)}&page_size=100`, {
+      // Overlap buffer ensures no messages are missed due to partition rebalance skew
+      const sinceDate = new Date(sinceIso);
+      const overlapIso = isNaN(sinceDate.getTime()) ? sinceIso : new Date(sinceDate.getTime() - 10000).toISOString();
+
+      const resp = await fetch(`/api/compliance/evaluations?from=${encodeURIComponent(overlapIso)}&page_size=100`, {
         headers: {
           'Authorization': token ? `Bearer ${token}` : '',
           'X-Tenant-ID': tenantId,
