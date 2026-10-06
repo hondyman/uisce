@@ -20,6 +20,7 @@ export const STUDIO_ROUTES: { path: string; slug: string }[] = [
   { path: 'infrastructure/streaming', slug: 'lakehouse-streaming' },
   { path: 'lakehouse-streaming', slug: 'lakehouse-streaming' },
   { path: 'system/lakehouse', slug: 'system-lakehouse' },
+  { path: 'system/lakehouse-status', slug: 'lakehouse-status' },
 ];
 
 /** The app routes a page is served at, e.g. ['/data/mastering']. */

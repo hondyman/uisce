@@ -397,6 +397,23 @@ func AuditDestinationFromEnv() AuditDestination {
 	return &lazyDestination{build: func() (AuditDestination, error) { return destinationBuilder() }}
 }
 
+// StatusAdminDBFromEnv opens a read-only StarRocks connection for the status panel. It uses
+// the LEGACY DSN (LAKEHOUSE_STARROCKS_DSN), not the per-tenant router, because the panel's
+// SHOW FRONTENDS / SHOW BACKENDS / SHOW RESOURCE GROUPS ALL are cluster-wide queries that
+// don't go through tenant routing. Returns nil, nil if the env is not configured; the
+// panel then serves the tenants-only view with a "cluster not configured" note.
+//
+// Any StarRocks user can run these SHOW commands; the root credential is NOT required. On a
+// multi-tenant cluster, a dedicated read-only user (e.g. status_reader) is preferred, but
+// this function does not require it.
+func StatusAdminDBFromEnv() (*sql.DB, error) {
+	dsn := os.Getenv("LAKEHOUSE_STARROCKS_DSN")
+	if dsn == "" {
+		return nil, nil
+	}
+	return OpenStarRocksDSN(dsn)
+}
+
 // destinationBuilder is a variable so a test can count constructions.
 var destinationBuilder = buildDestinationFromEnv
 
@@ -410,7 +427,7 @@ func buildDestinationFromEnv() (AuditDestination, error) {
 
 	// Per-tenant overrides win when any are present; otherwise we fall back to the legacy DSN
 	// (a single tenant cluster keeps working unchanged).
-	name2dsn, name2rg := scanTenantEnv(os.Environ())
+	name2dsn, name2initRG := ScanTenantEnv(os.Environ())
 	require := strings.EqualFold(os.Getenv("LAKEHOUSE_STARROCKS_REQUIRE_TENANT_DSN"), "true")
 	if len(name2dsn) == 0 {
 		dsn := os.Getenv("LAKEHOUSE_STARROCKS_DSN")
@@ -423,10 +440,10 @@ func buildDestinationFromEnv() (AuditDestination, error) {
 		}
 		return NewStarRocks(db, cfg)
 	}
-	return newTenantRouter(cfg, name2dsn, name2rg, os.Getenv("LAKEHOUSE_STARROCKS_DSN"), require, defaultLogger{})
+	return newTenantRouter(cfg, name2dsn, name2initRG, os.Getenv("LAKEHOUSE_STARROCKS_DSN"), require, defaultLogger{})
 }
 
-// tenantEnvKey is the canonical env-var suffix for a tenant name. Tenant names that don't
+// TenantEnvKey is the canonical env-var suffix for a tenant name. Tenant names that don't
 // slug to a valid env-var key (spaces, hyphens) are mapped here so the router can look up
 // LAKEHOUSE_STARROCKS_DSN_TENANT_<KEY> reliably. ASCII letters and digits are kept verbatim;
 // every run of any other character collapses to a single underscore; leading and trailing
@@ -435,7 +452,10 @@ func buildDestinationFromEnv() (AuditDestination, error) {
 //	"Demo Tenant CRD Bakeoff" → DEMO_TENANT_CRD_BAKEOFF
 //	"northwinds-prod"         → NORTHWINDS_PROD
 //	"  tenant-A  "            → TENANT_A
-func tenantEnvKey(name string) string {
+//
+// Exported so the status panel can ask "what wiring has this process discovered for tenant
+// X?" using the same slug the router uses on every connect.
+func TenantEnvKey(name string) string {
 	if name == "" {
 		return ""
 	}
@@ -455,21 +475,28 @@ func tenantEnvKey(name string) string {
 }
 
 const (
-	dsnTenantPrefix      = "LAKEHOUSE_STARROCKS_DSN_TENANT_"
-	resourceGroupPrefix  = "LAKEHOUSE_STARROCKS_RESOURCE_GROUP_TENANT_"
-	tenantMaxOpenConns   = 10              // matches the resource group's concurrency_limit
-	tenantConnMaxLifetime = 5 * time.Minute // rotates stale resource-group bindings after classifier edits
+	dsnTenantPrefix        = "LAKEHOUSE_STARROCKS_DSN_TENANT_"
+	initRGEnvPrefix        = "LAKEHOUSE_STARROCKS_INIT_RESOURCE_GROUP_TENANT_"
+	tenantMaxOpenConns     = 10               // matches the resource group's concurrency_limit
+	tenantConnMaxLifetime  = 5 * time.Minute  // rotates stale resource-group bindings after classifier edits
+	tenantConnMaxIdleTime  = 60 * time.Second // releases idle conns so 12.5 GB node doesn't sit on dead pool capacity
 )
 
-// scanTenantEnv returns one map per tenant override. It does not validate DSNs or resource-group
-// names; the router does that on first use so a typo in one tenant doesn't prevent the cluster
-// from booting. Collisions (two distinct env-var suffixes that differ only by case or punctuation
-// collapse to the same slug) are logged via the returned keys map so a startup pass can surface
-// them; the actual collision detection happens at first build, not here, because env-var values
-// hold the configured DSN, not a tenant name.
-func scanTenantEnv(env []string) (name2dsn, name2rg map[string]string) {
+// ScanTenantEnv returns per-tenant DSN and init-resource-group maps keyed by tenant slug (via
+// `TenantEnvKey` at lookup time). It does not validate DSNs or resource-group names; the router
+// does that on first use so a typo in one tenant doesn't prevent the cluster from booting.
+//
+// Init-resource-group env vars mirror the DSN convention: one per tenant, slug-suffixed.
+// A global opt-in was tried first but it OVERRIDES classifier routing (the SET pins the
+// connection's group, the classifier no longer gets to choose) — which means a single
+// shared value actively defeats per-tenant isolation. The per-tenant shape is the only one
+// that composes safely with the classifier system.
+//
+// Exported so the status service can read the same wiring the router uses, without
+// duplicating the prefix-matching logic.
+func ScanTenantEnv(env []string) (name2dsn, name2initRG map[string]string) {
 	name2dsn = make(map[string]string)
-	name2rg = make(map[string]string)
+	name2initRG = make(map[string]string)
 	for _, kv := range env {
 		eq := strings.IndexByte(kv, '=')
 		if eq <= 0 {
@@ -478,12 +505,12 @@ func scanTenantEnv(env []string) (name2dsn, name2rg map[string]string) {
 		k, v := kv[:eq], kv[eq+1:]
 		switch {
 		case strings.HasPrefix(k, dsnTenantPrefix):
-			name2dsn[k[len(dsnTenantPrefix):]] = v
-		case strings.HasPrefix(k, resourceGroupPrefix):
-			name2rg[k[len(resourceGroupPrefix):]] = v
+			name2dsn[strings.ToUpper(k[len(dsnTenantPrefix):])] = v
+		case strings.HasPrefix(k, initRGEnvPrefix):
+			name2initRG[strings.ToUpper(k[len(initRGEnvPrefix):])] = v
 		}
 	}
-	return name2dsn, name2rg
+	return name2dsn, name2initRG
 }
 
 type lazyDestination struct {
@@ -555,10 +582,10 @@ func (l *lazyDestination) AuditRange(ctx context.Context, tenantID uuid.UUID, af
 // calls that don't pass a name (MaxAuditID, etc.) require EnsureAuditDestination to have
 // been called for that tenant first so the id→name mapping is known.
 type tenantRouter struct {
-	cfg      StarRocksConfig
-	name2dsn map[string]string
-	name2rg  map[string]string
-	require  bool
+	cfg        StarRocksConfig
+	name2dsn   map[string]string
+	name2initRG map[string]string // slug → resource-group name; empty/absent → no init SQL for that tenant
+	require    bool
 
 	// legacy is built lazily from LAKEHOUSE_STARROCKS_DSN and used as the fallback. nil if
 	// that env var is empty; in that case unmapped tenants always error.
@@ -569,10 +596,11 @@ type tenantRouter struct {
 
 	mu      sync.Mutex
 	id2name map[uuid.UUID]string
-	cache   map[string]*StarRocks // tenant name → built
+	cache   map[string]AuditDestination // tenant name → built (production uses *StarRocks; tests stub)
+	warned  map[string]struct{}        // tenant names we've already WARN-logged for the unmapped path
 
 	openDB func(dsn string, initSQL []string) (*sql.DB, error)
-	newSR  func(*sql.DB, StarRocksConfig) (*StarRocks, error)
+	newSR  func(*sql.DB, StarRocksConfig) (AuditDestination, error)
 	logf   func(format string, args ...any)
 }
 
@@ -580,25 +608,27 @@ type defaultLogger struct{}
 
 func (defaultLogger) Printf(format string, args ...any) { fmt.Fprintf(os.Stderr, format+"\n", args...) }
 
-func newTenantRouter(cfg StarRocksConfig, name2dsn, name2rg map[string]string, legacyDSN string, require bool, logf interface {
+func newTenantRouter(cfg StarRocksConfig, name2dsn, name2initRG map[string]string, legacyDSN string, require bool, logf interface {
 	Printf(format string, args ...any)
 }) (*tenantRouter, error) {
-	if name2dsn == nil || name2rg == nil || logf == nil {
-		return nil, errors.New("name2dsn, name2rg and a logger are required")
+	if name2dsn == nil || logf == nil {
+		return nil, errors.New("name2dsn and a logger are required")
+	}
+	if name2initRG == nil {
+		name2initRG = map[string]string{}
 	}
 	r := &tenantRouter{
-		cfg:      cfg,
-		name2dsn: name2dsn,
-		name2rg:  name2rg,
-		require:  require,
-		legacyDSN: legacyDSN,
-		id2name:  make(map[uuid.UUID]string),
-		cache:    make(map[string]AuditDestination),
-		openDB:   func(dsn string, initSQL []string) (*sql.DB, error) { return OpenStarRocksDSN(dsn, initSQL...) },
-		newSR:    func(db *sql.DB, cfg StarRocksConfig) (AuditDestination, error) { return NewStarRocks(db, cfg) },
+		cfg:        cfg,
+		name2dsn:   name2dsn,
+		name2initRG: name2initRG,
+		require:    require,
+		legacyDSN:  legacyDSN,
+		id2name:    make(map[uuid.UUID]string),
+		cache:      make(map[string]AuditDestination),
+		warned:     make(map[string]struct{}),
+		openDB:     func(dsn string, initSQL []string) (*sql.DB, error) { return OpenStarRocksDSN(dsn, initSQL...) },
+		newSR:      func(db *sql.DB, cfg StarRocksConfig) (AuditDestination, error) { return NewStarRocks(db, cfg) },
 	}
-	// Wrap the interface logger in a closure that matches logf's signature, so tests can
-	// inject a recorder.
 	if l, ok := logf.(interface {
 		Printf(format string, args ...any)
 	}); ok {
@@ -607,7 +637,11 @@ func newTenantRouter(cfg StarRocksConfig, name2dsn, name2rg map[string]string, l
 		r.logf = defaultLogger{}.Printf
 	}
 	for name := range name2dsn {
-		r.logf("StarRocks tenant %q → DSN configured (resource group: %q)", name, name2rg[name])
+		if rg := name2initRG[name]; rg != "" {
+			r.logf("StarRocks tenant %q → DSN configured; init SQL: SET resource_group = %q", name, rg)
+		} else {
+			r.logf("StarRocks tenant %q → DSN configured; no init SQL (classifier routes)", name)
+		}
 	}
 	if require {
 		r.logf("StarRocks LAKEHOUSE_STARROCKS_REQUIRE_TENANT_DSN=true: unmapped tenants will error")
@@ -621,33 +655,42 @@ func newTenantRouter(cfg StarRocksConfig, name2dsn, name2rg map[string]string, l
 
 // forTenantByName returns the destination for the given tenant name (the lookup key). If the
 // name has a per-tenant override the destination is built lazily and cached; otherwise it
-// falls back to the legacy DSN (with a WARN) or errors.
+// falls back to the legacy DSN (with a WARN) or errors. Cache keys are slug-normalized so
+// "northwinds", "Northwinds", and "NORTHWINDS" share one entry.
 func (r *tenantRouter) forTenantByName(name string) (AuditDestination, error) {
 	if name == "" {
 		// No name on the call: caller did not enforce tenant. Use legacy, but only if it
 		// exists — silently failing here is worse than erroring.
 		return r.getLegacy(true)
 	}
+	key := TenantEnvKey(name)
 	r.mu.Lock()
-	if d, ok := r.cache[name]; ok {
+	if d, ok := r.cache[key]; ok {
 		r.mu.Unlock()
 		return d, nil
 	}
 	r.mu.Unlock()
 
-	dsn, hasOverride := r.name2dsn[name]
+	dsn, hasOverride := r.name2dsn[key]
 	if !hasOverride {
 		if r.require {
-			envName := dsnTenantPrefix + tenantEnvKey(name)
+			envName := dsnTenantPrefix + key
 			return nil, fmt.Errorf("no per-tenant StarRocks DSN configured for tenant %q (looked for %s); LAKEHOUSE_STARROCKS_REQUIRE_TENANT_DSN=true refuses the legacy fallback", name, envName)
 		}
-		r.logf("WARN: tenant %q has no per-tenant StarRocks DSN; falling back to the legacy LAKEHOUSE_STARROCKS_DSN — set %s%s to silence this", name, dsnTenantPrefix, tenantEnvKey(name))
+		r.mu.Lock()
+		_, already := r.warned[name]
+		r.warned[name] = struct{}{}
+		r.mu.Unlock()
+		if !already {
+			r.logf("WARN: tenant %q has no per-tenant StarRocks DSN; falling back to the legacy LAKEHOUSE_STARROCKS_DSN — set %s%s to silence this", name, dsnTenantPrefix, key)
+		}
 		return r.getLegacy(true)
 	}
 	initSQL := []string{}
-	if rg := r.name2rg[name]; rg != "" {
-		// 3.3 form: SET resource_group = '<rg>'. Verified against the live cluster —
-		// SET RESOURCE GROUP (no underscore, no `=`) is parser-rejected on 3.3.
+	if rg := r.name2initRG[key]; rg != "" {
+		// 3.3 form: `SET resource_group = '<rg>'`. The classifier pins this. The SET
+		// is belt-and-braces for 3.3; do not set it on 4.1 (the variable name may have
+		// changed) — leaving it absent keeps `initConnector.Connect` succeeding.
 		initSQL = append(initSQL, "SET resource_group = '"+rg+"'")
 	}
 	db, err := r.openDB(dsn, initSQL)
@@ -661,8 +704,9 @@ func (r *tenantRouter) forTenantByName(name string) (AuditDestination, error) {
 	}
 	db.SetMaxOpenConns(tenantMaxOpenConns)
 	db.SetConnMaxLifetime(tenantConnMaxLifetime)
+	db.SetConnMaxIdleTime(tenantConnMaxIdleTime)
 	r.mu.Lock()
-	r.cache[name] = sr
+	r.cache[key] = sr
 	r.mu.Unlock()
 	return sr, nil
 }

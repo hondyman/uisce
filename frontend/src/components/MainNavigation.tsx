@@ -66,7 +66,8 @@ import {
   Group as GroupIcon,
   PersonAdd as PersonAddIcon,
   LockOpen as LockOpenIcon,
-  Groups as GroupsIcon
+  Groups as GroupsIcon,
+  MonitorHeart as MonitorHeartIcon
 } from '@mui/icons-material';
 import { useTenant } from '../contexts/TenantContext';
 import { useAccess } from '../contexts/AccessContext';
@@ -194,6 +195,7 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'Seeding', path: '/admin/seeding', icon: <SystemUpdateAltIcon />, description: 'Rule seeding' },
           { label: 'Temporal Ops', path: '/admin/temporal-ops', icon: <PlayCircleOutlineIcon />, description: 'Workflow engine' },
           { label: 'Tenant Lakehouse', path: '/system/lakehouse', icon: <StorageIcon />, description: "Each tenant's Iceberg warehouse and audit retention" },
+          { label: 'Lakehouse status', path: '/system/lakehouse-status', icon: <MonitorHeartIcon />, description: 'Read-only: cluster health, resource groups, and per-tenant wiring', badge: { label: 'New', color: 'success' } },
           { label: 'Menu Designer', path: '/menu-designer', icon: <AccountTreeIcon />, description: 'Configure tenant navigation menus' },
         ]
       }

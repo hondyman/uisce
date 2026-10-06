@@ -284,6 +284,286 @@ func getPhase1PostTradeScenarios() []Scenario {
 			},
 			Expected: ExpectedOutcome{Status: "WARNING", MustContain: "cash_and_equivalent_pct"},
 		},
+
+		// ====================================================================
+		// 58. POST_TRADE_SOVEREIGN_EXPOSURE_35 (Sovereign Debt 35% Limit)
+		// ====================================================================
+		{
+			RuleCode:    "POST_TRADE_SOVEREIGN_EXPOSURE_35",
+			Code:        "POST_TRADE_SOVEREIGN_EXPOSURE_35:PASS",
+			Description: "Compliant single-country sovereign debt holding (28% <= 35%)",
+			Input: OrderContext{
+				MaxSovereignExposurePct: d("0.280000"),
+			},
+			Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+		},
+		{
+			RuleCode:    "POST_TRADE_SOVEREIGN_EXPOSURE_35",
+			Code:        "POST_TRADE_SOVEREIGN_EXPOSURE_35:BOUNDARY",
+			Description: "Boundary sovereign debt holding exactly at 35% limit",
+			Input: OrderContext{
+				MaxSovereignExposurePct: d("0.350000"),
+			},
+			Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+		},
+		{
+			RuleCode:    "POST_TRADE_SOVEREIGN_EXPOSURE_35",
+			Code:        "POST_TRADE_SOVEREIGN_EXPOSURE_35:FAIL",
+			Description: "Breached sovereign debt concentration (38.5% > 35%)",
+			Input: OrderContext{
+				MaxSovereignExposurePct: d("0.385000"),
+			},
+			Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "max_sovereign_exposure_pct"},
+		},
+		{
+			RuleCode:    "POST_TRADE_SOVEREIGN_EXPOSURE_35",
+			Code:        "POST_TRADE_SOVEREIGN_EXPOSURE_35:ADVERSARIAL",
+			Description: "Single emerging market sovereign debt holding reaching 60% of NAV",
+			Input: OrderContext{
+				MaxSovereignExposurePct: d("0.600000"),
+			},
+			Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "max_sovereign_exposure_pct"},
+		},
+
+		// ====================================================================
+		// 59. POST_TRADE_AGENCY_SUPRA_25 (Agency & Supranational Debt 25% Limit)
+		// ====================================================================
+		{
+			RuleCode:    "POST_TRADE_AGENCY_SUPRA_25",
+			Code:        "POST_TRADE_AGENCY_SUPRA_25:PASS",
+			Description: "Compliant agency/supranational debt holding (18% <= 25%)",
+			Input: OrderContext{
+				MaxAgencySupraExposurePct: d("0.180000"),
+			},
+			Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+		},
+		{
+			RuleCode:    "POST_TRADE_AGENCY_SUPRA_25",
+			Code:        "POST_TRADE_AGENCY_SUPRA_25:BOUNDARY",
+			Description: "Boundary agency/supranational holding exactly at 25% limit",
+			Input: OrderContext{
+				MaxAgencySupraExposurePct: d("0.250000"),
+			},
+			Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+		},
+		{
+			RuleCode:    "POST_TRADE_AGENCY_SUPRA_25",
+			Code:        "POST_TRADE_AGENCY_SUPRA_25:FAIL",
+			Description: "Breached agency/supranational exposure (28% > 25%)",
+			Input: OrderContext{
+				MaxAgencySupraExposurePct: d("0.280000"),
+			},
+			Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "max_agency_supra_exposure_pct"},
+		},
+		{
+			RuleCode:    "POST_TRADE_AGENCY_SUPRA_25",
+			Code:        "POST_TRADE_AGENCY_SUPRA_25:ADVERSARIAL",
+			Description: "Concentrated multilateral development bank holding at 45%",
+			Input: OrderContext{
+				MaxAgencySupraExposurePct: d("0.450000"),
+			},
+			Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "max_agency_supra_exposure_pct"},
+		},
+
+		// ====================================================================
+		// 60. POST_TRADE_MUNI_OBLIGOR_10 (Municipal Single-Obligor 10% Limit)
+		// ====================================================================
+		{
+			RuleCode:    "POST_TRADE_MUNI_OBLIGOR_10",
+			Code:        "POST_TRADE_MUNI_OBLIGOR_10:PASS",
+			Description: "Compliant municipal single-obligor exposure (7.5% <= 10%)",
+			Input: OrderContext{
+				MaxMuniObligorExposurePct: d("0.075000"),
+			},
+			Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+		},
+		{
+			RuleCode:    "POST_TRADE_MUNI_OBLIGOR_10",
+			Code:        "POST_TRADE_MUNI_OBLIGOR_10:BOUNDARY",
+			Description: "Boundary municipal obligor exposure exactly at 10% limit",
+			Input: OrderContext{
+				MaxMuniObligorExposurePct: d("0.100000"),
+			},
+			Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+		},
+		{
+			RuleCode:    "POST_TRADE_MUNI_OBLIGOR_10",
+			Code:        "POST_TRADE_MUNI_OBLIGOR_10:FAIL",
+			Description: "Breached municipal obligor exposure (12.5% > 10%)",
+			Input: OrderContext{
+				MaxMuniObligorExposurePct: d("0.125000"),
+			},
+			Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "max_muni_obligor_exposure_pct"},
+		},
+		{
+			RuleCode:    "POST_TRADE_MUNI_OBLIGOR_10",
+			Code:        "POST_TRADE_MUNI_OBLIGOR_10:ADVERSARIAL",
+			Description: "Revenue bond project concentration reaching 22% of portfolio NAV",
+			Input: OrderContext{
+				MaxMuniObligorExposurePct: d("0.220000"),
+			},
+			Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "max_muni_obligor_exposure_pct"},
+		},
+
+		// ====================================================================
+		// 61. POST_TRADE_CCP_CLEARING_EXPOSURE_15 (CCP Clearing 15% Limit)
+		// ====================================================================
+		{
+			RuleCode:    "POST_TRADE_CCP_CLEARING_EXPOSURE_15",
+			Code:        "POST_TRADE_CCP_CLEARING_EXPOSURE_15:PASS",
+			Description: "Compliant CCP clearing margin exposure (11% <= 15%)",
+			Input: OrderContext{
+				MaxCcpExposurePct: d("0.110000"),
+			},
+			Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+		},
+		{
+			RuleCode:    "POST_TRADE_CCP_CLEARING_EXPOSURE_15",
+			Code:        "POST_TRADE_CCP_CLEARING_EXPOSURE_15:BOUNDARY",
+			Description: "Boundary CCP clearing margin exposure exactly at 15% limit",
+			Input: OrderContext{
+				MaxCcpExposurePct: d("0.150000"),
+			},
+			Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+		},
+		{
+			RuleCode:    "POST_TRADE_CCP_CLEARING_EXPOSURE_15",
+			Code:        "POST_TRADE_CCP_CLEARING_EXPOSURE_15:FAIL",
+			Description: "Breached CCP clearing exposure (18.5% > 15%)",
+			Input: OrderContext{
+				MaxCcpExposurePct: d("0.185000"),
+			},
+			Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "max_ccp_exposure_pct"},
+		},
+		{
+			RuleCode:    "POST_TRADE_CCP_CLEARING_EXPOSURE_15",
+			Code:        "POST_TRADE_CCP_CLEARING_EXPOSURE_15:ADVERSARIAL",
+			Description: "Heavy cleared swap margin spike reaching 32% at single CCP",
+			Input: OrderContext{
+				MaxCcpExposurePct: d("0.320000"),
+			},
+			Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "max_ccp_exposure_pct"},
+		},
+
+		// ====================================================================
+		// 62. POST_TRADE_CUSTODIAN_CONCENTRATION_20 (Custodian Safekeeping 20% Limit)
+		// ====================================================================
+		{
+			RuleCode:    "POST_TRADE_CUSTODIAN_CONCENTRATION_20",
+			Code:        "POST_TRADE_CUSTODIAN_CONCENTRATION_20:PASS",
+			Description: "Compliant custodian safekeeping concentration (14% <= 20%)",
+			Input: OrderContext{
+				MaxCustodianConcentrationPct: d("0.140000"),
+			},
+			Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+		},
+		{
+			RuleCode:    "POST_TRADE_CUSTODIAN_CONCENTRATION_20",
+			Code:        "POST_TRADE_CUSTODIAN_CONCENTRATION_20:BOUNDARY",
+			Description: "Boundary custodian concentration exactly at 20% limit",
+			Input: OrderContext{
+				MaxCustodianConcentrationPct: d("0.200000"),
+			},
+			Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+		},
+		{
+			RuleCode:    "POST_TRADE_CUSTODIAN_CONCENTRATION_20",
+			Code:        "POST_TRADE_CUSTODIAN_CONCENTRATION_20:FAIL",
+			Description: "Breached custodian concentration (24.5% > 20%)",
+			Input: OrderContext{
+				MaxCustodianConcentrationPct: d("0.245000"),
+			},
+			Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "max_custodian_concentration_pct"},
+		},
+		{
+			RuleCode:    "POST_TRADE_CUSTODIAN_CONCENTRATION_20",
+			Code:        "POST_TRADE_CUSTODIAN_CONCENTRATION_20:ADVERSARIAL",
+			Description: "Prime broker unsegregated custody concentration at 42%",
+			Input: OrderContext{
+				MaxCustodianConcentrationPct: d("0.420000"),
+			},
+			Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "max_custodian_concentration_pct"},
+		},
+
+		// ====================================================================
+		// 63. POST_TRADE_BANK_DEPOSIT_20 (Single-Bank Cash Deposit 20% Limit)
+		// ====================================================================
+		{
+			RuleCode:    "POST_TRADE_BANK_DEPOSIT_20",
+			Code:        "POST_TRADE_BANK_DEPOSIT_20:PASS",
+			Description: "Compliant single-bank cash deposit (15% <= 20%)",
+			Input: OrderContext{
+				MaxBankDepositPct: d("0.150000"),
+			},
+			Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+		},
+		{
+			RuleCode:    "POST_TRADE_BANK_DEPOSIT_20",
+			Code:        "POST_TRADE_BANK_DEPOSIT_20:BOUNDARY",
+			Description: "Boundary bank deposit exactly at 20% limit",
+			Input: OrderContext{
+				MaxBankDepositPct: d("0.200000"),
+			},
+			Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+		},
+		{
+			RuleCode:    "POST_TRADE_BANK_DEPOSIT_20",
+			Code:        "POST_TRADE_BANK_DEPOSIT_20:FAIL",
+			Description: "Breached single-bank deposit concentration (22.5% > 20%)",
+			Input: OrderContext{
+				MaxBankDepositPct: d("0.225000"),
+			},
+			Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "max_bank_deposit_pct"},
+		},
+		{
+			RuleCode:    "POST_TRADE_BANK_DEPOSIT_20",
+			Code:        "POST_TRADE_BANK_DEPOSIT_20:ADVERSARIAL",
+			Description: "Single credit institution cash deposit holding reaching 38%",
+			Input: OrderContext{
+				MaxBankDepositPct: d("0.380000"),
+			},
+			Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "max_bank_deposit_pct"},
+		},
+
+		// ====================================================================
+		// 64. POST_TRADE_SEC_LENDING_COLLATERAL_102 (Sec Lending Collateral Floor 102%)
+		// ====================================================================
+		{
+			RuleCode:    "POST_TRADE_SEC_LENDING_COLLATERAL_102",
+			Code:        "POST_TRADE_SEC_LENDING_COLLATERAL_102:PASS",
+			Description: "Compliant securities lending collateral coverage (105% >= 102%)",
+			Input: OrderContext{
+				SecLendingCollateralRatio: d("1.050000"),
+			},
+			Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+		},
+		{
+			RuleCode:    "POST_TRADE_SEC_LENDING_COLLATERAL_102",
+			Code:        "POST_TRADE_SEC_LENDING_COLLATERAL_102:BOUNDARY",
+			Description: "Boundary collateral coverage exactly at 102% minimum floor",
+			Input: OrderContext{
+				SecLendingCollateralRatio: d("1.020000"),
+			},
+			Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+		},
+		{
+			RuleCode:    "POST_TRADE_SEC_LENDING_COLLATERAL_102",
+			Code:        "POST_TRADE_SEC_LENDING_COLLATERAL_102:FAIL",
+			Description: "Warning securities lending undercollateralization (98.5% < 102%)",
+			Input: OrderContext{
+				SecLendingCollateralRatio: d("0.985000"),
+			},
+			Expected: ExpectedOutcome{Status: "WARNING", MustContain: "sec_lending_collateral_ratio"},
+		},
+		{
+			RuleCode:    "POST_TRADE_SEC_LENDING_COLLATERAL_102",
+			Code:        "POST_TRADE_SEC_LENDING_COLLATERAL_102:ADVERSARIAL",
+			Description: "Severe collateral shortfall during market dislocation (80% < 102%)",
+			Input: OrderContext{
+				SecLendingCollateralRatio: d("0.800000"),
+			},
+			Expected: ExpectedOutcome{Status: "WARNING", MustContain: "sec_lending_collateral_ratio"},
+		},
 	}
 }
 
@@ -337,6 +617,55 @@ func evaluatePhase1Scenario(sc Scenario) (string, string, bool) {
 		limit := d("0.050000")
 		if in.CashAndEquivalentPct.LessThan(limit) {
 			return "WARNING", fmt.Sprintf("Rule %s warning: cash_and_equivalent_pct %s below min_cash_pct %s", sc.RuleCode, in.CashAndEquivalentPct, limit), true
+		}
+		return "PASSED", "Compliant", true
+
+	case "POST_TRADE_SOVEREIGN_EXPOSURE_35":
+		limit := d("0.350000")
+		if in.MaxSovereignExposurePct.GreaterThan(limit) {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: max_sovereign_exposure_pct %s exceeds max_sovereign_exposure_pct %s", sc.RuleCode, in.MaxSovereignExposurePct, limit), true
+		}
+		return "PASSED", "Compliant", true
+
+	case "POST_TRADE_AGENCY_SUPRA_25":
+		limit := d("0.250000")
+		if in.MaxAgencySupraExposurePct.GreaterThan(limit) {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: max_agency_supra_exposure_pct %s exceeds max_agency_supra_pct %s", sc.RuleCode, in.MaxAgencySupraExposurePct, limit), true
+		}
+		return "PASSED", "Compliant", true
+
+	case "POST_TRADE_MUNI_OBLIGOR_10":
+		limit := d("0.100000")
+		if in.MaxMuniObligorExposurePct.GreaterThan(limit) {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: max_muni_obligor_exposure_pct %s exceeds max_muni_obligor_pct %s", sc.RuleCode, in.MaxMuniObligorExposurePct, limit), true
+		}
+		return "PASSED", "Compliant", true
+
+	case "POST_TRADE_CCP_CLEARING_EXPOSURE_15":
+		limit := d("0.150000")
+		if in.MaxCcpExposurePct.GreaterThan(limit) {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: max_ccp_exposure_pct %s exceeds max_ccp_exposure_pct %s", sc.RuleCode, in.MaxCcpExposurePct, limit), true
+		}
+		return "PASSED", "Compliant", true
+
+	case "POST_TRADE_CUSTODIAN_CONCENTRATION_20":
+		limit := d("0.200000")
+		if in.MaxCustodianConcentrationPct.GreaterThan(limit) {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: max_custodian_concentration_pct %s exceeds max_custodian_pct %s", sc.RuleCode, in.MaxCustodianConcentrationPct, limit), true
+		}
+		return "PASSED", "Compliant", true
+
+	case "POST_TRADE_BANK_DEPOSIT_20":
+		limit := d("0.200000")
+		if in.MaxBankDepositPct.GreaterThan(limit) {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: max_bank_deposit_pct %s exceeds max_bank_deposit_pct %s", sc.RuleCode, in.MaxBankDepositPct, limit), true
+		}
+		return "PASSED", "Compliant", true
+
+	case "POST_TRADE_SEC_LENDING_COLLATERAL_102":
+		limit := d("1.020000")
+		if in.SecLendingCollateralRatio.LessThan(limit) {
+			return "WARNING", fmt.Sprintf("Rule %s warning: sec_lending_collateral_ratio %s below min_collateral_ratio %s", sc.RuleCode, in.SecLendingCollateralRatio, limit), true
 		}
 		return "PASSED", "Compliant", true
 

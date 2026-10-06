@@ -27,8 +27,8 @@ func TestListCoreRules_All50(t *testing.T) {
 		t.Fatalf("ListCoreRules failed: %v", err)
 	}
 
-	if len(rules) != 57 {
-		t.Fatalf("expected 57 core rules, got %d", len(rules))
+	if len(rules) != 86 {
+		t.Fatalf("expected 86 core rules, got %d", len(rules))
 	}
 
 	// Verify domain derivation and hash presence
@@ -138,11 +138,11 @@ func TestListRulesets(t *testing.T) {
 		t.Fatalf("ListRulesets failed: %v", err)
 	}
 
-	if len(rulesets) < 3 {
-		t.Fatalf("expected at least 3 standard rulesets, got %d", len(rulesets))
+	if len(rulesets) < 4 {
+		t.Fatalf("expected at least 4 standard rulesets, got %d", len(rulesets))
 	}
 
-	var foundCoreReg, foundMarket, foundInst bool
+	var foundCoreReg, foundMarket, foundInst, foundPostTrade bool
 	for _, rs := range rulesets {
 		if rs.RulesetCode == "CORE_REGULATORY" {
 			foundCoreReg = true
@@ -162,10 +162,16 @@ func TestListRulesets(t *testing.T) {
 				t.Errorf("INSTITUTIONAL_CONTROLS ruleset has 0 rules")
 			}
 		}
+		if rs.RulesetCode == "POST_TRADE_MONITORING" {
+			foundPostTrade = true
+			if rs.TotalRules == 0 {
+				t.Errorf("POST_TRADE_MONITORING ruleset has 0 rules")
+			}
+		}
 	}
 
-	if !foundCoreReg || !foundMarket || !foundInst {
-		t.Errorf("missing standard rulesets: core_reg=%v, market=%v, inst=%v", foundCoreReg, foundMarket, foundInst)
+	if !foundCoreReg || !foundMarket || !foundInst || !foundPostTrade {
+		t.Errorf("missing standard rulesets: core_reg=%v, market=%v, inst=%v, post_trade=%v", foundCoreReg, foundMarket, foundInst, foundPostTrade)
 	}
 }
 
@@ -182,11 +188,11 @@ func TestTenantActivationMatrix_GoldMaster(t *testing.T) {
 	if !matrix.GoldCopy {
 		t.Errorf("expected master tenant to be gold_copy=true")
 	}
-	if matrix.TotalRules != 57 {
-		t.Errorf("expected 57 rules in matrix, got %d", matrix.TotalRules)
+	if matrix.TotalRules != 86 {
+		t.Errorf("expected 86 rules in matrix, got %d", matrix.TotalRules)
 	}
-	if matrix.TotalActive != 57 {
-		t.Errorf("expected 57 active rules for gold copy tenant, got %d", matrix.TotalActive)
+	if matrix.TotalActive != 86 {
+		t.Errorf("expected 86 active rules for gold copy tenant, got %d", matrix.TotalActive)
 	}
 	if matrix.DriftCount != 0 {
 		t.Errorf("expected 0 drift count for gold copy tenant, got %d", matrix.DriftCount)
@@ -378,8 +384,8 @@ func TestHTTPHandler_Endpoints(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&listResp); err != nil {
 		t.Fatalf("decode list response: %v", err)
 	}
-	if listResp.TotalCount != 57 {
-		t.Errorf("expected 57 rules, got %d", listResp.TotalCount)
+	if listResp.TotalCount != 86 {
+		t.Errorf("expected 86 rules, got %d", listResp.TotalCount)
 	}
 
 	// 2. GET /api/compliance/library/rules/{id}
@@ -515,5 +521,64 @@ func TestTenantFencing_AppUserRLS_Isolation(t *testing.T) {
 	}
 	if count != 0 {
 		t.Errorf("RLS violation: Tenant B can see %d activations belonging to Tenant A", count)
+	}
+}
+
+func TestGovernance_DataProvenancePromotionAndAudit(t *testing.T) {
+	db := testutil.GetEphemeralTestDB(t)
+	ctx := context.Background()
+
+	// 1. Verify default provenance for Phase II rules is SYNTHETIC_FIXTURE
+	var prov string
+	var ruleID uuid.UUID
+	err := db.QueryRowContext(ctx, `
+		SELECT id, data_provenance FROM compliance.compliance_rule
+		WHERE rule_code = 'POST_TRADE_UNCLASSIFIED_CEILING_5' AND valid_to IS NULL
+	`).Scan(&ruleID, &prov)
+	if err != nil {
+		t.Fatalf("query rule provenance: %v", err)
+	}
+	if prov != "SYNTHETIC_FIXTURE" {
+		t.Fatalf("expected SYNTHETIC_FIXTURE default, got %s", prov)
+	}
+
+	// 2. Execute audited promotion to VENDOR_PROVEN
+	_, err = db.ExecContext(ctx, `
+		SELECT compliance.promote_rule_data_provenance(
+			$1, 'steward_alice', 'Contracted FactSet GICS feed integration verified', 'FactSet GICS v2026.3'
+		)
+	`, ruleID)
+	if err != nil {
+		t.Fatalf("promote_rule_data_provenance failed: %v", err)
+	}
+
+	// 3. Verify rule row is now VENDOR_PROVEN
+	err = db.QueryRowContext(ctx, `
+		SELECT data_provenance FROM compliance.compliance_rule WHERE id = $1
+	`, ruleID).Scan(&prov)
+	if err != nil {
+		t.Fatalf("query updated provenance: %v", err)
+	}
+	if prov != "VENDOR_PROVEN" {
+		t.Fatalf("expected VENDOR_PROVEN after promotion, got %s", prov)
+	}
+
+	// 4. Verify immutable governance audit record was created
+	var eventType, stewardID, notes string
+	var astDiff []byte
+	err = db.QueryRowContext(ctx, `
+		SELECT event_type, steward_id, steward_notes, ast_diff
+		FROM compliance.governance_audit_event
+		WHERE rule_id = $1 AND event_type = 'DATA_PROVENANCE_PROMOTED'
+	`, ruleID).Scan(&eventType, &stewardID, &notes, &astDiff)
+	if err != nil {
+		t.Fatalf("query governance audit event: %v", err)
+	}
+
+	if eventType != "DATA_PROVENANCE_PROMOTED" {
+		t.Errorf("expected event_type DATA_PROVENANCE_PROMOTED, got %s", eventType)
+	}
+	if stewardID != "steward_alice" {
+		t.Errorf("expected steward_id steward_alice, got %s", stewardID)
 	}
 }

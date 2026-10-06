@@ -11,8 +11,8 @@ The scenario corpus is split into modular files to keep scenario definitions mai
 - **[`corpus_phase1.go`](./corpus_phase1.go)**: 28 deterministic scenario test vectors across the 7 post-trade rules (3 pilot + 4 Phase 1 rules).
 
 ### Invariant Equation
-$$\text{Total Active Scenarios} = 228 = 200 \;(\text{Pre-Trade}) + 28 \;(\text{Post-Trade})$$
-$$\text{Total Active Gold Rules} = 57 = 50 \;(\text{Pre-Trade}) + 7 \;(\text{Post-Trade})$$
+$$\text{Total Active Scenarios} = 256 = 200 \;(\text{Pre-Trade}) + 56 \;(\text{Post-Trade})$$
+$$\text{Total Active Gold Rules} = 64 = 50 \;(\text{Pre-Trade}) + 14 \;(\text{Post-Trade})$$
 
 Every rule in the gold-copy library is covered by exactly 4 deterministic scenario test vectors (`PASS`, `BOUNDARY`, `FAIL`, `ADVERSARIAL`), yielding 100% resolution in `TestCoreLibrary_ScenarioRuleCodeResolution`.
 

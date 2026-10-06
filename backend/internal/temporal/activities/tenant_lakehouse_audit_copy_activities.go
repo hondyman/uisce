@@ -57,7 +57,8 @@ func (a *TenantLakehouseActivities) PrepareAuditCopy(ctx context.Context, in Lak
 		return infraErr("read storage credential", err)
 	}
 	if err := a.Destination.EnsureAuditDestination(ctx, infra.AuditDestinationSpec{
-		TenantID: id, WarehouseName: cfg.WarehouseName, AccessKeyID: key, SecretKey: secret,
+		TenantID: id, TenantName: cfg.TenantName,
+		WarehouseName: cfg.WarehouseName, AccessKeyID: key, SecretKey: secret,
 	}); err != nil {
 		return infraErr("prepare the audit destination", err)
 	}

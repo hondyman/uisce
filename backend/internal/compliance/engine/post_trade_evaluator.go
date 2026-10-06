@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,28 +23,58 @@ type PortfolioPosition struct {
 	MarketValue   decimal.Decimal `json:"market_value"`
 	Weight        decimal.Decimal `json:"weight"` // MarketValue / NAV
 	AssetClass    string          `json:"asset_class"`
-	Sector        string          `json:"sector"`
-	CountryOfRisk string          `json:"country_of_risk"`
-	Is144A          bool            `json:"is_144a"`
-	IsQIBEligible   bool            `json:"is_qib_eligible"`
-	CreditRating    string          `json:"credit_rating"`
-	ParentEntityID  string          `json:"parent_entity_id,omitempty"`
-	CounterpartyID  string          `json:"counterparty_id,omitempty"`
-	PFEAmount       decimal.Decimal `json:"pfe_amount,omitempty"`
+	Sector                string          `json:"sector"`
+	IndustryGroup         string          `json:"industry_group,omitempty"`
+	CountryOfRisk         string          `json:"country_of_risk"`
+	CountryClassification string          `json:"country_classification,omitempty"` // DEVELOPED, EMERGING, FRONTIER
+	Is144A                bool            `json:"is_144a"`
+	IsQIBEligible         bool            `json:"is_qib_eligible"`
+	CreditRating          string          `json:"credit_rating"`
+	IssuerType            string          `json:"issuer_type,omitempty"` // SOVEREIGN, AGENCY, SUPRANATIONAL, MUNICIPAL, CORPORATE
+	ParentEntityID        string          `json:"parent_entity_id,omitempty"`
+	CounterpartyID        string          `json:"counterparty_id,omitempty"`
+	CustodianID           string          `json:"custodian_id,omitempty"`
+	BankID                string          `json:"bank_id,omitempty"`
+	CCPID                 string          `json:"ccp_id,omitempty"`
+	PFEAmount             decimal.Decimal `json:"pfe_amount,omitempty"`
+	SecLendingOnLoanValue     decimal.Decimal `json:"sec_lending_on_loan_value,omitempty"`
+	SecLendingCollateralValue decimal.Decimal `json:"sec_lending_collateral_value,omitempty"`
+	IsSanctioned              bool            `json:"is_sanctioned,omitempty"`
+	IsUnhedgedFX              bool            `json:"is_unhedged_fx,omitempty"`
+	UnhedgedFXAmount          decimal.Decimal `json:"unhedged_fx_amount,omitempty"`
+	IsHighYield               bool            `json:"is_high_yield,omitempty"`
+	ConservativeRatingRank    int             `json:"conservative_rating_rank,omitempty"`
+	IsControversialWeapons    bool            `json:"is_controversial_weapons,omitempty"`
+	ThermalCoalRevenuePct     decimal.Decimal `json:"thermal_coal_revenue_pct,omitempty"`
+	TobaccoRevenuePct         decimal.Decimal `json:"tobacco_revenue_pct,omitempty"`
+	FairValueLevel            int             `json:"fair_value_level,omitempty"` // 1, 2, 3
+	IsSettlementFailed        bool            `json:"is_settlement_failed,omitempty"`
+	WaciIntensity             decimal.Decimal `json:"waci_intensity,omitempty"`
+	HasEmissionsData          bool            `json:"has_emissions_data,omitempty"`
+	GhgScope12Intensity       decimal.Decimal `json:"ghg_scope_1_2_intensity,omitempty"`
+	BoardGenderDiversityPct   decimal.Decimal `json:"board_gender_diversity_pct,omitempty"`
+	HazardousWasteRatio       decimal.Decimal `json:"hazardous_waste_ratio,omitempty"`
+	EuTaxonomyAlignmentPct    decimal.Decimal `json:"eu_taxonomy_alignment_pct,omitempty"`
+	LiquidityCoverageRatio    decimal.Decimal `json:"liquidity_coverage_ratio,omitempty"`
 }
 
 // PortfolioState represents the aggregated point-in-time state of an account's portfolio.
 type PortfolioState struct {
-	TenantID      uuid.UUID                  `json:"tenant_id"`
-	AccountID     uuid.UUID                  `json:"account_id"`
-	AsOfDate      time.Time                  `json:"as_of_date"`
-	NAV           decimal.Decimal            `json:"nav"`
-	GrossExposure decimal.Decimal            `json:"gross_exposure"`
-	NetExposure   decimal.Decimal            `json:"net_exposure"`
-	CashBalance   decimal.Decimal            `json:"cash_balance"`
-	MarginLimit   decimal.Decimal            `json:"margin_limit"`
-	Positions     []PortfolioPosition        `json:"positions"`
-	Metrics       map[string]decimal.Decimal `json:"metrics,omitempty"`
+	TenantID                        uuid.UUID                  `json:"tenant_id"`
+	AccountID                       uuid.UUID                  `json:"account_id"`
+	AsOfDate                        time.Time                  `json:"as_of_date"`
+	NAV                             decimal.Decimal            `json:"nav"`
+	GrossExposure                   decimal.Decimal            `json:"gross_exposure"`
+	NetExposure                     decimal.Decimal            `json:"net_exposure"`
+	CashBalance                     decimal.Decimal            `json:"cash_balance"`
+	MarginLimit                     decimal.Decimal            `json:"margin_limit"`
+	SecLendingTotalLoanValue        decimal.Decimal            `json:"sec_lending_total_loan_value,omitempty"`
+	SecLendingTotalCollateralValue  decimal.Decimal            `json:"sec_lending_total_collateral_value,omitempty"`
+	LiquidityCoverageRatio          decimal.Decimal            `json:"liquidity_coverage_ratio,omitempty"`
+	CyclicalSectors                 []string                   `json:"cyclical_sectors,omitempty"`
+	ClassificationOverrides         map[string]string          `json:"classification_overrides,omitempty"`
+	Positions                       []PortfolioPosition        `json:"positions"`
+	Metrics                         map[string]decimal.Decimal `json:"metrics,omitempty"`
 }
 
 // PostTradeEvaluationResult represents a compliance decision and generated finding.
@@ -190,6 +221,362 @@ func (e *PostTradeEvaluator) ComputePortfolioMetrics(state *PortfolioState) map[
 		metrics["portfolio.cash_and_equivalent_pct"] = cashRatio
 	} else {
 		metrics["portfolio.cash_and_equivalent_pct"] = decimal.Zero
+	}
+
+	// 8. Sovereign Debt Exposure (grouped by country of risk or issuer)
+	sovereignMap := make(map[string]decimal.Decimal)
+	for _, pos := range state.Positions {
+		if pos.IssuerType == "SOVEREIGN" || pos.Sector == "SOVEREIGN" || pos.AssetClass == "SOVEREIGN_DEBT" {
+			key := pos.CountryOfRisk
+			if key == "" {
+				key = pos.IssuerID
+			}
+			sovereignMap[key] = sovereignMap[key].Add(pos.Weight)
+		}
+	}
+	var maxSovereign decimal.Decimal
+	for _, exp := range sovereignMap {
+		if exp.GreaterThan(maxSovereign) {
+			maxSovereign = exp
+		}
+	}
+	metrics["portfolio.max_sovereign_exposure_pct"] = maxSovereign
+
+	// 9. Agency & Supranational Exposure (aggregate across portfolio)
+	var agencySupraTotal decimal.Decimal
+	for _, pos := range state.Positions {
+		if pos.IssuerType == "AGENCY" || pos.IssuerType == "SUPRANATIONAL" || pos.Sector == "AGENCY" || pos.Sector == "SUPRANATIONAL" {
+			agencySupraTotal = agencySupraTotal.Add(pos.Weight)
+		}
+	}
+	metrics["portfolio.max_agency_supra_exposure_pct"] = agencySupraTotal
+
+	// 10. Municipal Single-Obligor Exposure
+	muniMap := make(map[string]decimal.Decimal)
+	for _, pos := range state.Positions {
+		if pos.IssuerType == "MUNICIPAL" || pos.Sector == "MUNICIPAL" || pos.AssetClass == "MUNICIPAL_BOND" {
+			muniMap[pos.IssuerID] = muniMap[pos.IssuerID].Add(pos.Weight)
+		}
+	}
+	var maxMuni decimal.Decimal
+	for _, exp := range muniMap {
+		if exp.GreaterThan(maxMuni) {
+			maxMuni = exp
+		}
+	}
+	metrics["portfolio.max_muni_obligor_exposure_pct"] = maxMuni
+
+	// 11. Central Counterparty (CCP) Clearing Exposure
+	ccpMap := make(map[string]decimal.Decimal)
+	for _, pos := range state.Positions {
+		if pos.CCPID != "" {
+			ccpMap[pos.CCPID] = ccpMap[pos.CCPID].Add(pos.Weight)
+		}
+	}
+	var maxCcp decimal.Decimal
+	for _, exp := range ccpMap {
+		if exp.GreaterThan(maxCcp) {
+			maxCcp = exp
+		}
+	}
+	metrics["portfolio.max_ccp_exposure_pct"] = maxCcp
+
+	// 12. Custodian Safekeeping Concentration
+	custodianMap := make(map[string]decimal.Decimal)
+	for _, pos := range state.Positions {
+		if pos.CustodianID != "" {
+			custodianMap[pos.CustodianID] = custodianMap[pos.CustodianID].Add(pos.Weight)
+		}
+	}
+	var maxCustodian decimal.Decimal
+	for _, exp := range custodianMap {
+		if exp.GreaterThan(maxCustodian) {
+			maxCustodian = exp
+		}
+	}
+	metrics["portfolio.max_custodian_concentration_pct"] = maxCustodian
+
+	// 13. Single-Bank Cash Deposit Exposure
+	bankMap := make(map[string]decimal.Decimal)
+	for _, pos := range state.Positions {
+		if pos.BankID != "" {
+			bankMap[pos.BankID] = bankMap[pos.BankID].Add(pos.Weight)
+		}
+	}
+	var maxBank decimal.Decimal
+	for _, exp := range bankMap {
+		if exp.GreaterThan(maxBank) {
+			maxBank = exp
+		}
+	}
+	metrics["portfolio.max_bank_deposit_pct"] = maxBank
+
+	// 14. Securities Lending Collateral Coverage Ratio
+	if state.SecLendingTotalLoanValue.GreaterThan(decimal.Zero) {
+		ratio := state.SecLendingTotalCollateralValue.Div(state.SecLendingTotalLoanValue)
+		metrics["portfolio.sec_lending_collateral_ratio"] = ratio
+	} else {
+		// Calculate from position level if state totals not set
+		var totalLoan, totalCol decimal.Decimal
+		for _, pos := range state.Positions {
+			totalLoan = totalLoan.Add(pos.SecLendingOnLoanValue)
+			totalCol = totalCol.Add(pos.SecLendingCollateralValue)
+		}
+		if totalLoan.GreaterThan(decimal.Zero) {
+			metrics["portfolio.sec_lending_collateral_ratio"] = totalCol.Div(totalLoan)
+		} else {
+			// No active loans -> 100% compliant sentinel 1.050000
+			metrics["portfolio.sec_lending_collateral_ratio"] = decimal.RequireFromString("1.050000")
+		}
+	}
+
+	// 15. Unclassified / Uncategorized Securities Exposure
+	var unclassifiedWeight decimal.Decimal
+	for _, pos := range state.Positions {
+		if pos.Sector == "" || strings.EqualFold(pos.Sector, "UNCLASSIFIED") || strings.EqualFold(pos.Sector, "UNKNOWN") {
+			unclassifiedWeight = unclassifiedWeight.Add(pos.Weight)
+		}
+	}
+	metrics["portfolio.unclassified_securities_pct"] = unclassifiedWeight
+
+	// 16. GICS / ICB Sector Concentration (Max Sector Exposure)
+	sectorMap := make(map[string]decimal.Decimal)
+	for _, pos := range state.Positions {
+		if pos.Sector != "" && !strings.EqualFold(pos.Sector, "UNCLASSIFIED") && !strings.EqualFold(pos.Sector, "UNKNOWN") {
+			sectorMap[pos.Sector] = sectorMap[pos.Sector].Add(pos.Weight)
+		}
+	}
+	var maxSector decimal.Decimal
+	for _, exp := range sectorMap {
+		if exp.GreaterThan(maxSector) {
+			maxSector = exp
+		}
+	}
+	metrics["portfolio.max_sector_exposure_pct"] = maxSector
+
+	// 17. Industry Group Concentration (Max Industry Group Exposure)
+	industryMap := make(map[string]decimal.Decimal)
+	for _, pos := range state.Positions {
+		ind := pos.IndustryGroup
+		if ind == "" {
+			ind = pos.Sector
+		}
+		if ind != "" && !strings.EqualFold(ind, "UNCLASSIFIED") && !strings.EqualFold(ind, "UNKNOWN") {
+			industryMap[ind] = industryMap[ind].Add(pos.Weight)
+		}
+	}
+	var maxIndustry decimal.Decimal
+	for _, exp := range industryMap {
+		if exp.GreaterThan(maxIndustry) {
+			maxIndustry = exp
+		}
+	}
+	metrics["portfolio.max_industry_group_pct"] = maxIndustry
+
+	// 18. Cyclical Sector Aggregate Exposure (Reference Data / Tenant Overridable)
+	var cyclicalWeight decimal.Decimal
+	cyclicalSectors := make(map[string]bool)
+	if len(state.CyclicalSectors) > 0 {
+		for _, s := range state.CyclicalSectors {
+			cyclicalSectors[strings.ToUpper(strings.TrimSpace(s))] = true
+		}
+	} else {
+		for _, s := range []string{"ENERGY", "MATERIALS", "INDUSTRIALS", "CONSUMER DISCRETIONARY", "FINANCIALS", "REAL ESTATE"} {
+			cyclicalSectors[s] = true
+		}
+	}
+	for _, pos := range state.Positions {
+		sector := pos.Sector
+		if ovr, ok := state.ClassificationOverrides[pos.SecurityID]; ok {
+			sector = ovr
+		}
+		if cyclicalSectors[strings.ToUpper(sector)] {
+			cyclicalWeight = cyclicalWeight.Add(pos.Weight)
+		}
+	}
+	metrics["portfolio.cyclical_sectors_aggregate_pct"] = cyclicalWeight
+
+	// 19. Emerging Market Country Exposure
+	emergingCountries := map[string]bool{
+		"BR": true, "CN": true, "IN": true, "MX": true, "ZA": true, "KR": true, "TW": true, "SA": true, "ID": true, "TR": true, "PL": true, "TH": true, "MY": true, "CL": true, "CO": true, "EG": true, "PH": true, "HU": true, "CZ": true, "GR": true, "QA": true, "AE": true, "KW": true,
+	}
+	var emergingWeight decimal.Decimal
+	for _, pos := range state.Positions {
+		if emergingCountries[strings.ToUpper(pos.CountryOfRisk)] || strings.EqualFold(pos.CountryClassification, "EMERGING") {
+			emergingWeight = emergingWeight.Add(pos.Weight)
+		}
+	}
+	metrics["portfolio.emerging_markets_pct"] = emergingWeight
+
+	// 20. Non-OECD Country Aggregate Exposure
+	oecdCountries := map[string]bool{
+		"US": true, "GB": true, "DE": true, "FR": true, "JP": true, "CA": true, "AU": true, "IT": true, "ES": true, "NL": true, "CH": true, "SE": true, "NO": true, "DK": true, "FI": true, "BE": true, "AT": true, "IE": true, "NZ": true, "PT": true, "LU": true, "IL": true, "KR": true, "MX": true, "CL": true, "CO": true, "CR": true, "CZ": true, "EE": true, "GR": true, "HU": true, "IS": true, "LV": true, "LT": true, "PL": true, "SK": true, "SI": true, "TR": true,
+	}
+	var nonOECDWeight decimal.Decimal
+	for _, pos := range state.Positions {
+		c := strings.ToUpper(pos.CountryOfRisk)
+		if c != "" && !oecdCountries[c] {
+			nonOECDWeight = nonOECDWeight.Add(pos.Weight)
+		}
+	}
+	metrics["portfolio.non_oecd_exposure_pct"] = nonOECDWeight
+
+	// 21. Frontier Market Country Sub-Ceiling Exposure
+	frontierCountries := map[string]bool{
+		"VN": true, "NG": true, "KE": true, "BD": true, "PK": true, "RO": true, "KZ": true, "MA": true, "HR": true, "RS": true, "SI": true, "IS": true, "BH": true, "OM": true, "JO": true, "TN": true, "MU": true,
+	}
+	var frontierWeight decimal.Decimal
+	for _, pos := range state.Positions {
+		if frontierCountries[strings.ToUpper(pos.CountryOfRisk)] || strings.EqualFold(pos.CountryClassification, "FRONTIER") {
+			frontierWeight = frontierWeight.Add(pos.Weight)
+		}
+	}
+	metrics["portfolio.frontier_markets_pct"] = frontierWeight
+
+	// 22. Sanctioned Entity Holding Matches Count
+	var sanctionedMatches int64
+	for _, pos := range state.Positions {
+		if pos.IsSanctioned {
+			sanctionedMatches++
+		}
+	}
+	metrics["portfolio.sanctioned_entity_matches_count"] = decimal.NewFromInt(sanctionedMatches)
+
+	// 23. Unhedged Foreign Currency Exposure
+	var unhedgedFX decimal.Decimal
+	for _, pos := range state.Positions {
+		if pos.IsUnhedgedFX {
+			unhedgedFX = unhedgedFX.Add(pos.Weight)
+		}
+	}
+	metrics["portfolio.unhedged_fx_exposure_pct"] = unhedgedFX
+
+	// 24. High-Yield & Sub-Investment Grade Debt Exposure
+	var highYieldDebt decimal.Decimal
+	for _, pos := range state.Positions {
+		if pos.IsHighYield {
+			highYieldDebt = highYieldDebt.Add(pos.Weight)
+		}
+	}
+	metrics["portfolio.high_yield_debt_exposure_pct"] = highYieldDebt
+
+	// 25. Split Credit Rating Conservative Grade Floor Rank (Worst rank across portfolio, 1=AAA ... 10=BBB- ... 22=D)
+	worstRatingRank := 1 // Sentinel: default AAA if no debt holdings
+	for _, pos := range state.Positions {
+		if pos.ConservativeRatingRank > worstRatingRank {
+			worstRatingRank = pos.ConservativeRatingRank
+		}
+	}
+	metrics["portfolio.split_rating_worst_grade_rank"] = decimal.NewFromInt(int64(worstRatingRank))
+
+	// 26. Controversial Weapons Zero-Tolerance Exposure
+	var weaponsWeight decimal.Decimal
+	for _, pos := range state.Positions {
+		if pos.IsControversialWeapons {
+			weaponsWeight = weaponsWeight.Add(pos.Weight)
+		}
+	}
+	metrics["portfolio.esg_controversial_weapons_pct"] = weaponsWeight
+
+	// 27. Thermal Coal Revenue Exposure
+	var maxCoalRevenue decimal.Decimal
+	for _, pos := range state.Positions {
+		if pos.ThermalCoalRevenuePct.GreaterThan(maxCoalRevenue) {
+			maxCoalRevenue = pos.ThermalCoalRevenuePct
+		}
+	}
+	metrics["portfolio.esg_thermal_coal_revenue_pct"] = maxCoalRevenue
+
+	// 28. Tobacco Revenue Exposure
+	var maxTobaccoRevenue decimal.Decimal
+	for _, pos := range state.Positions {
+		if pos.TobaccoRevenuePct.GreaterThan(maxTobaccoRevenue) {
+			maxTobaccoRevenue = pos.TobaccoRevenuePct
+		}
+	}
+	metrics["portfolio.esg_tobacco_revenue_pct"] = maxTobaccoRevenue
+
+	// 29. Level 3 Illiquid Fair-Value Assets Exposure
+	var illiquidWeight decimal.Decimal
+	for _, pos := range state.Positions {
+		if pos.FairValueLevel == 3 {
+			illiquidWeight = illiquidWeight.Add(pos.Weight)
+		}
+	}
+	metrics["portfolio.illiquid_level3_assets_pct"] = illiquidWeight
+
+	// 30. Settlement Failure Exposure
+	var failedSettlementWeight decimal.Decimal
+	for _, pos := range state.Positions {
+		if pos.IsSettlementFailed {
+			failedSettlementWeight = failedSettlementWeight.Add(pos.Weight)
+		}
+	}
+	metrics["portfolio.settlement_fail_exposure_pct"] = failedSettlementWeight
+
+	// 31. WACI (Weighted Average Carbon Intensity) + Emissions Data Coverage Ratio
+	var waciSum, coveredEmissionsWeight decimal.Decimal
+	for _, pos := range state.Positions {
+		if pos.HasEmissionsData || pos.WaciIntensity.GreaterThan(decimal.Zero) {
+			coveredEmissionsWeight = coveredEmissionsWeight.Add(pos.Weight)
+			waciSum = waciSum.Add(pos.Weight.Mul(pos.WaciIntensity))
+		}
+	}
+	metrics["portfolio.esg_waci_tco2e_per_m_revenue"] = waciSum
+	metrics["portfolio.esg_emissions_data_coverage_pct"] = coveredEmissionsWeight
+
+	// 32. Scope 1 & 2 GHG Emissions Intensity
+	var scope12Sum decimal.Decimal
+	for _, pos := range state.Positions {
+		if pos.GhgScope12Intensity.GreaterThan(decimal.Zero) {
+			scope12Sum = scope12Sum.Add(pos.Weight.Mul(pos.GhgScope12Intensity))
+		}
+	}
+	metrics["portfolio.esg_ghg_scope_1_2_intensity"] = scope12Sum
+
+	// 33. Board Gender Diversity (Weighted Average Female Board Representation %)
+	var diversitySum decimal.Decimal
+	for _, pos := range state.Positions {
+		if pos.BoardGenderDiversityPct.GreaterThan(decimal.Zero) {
+			diversitySum = diversitySum.Add(pos.Weight.Mul(pos.BoardGenderDiversityPct))
+		}
+	}
+	metrics["portfolio.esg_board_gender_diversity_pct"] = diversitySum
+
+	// 34. Hazardous Waste Ratio (Weighted Average Tonnes / M$ Revenue)
+	var wasteSum decimal.Decimal
+	for _, pos := range state.Positions {
+		if pos.HazardousWasteRatio.GreaterThan(decimal.Zero) {
+			wasteSum = wasteSum.Add(pos.Weight.Mul(pos.HazardousWasteRatio))
+		}
+	}
+	metrics["portfolio.esg_hazardous_waste_ratio"] = wasteSum
+
+	// 35. EU Taxonomy Green Revenue Alignment %
+	var taxonomySum decimal.Decimal
+	for _, pos := range state.Positions {
+		if pos.EuTaxonomyAlignmentPct.GreaterThan(decimal.Zero) {
+			taxonomySum = taxonomySum.Add(pos.Weight.Mul(pos.EuTaxonomyAlignmentPct))
+		}
+	}
+	metrics["portfolio.eu_taxonomy_alignment_pct"] = taxonomySum
+
+	// 36. Liquidity Coverage Ratio (LCR) Stress Buffer Ratio
+	if state.LiquidityCoverageRatio.GreaterThan(decimal.Zero) {
+		metrics["portfolio.liquidity_coverage_ratio"] = state.LiquidityCoverageRatio
+	} else {
+		var lcrSum decimal.Decimal
+		for _, pos := range state.Positions {
+			if pos.LiquidityCoverageRatio.GreaterThan(decimal.Zero) {
+				lcrSum = lcrSum.Add(pos.Weight.Mul(pos.LiquidityCoverageRatio))
+			}
+		}
+		if lcrSum.GreaterThan(decimal.Zero) {
+			metrics["portfolio.liquidity_coverage_ratio"] = lcrSum
+		} else {
+			// Compliant default sentinel (1.200000 = 120%)
+			metrics["portfolio.liquidity_coverage_ratio"] = decimal.RequireFromString("1.200000")
+		}
 	}
 
 	state.Metrics = metrics
@@ -535,6 +922,561 @@ func (e *PostTradeEvaluator) evaluateRule(
 			res.Action = "WARNING"
 			res.Status = "OPEN"
 			res.Details["breach_reason"] = fmt.Sprintf("Cash & cash equivalent ratio %s is below 5%% liquidity floor %s", cashExp.StringFixed(4), minLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_SOVEREIGN_EXPOSURE_35":
+		maxLimit := decimal.RequireFromString("0.350000")
+		if v, ok := thresholds["max_sovereign_exposure_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		sovExp := metrics["portfolio.max_sovereign_exposure_pct"]
+		res.Details["max_sovereign_exposure_pct"] = sovExp.StringFixed(6)
+		res.Details["max_sovereign_exposure_pct_threshold"] = maxLimit.StringFixed(6)
+		if sovExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Sovereign debt exposure %s exceeds 35%% limit %s", sovExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_AGENCY_SUPRA_25":
+		maxLimit := decimal.RequireFromString("0.250000")
+		if v, ok := thresholds["max_agency_supra_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		agencyExp := metrics["portfolio.max_agency_supra_exposure_pct"]
+		res.Details["max_agency_supra_exposure_pct"] = agencyExp.StringFixed(6)
+		res.Details["max_agency_supra_pct"] = maxLimit.StringFixed(6)
+		if agencyExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Agency and supranational exposure %s exceeds 25%% limit %s", agencyExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_MUNI_OBLIGOR_10":
+		maxLimit := decimal.RequireFromString("0.100000")
+		if v, ok := thresholds["max_muni_obligor_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		muniExp := metrics["portfolio.max_muni_obligor_exposure_pct"]
+		res.Details["max_muni_obligor_exposure_pct"] = muniExp.StringFixed(6)
+		res.Details["max_muni_obligor_pct"] = maxLimit.StringFixed(6)
+		if muniExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Municipal single-obligor exposure %s exceeds 10%% limit %s", muniExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_CCP_CLEARING_EXPOSURE_15":
+		maxLimit := decimal.RequireFromString("0.150000")
+		if v, ok := thresholds["max_ccp_exposure_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		ccpExp := metrics["portfolio.max_ccp_exposure_pct"]
+		res.Details["max_ccp_exposure_pct"] = ccpExp.StringFixed(6)
+		res.Details["max_ccp_exposure_pct_threshold"] = maxLimit.StringFixed(6)
+		if ccpExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Central counterparty clearing exposure %s exceeds 15%% limit %s", ccpExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_CUSTODIAN_CONCENTRATION_20":
+		maxLimit := decimal.RequireFromString("0.200000")
+		if v, ok := thresholds["max_custodian_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		custExp := metrics["portfolio.max_custodian_concentration_pct"]
+		res.Details["max_custodian_concentration_pct"] = custExp.StringFixed(6)
+		res.Details["max_custodian_pct"] = maxLimit.StringFixed(6)
+		if custExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Custodian safekeeping concentration %s exceeds 20%% limit %s", custExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_BANK_DEPOSIT_20":
+		maxLimit := decimal.RequireFromString("0.200000")
+		if v, ok := thresholds["max_bank_deposit_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		bankExp := metrics["portfolio.max_bank_deposit_pct"]
+		res.Details["max_bank_deposit_pct"] = bankExp.StringFixed(6)
+		res.Details["max_bank_deposit_pct_threshold"] = maxLimit.StringFixed(6)
+		if bankExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Single-bank cash deposit %s exceeds 20%% limit %s", bankExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_SEC_LENDING_COLLATERAL_102":
+		minLimit := decimal.RequireFromString("1.020000")
+		if v, ok := thresholds["min_collateral_ratio"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				minLimit = d
+			}
+		}
+		ratio := metrics["portfolio.sec_lending_collateral_ratio"]
+		res.Details["sec_lending_collateral_ratio"] = ratio.StringFixed(6)
+		res.Details["min_collateral_ratio"] = minLimit.StringFixed(6)
+		if ratio.LessThan(minLimit) {
+			res.Action = "WARNING"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Securities lending collateral coverage ratio %s is below 102%% floor %s", ratio.StringFixed(4), minLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_UNCLASSIFIED_CEILING_5":
+		maxLimit := decimal.RequireFromString("0.050000")
+		if v, ok := thresholds["max_unclassified_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		unclassExp := metrics["portfolio.unclassified_securities_pct"]
+		res.Details["unclassified_securities_pct"] = unclassExp.StringFixed(6)
+		res.Details["max_unclassified_pct"] = maxLimit.StringFixed(6)
+		if unclassExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["finding_category"] = "DATA_QUALITY_INCIDENT"
+			res.Details["resolution_path"] = "DATA_REMEDIATION_REQUIRED"
+			res.Details["breach_reason"] = fmt.Sprintf("DATA_REMEDIATION_REQUIRED: Unclassified or unjoined security holdings %s exceed 5%% ceiling %s. Update security master reference data.", unclassExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_SECTOR_CONCENTRATION_25":
+		maxLimit := decimal.RequireFromString("0.250000")
+		if v, ok := thresholds["max_sector_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		secExp := metrics["portfolio.max_sector_exposure_pct"]
+		res.Details["max_sector_exposure_pct"] = secExp.StringFixed(6)
+		res.Details["max_sector_pct"] = maxLimit.StringFixed(6)
+		if secExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("GICS/ICB sector concentration %s exceeds 25%% limit %s", secExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_INDUSTRY_GROUP_15":
+		maxLimit := decimal.RequireFromString("0.150000")
+		if v, ok := thresholds["max_industry_group_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		indExp := metrics["portfolio.max_industry_group_pct"]
+		res.Details["max_industry_group_pct"] = indExp.StringFixed(6)
+		res.Details["max_industry_group_pct_threshold"] = maxLimit.StringFixed(6)
+		if indExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Industry group concentration %s exceeds 15%% limit %s", indExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_CYCLICAL_SECTOR_35":
+		maxLimit := decimal.RequireFromString("0.350000")
+		if v, ok := thresholds["max_cyclical_sector_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		cycExp := metrics["portfolio.cyclical_sectors_aggregate_pct"]
+		res.Details["cyclical_sectors_aggregate_pct"] = cycExp.StringFixed(6)
+		res.Details["max_cyclical_sector_pct"] = maxLimit.StringFixed(6)
+		if cycExp.GreaterThan(maxLimit) {
+			res.Action = "WARNING"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Cyclical sector aggregate exposure %s exceeds 35%% warning threshold %s", cycExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_EMERGING_MARKET_20":
+		maxLimit := decimal.RequireFromString("0.200000")
+		if v, ok := thresholds["max_emerging_market_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		emExp := metrics["portfolio.emerging_markets_pct"]
+		res.Details["emerging_markets_pct"] = emExp.StringFixed(6)
+		res.Details["max_emerging_market_pct"] = maxLimit.StringFixed(6)
+		if emExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Emerging market country exposure %s exceeds 20%% limit %s", emExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_NON_OECD_EXPOSURE_10":
+		maxLimit := decimal.RequireFromString("0.100000")
+		if v, ok := thresholds["max_non_oecd_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		nonOecdExp := metrics["portfolio.non_oecd_exposure_pct"]
+		res.Details["non_oecd_exposure_pct"] = nonOecdExp.StringFixed(6)
+		res.Details["max_non_oecd_pct"] = maxLimit.StringFixed(6)
+		if nonOecdExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Non-OECD country exposure %s exceeds 10%% ceiling %s", nonOecdExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_FRONTIER_MARKET_5":
+		maxLimit := decimal.RequireFromString("0.050000")
+		if v, ok := thresholds["max_frontier_market_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		frontierExp := metrics["portfolio.frontier_markets_pct"]
+		res.Details["frontier_markets_pct"] = frontierExp.StringFixed(6)
+		res.Details["max_frontier_market_pct"] = maxLimit.StringFixed(6)
+		if frontierExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Frontier market country sub-ceiling %s exceeds 5%% limit %s", frontierExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_SANCTION_LIST_ZERO_TOLERANCE":
+		matches := metrics["portfolio.sanctioned_entity_matches_count"]
+		res.Details["sanctioned_entity_matches_count"] = matches.String()
+		res.Details["max_sanctioned_matches"] = "0"
+		if matches.GreaterThan(decimal.Zero) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Sanctions list zero-tolerance violation: %s sanctioned entity holdings detected", matches.String())
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_FX_FORWARD_UNHEDGED_30":
+		maxLimit := decimal.RequireFromString("0.300000")
+		if v, ok := thresholds["max_unhedged_fx_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		fxExp := metrics["portfolio.unhedged_fx_exposure_pct"]
+		res.Details["unhedged_fx_exposure_pct"] = fxExp.StringFixed(6)
+		res.Details["max_unhedged_fx_pct"] = maxLimit.StringFixed(6)
+		if fxExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Unhedged FX exposure %s exceeds 30%% limit %s", fxExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_HIGH_YIELD_CEILING_10":
+		maxLimit := decimal.RequireFromString("0.100000")
+		if v, ok := thresholds["max_high_yield_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		hyExp := metrics["portfolio.high_yield_debt_exposure_pct"]
+		res.Details["high_yield_debt_exposure_pct"] = hyExp.StringFixed(6)
+		res.Details["max_high_yield_pct"] = maxLimit.StringFixed(6)
+		if hyExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("High-yield debt exposure %s exceeds 10%% ceiling %s", hyExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_SPLIT_RATING_CONSERVATIVE_FLOOR":
+		maxRank := int64(10) // default BBB-/Baa3 rank (1=AAA ... 10=BBB- ... 22=D)
+		if v, ok := thresholds["worst_permissible_rank"].(float64); ok {
+			maxRank = int64(v)
+		} else if v, ok := thresholds["max_grade_rank"].(float64); ok {
+			maxRank = int64(v)
+		}
+		rank := metrics["portfolio.split_rating_worst_grade_rank"]
+		res.Details["split_rating_worst_grade_rank"] = rank.String()
+		res.Details["worst_permissible_rank"] = fmt.Sprintf("%d", maxRank)
+		if rank.IntPart() > maxRank {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Conservative split credit rating rank %s exceeds maximum permissible grade rank %d (BBB-/Baa3 floor breached; sub-investment grade holding detected)", rank.String(), maxRank)
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_ESG_CONTROVERSIAL_WEAPONS_0":
+		weapExp := metrics["portfolio.esg_controversial_weapons_pct"]
+		res.Details["esg_controversial_weapons_pct"] = weapExp.StringFixed(6)
+		res.Details["max_weapons_exposure_pct"] = "0.000000"
+		if weapExp.GreaterThan(decimal.Zero) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Controversial weapons zero-tolerance exclusion breached: %s exposure detected", weapExp.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_ESG_THERMAL_COAL_REVENUE_5":
+		maxLimit := decimal.RequireFromString("0.050000")
+		if v, ok := thresholds["max_coal_revenue_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		coalExp := metrics["portfolio.esg_thermal_coal_revenue_pct"]
+		res.Details["esg_thermal_coal_revenue_pct"] = coalExp.StringFixed(6)
+		res.Details["max_coal_revenue_pct"] = maxLimit.StringFixed(6)
+		if coalExp.GreaterThan(maxLimit) {
+			res.Action = "WARNING"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Thermal coal revenue exposure %s exceeds 5%% threshold %s", coalExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_ESG_TOBACCO_REVENUE_5":
+		maxLimit := decimal.RequireFromString("0.050000")
+		if v, ok := thresholds["max_tobacco_revenue_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		tobaccoExp := metrics["portfolio.esg_tobacco_revenue_pct"]
+		res.Details["esg_tobacco_revenue_pct"] = tobaccoExp.StringFixed(6)
+		res.Details["max_tobacco_revenue_pct"] = maxLimit.StringFixed(6)
+		if tobaccoExp.GreaterThan(maxLimit) {
+			res.Action = "WARNING"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Tobacco revenue exposure %s exceeds 5%% threshold %s", tobaccoExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_ILLIQUID_TIER3_ASSETS_10":
+		maxLimit := decimal.RequireFromString("0.100000")
+		if v, ok := thresholds["max_illiquid_tier3_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		illiquidExp := metrics["portfolio.illiquid_level3_assets_pct"]
+		res.Details["illiquid_level3_assets_pct"] = illiquidExp.StringFixed(6)
+		res.Details["max_illiquid_tier3_pct"] = maxLimit.StringFixed(6)
+		if illiquidExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Level 3 illiquid assets exposure %s exceeds 10%% ceiling %s", illiquidExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_SETTLEMENT_FAIL_CONCENTRATION_5":
+		maxLimit := decimal.RequireFromString("0.050000")
+		if v, ok := thresholds["max_settlement_fail_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		failExp := metrics["portfolio.settlement_fail_exposure_pct"]
+		res.Details["settlement_fail_exposure_pct"] = failExp.StringFixed(6)
+		res.Details["max_settlement_fail_pct"] = maxLimit.StringFixed(6)
+		if failExp.GreaterThan(maxLimit) {
+			res.Action = "WARNING"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Settlement failure exposure %s exceeds 5%% threshold %s", failExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_ESG_WACI_PORTFOLIO_CEILING":
+		maxWaci := decimal.RequireFromString("150.000000")
+		minCov := decimal.RequireFromString("0.750000")
+		if v, ok := thresholds["max_waci_tco2e_per_m_revenue"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxWaci = d
+			}
+		}
+		if v, ok := thresholds["min_emissions_data_coverage_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				minCov = d
+			}
+		}
+		waci := metrics["portfolio.esg_waci_tco2e_per_m_revenue"]
+		cov := metrics["portfolio.esg_emissions_data_coverage_pct"]
+		res.Details["esg_waci_tco2e_per_m_revenue"] = waci.StringFixed(2)
+		res.Details["max_waci_tco2e_per_m_revenue"] = maxWaci.StringFixed(2)
+		res.Details["esg_emissions_data_coverage_pct"] = cov.StringFixed(4)
+		res.Details["min_emissions_data_coverage_pct"] = minCov.StringFixed(4)
+
+		if cov.LessThan(minCov) {
+			res.Action = "WARNING"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Emissions data coverage %s is below mandatory threshold %s (understates portfolio WACI)", cov.StringFixed(4), minCov.StringFixed(4))
+		} else if waci.GreaterThan(maxWaci) {
+			res.Action = "WARNING"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("WACI %s tCO2e/M$ exceeds portfolio carbon ceiling %s tCO2e/M$", waci.StringFixed(2), maxWaci.StringFixed(2))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_ESG_SCOPE_1_2_EMISSIONS_CEILING":
+		maxLimit := decimal.RequireFromString("100.000000")
+		if v, ok := thresholds["max_ghg_scope_1_2_intensity"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		scope12 := metrics["portfolio.esg_ghg_scope_1_2_intensity"]
+		res.Details["esg_ghg_scope_1_2_intensity"] = scope12.StringFixed(2)
+		res.Details["max_ghg_scope_1_2_intensity"] = maxLimit.StringFixed(2)
+		if scope12.GreaterThan(maxLimit) {
+			res.Action = "WARNING"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Scope 1+2 emissions intensity %s tCO2e/M$ exceeds ceiling %s tCO2e/M$", scope12.StringFixed(2), maxLimit.StringFixed(2))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_ESG_BOARD_GENDER_DIVERSITY_FLOOR":
+		minLimit := decimal.RequireFromString("0.300000")
+		if v, ok := thresholds["min_board_gender_diversity_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				minLimit = d
+			}
+		}
+		div := metrics["portfolio.esg_board_gender_diversity_pct"]
+		res.Details["esg_board_gender_diversity_pct"] = div.StringFixed(4)
+		res.Details["min_board_gender_diversity_pct"] = minLimit.StringFixed(4)
+		if div.LessThan(minLimit) {
+			res.Action = "WARNING"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Board female representation %s is below minimum diversity floor %s (SFDR PAI 13)", div.StringFixed(4), minLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_ESG_HAZARDOUS_WASTE_RATIO_CEILING":
+		maxLimit := decimal.RequireFromString("5.000000")
+		if v, ok := thresholds["max_hazardous_waste_ratio"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		waste := metrics["portfolio.esg_hazardous_waste_ratio"]
+		res.Details["esg_hazardous_waste_ratio"] = waste.StringFixed(2)
+		res.Details["max_hazardous_waste_ratio"] = maxLimit.StringFixed(2)
+		if waste.GreaterThan(maxLimit) {
+			res.Action = "WARNING"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Hazardous waste ratio %s tonnes/M$ exceeds ceiling %s tonnes/M$ (SFDR PAI 9)", waste.StringFixed(2), maxLimit.StringFixed(2))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_EU_TAXONOMY_GREEN_REVENUE_FLOOR":
+		minLimit := decimal.RequireFromString("0.150000")
+		if v, ok := thresholds["min_taxonomy_alignment_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				minLimit = d
+			}
+		}
+		tax := metrics["portfolio.eu_taxonomy_alignment_pct"]
+		res.Details["eu_taxonomy_alignment_pct"] = tax.StringFixed(4)
+		res.Details["min_taxonomy_alignment_pct"] = minLimit.StringFixed(4)
+		if tax.LessThan(minLimit) {
+			res.Action = "WARNING"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("EU Taxonomy green revenue alignment %s is below minimum floor %s", tax.StringFixed(4), minLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_LIQUIDITY_COVERAGE_RATIO_BUFFER":
+		minLimit := decimal.RequireFromString("1.050000")
+		if v, ok := thresholds["min_lcr_buffer_ratio"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				minLimit = d
+			}
+		}
+		lcr := metrics["portfolio.liquidity_coverage_ratio"]
+		res.Details["liquidity_coverage_ratio"] = lcr.StringFixed(4)
+		res.Details["min_lcr_buffer_ratio"] = minLimit.StringFixed(4)
+		if lcr.LessThan(minLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Stress Liquidity Coverage Ratio %s is below mandatory buffer %s (Basel III / UCITS)", lcr.StringFixed(4), minLimit.StringFixed(4))
 		} else {
 			res.Action = "WITHIN_LIMITS"
 			res.Status = "RESOLVED"

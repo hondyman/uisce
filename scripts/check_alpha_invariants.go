@@ -92,12 +92,12 @@ func main() {
 
 	fmt.Println("======================================================================")
 	fmt.Printf("POST-SUITE LIVE INVARIANTS & STRUCTURAL POLLUTION PROBE (LIVE ALPHA):\n")
-	fmt.Printf("  master_active_rules:         %d (expected 57)\n", masterActiveRules)
-	fmt.Printf("  master_library_active:       %d (expected 57)\n", masterLibraryActive)
+	fmt.Printf("  master_active_rules:         %d (expected 80)\n", masterActiveRules)
+	fmt.Printf("  master_library_active:       %d (expected 80)\n", masterLibraryActive)
 	fmt.Printf("  master_library_provisional:  %d (expected 0)\n", masterLibraryProvisional)
-	fmt.Printf("  master_snapshots:            %d (expected 57)\n", masterSnapshots)
+	fmt.Printf("  master_snapshots:            %d (expected 80)\n", masterSnapshots)
 	fmt.Printf("  master_soft_deleted:         %d (expected 0)\n", masterSoftDeleted)
-	fmt.Printf("  total_rules:                 %d (expected 57)\n", totalRules)
+	fmt.Printf("  total_rules:                 %d (expected 80)\n", totalRules)
 	fmt.Println("----------------------------------------------------------------------")
 	fmt.Printf("NON-MASTER / NON-DEMO ROW COUNTS (STRICT ZERO REQUIRED):\n")
 	fmt.Printf("  compliance_rule:                 %d (expected 0)\n", foreignRules)
@@ -116,8 +116,8 @@ func main() {
 	fmt.Printf("  compliance_notification:         %d (expected 0)\n", foreignNotifications)
 	fmt.Println("======================================================================")
 
-	if masterActiveRules != 57 || masterLibraryActive != 57 || masterLibraryProvisional != 0 ||
-		masterSnapshots != 57 || masterSoftDeleted != 0 || totalRules != 57 ||
+	if masterActiveRules != 80 || masterLibraryActive != 80 || masterLibraryProvisional != 0 ||
+		masterSnapshots != 80 || masterSoftDeleted != 0 || totalRules != 80 ||
 		foreignRules != 0 || foreignVersions != 0 || foreignActivations != 0 ||
 		foreignEvaluations != 0 || foreignAuditEvents != 0 || foreignFindings != 0 ||
 		foreignSurvEvents != 0 || foreignPortSnapshots != 0 || foreignPostFindings != 0 ||

@@ -296,6 +296,11 @@ func (s *Service) ListRulesets(ctx context.Context) ([]RulesetSummary, error) {
 			Description: "Fat-finger notional/ADV limits, self-trade prevention, VaR leverage, liquidity bucketing, and personal trading preclearance.",
 			PlanTier:    "enterprise",
 		},
+		"POST_TRADE_MONITORING": {
+			Name:        "Post-Trade Portfolio & Exposure Monitoring Pack",
+			Description: "Single/group issuer concentration, sovereign/agency limits, counterparty PFE, clearing, custodian, deposit, and collateral floors.",
+			PlanTier:    "enterprise",
+		},
 	}
 
 	rows, err := s.db.QueryContext(ctx, `

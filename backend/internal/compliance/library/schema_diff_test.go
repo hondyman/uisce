@@ -95,11 +95,11 @@ func TestSchemaParity_ComplianceTablesAndConstraints(t *testing.T) {
 		t.Fatalf("failed to query master tenant counts: %v", err)
 	}
 
-	if masterCount != 57 {
-		t.Errorf("expected exactly 57 gold-copy rules, got %d", masterCount)
+	if masterCount != 86 {
+		t.Errorf("expected exactly 86 gold-copy rules, got %d", masterCount)
 	}
-	if snapshotCount != 57 {
-		t.Errorf("expected exactly 57 v1 snapshots for gold-copy rules, got %d", snapshotCount)
+	if snapshotCount != 86 {
+		t.Errorf("expected exactly 86 v1 snapshots for gold-copy rules, got %d", snapshotCount)
 	}
 
 	// 4. Verify master schema tables
@@ -114,5 +114,5 @@ func TestSchemaParity_ComplianceTablesAndConstraints(t *testing.T) {
 		t.Errorf("expected master.entity_relationship_snapshot table to exist")
 	}
 
-	fmt.Printf("[Schema Diff Test] Verified 57 master rules, 57 v1 snapshots, 17 compliance tables, master hierarchy table, and all triggers.\n")
+	fmt.Printf("[Schema Diff Test] Verified 86 master rules, 86 v1 snapshots, 17 compliance tables, master hierarchy table, and all triggers.\n")
 }

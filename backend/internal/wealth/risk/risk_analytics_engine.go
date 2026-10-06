@@ -980,7 +980,7 @@ h.market_value,
 h.weight,
 COALESCE(s.avg_daily_volume, 1000000) as avg_daily_volume
 FROM portfolio_holdings h
-JOIN securities s ON h.security_id = s.security_id
+LEFT JOIN securities s ON h.security_id = s.security_id
 WHERE h.portfolio_id = $1
 AND h.holding_date = $2
 )

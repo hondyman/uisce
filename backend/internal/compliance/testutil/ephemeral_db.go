@@ -55,7 +55,12 @@ func ensureTemplateDatabase(adminDB *sql.DB) error {
 		tplDB, err := sql.Open("postgres", templateDSN)
 		if err == nil {
 			var hasLatest bool
-			_ = tplDB.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM compliance.compliance_rule_version WHERE content_hash = '6438860a9643d7d305ff9511c113ee5d7f128c8dbb7bbdcdd32a690c75be8a43')").Scan(&hasLatest)
+			_ = tplDB.QueryRowContext(ctx, `
+				SELECT EXISTS(
+					SELECT 1 FROM compliance.compliance_rule_version 
+					WHERE content_hash = 'f292765cfcd9d6883d997856a5ea07ad91243dd3f19ae1a2a89f26148795faee'
+				)
+			`).Scan(&hasLatest)
 			tplDB.Close()
 			if hasLatest {
 				return nil
@@ -153,7 +158,7 @@ func ensureTemplateDatabase(adminDB *sql.DB) error {
 		return fmt.Errorf("apply prereqs on template db: %w", err)
 	}
 
-	// Apply migrations 001 -> 011
+	// Apply migrations 001 -> 017
 	migrations := []string{
 		"20261218_001_compliance_engine_core_tables.up.sql",
 		"20261218_002_governance_audit_and_privileges.up.sql",
@@ -166,6 +171,12 @@ func ensureTemplateDatabase(adminDB *sql.DB) error {
 		"20261220_009_compliance_surveillance_findings.up.sql",
 		"20261221_010_post_trade_pilot_schema.up.sql",
 		"20261222_011_phase1_counterparty_and_group_schema.up.sql",
+		"20261223_012_phase1_tranche2_rules_and_pack.up.sql",
+		"20261224_013_phase2_tranche1_taxonomy_rules.up.sql",
+		"20261224_014_provenance_least_privilege_and_audit.up.sql",
+		"20261224_015_phase2_tranche2_rules_and_pack.up.sql",
+		"20261224_016_phase2_tranche2_rule_corrections.up.sql",
+		"20261224_017_phase2_tranche3_waci_and_sfdr_rules.up.sql",
 	}
 
 	// Search for migration directory

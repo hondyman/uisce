@@ -8,6 +8,7 @@ import { sourceScoringBlueprint } from './sourceScoring';
 import { validationRulesBlueprint } from './validationRules';
 import { lakehouseStreamingBlueprint } from './lakehouseStreaming';
 import { systemLakehouseBlueprint } from './systemLakehouse';
+import { lakehouseStatusBlueprint } from './lakehouseStatus';
 
 /**
  * Pages the studio can start from: complete, working pages built entirely
@@ -92,6 +93,12 @@ export const PAGE_BLUEPRINTS: PageBlueprint[] = [
     name: 'Tenant lakehouse',
     description: "System: each tenant's one Iceberg warehouse and its per-tenant audit retention, with provisioning and the audit trail.",
     build: systemLakehouseBlueprint,
+  },
+  {
+    id: 'lakehouse-status',
+    name: 'Lakehouse status',
+    description: 'Read-only panel: cluster health, resource groups, per-tenant wiring, and cross-check warnings.',
+    build: lakehouseStatusBlueprint,
   },
 ];
 

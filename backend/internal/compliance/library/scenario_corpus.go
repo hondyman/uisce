@@ -54,6 +54,37 @@ type OrderContext struct {
 	MaxIssuerDebtExposurePct        decimal.Decimal
 	MaxCounterpartyPfeExposurePct   decimal.Decimal
 	CashAndEquivalentPct            decimal.Decimal
+	MaxSovereignExposurePct         decimal.Decimal
+	MaxAgencySupraExposurePct       decimal.Decimal
+	MaxMuniObligorExposurePct       decimal.Decimal
+	MaxCcpExposurePct               decimal.Decimal
+	MaxCustodianConcentrationPct    decimal.Decimal
+	MaxBankDepositPct               decimal.Decimal
+	SecLendingCollateralRatio       decimal.Decimal
+	UnclassifiedSecuritiesPct       decimal.Decimal
+	MaxSectorExposurePct            decimal.Decimal
+	MaxIndustryGroupPct             decimal.Decimal
+	CyclicalSectorsAggregatePct     decimal.Decimal
+	EmergingMarketsPct              decimal.Decimal
+	NonOecdExposurePct              decimal.Decimal
+	FrontierMarketsPct              decimal.Decimal
+	SanctionedEntityMatchesCount    int
+	UnhedgedFxExposurePct           decimal.Decimal
+	HighYieldDebtExposurePct        decimal.Decimal
+	SplitRatingWorstGradeRank       int
+	SplitRatingConservativeGradeRank int
+	EsgControversialWeaponsPct      decimal.Decimal
+	EsgThermalCoalRevenuePct        decimal.Decimal
+	EsgTobaccoRevenuePct            decimal.Decimal
+	IlliquidLevel3AssetsPct         decimal.Decimal
+	SettlementFailExposurePct       decimal.Decimal
+	EsgWaciTco2ePerMRevenue         decimal.Decimal
+	EsgEmissionsDataCoveragePct     decimal.Decimal
+	EsgGhgScope12Intensity          decimal.Decimal
+	EsgBoardGenderDiversityPct      decimal.Decimal
+	EsgHazardousWasteRatio          decimal.Decimal
+	EuTaxonomyAlignmentPct          decimal.Decimal
+	LiquidityCoverageRatio          decimal.Decimal
 	Nav                             decimal.Decimal
 	ExistingPositionValue decimal.Decimal
 	ReferencePrice        decimal.Decimal
@@ -140,12 +171,16 @@ func buildScenarioCorpus() []Scenario {
 	var corpus []Scenario
 	corpus = append(corpus, getCorePreTradeScenarios()...)
 	corpus = append(corpus, getPhase1PostTradeScenarios()...)
+	corpus = append(corpus, getPhase2PostTradeScenarios()...)
 	return corpus
 }
 
 // EvaluateScenario evaluates an OrderContext against a rule AST condition and parameter thresholds.
 func EvaluateScenario(sc Scenario) (string, string) {
 	if status, explain, ok := evaluatePhase1Scenario(sc); ok {
+		return status, explain
+	}
+	if status, explain, ok := evaluatePhase2Scenario(sc); ok {
 		return status, explain
 	}
 	in := sc.Input
