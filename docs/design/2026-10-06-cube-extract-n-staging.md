@@ -1,6 +1,6 @@
 # Track C — Extract-N → staging for federated cube materialize
 
-**Status:** C0 approved — implementing C1–C3  
+**Status:** C0–C4 done (C4 lab receipt 2026-10-06)  
 **Date:** 2026-10-06  
 **Depends on:** Track A (#411), Track B (#412 + ALTER syntax #413).  
 **Lab anchor:** CUBE-2.5 Position×Account×Security (`b3b29340-a32b-4512-ac28-5e9a7d02fef6`).
@@ -119,6 +119,15 @@ Out of scope for Track C:
 3. CUBE-2.5 cold `COUNT(*)` matches pre-extract JDBC path (3 for smoke grain).
 4. Gate off: CUBE-2.5 JDBC path still green (regression).
 5. Single-BO Deploy never calls extract.
+
+### C4 lab receipt (2026-10-06)
+
+Materializer path with `CUBE_FEDERATION_EXTRACT=1` (same activities Temporal registers):
+
+- Extract CTAS needs `PROPERTIES ("replication_num" = "1")` on single-BE SR 3.3.22.
+- Staging mid-flight: pos=3, acct=3, sec=29; cold Iceberg `COUNT(*)=3`.
+- Staging unknown after `DropStaging` (`C4_RECEIPT_OK`).
+- Temporal Deploy path is the same activity set once worker has #414 + env gate.
 
 ## Approval ask
 
