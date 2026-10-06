@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -106,18 +105,10 @@ func TestPostTradeEvaluator_E2E_PilotRulesAndSupersession(t *testing.T) {
 	require.Equal(t, 1, snapCount)
 
 	// Verify Finding row exists in DB
-	rows, err := db.QueryContext(ctx, "SELECT rule_code, action, finding_severity, status, details FROM compliance.compliance_finding WHERE tenant_id = $1 AND status = 'OPEN'", tenantA)
+	var openFindingsCount int
+	err = db.QueryRowContext(ctx, "SELECT count(*) FROM compliance.compliance_finding WHERE tenant_id = $1 AND status = 'OPEN'", tenantA).Scan(&openFindingsCount)
 	require.NoError(t, err)
-	defer rows.Close()
-	var openRules []string
-	for rows.Next() {
-		var rc, act, sev, st string
-		var dt []byte
-		require.NoError(t, rows.Scan(&rc, &act, &sev, &st, &dt))
-		openRules = append(openRules, fmt.Sprintf("%s (%s/%s: %s)", rc, act, sev, string(dt)))
-	}
-	t.Logf("Open Findings in DB (%d): %v", len(openRules), openRules)
-	require.Equal(t, 1, len(openRules), "Expected exactly 1 open finding (UCITS_5_10_40)")
+	require.Equal(t, 1, openFindingsCount)
 
 	// =========================================================================
 	// Scenario 2: Idempotency Re-run with Exact Same Input

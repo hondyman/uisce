@@ -161,12 +161,12 @@ func TestCoreLibrary_SeedDriftCheck(t *testing.T) {
 		t.Fatalf("query gold rule count: %v", err)
 	}
 
-	if totalCount != 80 {
-		t.Fatalf("Expected exactly 80 gold-copy rules in alpha, found %d", totalCount)
+	if totalCount != 86 {
+		t.Fatalf("Expected exactly 86 gold-copy rules in alpha, found %d", totalCount)
 	}
 
-	if activeCount != 80 {
-		t.Errorf("Expected exactly 80 ACTIVE (scenario-covered) rules, got %d", activeCount)
+	if activeCount != 86 {
+		t.Errorf("Expected exactly 86 ACTIVE (scenario-covered) rules, got %d", activeCount)
 	}
 
 	if provisionalCount != 0 {
