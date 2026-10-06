@@ -46,6 +46,8 @@ CREATE INDEX IF NOT EXISTS idx_compliance_rule_core_ref
 ALTER TABLE compliance.compliance_rule ENABLE ROW LEVEL SECURITY;
 ALTER TABLE compliance.compliance_rule FORCE ROW LEVEL SECURITY;
 
+-- Drop-then-create for idempotency: matches the pattern used by migrations 006/007/009.
+DROP POLICY IF EXISTS tenant_isolation_compliance_rule ON compliance.compliance_rule;
 CREATE POLICY tenant_isolation_compliance_rule ON compliance.compliance_rule
     FOR ALL
     USING (
@@ -124,6 +126,8 @@ CREATE INDEX IF NOT EXISTS idx_compliance_eval_lineage
 ALTER TABLE compliance.compliance_evaluation_event ENABLE ROW LEVEL SECURITY;
 ALTER TABLE compliance.compliance_evaluation_event FORCE ROW LEVEL SECURITY;
 
+-- Drop-then-create for idempotency: matches the pattern used by migrations 006/007/009.
+DROP POLICY IF EXISTS tenant_isolation_compliance_evaluation ON compliance.compliance_evaluation_event;
 CREATE POLICY tenant_isolation_compliance_evaluation ON compliance.compliance_evaluation_event
     FOR ALL
     USING (
@@ -176,6 +180,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS unq_compliance_archive_manifest_s3_key
 ALTER TABLE compliance.compliance_archive_manifest ENABLE ROW LEVEL SECURITY;
 ALTER TABLE compliance.compliance_archive_manifest FORCE ROW LEVEL SECURITY;
 
+-- Drop-then-create for idempotency: matches the pattern used by migrations 006/007/009.
+DROP POLICY IF EXISTS tenant_isolation_compliance_manifest ON compliance.compliance_archive_manifest;
 CREATE POLICY tenant_isolation_compliance_manifest ON compliance.compliance_archive_manifest
     FOR ALL
     USING (
@@ -197,6 +203,8 @@ CREATE TABLE IF NOT EXISTS compliance.compliance_watermark_checkpoint (
 ALTER TABLE compliance.compliance_watermark_checkpoint ENABLE ROW LEVEL SECURITY;
 ALTER TABLE compliance.compliance_watermark_checkpoint FORCE ROW LEVEL SECURITY;
 
+-- Drop-then-create for idempotency: matches the pattern used by migrations 006/007/009.
+DROP POLICY IF EXISTS tenant_isolation_compliance_watermark ON compliance.compliance_watermark_checkpoint;
 CREATE POLICY tenant_isolation_compliance_watermark ON compliance.compliance_watermark_checkpoint
     FOR ALL
     USING (

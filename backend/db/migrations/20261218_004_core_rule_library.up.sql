@@ -61,6 +61,8 @@ CREATE INDEX IF NOT EXISTS idx_compliance_tenant_activation_lookup
 ALTER TABLE compliance.tenant_rule_activation ENABLE ROW LEVEL SECURITY;
 ALTER TABLE compliance.tenant_rule_activation FORCE ROW LEVEL SECURITY;
 
+-- Drop-then-create for idempotency: matches the pattern used by migrations 006/007/009.
+DROP POLICY IF EXISTS tenant_isolation_activation ON compliance.tenant_rule_activation;
 CREATE POLICY tenant_isolation_activation ON compliance.tenant_rule_activation
     FOR ALL USING (
         tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid

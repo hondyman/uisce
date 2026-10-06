@@ -27,6 +27,8 @@ CREATE INDEX IF NOT EXISTS idx_compliance_gov_audit_rule
 ALTER TABLE compliance.governance_audit_event ENABLE ROW LEVEL SECURITY;
 ALTER TABLE compliance.governance_audit_event FORCE ROW LEVEL SECURITY;
 
+-- Drop-then-create for idempotency: matches the pattern used by migrations 006/007/009.
+DROP POLICY IF EXISTS tenant_isolation_governance_audit ON compliance.governance_audit_event;
 CREATE POLICY tenant_isolation_governance_audit ON compliance.governance_audit_event
     FOR ALL
     USING (
