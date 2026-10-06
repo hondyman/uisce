@@ -13,7 +13,7 @@ CUBE-2.5 lab cold path mounts Lakekeeper as StarRocks external catalog `lakekeep
 **Sidecar refresher** (not native oauth2.credential):
 
 1. Mint access token via Keycloak `client_credentials` (reuse `iceberg.TokenManager`).
-2. `ALTER CATALOG <name> SET PROPERTIES ("iceberg.catalog.token" = '…')`.
+2. `ALTER CATALOG <name> SET ("iceberg.catalog.token" = '…')` (SR 3.3.22 — no `PROPERTIES` keyword).
 3. Run **eagerly** at the start of `starRocksColdWriter.ApplyCold` when `CUBE_ICEBERG_TOKEN_REFRESH` is enabled.
 4. Fail closed if mint or ALTER fails (do not proceed to CREATE DATABASE / CTAS with a stale token).
 
@@ -33,8 +33,9 @@ Honest non-claim: this does not fix StarRocks’ oauth2.credential path; it is t
 
 ```sql
 ALTER CATALOG `lakekeeper_iceberg`
-SET PROPERTIES ("iceberg.catalog.token" = '<redacted>');
+SET ("iceberg.catalog.token" = '<redacted>');
 ```
+<!-- Lab-proven 2026-10-05 on StarRocks 3.3.22-753696f: SET PROPERTIES is a parse error. -->
 
 Inventory before apply:
 

@@ -53,7 +53,7 @@ func TestStarRocksCatalogTokenRefresher_Ensure_AlterSQL(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	mock.ExpectExec(`(?s)ALTER CATALOG .+lakekeeper_iceberg.+ SET PROPERTIES \("iceberg\.catalog\.token" = 'tok-live-secret-value'\)`).
+	mock.ExpectExec(`(?s)ALTER CATALOG .+lakekeeper_iceberg.+ SET \("iceberg\.catalog\.token" = 'tok-live-secret-value'\)`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	r := &starRocksCatalogTokenRefresher{
@@ -118,7 +118,7 @@ func TestApplyCold_RunsCatalogTokenRefreshFirst(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	mock.ExpectExec(`ALTER CATALOG .+ SET PROPERTIES`).
+	mock.ExpectExec(`ALTER CATALOG .+ SET \("iceberg\.catalog\.token"`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`CREATE DATABASE IF NOT EXISTS .+`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
