@@ -2,7 +2,6 @@ package cold_test
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net"
 	"os"
@@ -17,6 +16,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
 	"github.com/hondyman/uisce/backend/internal/compliance/cold"
 	"github.com/hondyman/uisce/backend/internal/compliance/jobs"
+	"github.com/hondyman/uisce/backend/internal/compliance/testutil"
 )
 
 func TestCompliance_EndToEndCryptographicAuditHotWarmColdCLI(t *testing.T) {
@@ -31,14 +31,7 @@ func TestCompliance_EndToEndCryptographicAuditHotWarmColdCLI(t *testing.T) {
 	}
 	conn.Close()
 
-	homeDir, _ := os.UserHomeDir()
-	dsn := fmt.Sprintf("postgres://postgres:postgres@100.84.50.65:5432/alpha?sslmode=verify-full&sslrootcert=%s/.uisce/certs/ca.crt&sslcert=%s/.uisce/certs/postgres-client.crt&sslkey=%s/.uisce/certs/postgres-client.key", homeDir, homeDir, homeDir)
-	pgDB, err := sql.Open("postgres", dsn)
-	if err != nil {
-		t.Skipf("Postgres alpha not reachable: %v", err)
-		return
-	}
-	defer pgDB.Close()
+	pgDB := testutil.GetEphemeralTestDB(t)
 
 	tenantID := uuid.New()
 	ruleID := uuid.New()

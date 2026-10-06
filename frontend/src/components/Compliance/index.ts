@@ -4,3 +4,5 @@ export { SoDRulesManager } from './SoDRulesManager';
 export { ComplianceDecisionBlotter } from './ComplianceDecisionBlotter';
 export { RegulatoryChangeQueue } from './RegulatoryChangeQueue';
 export { SurveillanceFindingsQueue } from './SurveillanceFindingsQueue';
+export { RuleLibraryExplorer } from './RuleLibraryExplorer';
+export { RuleActivationMatrix } from './RuleActivationMatrix';
