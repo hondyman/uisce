@@ -163,6 +163,7 @@ func TestMCP_TenantMismatch_MatchNonDefaultTenant(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("uisce\\.current_tenant").WithArgs(altTenantID).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("app\\.tenant_id").WithArgs(altTenantID).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("app\\.current_tenant").WithArgs(altTenantID).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("uisce\\.gold_tenant").WithArgs(gold.String()).WillReturnResult(sqlmock.NewResult(0, 0))
 	rows := sqlmock.NewRows([]string{"id", "name", "slug", "status"})
 	mock.ExpectQuery("FROM public.page_definitions").

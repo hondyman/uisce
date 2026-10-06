@@ -92,6 +92,9 @@ func ApplyTenantGUCs(ctx context.Context, tx *sql.Tx, tenantID, goldTenantID str
 	if _, err := tx.ExecContext(ctx, "SELECT set_config('app.tenant_id', $1, true)", tenantID); err != nil {
 		return fmt.Errorf("ApplyTenantGUCs: SET LOCAL app.tenant_id failed: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, "SELECT set_config('app.current_tenant', $1, true)", tenantID); err != nil {
+		return fmt.Errorf("ApplyTenantGUCs: SET LOCAL app.current_tenant failed: %w", err)
+	}
 	if goldTenantID != "" {
 		if _, err := tx.ExecContext(ctx, "SELECT set_config('uisce.gold_tenant', $1, true)", goldTenantID); err != nil {
 			return fmt.Errorf("ApplyTenantGUCs: SET LOCAL uisce.gold_tenant failed: %w", err)
