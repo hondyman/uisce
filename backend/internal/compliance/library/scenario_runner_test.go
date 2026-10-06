@@ -41,6 +41,41 @@ func TestCoreLibrary_ScenarioCorpusRegression(t *testing.T) {
 	}
 }
 
+// 1b. Scenario Rule Code Resolution Guard (Fails if scenario references an unknown rule code)
+func TestCoreLibrary_ScenarioRuleCodeResolution(t *testing.T) {
+	db := getAlphaTestDB(t)
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	loader := compliance.NewMultiTenantRuleLoader(db)
+	goldTenant, err := loader.GetGoldCopyTenantID(ctx)
+	require.NoError(t, err)
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT rule_code FROM compliance.compliance_rule
+		WHERE tenant_id = $1 AND valid_to IS NULL
+	`, goldTenant)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	validRules := make(map[string]bool)
+	for rows.Next() {
+		var code string
+		require.NoError(t, rows.Scan(&code))
+		validRules[code] = true
+	}
+
+	for _, sc := range CoreScenarioCorpus {
+		if !validRules[sc.RuleCode] {
+			t.Fatalf("Scenario %s references unknown rule code %q (not found in gold-copy rule library)",
+				sc.Code, sc.RuleCode)
+		}
+	}
+	t.Logf("100%% Rule Code Resolution Verified: all %d scenarios map directly to valid gold-copy core rules", len(CoreScenarioCorpus))
+}
+
 // 2. Reservation-Dependent Adversarial Test
 func TestCoreLibrary_ReservationAdversarial(t *testing.T) {
 	cache := reservation.NewPositionCache()
@@ -130,12 +165,12 @@ func TestCoreLibrary_SeedDriftCheck(t *testing.T) {
 		t.Fatalf("Expected exactly 50 gold-copy rules in alpha, found %d", totalCount)
 	}
 
-	if activeCount != 17 {
-		t.Errorf("Expected exactly 17 ACTIVE (scenario-covered) rules, got %d", activeCount)
+	if activeCount != 50 {
+		t.Errorf("Expected exactly 50 ACTIVE (scenario-covered) rules, got %d", activeCount)
 	}
 
-	if provisionalCount != 33 {
-		t.Errorf("Expected exactly 33 PROVISIONAL rules, got %d", provisionalCount)
+	if provisionalCount != 0 {
+		t.Errorf("Expected exactly 0 PROVISIONAL rules, got %d", provisionalCount)
 	}
 
 	// Verify all 3 licensable rulesets are populated
@@ -346,15 +381,25 @@ func TestCoreLibrary_RepinProvisionalRejection(t *testing.T) {
 		t.Fatalf("get gold tenant: %v", err)
 	}
 
-	// Pick a PROVISIONAL core rule (e.g. ORDER_RATE_LIMIT)
-	var provisionalCoreID uuid.UUID
-	err = db.QueryRowContext(ctx, `
-		SELECT id FROM compliance.compliance_rule
-		WHERE tenant_id = $1 AND rule_code = 'ORDER_RATE_LIMIT' AND library_status = 'PROVISIONAL'
-	`, goldTenant).Scan(&provisionalCoreID)
+	// Create an isolated provisional core rule fixture under gold tenant for testing
+	provisionalCoreID := uuid.New()
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO compliance.compliance_rule (
+			id, tenant_id, rule_code, name, rule_phase, severity, priority,
+			is_active, source_version, inherit_mode, library_status,
+			ast_condition, parameter_thresholds, citation
+		) VALUES (
+			$1, $2, 'TEST_PROVISIONAL_RULE', 'Test Provisional Rule', 'PRE_TRADE', 'HARD_BLOCK', 95,
+			true, 'CORE_LIB_V1', 'inherit', 'PROVISIONAL',
+			'{}'::jsonb, '{}'::jsonb, 'Test Provisional Citation'
+		)
+	`, provisionalCoreID, goldTenant)
 	if err != nil {
-		t.Fatalf("find PROVISIONAL core rule ORDER_RATE_LIMIT: %v", err)
+		t.Fatalf("insert fixture provisional core rule: %v", err)
 	}
+	defer func() {
+		_, _ = db.ExecContext(ctx, "DELETE FROM compliance.compliance_rule WHERE id = $1", provisionalCoreID)
+	}()
 
 	// Create an extended tenant rule pointing to the provisional core rule
 	testTenant := uuid.New()
@@ -365,7 +410,7 @@ func TestCoreLibrary_RepinProvisionalRejection(t *testing.T) {
 			rule_code, name, rule_phase, severity, priority, is_active, source_version
 		) VALUES (
 			$1, $2, $3, 'extend', 1, 'CORE_VERSION_UPDATED',
-			'ORDER_RATE_LIMIT', 'Custom Rate Limit', 'PRE_TRADE', 'HARD_BLOCK', 95, true, 'TENANT_CUSTOM'
+			'TEST_PROVISIONAL_RULE', 'Custom Rate Limit', 'PRE_TRADE', 'HARD_BLOCK', 95, true, 'TENANT_CUSTOM'
 		)
 	`, tenantRuleID, testTenant, provisionalCoreID)
 	if err != nil {

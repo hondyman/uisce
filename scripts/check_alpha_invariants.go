@@ -44,6 +44,7 @@ func main() {
 
 	var (
 		masterActiveRules, masterSnapshots, masterSoftDeleted, totalRules int
+		masterLibraryActive, masterLibraryProvisional                     int
 		foreignRules, foreignVersions, foreignActivations                 int
 		foreignEvaluations, foreignAuditEvents, foreignFindings           int
 		foreignDraftRules, foreignCases                                   int
@@ -56,6 +57,8 @@ func main() {
 			(SELECT count(*) FROM compliance.compliance_rule_version WHERE tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid),
 			(SELECT count(*) FROM compliance.compliance_rule WHERE tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid AND valid_to IS NOT NULL),
 			(SELECT count(*) FROM compliance.compliance_rule),
+			(SELECT count(*) FROM compliance.compliance_rule WHERE tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid AND library_status = 'ACTIVE' AND valid_to IS NULL),
+			(SELECT count(*) FROM compliance.compliance_rule WHERE tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid AND library_status = 'PROVISIONAL' AND valid_to IS NULL),
 
 			-- 2. Foreign / Test row probes across all tables (must be 0 outside gold master and demo tenant)
 			(SELECT count(*) FROM compliance.compliance_rule WHERE tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)),
@@ -68,6 +71,7 @@ func main() {
 			(SELECT count(*) FROM compliance.regulatory_change_case)
 	`).Scan(
 		&masterActiveRules, &masterSnapshots, &masterSoftDeleted, &totalRules,
+		&masterLibraryActive, &masterLibraryProvisional,
 		&foreignRules, &foreignVersions, &foreignActivations,
 		&foreignEvaluations, &foreignAuditEvents, &foreignFindings,
 		&foreignDraftRules, &foreignCases,
@@ -78,10 +82,12 @@ func main() {
 
 	fmt.Println("======================================================================")
 	fmt.Printf("POST-SUITE LIVE INVARIANTS & STRUCTURAL POLLUTION PROBE (LIVE ALPHA):\n")
-	fmt.Printf("  master_active_rules: %d (expected 50)\n", masterActiveRules)
-	fmt.Printf("  master_snapshots:    %d (expected 50)\n", masterSnapshots)
-	fmt.Printf("  master_soft_deleted: %d (expected 0)\n", masterSoftDeleted)
-	fmt.Printf("  total_rules:         %d (expected 50)\n", totalRules)
+	fmt.Printf("  master_active_rules:         %d (expected 50)\n", masterActiveRules)
+	fmt.Printf("  master_library_active:       %d (expected 50)\n", masterLibraryActive)
+	fmt.Printf("  master_library_provisional:  %d (expected 0)\n", masterLibraryProvisional)
+	fmt.Printf("  master_snapshots:            %d (expected 50)\n", masterSnapshots)
+	fmt.Printf("  master_soft_deleted:         %d (expected 0)\n", masterSoftDeleted)
+	fmt.Printf("  total_rules:                 %d (expected 50)\n", totalRules)
 	fmt.Println("----------------------------------------------------------------------")
 	fmt.Printf("NON-MASTER / NON-DEMO ROW COUNTS (STRICT ZERO REQUIRED):\n")
 	fmt.Printf("  compliance_rule:                 %d (expected 0)\n", foreignRules)
@@ -94,7 +100,8 @@ func main() {
 	fmt.Printf("  regulatory_change_case:          %d (expected 0)\n", foreignCases)
 	fmt.Println("======================================================================")
 
-	if masterActiveRules != 50 || masterSnapshots != 50 || masterSoftDeleted != 0 || totalRules != 50 ||
+	if masterActiveRules != 50 || masterLibraryActive != 50 || masterLibraryProvisional != 0 ||
+		masterSnapshots != 50 || masterSoftDeleted != 0 || totalRules != 50 ||
 		foreignRules != 0 || foreignVersions != 0 || foreignActivations != 0 ||
 		foreignEvaluations != 0 || foreignAuditEvents != 0 || foreignFindings != 0 ||
 		foreignDraftRules != 0 || foreignCases != 0 {

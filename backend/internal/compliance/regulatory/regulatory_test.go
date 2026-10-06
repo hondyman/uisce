@@ -554,12 +554,22 @@ func TestRegulatoryWorkflow_CorpusGateRejection(t *testing.T) {
 	t.Logf("Corpus gate correctly rejected failing test vector: %v", err)
 
 	// 2. Reject SEMANTIC_CHANGE on PROVISIONAL rule
-	var provRuleID uuid.UUID
-	err = db.QueryRowContext(ctx, `
-		SELECT id FROM compliance.compliance_rule
-		WHERE tenant_id = $1 AND rule_code = 'ORDER_RATE_LIMIT' AND library_status = 'PROVISIONAL'
-	`, goldTenant).Scan(&provRuleID)
+	provRuleID := uuid.New()
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO compliance.compliance_rule (
+			id, tenant_id, inherit_mode, rule_code, name, rule_phase, severity,
+			priority, is_active, current_version, ast_condition, parameter_thresholds,
+			citation, library_status
+		) VALUES (
+			$1, $2, 'inherit', 'TEST_PROV_REJECT', 'Test Provisional Reject', 'POST_TRADE', 'HARD_BLOCK',
+			50, true, 1, '{}'::jsonb, '{}'::jsonb,
+			'Test Citation', 'PROVISIONAL'
+		)
+	`, provRuleID, goldTenant)
 	require.NoError(t, err)
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM compliance.compliance_rule WHERE id = $1", provRuleID)
+	}()
 
 	draftProv := RuleDraft{
 		RuleID: provRuleID,

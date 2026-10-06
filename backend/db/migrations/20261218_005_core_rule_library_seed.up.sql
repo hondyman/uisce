@@ -15,7 +15,7 @@ CREATE OR REPLACE FUNCTION compliance.seed_core_rule(
     p_jurisdictions TEXT[],
     p_params JSONB,
     p_ast JSONB,
-    p_status TEXT DEFAULT 'PROVISIONAL'
+    p_status TEXT DEFAULT 'ACTIVE'
 ) RETURNS UUID AS $$
 DECLARE
     v_id UUID;
@@ -206,7 +206,7 @@ SELECT compliance.seed_core_rule('FRONT_RUNNING_CLIENT_ORDER',
   ARRAY['GLOBAL'],
   '{}',
   '{"type":"AND","children":[{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"order.is_principal_or_employee"},"right":{"type":"LITERAL","value":true}},{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"market.pending_client_orders_exist"},"right":{"type":"LITERAL","value":true}}]}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('FREERIDING_REG_T',
   'Federal Reserve Reg T Freeriding Prohibition', 'PRE_TRADE', 'HARD_BLOCK', 95,
@@ -214,7 +214,7 @@ SELECT compliance.seed_core_rule('FREERIDING_REG_T',
   ARRAY['US'],
   '{}',
   '{"type":"AND","children":[{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"order.side"},"right":{"type":"LITERAL","value":"SELL"}},{"type":"COMPARISON","op":"LT","left":{"type":"METRIC","path":"security.settled_qty"},"right":{"type":"METRIC","path":"order.qty"}},{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"cash.unpaid"},"right":{"type":"LITERAL","value":true}}]}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('LAYERING_SPOOF_PATTERN',
   'High Order-to-Trade Ratio & Spoofing Pattern', 'POST_TRADE', 'SOFT_WARNING', 85,
@@ -222,7 +222,7 @@ SELECT compliance.seed_core_rule('LAYERING_SPOOF_PATTERN',
   ARRAY['EU', 'GLOBAL'],
   '{"max_cancel_rate":"0.900000","max_otr":"50.000000"}',
   '{"type":"AND","children":[{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"trading.cancel_rate_5min"},"right":{"type":"PARAM","name":"max_cancel_rate"}},{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"trading.order_to_trade_ratio"},"right":{"type":"PARAM","name":"max_otr"}}]}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('EXECUTION_PRICE_DEVIATION',
   'Execution Arrival Price Deviation Surveillance', 'POST_TRADE', 'SOFT_WARNING', 75,
@@ -230,7 +230,7 @@ SELECT compliance.seed_core_rule('EXECUTION_PRICE_DEVIATION',
   ARRAY['EU', 'GLOBAL'],
   '{"max_bench_deviation":"0.020000"}',
   '{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"execution.arrival_price_deviation_pct"},"right":{"type":"PARAM","name":"max_bench_deviation"}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('SHORT_SALE_LOCATE',
   'Reg SHO 203(b) Short Sale Locate Requirement', 'PRE_TRADE', 'HARD_BLOCK', 100,
@@ -238,7 +238,7 @@ SELECT compliance.seed_core_rule('SHORT_SALE_LOCATE',
   ARRAY['US'],
   '{}',
   '{"type":"AND","children":[{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"order.side"},"right":{"type":"LITERAL","value":"SHORT"}},{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"locate.valid"},"right":{"type":"LITERAL","value":false}},{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"security.easy_to_borrow"},"right":{"type":"LITERAL","value":false}}]}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('LULD_PRICE_BAND',
   'SEC LULD Rule 201 Limit Price Band Gate', 'PRE_TRADE', 'HARD_BLOCK', 95,
@@ -246,7 +246,7 @@ SELECT compliance.seed_core_rule('LULD_PRICE_BAND',
   ARRAY['US'],
   '{}',
   '{"type":"OR","children":[{"type":"COMPARISON","op":"LT","left":{"type":"METRIC","path":"order.limit_price"},"right":{"type":"METRIC","path":"luld.lower_band"}},{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"order.limit_price"},"right":{"type":"METRIC","path":"luld.upper_band"}}]}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 -- ====================================================================
 -- D. ORDER-LEVEL PRE-TRADE CONTROLS (8)
@@ -265,7 +265,7 @@ SELECT compliance.seed_core_rule('FAT_FINGER_ADV_RATIO',
   ARRAY['GLOBAL'],
   '{"adv_multiple":"0.250000"}',
   '{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"order.adv_ratio"},"right":{"type":"PARAM","name":"adv_multiple"}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('PRICE_COLLAR_PCT',
   'Price Collar Percentage Threshold', 'PRE_TRADE', 'HARD_BLOCK', 95,
@@ -273,7 +273,7 @@ SELECT compliance.seed_core_rule('PRICE_COLLAR_PCT',
   ARRAY['GLOBAL'],
   '{"collar_pct":"0.100000"}',
   '{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"order.price_deviation_pct"},"right":{"type":"PARAM","name":"collar_pct"}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('DUPLICATE_ORDER_WINDOW',
   'Duplicate Order Burst Rate Control', 'PRE_TRADE', 'SOFT_WARNING', 70,
@@ -281,7 +281,7 @@ SELECT compliance.seed_core_rule('DUPLICATE_ORDER_WINDOW',
   ARRAY['GLOBAL'],
   '{"window_seconds":60}',
   '{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"order.duplicate_count"},"right":{"type":"LITERAL","value":0}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('SELF_TRADE_PREVENT',
   'Self-Trade Prevention (Wash Execution Filter)', 'PRE_TRADE', 'HARD_BLOCK', 100,
@@ -297,7 +297,7 @@ SELECT compliance.seed_core_rule('ORDER_RATE_LIMIT',
   ARRAY['GLOBAL'],
   '{"max_opm":100}',
   '{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"account.orders_per_minute"},"right":{"type":"PARAM","name":"max_opm"}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('ODD_LOT_ABOVE_MIN',
   'Odd-Lot Market Order Warning', 'PRE_TRADE', 'SOFT_WARNING', 50,
@@ -305,7 +305,7 @@ SELECT compliance.seed_core_rule('ODD_LOT_ABOVE_MIN',
   ARRAY['GLOBAL'],
   '{}',
   '{"type":"AND","children":[{"type":"COMPARISON","op":"LT","left":{"type":"METRIC","path":"order.qty"},"right":{"type":"METRIC","path":"security.round_lot"}},{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"security.penny_stock"},"right":{"type":"LITERAL","value":false}}]}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('SHORT_POSITION_RESTRICTION',
   'Short Sale Restriction (SSR) Circuit Breaker', 'PRE_TRADE', 'APPROVAL_REQUIRED', 90,
@@ -313,7 +313,7 @@ SELECT compliance.seed_core_rule('SHORT_POSITION_RESTRICTION',
   ARRAY['US'],
   '{}',
   '{"type":"AND","children":[{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"security.short_sale_restricted"},"right":{"type":"LITERAL","value":true}},{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"order.side"},"right":{"type":"LITERAL","value":"SHORT"}}]}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 -- ====================================================================
 -- E. POSITION, LEVERAGE & LIQUIDITY (6)
@@ -324,7 +324,7 @@ SELECT compliance.seed_core_rule('LEVERAGE_VAR_COMMIT',
   ARRAY['EU'],
   '{"max_leverage_var":"0.200000","max_commitment_ratio":"2.000000"}',
   '{"type":"OR","children":[{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"position.var_leverage_ratio"},"right":{"type":"PARAM","name":"max_leverage_var"}},{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"position.commitment_ratio"},"right":{"type":"PARAM","name":"max_commitment_ratio"}}]}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('ILLIQUID_ASSET_LIMIT',
   'Open-End Fund Illiquid Asset Cap (15%)', 'BOTH', 'SOFT_WARNING', 80,
@@ -332,7 +332,7 @@ SELECT compliance.seed_core_rule('ILLIQUID_ASSET_LIMIT',
   ARRAY['US'],
   '{"max_illiquid_pct":"0.150000"}',
   '{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"fund.illiquid_assets_pct"},"right":{"type":"PARAM","name":"max_illiquid_pct"}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('LIQUIDITY_BUCKET_DAYS',
   'Days to Liquidate 50% Portfolio Threshold', 'BOTH', 'SOFT_WARNING', 75,
@@ -340,7 +340,7 @@ SELECT compliance.seed_core_rule('LIQUIDITY_BUCKET_DAYS',
   ARRAY['EU'],
   '{"max_liquid_days":7}',
   '{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"position.days_to_liquidate_50pct"},"right":{"type":"PARAM","name":"max_liquid_days"}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('MARGIN_HOUSE_LIMIT',
   'Margin Utilization House Capacity Limit', 'PRE_TRADE', 'HARD_BLOCK', 90,
@@ -348,7 +348,7 @@ SELECT compliance.seed_core_rule('MARGIN_HOUSE_LIMIT',
   ARRAY['GLOBAL'],
   '{"house_margin_limit":"0.700000"}',
   '{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"account.margin_utilization_pct"},"right":{"type":"PARAM","name":"house_margin_limit"}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('SECTOR_CONCENTRATION',
   'Sector & Industry Concentration Limit', 'BOTH', 'SOFT_WARNING', 70,
@@ -356,7 +356,7 @@ SELECT compliance.seed_core_rule('SECTOR_CONCENTRATION',
   ARRAY['GLOBAL'],
   '{"max_sector_pct":"0.250000"}',
   '{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"position.sector_exposure_pct"},"right":{"type":"PARAM","name":"max_sector_pct"}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('SINGLE_POSITION_NAV',
   'Single Security NAV Concentration Limit', 'BOTH', 'SOFT_WARNING', 75,
@@ -364,7 +364,7 @@ SELECT compliance.seed_core_rule('SINGLE_POSITION_NAV',
   ARRAY['GLOBAL'],
   '{"max_single_nav_pct":"0.100000"}',
   '{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"position.nav_weight_pct"},"right":{"type":"PARAM","name":"max_single_nav_pct"}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 -- ====================================================================
 -- F. ALLOCATION, BEST EXECUTION & VENUE (4)
@@ -375,7 +375,7 @@ SELECT compliance.seed_core_rule('PRO_RATA_ALLOCATION_FAIRNESS',
   ARRAY['US', 'GLOBAL'],
   '{"max_deviation":"0.020000","max_dispersion":"0.001000"}',
   '{"type":"AND","children":[{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"allocation.ratio_deviation"},"right":{"type":"PARAM","name":"max_deviation"}},{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"allocation.price_dispersion"},"right":{"type":"PARAM","name":"max_dispersion"}}]}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('AGGREGATION_ELIGIBILITY',
   'Order Block Aggregation Eligibility Verification', 'PRE_TRADE', 'SOFT_WARNING', 65,
@@ -383,7 +383,7 @@ SELECT compliance.seed_core_rule('AGGREGATION_ELIGIBILITY',
   ARRAY['GLOBAL'],
   '{}',
   '{"type":"AND","children":[{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"order.can_be_aggregated"},"right":{"type":"LITERAL","value":false}},{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"order.parent_is_block"},"right":{"type":"LITERAL","value":true}}]}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('VENUE_APPROVED_LIST',
   'Execution Venue Best-Ex Policy Approved List', 'PRE_TRADE', 'HARD_BLOCK', 90,
@@ -391,7 +391,7 @@ SELECT compliance.seed_core_rule('VENUE_APPROVED_LIST',
   ARRAY['EU', 'GLOBAL'],
   '{"approved_venues":["XNYS","XNAS","XLON","XFRA","XPAR"]}',
   '{"type":"IN_LIST","target":{"type":"METRIC","path":"order.venue"},"list":{"type":"PARAM","name":"approved_venues"},"negate":true}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('EXECUTION_WITHIN_SPREAD',
   'Execution Within Prevailing Bid/Ask Spread', 'POST_TRADE', 'SOFT_WARNING', 70,
@@ -399,7 +399,7 @@ SELECT compliance.seed_core_rule('EXECUTION_WITHIN_SPREAD',
   ARRAY['EU', 'GLOBAL'],
   '{}',
   '{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"execution.outside_spread"},"right":{"type":"LITERAL","value":true}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 -- ====================================================================
 -- G. PERSONAL / EMPLOYEE TRADING (4)
@@ -418,7 +418,7 @@ SELECT compliance.seed_core_rule('PT_BLACKOUT_PERIOD',
   ARRAY['US', 'GLOBAL'],
   '{}',
   '{"type":"AND","children":[{"type":"COMPARISON","op":"NEQ","left":{"type":"METRIC","path":"order.employee_id"},"right":{"type":"LITERAL","value":null}},{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"employee.blackout_active"},"right":{"type":"LITERAL","value":true}}]}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('PT_MIN_HOLDING_30D',
   'Employee Minimum 30-Day Holding Period', 'PRE_TRADE', 'HARD_BLOCK', 90,
@@ -426,7 +426,7 @@ SELECT compliance.seed_core_rule('PT_MIN_HOLDING_30D',
   ARRAY['GLOBAL'],
   '{"min_holding_days":30}',
   '{"type":"AND","children":[{"type":"COMPARISON","op":"NEQ","left":{"type":"METRIC","path":"order.employee_id"},"right":{"type":"LITERAL","value":null}},{"type":"COMPARISON","op":"LT","left":{"type":"METRIC","path":"employee.days_since_purchase"},"right":{"type":"PARAM","name":"min_holding_days"}}]}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('PT_ACCESS_PERSON_RECON',
   'Access Person Broker Statement Reconciliation Discrepancy', 'POST_TRADE', 'SOFT_WARNING', 80,
@@ -434,7 +434,7 @@ SELECT compliance.seed_core_rule('PT_ACCESS_PERSON_RECON',
   ARRAY['US'],
   '{}',
   '{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"employee.statement_discrepancy"},"right":{"type":"LITERAL","value":true}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 -- ====================================================================
 -- H. REPORTING, SETTLEMENT & OTC (8)
@@ -445,7 +445,7 @@ SELECT compliance.seed_core_rule('LARGE_TRADE_THRESHOLD',
   ARRAY['EU'],
   '{"large_trade_threshold":"500000.000000"}',
   '{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"order.notional"},"right":{"type":"PARAM","name":"large_trade_threshold"}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('TXN_REPORT_COMPLETENESS',
   'Transaction Report Mandatory Fields & LEI Validation', 'POST_TRADE', 'HARD_BLOCK', 100,
@@ -453,7 +453,7 @@ SELECT compliance.seed_core_rule('TXN_REPORT_COMPLETENESS',
   ARRAY['EU', 'UK'],
   '{}',
   '{"type":"OR","children":[{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"report.missing_fields_count"},"right":{"type":"LITERAL","value":0}},{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"report.lei_invalid"},"right":{"type":"LITERAL","value":true}}]}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('TXN_REPORT_TIMELINESS',
   'Transaction Reporting T+1 Timeliness Window', 'POST_TRADE', 'SOFT_WARNING', 80,
@@ -461,7 +461,7 @@ SELECT compliance.seed_core_rule('TXN_REPORT_TIMELINESS',
   ARRAY['EU', 'UK'],
   '{"max_reporting_delay_minutes":1440}',
   '{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"report.minutes_since_execution"},"right":{"type":"PARAM","name":"max_reporting_delay_minutes"}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('SETTLEMENT_FAIL_AGING',
   'CSDR Settlement Fail Aging & Buy-in Escalation', 'POST_TRADE', 'APPROVAL_REQUIRED', 85,
@@ -469,7 +469,7 @@ SELECT compliance.seed_core_rule('SETTLEMENT_FAIL_AGING',
   ARRAY['EU'],
   '{"max_fail_days":3}',
   '{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"settlement.fail_age_days"},"right":{"type":"PARAM","name":"max_fail_days"}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('COUNTERPARTY_OTC_LIMIT',
   'Bilateral OTC Counterparty Credit Exposure Limit', 'PRE_TRADE', 'HARD_BLOCK', 95,
@@ -477,7 +477,7 @@ SELECT compliance.seed_core_rule('COUNTERPARTY_OTC_LIMIT',
   ARRAY['EU', 'GLOBAL'],
   '{"counterparty_limit":"25000000.000000"}',
   '{"type":"COMPARISON","op":"GT","left":{"type":"METRIC","path":"otc.counterparty_exposure"},"right":{"type":"PARAM","name":"counterparty_limit"}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('EMIR_FIELD_VALIDITY',
   'EMIR ISO 20022 Schema Field Validation', 'POST_TRADE', 'HARD_BLOCK', 100,
@@ -485,7 +485,7 @@ SELECT compliance.seed_core_rule('EMIR_FIELD_VALIDITY',
   ARRAY['EU'],
   '{}',
   '{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"report.emir_valid"},"right":{"type":"LITERAL","value":false}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('FX_SETTLEMENT_CURRENCY_MATCH',
   'FX Settlement Base Currency Alignment Guardrail', 'PRE_TRADE', 'SOFT_WARNING', 60,
@@ -493,7 +493,7 @@ SELECT compliance.seed_core_rule('FX_SETTLEMENT_CURRENCY_MATCH',
   ARRAY['GLOBAL'],
   '{}',
   '{"type":"AND","children":[{"type":"COMPARISON","op":"NEQ","left":{"type":"METRIC","path":"order.currency"},"right":{"type":"METRIC","path":"account.base_currency"}},{"type":"COMPARISON","op":"NEQ","left":{"type":"METRIC","path":"order.currency"},"right":{"type":"METRIC","path":"security.currency"}}]}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 SELECT compliance.seed_core_rule('CROSS_BORDER_CLIENT_ELIGIBILITY',
   'Cross-Border Client Distribution Eligibility (KIID / PRIIPs)', 'PRE_TRADE', 'HARD_BLOCK', 95,
@@ -501,7 +501,7 @@ SELECT compliance.seed_core_rule('CROSS_BORDER_CLIENT_ELIGIBILITY',
   ARRAY['GLOBAL'],
   '{}',
   '{"type":"COMPARISON","op":"EQ","left":{"type":"METRIC","path":"account.distribution_eligible"},"right":{"type":"LITERAL","value":false}}',
-  'PROVISIONAL');
+  'ACTIVE');
 
 -- ====================================================================
 -- LICENSABLE RULESET BUNDLE MEMBERSHIP
