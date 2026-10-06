@@ -42,30 +42,63 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var masterActiveRules, masterSnapshots, masterSoftDeleted, testRulesCount, totalRules int
+	var (
+		masterActiveRules, masterSnapshots, masterSoftDeleted, totalRules int
+		foreignRules, foreignVersions, foreignActivations                 int
+		foreignEvaluations, foreignAuditEvents, foreignFindings           int
+		foreignDraftRules, foreignCases                                   int
+	)
+
 	err = db.QueryRowContext(ctx, `
 		SELECT 
-			(SELECT count(*) FROM compliance.compliance_rule WHERE tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid AND valid_to IS NULL) AS master_active_rules,
-			(SELECT count(*) FROM compliance.compliance_rule_version WHERE tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid) AS master_snapshots,
-			(SELECT count(*) FROM compliance.compliance_rule WHERE tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid AND valid_to IS NOT NULL) AS master_soft_deleted,
-			(SELECT count(*) FROM compliance.compliance_rule WHERE rule_code LIKE 'TEST%' OR rule_code LIKE 'E2E%' OR name LIKE '%Test%' OR tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)) AS test_rules_count,
-			(SELECT count(*) FROM compliance.compliance_rule) AS total_rules
-	`).Scan(&masterActiveRules, &masterSnapshots, &masterSoftDeleted, &testRulesCount, &totalRules)
+			-- 1. Master gold-copy rule library invariants
+			(SELECT count(*) FROM compliance.compliance_rule WHERE tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid AND valid_to IS NULL),
+			(SELECT count(*) FROM compliance.compliance_rule_version WHERE tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid),
+			(SELECT count(*) FROM compliance.compliance_rule WHERE tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid AND valid_to IS NOT NULL),
+			(SELECT count(*) FROM compliance.compliance_rule),
+
+			-- 2. Foreign / Test row probes across all tables (must be 0 outside gold master and demo tenant)
+			(SELECT count(*) FROM compliance.compliance_rule WHERE tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)),
+			(SELECT count(*) FROM compliance.compliance_rule_version WHERE tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)),
+			(SELECT count(*) FROM compliance.tenant_rule_activation WHERE tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)),
+			(SELECT count(*) FROM compliance.compliance_evaluation_event WHERE tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)),
+			(SELECT count(*) FROM compliance.governance_audit_event WHERE tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)),
+			(SELECT count(*) FROM compliance.compliance_surveillance_finding WHERE tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)),
+			(SELECT count(*) FROM compliance.regulatory_draft_rule),
+			(SELECT count(*) FROM compliance.regulatory_change_case)
+	`).Scan(
+		&masterActiveRules, &masterSnapshots, &masterSoftDeleted, &totalRules,
+		&foreignRules, &foreignVersions, &foreignActivations,
+		&foreignEvaluations, &foreignAuditEvents, &foreignFindings,
+		&foreignDraftRules, &foreignCases,
+	)
 	if err != nil {
 		log.Fatalf("Failed to query invariants: %v", err)
 	}
 
 	fmt.Println("======================================================================")
-	fmt.Printf("POST-SUITE LIVE INVARIANTS ASSERTION (POST-FULL-SUITE RUN):\n")
+	fmt.Printf("POST-SUITE LIVE INVARIANTS & STRUCTURAL POLLUTION PROBE (LIVE ALPHA):\n")
 	fmt.Printf("  master_active_rules: %d (expected 50)\n", masterActiveRules)
 	fmt.Printf("  master_snapshots:    %d (expected 50)\n", masterSnapshots)
 	fmt.Printf("  master_soft_deleted: %d (expected 0)\n", masterSoftDeleted)
-	fmt.Printf("  test_rules_count:    %d (expected 0)\n", testRulesCount)
 	fmt.Printf("  total_rules:         %d (expected 50)\n", totalRules)
+	fmt.Println("----------------------------------------------------------------------")
+	fmt.Printf("NON-MASTER / NON-DEMO ROW COUNTS (STRICT ZERO REQUIRED):\n")
+	fmt.Printf("  compliance_rule:                 %d (expected 0)\n", foreignRules)
+	fmt.Printf("  compliance_rule_version:         %d (expected 0)\n", foreignVersions)
+	fmt.Printf("  tenant_rule_activation:          %d (expected 0)\n", foreignActivations)
+	fmt.Printf("  compliance_evaluation_event:     %d (expected 0)\n", foreignEvaluations)
+	fmt.Printf("  governance_audit_event:          %d (expected 0)\n", foreignAuditEvents)
+	fmt.Printf("  compliance_surveillance_finding: %d (expected 0)\n", foreignFindings)
+	fmt.Printf("  regulatory_draft_rule:           %d (expected 0)\n", foreignDraftRules)
+	fmt.Printf("  regulatory_change_case:          %d (expected 0)\n", foreignCases)
 	fmt.Println("======================================================================")
 
-	if masterActiveRules != 50 || masterSnapshots != 50 || masterSoftDeleted != 0 || testRulesCount != 0 {
-		log.Fatalf("INVARIANT CHECK FAILED!")
+	if masterActiveRules != 50 || masterSnapshots != 50 || masterSoftDeleted != 0 || totalRules != 50 ||
+		foreignRules != 0 || foreignVersions != 0 || foreignActivations != 0 ||
+		foreignEvaluations != 0 || foreignAuditEvents != 0 || foreignFindings != 0 ||
+		foreignDraftRules != 0 || foreignCases != 0 {
+		log.Fatalf("INVARIANT / STRUCTURAL POLLUTION CHECK FAILED!")
 	}
-	fmt.Println("STATUS: ZERO TEST POLLUTION CONFIRMED ON ALPHA.")
+	fmt.Println("STATUS: ZERO TEST POLLUTION CONFIRMED ACROSS ALL COMPLIANCE TABLES.")
 }
