@@ -54,6 +54,11 @@ yarn-error.log*
 .env*.tmp.*
 .env.mesh
 
+# Tenant RBAC: rendered secrets must never be committed.
+tenants.env
+*.rendered.sql
+.probe_*.sh
+
 # IDE and editor files
 .idea/
 .vscode/
