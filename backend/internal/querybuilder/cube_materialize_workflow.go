@@ -98,8 +98,32 @@ func CubeMaterializeWorkflow(ctx workflow.Context, req CubeMaterializeRequest) (
 		return nil, err
 	}
 
+	dropStaging := func() {
+		if len(plan.StagingTables) == 0 {
+			return
+		}
+		_ = workflow.ExecuteActivity(bookkeeping, ActCubeDropStaging, &plan).Get(ctx, nil)
+	}
+
+	// Track C: federated Extract-N → staging before ApplyHot when gated on.
+	if plan.ExtractEnabled && len(plan.FederationSources) > 0 {
+		var extracted CubeExtractResult
+		if err := workflow.ExecuteActivity(long, ActCubeExtractSources, &plan).Get(ctx, &extracted); err != nil {
+			dropStaging()
+			_ = workflow.ExecuteActivity(bookkeeping, ActCubeFailAttempt, CubeFailAttemptInput{
+				Plan:         &plan,
+				ErrorMessage: err.Error(),
+			}).Get(ctx, nil)
+			return nil, err
+		}
+		if extracted.Plan != nil {
+			plan = *extracted.Plan
+		}
+	}
+
 	var hot CubeMaterializeHotResult
 	if err := workflow.ExecuteActivity(long, ActCubeApplyHot, &plan).Get(ctx, &hot); err != nil {
+		dropStaging()
 		_ = workflow.ExecuteActivity(bookkeeping, ActCubeFailAttempt, CubeFailAttemptInput{
 			Plan:         &plan,
 			ErrorMessage: err.Error(),
@@ -113,6 +137,7 @@ func CubeMaterializeWorkflow(ctx workflow.Context, req CubeMaterializeRequest) (
 	if err := workflow.ExecuteActivity(long, ActCubeApplyCold, &plan, &hot).Get(ctx, &cold); err != nil {
 		_ = workflow.ExecuteActivity(bookkeeping, ActCubeCompensateHot, &plan).Get(ctx, nil)
 		out.CompensatedHot = true
+		dropStaging()
 		_ = workflow.ExecuteActivity(bookkeeping, ActCubeFailAttempt, CubeFailAttemptInput{
 			Plan:         &plan,
 			ErrorMessage: err.Error(),
@@ -126,8 +151,10 @@ func CubeMaterializeWorkflow(ctx workflow.Context, req CubeMaterializeRequest) (
 	}
 
 	if err := workflow.ExecuteActivity(bookkeeping, ActCubeCompleteDualCommit, &plan, &hot, &cold).Get(ctx, nil); err != nil {
+		dropStaging()
 		return nil, fmt.Errorf("hot+cold succeeded but dual-commit Active failed: %w", err)
 	}
+	dropStaging()
 	if !cold.CommittedAt.IsZero() {
 		out.DualCommitWatermark = cold.CommittedAt.UTC().Format(time.RFC3339Nano)
 	}
@@ -136,6 +163,7 @@ func CubeMaterializeWorkflow(ctx workflow.Context, req CubeMaterializeRequest) (
 		"materialization", hot.MaterializationName,
 		"iceberg", cold.IcebergTable,
 		"rowCount", out.RowCount,
+		"extractApplied", plan.ExtractApplied,
 	)
 	return out, nil
 }

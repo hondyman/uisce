@@ -45,6 +45,8 @@ func (s *Server) registerCubeMaterializeWorker(sqlxDB *sqlx.DB, tc temporalclien
 	})
 	w.RegisterActivityWithOptions(acts.CubeValidateAndPlan, activity.RegisterOptions{Name: querybuilder.ActCubeValidateAndPlan})
 	w.RegisterActivityWithOptions(acts.CubeBeginAttempt, activity.RegisterOptions{Name: querybuilder.ActCubeBeginAttempt})
+	w.RegisterActivityWithOptions(acts.CubeExtractSources, activity.RegisterOptions{Name: querybuilder.ActCubeExtractSources})
+	w.RegisterActivityWithOptions(acts.CubeDropStaging, activity.RegisterOptions{Name: querybuilder.ActCubeDropStaging})
 	w.RegisterActivityWithOptions(acts.CubeApplyHot, activity.RegisterOptions{Name: querybuilder.ActCubeApplyHot})
 	w.RegisterActivityWithOptions(acts.CubeApplyCold, activity.RegisterOptions{Name: querybuilder.ActCubeApplyCold})
 	w.RegisterActivityWithOptions(acts.CubeCompensateHot, activity.RegisterOptions{Name: querybuilder.ActCubeCompensateHot})
