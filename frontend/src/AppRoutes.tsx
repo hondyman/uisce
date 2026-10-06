@@ -165,12 +165,12 @@ const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; r
   import('./pages/PageBrowser').then((m) => ({ default: m.StandalonePageRenderer }))
 );
 const FixedIncomeDashboard = React.lazy(() => import('./components/FixedIncomeDashboard'));
-const ComplianceDecisionBlotter = React.lazy(() => import('./components/compliance/ComplianceDecisionBlotter'));
+const ComplianceDecisionBlotter = React.lazy(() => import('./components/Compliance/ComplianceDecisionBlotter'));
 const RegulatoryChangeQueue = React.lazy(() =>
-  import('./components/compliance/RegulatoryChangeQueue').then((m) => ({ default: m.RegulatoryChangeQueue }))
+  import('./components/Compliance/RegulatoryChangeQueue').then((m) => ({ default: m.RegulatoryChangeQueue }))
 );
 const SurveillanceFindingsQueue = React.lazy(() =>
-  import('./components/compliance/SurveillanceFindingsQueue').then((m) => ({ default: m.SurveillanceFindingsQueue }))
+  import('./components/Compliance/SurveillanceFindingsQueue').then((m) => ({ default: m.SurveillanceFindingsQueue }))
 );
 const AIPortfolioRebalancer = React.lazy(() => import('./components/AIPortfolioRebalancer'));
 const ScenarioAnalysisPro = React.lazy(() => import('./components/ScenarioAnalysisPro'));
