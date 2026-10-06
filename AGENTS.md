@@ -50,7 +50,7 @@ This project is indexed by GitNexus as **uisce** (396506 symbols, 583087 relatio
 
 ## Never Do (product surfaces)
 
-- **NEVER revive** `frontend/src/components/pagestudio/` — orphan tree (tests-only; not mounted). Live designer is `/page-studio`. Archive plan: `docs/design/2026-10-05-pr8-pagestudio-archive-plan.md`.
+- **NEVER revive** `frontend/src/components/pagestudio/` — deleted (Track D); was orphan/tests-only. Live designer is `/page-studio`. Archive plan: `docs/design/2026-10-05-pr8-pagestudio-archive-plan.md`.
 - **NEVER** add a full-page DomainComponent id `cubes.Designer` (or equivalent) that rehosts a coded cube designer shell / iframe.
 - **NEVER** dual-register `/build/cubes*` as both coded routes and `STUDIO_ROUTES` — catalog + designer hosts are studio blueprints (`cubes-catalog`, `cube-designer`) after PR5/PR6.
 - **NEVER** ship a second Query Builder or Report Builder for cubes — share `QuerySubject` / `SubjectPicker` (`features/analytical-subject`).
