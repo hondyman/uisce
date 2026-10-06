@@ -47,7 +47,9 @@ func main() {
 		masterLibraryActive, masterLibraryProvisional                     int
 		foreignRules, foreignVersions, foreignActivations                 int
 		foreignEvaluations, foreignAuditEvents, foreignFindings           int
-		foreignDraftRules, foreignCases                                   int
+		foreignSurvEvents, foreignPortSnapshots, foreignPostFindings      int
+		foreignOverrides, foreignDraftRules, foreignCases                 int
+		foreignCaseEvents, foreignNotifications                           int
 	)
 
 	err = db.QueryRowContext(ctx, `
@@ -67,14 +69,22 @@ func main() {
 			(SELECT count(*) FROM compliance.compliance_evaluation_event WHERE tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)),
 			(SELECT count(*) FROM compliance.governance_audit_event WHERE tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)),
 			(SELECT count(*) FROM compliance.compliance_surveillance_finding WHERE tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)),
+			(SELECT count(*) FROM compliance.compliance_surveillance_event WHERE tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)),
+			(SELECT count(*) FROM compliance.compliance_portfolio_snapshot WHERE tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)),
+			(SELECT count(*) FROM compliance.compliance_finding WHERE tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)),
+			(SELECT count(*) FROM master.tenant_classification_override WHERE tenant_id NOT IN ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, '00000000-0000-4000-a000-000000000002'::uuid)),
 			(SELECT count(*) FROM compliance.regulatory_draft_rule),
-			(SELECT count(*) FROM compliance.regulatory_change_case)
+			(SELECT count(*) FROM compliance.regulatory_change_case),
+			(SELECT count(*) FROM compliance.regulatory_case_event),
+			(SELECT count(*) FROM compliance.compliance_notification)
 	`).Scan(
 		&masterActiveRules, &masterSnapshots, &masterSoftDeleted, &totalRules,
 		&masterLibraryActive, &masterLibraryProvisional,
 		&foreignRules, &foreignVersions, &foreignActivations,
 		&foreignEvaluations, &foreignAuditEvents, &foreignFindings,
-		&foreignDraftRules, &foreignCases,
+		&foreignSurvEvents, &foreignPortSnapshots, &foreignPostFindings,
+		&foreignOverrides, &foreignDraftRules, &foreignCases,
+		&foreignCaseEvents, &foreignNotifications,
 	)
 	if err != nil {
 		log.Fatalf("Failed to query invariants: %v", err)
@@ -96,15 +106,23 @@ func main() {
 	fmt.Printf("  compliance_evaluation_event:     %d (expected 0)\n", foreignEvaluations)
 	fmt.Printf("  governance_audit_event:          %d (expected 0)\n", foreignAuditEvents)
 	fmt.Printf("  compliance_surveillance_finding: %d (expected 0)\n", foreignFindings)
+	fmt.Printf("  compliance_surveillance_event:   %d (expected 0)\n", foreignSurvEvents)
+	fmt.Printf("  compliance_portfolio_snapshot:   %d (expected 0)\n", foreignPortSnapshots)
+	fmt.Printf("  compliance_finding:              %d (expected 0)\n", foreignPostFindings)
+	fmt.Printf("  tenant_classification_override:  %d (expected 0)\n", foreignOverrides)
 	fmt.Printf("  regulatory_draft_rule:           %d (expected 0)\n", foreignDraftRules)
 	fmt.Printf("  regulatory_change_case:          %d (expected 0)\n", foreignCases)
+	fmt.Printf("  regulatory_case_event:           %d (expected 0)\n", foreignCaseEvents)
+	fmt.Printf("  compliance_notification:         %d (expected 0)\n", foreignNotifications)
 	fmt.Println("======================================================================")
 
 	if masterActiveRules != 53 || masterLibraryActive != 53 || masterLibraryProvisional != 0 ||
 		masterSnapshots != 53 || masterSoftDeleted != 0 || totalRules != 53 ||
 		foreignRules != 0 || foreignVersions != 0 || foreignActivations != 0 ||
 		foreignEvaluations != 0 || foreignAuditEvents != 0 || foreignFindings != 0 ||
-		foreignDraftRules != 0 || foreignCases != 0 {
+		foreignSurvEvents != 0 || foreignPortSnapshots != 0 || foreignPostFindings != 0 ||
+		foreignOverrides != 0 || foreignDraftRules != 0 || foreignCases != 0 ||
+		foreignCaseEvents != 0 || foreignNotifications != 0 {
 		log.Fatalf("INVARIANT / STRUCTURAL POLLUTION CHECK FAILED!")
 	}
 	fmt.Println("STATUS: ZERO TEST POLLUTION CONFIRMED ACROSS ALL COMPLIANCE TABLES.")

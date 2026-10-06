@@ -440,8 +440,8 @@ func TestCoreLibrary_RepinProvisionalRejection(t *testing.T) {
 	}
 }
 
-// 8. 50-Rule Canonical Content Hash 3-Way Agreement (Go == PostgreSQL == Database)
-func TestCoreLibrary_All50CoreRules_ContentHashAgreement(t *testing.T) {
+// 8. 53-Rule Canonical Content Hash Agreement (Go RFC 8785 Authority == DB Snapshot)
+func TestCoreLibrary_All53CoreRules_ContentHashAgreement(t *testing.T) {
 	db := getAlphaTestDB(t)
 	defer db.Close()
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -29,6 +30,16 @@ func getAlphaDSN() string {
 }
 
 func main() {
+	force := flag.Bool("force", false, "Confirm destructive drop of compliance schema")
+	iKnow := flag.Bool("i-know-this-drops-alpha", false, "Explicit acknowledgement of destructive operation")
+	flag.Parse()
+
+	if !*force && !*iKnow && os.Getenv("CONFIRM_DROP_ALPHA") != "true" {
+		fmt.Println("SAFETY ERROR: rebuild_alpha_compliance is a DESTRUCTIVE script that drops and rebuilds the live alpha compliance schema.")
+		fmt.Println("To proceed, pass: go run scripts/rebuild_alpha_compliance.go --i-know-this-drops-alpha (or --force)")
+		os.Exit(1)
+	}
+
 	dsn := getAlphaDSN()
 	if dsn == "" {
 		log.Fatal("ALPHA_DSN not configured and certs not found")
