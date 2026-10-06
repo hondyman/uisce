@@ -10,7 +10,7 @@
 |------|--------|
 | Product ban (do not revive) | **In force** — `Agents.md` Page Designer axiom; `HANDOFF_BI_WORK.md` |
 | Live Page Designer | `/page-studio` → `frontend/src/pages/page-studio/*` + `PageStudioHandler` |
-| Orphan tree | `frontend/src/components/pagestudio/` — **not mounted**; vitests only |
+| Orphan tree | **Deleted** (Track D) — was `frontend/src/components/pagestudio/` + `vitest/components/pagestudio/` |
 | Coded cube shells | **Deleted** in PR8 (`CubesCatalogPage`, `CubeDesignerPage`); hosts are STUDIO_ROUTES |
 
 ## Why not delete the orphan tree in PR8
@@ -19,16 +19,13 @@
 2. Some helpers (`mapFieldToControlType`, tab ops) may still be useful as reference when mining ideas — cherry-pick concepts into `pages/page-studio`, never mount the orphan UI.
 3. Design explicitly staged **documentation ban now**, **archive later**.
 
-## Archive steps (follow-on)
+## Archive steps (completed Track D)
 
-1. Inventory importers:
-   ```bash
-   rg -n "components/pagestudio|from ['\"].*pagestudio" frontend/src
-   ```
-2. For each vitest: either delete (if coverage is obsolete vs live `/page-studio`) or port assertions onto live modules under `pages/page-studio`.
-3. `git rm -r frontend/src/components/pagestudio` and remove `frontend/src/vitest/components/pagestudio` once empty of value.
-4. Keep the Agents.md ban indefinitely so a future PR cannot re-add a parallel designer under that path.
-5. Optional: move any still-valuable pure helpers into `pages/page-studio/` or `studio-core/` **before** delete — do not re-export from `components/pagestudio`.
+1. Inventory: no runtime importers outside the orphan tree; only vitests + `ts-baseline` + docs references.
+2. Retired 7 orphan vitests (30 `it`/`test`) — obsolete vs live `/page-studio`; helpers were not ported (live designer owns its own modules).
+3. `git rm -r frontend/src/components/pagestudio` + `frontend/src/vitest/components/pagestudio`; stripped matching `frontend/docs/ts-baseline.txt` rows; coverageManifest baselines −7 files / −30 tests.
+4. Agents.md ban remains indefinitely.
+5. No helper cherry-pick — live `pages/page-studio` already is the product surface.
 
 ## Related bans (already enforced in code/docs)
 
