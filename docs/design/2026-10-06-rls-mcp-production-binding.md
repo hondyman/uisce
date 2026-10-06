@@ -1,6 +1,6 @@
 # RLS / MCP production binding (staged MCP-first)
 
-**Status:** R0+R1 merged (#416); **R2 CLOSED 2026-10-06 (SET ROLE mode)** — triple receipt A/B/C captured. R3 parked.  
+**Status:** R0+R1 merged (#416); **R2 CLOSED** (SET ROLE, #418); **R2b CLOSED 2026-10-06** (direct `uisce-app-dsn` + Infisical `UISCE_APP_DSN` durability). R3 parked.  
 **Date:** 2026-10-06  
 **Depends on:** Gold-aware FORCE RLS (`20261020_001`+), grants (`20261020_002`), `OpenMCPAppDB` (`9701efac4`).  
 **Branch:** `feat/rls-mcp-production-binding` (merged).
@@ -106,4 +106,21 @@ Never echo DSN passwords, tokens, or full connection strings in chat, commits, o
 | C− | same JWT: `list_pages` excludes B Page `0f3af13f-8ad0-4538-af25-fa38536bed15`; `get_page` → `found:false` |
 
 Endpoint: `POST /api/mcp` (streamable, stateless). Local ops log: `/tmp/uisce-server-r2.log`. Redacted capture: `/tmp/r2-triple-receipt.md`.
+
+## R2b receipt (direct DSN + Infisical, 2026-10-06)
+
+**Claimed:** MCP pool TCP login `mode=uisce-app-dsn` with `session_user=current_user=uisce_mcp_app` and `rolbypassrls=false`, IDOR C+/C− on `/api/mcp`, and `UISCE_APP_DSN` durable in Infisical `uisce`/`dev`.
+
+**Ops applied (alpha):** `GRANT ivy_tenant_apps TO uisce_mcp_app`; `GRANT CONNECT ON DATABASE alpha TO uisce_mcp_app`; password rotated (value not in git/chat).
+
+**Infisical notes:** initial read-only token got 403; RW token stored the key. CLI `SECRET=@/path` stored the path literal — correct upsert used `infisical secrets set --file` (.env). Restart pulled value_len=165 matching the proven DSN.
+
+| Receipt | Evidence |
+|---------|----------|
+| A (local export) | `mode=uisce-app-dsn pid=65410 started_at=2026-10-06T03:12:12.228606Z` |
+| A/B (Infisical pull restart) | `mode=uisce-app-dsn pid=66086 started_at=2026-10-06T03:20:21.221815Z session_user=uisce_mcp_app current_user=uisce_mcp_app rolbypassrls=false` |
+| C+ | tenant A JWT: `list_pages` includes A Page; `get_page` → `found:true` |
+| C− | same JWT: B Page absent; `get_page` → `found:false` |
+
+Local ops log: `/tmp/uisce-server-r2b.log`. Redacted captures: `/tmp/r2b-triple-receipt.md`, `/tmp/r2b-infisical-durability-receipt.md`.
 
