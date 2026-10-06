@@ -2,8 +2,10 @@ package blotter
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -119,6 +121,15 @@ func (h *Handler) HandleGetEvidenceBundleByLineage(w http.ResponseWriter, r *htt
 
 	bundle, err := h.service.GetEvidenceBundleByLineageID(ctx, tenantID, lineageID)
 	if err != nil {
+		if errors.Is(err, ErrProvenanceVerificationFailed) || strings.Contains(err.Error(), "provenance verification failed") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error":   "PROVENANCE_VERIFICATION_FAILED",
+				"message": err.Error(),
+			})
+			return
+		}
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
@@ -145,6 +156,15 @@ func (h *Handler) HandleGetEvidenceBundleByID(w http.ResponseWriter, r *http.Req
 
 	bundle, err := h.service.GetEvidenceBundleByID(ctx, tenantID, evalID)
 	if err != nil {
+		if errors.Is(err, ErrProvenanceVerificationFailed) || strings.Contains(err.Error(), "provenance verification failed") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error":   "PROVENANCE_VERIFICATION_FAILED",
+				"message": err.Error(),
+			})
+			return
+		}
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}

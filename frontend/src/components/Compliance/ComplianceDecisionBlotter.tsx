@@ -190,7 +190,52 @@ export const ComplianceDecisionBlotter: React.FC = () => {
     fetchEvaluations();
   }, [fetchEvaluations]);
 
-  // Live WebSocket Connection
+  // Track newest evaluated timestamp for reconnect gap-filling
+  const lastEvaluatedAtRef = useRef<string | null>(null);
+
+  // Gap-fill missed evaluations during disconnection
+  const performGapFill = useCallback(async (sinceIso: string) => {
+    try {
+      const tenantId = localStorage.getItem('tenant_id') || '99e99e99-99e9-49e9-89e9-99e99e99e999';
+      const token = localStorage.getItem('AUTH_TOKEN') || localStorage.getItem('auth_token') || '';
+
+      const resp = await fetch(`/api/compliance/evaluations?from=${encodeURIComponent(sinceIso)}&page_size=100`, {
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+          'X-Tenant-ID': tenantId,
+        },
+      });
+
+      if (resp.ok) {
+        const json = await resp.json();
+        if (json.data && json.data.length > 0) {
+          setEvaluations((prev) => {
+            const existingIds = new Set(prev.map((e) => e.id));
+            const fresh = json.data.filter((e: EvaluationEventRecord) => !existingIds.has(e.id));
+            if (fresh.length > 0) {
+              const combined = [...fresh, ...prev].slice(0, 200);
+              if (combined.length > 0 && combined[0].evaluated_at) {
+                lastEvaluatedAtRef.current = combined[0].evaluated_at;
+              }
+              return combined;
+            }
+            return prev;
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[ComplianceBlotter] Gap-fill fetch notice:', err);
+    }
+  }, []);
+
+  // Update newest timestamp when evaluations list updates
+  useEffect(() => {
+    if (evaluations.length > 0 && evaluations[0].evaluated_at) {
+      lastEvaluatedAtRef.current = evaluations[0].evaluated_at;
+    }
+  }, [evaluations]);
+
+  // Live WebSocket Connection with Auto-Reconnect and Gap-Fill
   useEffect(() => {
     if (!isLiveWs) {
       if (wsRef.current) {
@@ -201,50 +246,74 @@ export const ComplianceDecisionBlotter: React.FC = () => {
       return;
     }
 
-    const tenantId = localStorage.getItem('tenant_id') || '99e99e99-99e9-49e9-89e9-99e99e99e999';
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/compliance/evaluations/ws?tenant_id=${tenantId}`;
-
     let isCancelled = false;
+    let reconnectTimer: NodeJS.Timeout | null = null;
     let ws: WebSocket;
 
-    try {
-      ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+    const connect = () => {
+      if (isCancelled) return;
 
-      ws.onopen = () => {
-        if (!isCancelled) setWsConnected(true);
-      };
+      const tenantId = localStorage.getItem('tenant_id') || '99e99e99-99e9-49e9-89e9-99e99e99e999';
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/api/compliance/evaluations/ws?tenant_id=${tenantId}`;
 
-      ws.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === 'COMPLIANCE_EVALUATION_EVENT' && payload.data) {
-            setEvaluations((prev) => [payload.data, ...prev.slice(0, 199)]);
+      try {
+        ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          if (isCancelled) return;
+          setWsConnected(true);
+
+          // On reconnect: gap-fill from last seen timestamp
+          if (lastEvaluatedAtRef.current) {
+            performGapFill(lastEvaluatedAtRef.current);
           }
-        } catch (e) {
-          // ignore non-json ping
-        }
-      };
+        };
 
-      ws.onclose = () => {
-        if (!isCancelled) setWsConnected(false);
-      };
+        ws.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === 'COMPLIANCE_EVALUATION_EVENT' && payload.data) {
+              const newEv: EvaluationEventRecord = payload.data;
+              setEvaluations((prev) => {
+                if (prev.some((e) => e.id === newEv.id)) return prev;
+                if (newEv.evaluated_at) {
+                  lastEvaluatedAtRef.current = newEv.evaluated_at;
+                }
+                return [newEv, ...prev.slice(0, 199)];
+              });
+            }
+          } catch (e) {
+            // ignore heartbeat/non-json
+          }
+        };
 
-      ws.onerror = () => {
-        if (!isCancelled) setWsConnected(false);
-      };
-    } catch (err) {
-      console.warn('[ComplianceBlotter] WebSocket connection error:', err);
-    }
+        ws.onclose = () => {
+          if (isCancelled) return;
+          setWsConnected(false);
+          // Schedule auto-reconnect in 3s
+          reconnectTimer = setTimeout(connect, 3000);
+        };
+
+        ws.onerror = () => {
+          if (isCancelled) return;
+          setWsConnected(false);
+        };
+      } catch (err) {
+        console.warn('[ComplianceBlotter] WebSocket connection error:', err);
+        reconnectTimer = setTimeout(connect, 3000);
+      }
+    };
+
+    connect();
 
     return () => {
       isCancelled = true;
-      if (ws) {
-        ws.close();
-      }
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (ws) ws.close();
     };
-  }, [isLiveWs]);
+  }, [isLiveWs, performGapFill]);
 
   // Filtered rows
   const filteredEvaluations = useMemo(() => {

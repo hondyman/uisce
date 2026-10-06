@@ -2,10 +2,14 @@ package blotter
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// ErrProvenanceVerificationFailed is returned when snapshot lookup fails or content hash verification fails.
+var ErrProvenanceVerificationFailed = errors.New("provenance verification failed: rule snapshot mismatch or cryptographic hash corruption")
 
 // EvaluationEventRecord models a single compliance evaluation event row joined with rule metadata.
 type EvaluationEventRecord struct {

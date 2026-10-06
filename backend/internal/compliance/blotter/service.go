@@ -274,25 +274,30 @@ func (s *Service) buildEvidenceBundle(ctx context.Context, eval EvaluationEventR
 	err := s.db.QueryRowContext(ctx, snapQuery, eval.RuleID, eval.RuleVersion).Scan(
 		&snap.RuleID, &snap.Version, &snap.ContentHash, &astBytes, &paramsBytes, &snap.Citation,
 	)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("%w: snapshot missing for rule %s version %d", ErrProvenanceVerificationFailed, eval.RuleID, eval.RuleVersion)
+		}
 		return nil, fmt.Errorf("query rule version snapshot: %w", err)
 	}
 	snap.ResolvedAST = json.RawMessage(astBytes)
 	snap.ParameterThresholds = json.RawMessage(paramsBytes)
 
-	// Recompute RFC 8785 canonical hash on the snapshot logic
-	recomputedHash := ""
-	if len(astBytes) > 0 {
-		h, err := canonical.ComputeRuleContentHashFromRaw(astBytes, paramsBytes, snap.Citation)
-		if err == nil {
-			recomputedHash = h
-		}
+	// 2. Recompute RFC 8785 canonical hash on the snapshot logic
+	recomputedHash, err := canonical.ComputeRuleContentHashFromRaw(astBytes, paramsBytes, snap.Citation)
+	if err != nil {
+		return nil, fmt.Errorf("%w: canonicalization error: %v", ErrProvenanceVerificationFailed, err)
+	}
+	if recomputedHash != snap.ContentHash {
+		return nil, fmt.Errorf("%w: recomputed RFC 8785 hash %s does not match snapshot stored hash %s (logic tampering detected)", ErrProvenanceVerificationFailed, recomputedHash, snap.ContentHash)
 	}
 
-	contentHashMatches := (recomputedHash != "" && recomputedHash == snap.ContentHash)
-	if eval.RuleContentHash != "" && snap.ContentHash != "" {
-		contentHashMatches = contentHashMatches && (eval.RuleContentHash == snap.ContentHash)
+	// 3. Assert evaluation event's recorded content hash matches snapshot hash
+	if eval.RuleContentHash != "" && eval.RuleContentHash != snap.ContentHash {
+		return nil, fmt.Errorf("%w: event rule_content_hash %s does not match snapshot content_hash %s for rule %s v%d", ErrProvenanceVerificationFailed, eval.RuleContentHash, snap.ContentHash, eval.RuleID, eval.RuleVersion)
 	}
+
+	contentHashMatches := true
 
 	// Parse metrics and parameters
 	metrics := extractEvaluatedMetrics(eval.MetricSnapshots, snap.ParameterThresholds, eval.InputParams)
