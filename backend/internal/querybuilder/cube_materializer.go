@@ -92,6 +92,9 @@ type CubeMaterializer struct {
 	cold        CubeColdWriter
 	icebergCat  string
 	fedResolver FederationBindingResolver
+	// catalogAuth refreshes StarRocks Iceberg catalog bearer token before cold
+	// CTAS when CUBE_ICEBERG_TOKEN_REFRESH is enabled (Track B).
+	catalogAuth IcebergCatalogTokenRefresher
 }
 
 // NewCubeMaterializer wires Postgres control plane + optional StarRocks hot/cold plane.
@@ -110,6 +113,7 @@ func NewCubeMaterializer(db *sqlx.DB, starrocksDB *sql.DB) *CubeMaterializer {
 		starrocksDB: starrocksDB,
 		ddl:         gen,
 		icebergCat:  defaultIcebergCatalog(),
+		catalogAuth: newDefaultIcebergCatalogTokenRefresher(starrocksDB),
 	}
 	m.cold = &starRocksColdWriter{m: m}
 	return m
@@ -119,6 +123,14 @@ func NewCubeMaterializer(db *sqlx.DB, starrocksDB *sql.DB) *CubeMaterializer {
 func (m *CubeMaterializer) SetColdWriter(w CubeColdWriter) {
 	if m != nil {
 		m.cold = w
+	}
+}
+
+// SetCatalogTokenRefresher replaces the Lakekeeper/StarRocks catalog token
+// refresher (tests inject a fake; nil skips Ensure before ApplyCold).
+func (m *CubeMaterializer) SetCatalogTokenRefresher(r IcebergCatalogTokenRefresher) {
+	if m != nil {
+		m.catalogAuth = r
 	}
 }
 
