@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -34,11 +35,10 @@ func (s *Service) withTenant(ctx context.Context, tenantID uuid.UUID, fn func(tx
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx,
-		`SELECT set_config('app.current_tenant', $1, true)`,
-		tenantID.String(),
-	); err != nil {
-		return fmt.Errorf("set tenant guc: %w", err)
+	// Replaces ad-hoc app.current_tenant-only set_config: ApplyTenantGUCs sets
+	// uisce.current_tenant + app.tenant_id for FORCE RLS (R3 wave3).
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx.Tx, tenantID.String(), ""); err != nil {
+		return fmt.Errorf("tenant GUC: %w", err)
 	}
 
 	if err := fn(tx); err != nil {

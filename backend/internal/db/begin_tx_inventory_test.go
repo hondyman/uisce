@@ -32,6 +32,17 @@ var wave1Choked = []string{
 	"drift/patch_service.go",
 }
 
+// R3 wave2: catalog graph batch writers.
+var wave2Choked = []string{
+	"catalog/writer.go",
+}
+
+// R3 wave3: attribute package ad-hoc GUC → ApplyTenantGUCs.
+var wave3Choked = []string{
+	"attribute/service.go",
+	"attribute/hydrate.go",
+}
+
 // Remaining known fence-needed paths (tenant-bearing tables + Begin, no choke).
 // Grow this list as classification proceeds; shrink as files migrate.
 // Wave1 removed the five paths above; walk heuristics still count the rest.
@@ -116,6 +127,30 @@ func TestBeginTxInventory_DocumentsCutoverBlastRadius(t *testing.T) {
 		body := string(b)
 		if !strings.Contains(body, "ApplyTenantGUCs") {
 			t.Errorf("wave1 %s must call ApplyTenantGUCs", rel)
+		}
+	}
+	for _, rel := range wave2Choked {
+		path := filepath.Join(root, rel)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("wave2 missing %s", rel)
+			continue
+		}
+		body := string(b)
+		if !strings.Contains(body, "ApplyTenantGUCs") {
+			t.Errorf("wave2 %s must call ApplyTenantGUCs", rel)
+		}
+	}
+	for _, rel := range wave3Choked {
+		path := filepath.Join(root, rel)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("wave3 missing %s", rel)
+			continue
+		}
+		body := string(b)
+		if !strings.Contains(body, "ApplyTenantGUCs") {
+			t.Errorf("wave3 %s must call ApplyTenantGUCs", rel)
 		}
 	}
 	for _, rel := range fenceNeededRemaining {
