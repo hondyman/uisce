@@ -169,7 +169,11 @@ func (m *CubeMaterializer) ExtractSources(ctx context.Context, plan *CubeMateria
 			cleanup()
 			return nil, fmt.Errorf("cube extract: drop staging %s: %w", qualified, err)
 		}
-		ctas := fmt.Sprintf("CREATE TABLE %s AS SELECT * FROM %s", qualified, drive)
+		// Single-BE lab/prod often has only one alive BE; default replication_num=3 fails.
+		ctas := fmt.Sprintf(
+			`CREATE TABLE %s PROPERTIES ("replication_num" = "1") AS SELECT * FROM %s`,
+			qualified, drive,
+		)
 		if _, err := m.starrocksDB.ExecContext(ctx, ctas); err != nil {
 			cleanup()
 			return nil, fmt.Errorf("cube extract: CTAS %s from %s: %w", qualified, drive, err)

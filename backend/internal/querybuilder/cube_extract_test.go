@@ -78,13 +78,13 @@ func TestExtractSources_CTASAndRewrite(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`DROP TABLE IF EXISTS .+cube_ext_deadbeef_aaaaaaaa_pos.+`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec(`CREATE TABLE .+cube_ext_deadbeef_aaaaaaaa_pos.+ AS SELECT \* FROM pg_alpha\.oms\.position`).
+	mock.ExpectExec(`CREATE TABLE .+cube_ext_deadbeef_aaaaaaaa_pos.+ PROPERTIES \("replication_num" = "1"\) AS SELECT \* FROM pg_alpha\.oms\.position`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM .+cube_ext_deadbeef_aaaaaaaa_pos.+`).
 		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(10))
 	mock.ExpectExec(`DROP TABLE IF EXISTS .+cube_ext_deadbeef_aaaaaaaa_acct.+`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec(`CREATE TABLE .+cube_ext_deadbeef_aaaaaaaa_acct.+ AS SELECT \* FROM pg_alpha\.oms\.account`).
+	mock.ExpectExec(`CREATE TABLE .+cube_ext_deadbeef_aaaaaaaa_acct.+ PROPERTIES \("replication_num" = "1"\) AS SELECT \* FROM pg_alpha\.oms\.account`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM .+cube_ext_deadbeef_aaaaaaaa_acct.+`).
 		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(3))
