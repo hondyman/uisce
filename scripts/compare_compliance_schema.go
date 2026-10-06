@@ -244,6 +244,16 @@ func main() {
 
 	var discrepancies []string
 
+	const expectedTablesCount = 34
+	const expectedTriggersCount = 29
+
+	if len(refTables) != expectedTablesCount {
+		discrepancies = append(discrepancies, fmt.Sprintf("REFERENCE TABLE COUNT MISMATCH: expected %d, got %d", expectedTablesCount, len(refTables)))
+	}
+	if len(refTriggers) != expectedTriggersCount {
+		discrepancies = append(discrepancies, fmt.Sprintf("REFERENCE TRIGGER COUNT MISMATCH: expected %d, got %d", expectedTriggersCount, len(refTriggers)))
+	}
+
 	// Check table existence
 	allTableNames := make(map[string]bool)
 	for t := range refTables {
