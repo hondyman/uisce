@@ -1,9 +1,9 @@
 # RLS / MCP production binding (staged MCP-first)
 
-**Status:** R0 approved (receipt amendments folded) — implementing R1  
+**Status:** R0+R1 merged (#416); **R2 CLOSED 2026-10-06 (SET ROLE mode)** — triple receipt A/B/C captured. R3 parked.  
 **Date:** 2026-10-06  
 **Depends on:** Gold-aware FORCE RLS (`20261020_001`+), grants (`20261020_002`), `OpenMCPAppDB` (`9701efac4`).  
-**Branch:** `feat/rls-mcp-production-binding`.
+**Branch:** `feat/rls-mcp-production-binding` (merged).
 
 ## Claim boundary
 
@@ -91,3 +91,19 @@ Negative-only proof is insufficient (deny-all or broken pool would pass).
 ## Secrets hygiene
 
 Never echo DSN passwords, tokens, or full connection strings in chat, commits, or PR bodies. Receipts name paths and key names only.
+
+## R2 receipt (SET ROLE, 2026-10-06)
+
+**Claimed:** MCP Server pool effective identity `uisce_mcp_app` with FORCE RLS (`rolbypassrls=false`) under **SET ROLE** fallback.
+
+**Not claimed:** `UISCE_APP_DSN` direct login; full-fleet `DATABASE_URL` flip; R3 BeginTx fencing.
+
+| Receipt | Evidence |
+|---------|----------|
+| A | `[mcp-cutover] MCP DB pool mode=set-role:uisce_mcp_app pid=62768 started_at=2026-10-06T02:37:59.417759Z …` |
+| B | `session_user=postgres` `current_user=uisce_mcp_app` `rolbypassrls=false` (do not use `pg_stat_activity.usename` alone under SET ROLE) |
+| C+ | tenant `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa` JWT: `list_pages` includes A Page `eb23fc7a-66ef-4da5-8da4-1ea66570b530`; `get_page` → `found:true` |
+| C− | same JWT: `list_pages` excludes B Page `0f3af13f-8ad0-4538-af25-fa38536bed15`; `get_page` → `found:false` |
+
+Endpoint: `POST /api/mcp` (streamable, stateless). Local ops log: `/tmp/uisce-server-r2.log`. Redacted capture: `/tmp/r2-triple-receipt.md`.
+
