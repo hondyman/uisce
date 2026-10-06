@@ -20,8 +20,12 @@ const AIPortfolioRebalancer = React.lazy(() => import('../AIPortfolioRebalancer'
 const ScenarioAnalysisPro = React.lazy(() => import('../ScenarioAnalysisPro'));
 const FixedIncomeDashboard = React.lazy(() => import('../FixedIncomeDashboard'));
 const ComplianceDecisionBlotter = React.lazy(() => import('../Compliance/ComplianceDecisionBlotter'));
-const RegulatoryChangeQueue = React.lazy(() => import('../Compliance/RegulatoryChangeQueue'));
-const SurveillanceFindingsQueue = React.lazy(() => import('../Compliance/SurveillanceFindingsQueue'));
+const RegulatoryChangeQueue = React.lazy(() =>
+  import('../Compliance/RegulatoryChangeQueue').then((m) => ({ default: m.RegulatoryChangeQueue }))
+);
+const SurveillanceFindingsQueue = React.lazy(() =>
+  import('../Compliance/SurveillanceFindingsQueue').then((m) => ({ default: m.SurveillanceFindingsQueue }))
+);
 
 // Module-level guard to prevent React StrictMode double-restoration on desktop boot
 let hasAutoRestoredOnBoot = false;
