@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,60 +21,12 @@ import (
 	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
 	"github.com/hondyman/uisce/backend/internal/compliance/drift"
 	"github.com/hondyman/uisce/backend/internal/compliance/jobs"
+	"github.com/hondyman/uisce/backend/internal/compliance/testutil"
 )
 
 func getAlphaTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-
-	dsn := os.Getenv("ALPHA_DSN")
-	if dsn == "" {
-		home, _ := os.UserHomeDir()
-		caPath := filepath.Join(home, ".uisce/certs/ca.crt")
-		certPath := filepath.Join(home, ".uisce/certs/postgres-client.crt")
-		keyPath := filepath.Join(home, ".uisce/certs/postgres-client.key")
-
-		if _, err := os.Stat(caPath); err == nil {
-			dsn = "host=100.84.50.65 port=5432 user=postgres password=postgres dbname=alpha sslmode=verify-full sslrootcert=" + caPath + " sslcert=" + certPath + " sslkey=" + keyPath
-		}
-	}
-
-	if dsn == "" {
-		t.Skip("ALPHA_DSN not set and mTLS certificates not found; skipping live DB test")
-		return nil
-	}
-
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		t.Skipf("Failed to open connection to alpha: %v", err)
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	if err := db.PingContext(ctx); err != nil {
-		t.Skipf("Cannot ping alpha database: %v", err)
-		return nil
-	}
-
-	// Ensure Migrations 007 and 008 up are applied on the test DB
-	ensureMigrationsApplied(t, db)
-
-	return db
-}
-
-func ensureMigrationsApplied(t *testing.T, db *sql.DB) {
-	t.Helper()
-	migDir := filepath.Join("..", "..", "..", "db", "migrations")
-	if _, err := os.Stat(migDir); err != nil {
-		migDir = filepath.Join("backend", "db", "migrations")
-	}
-
-	for _, f := range []string{"20261218_007_regulatory_change_workflow.up.sql", "20261219_008_trigger_refactor_and_draft_guard.up.sql"} {
-		upFile := filepath.Join(migDir, f)
-		upContent, _ := os.ReadFile(upFile)
-		_, _ = db.Exec(string(upContent))
-	}
+	return testutil.GetEphemeralTestDB(t)
 }
 
 // Gate 2: Transition Legality Tested Both Ways

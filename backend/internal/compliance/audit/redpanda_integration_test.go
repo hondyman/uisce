@@ -2,7 +2,6 @@ package audit
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -15,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
+	"github.com/hondyman/uisce/backend/internal/compliance/testutil"
 )
 
 func TestRedpanda_RealBrokerDurabilityAndPostgresIntegration(t *testing.T) {
@@ -107,17 +107,9 @@ func TestRedpanda_RealBrokerDurabilityAndPostgresIntegration(t *testing.T) {
 		t.Fatalf("Expected at least %d consumed events from live Redpanda, got %d", numEvents, consumedCount)
 	}
 
-	// 5. Connect to live alpha PostgreSQL and ingest batch
-	dsn := os.Getenv("ALPHA_DSN")
-	if dsn == "" {
-		homeDir, _ := os.UserHomeDir()
-		dsn = fmt.Sprintf("postgres://postgres:postgres@100.84.50.65:5432/alpha?sslmode=verify-full&sslrootcert=%s/.uisce/certs/ca.crt&sslcert=%s/.uisce/certs/postgres-client.crt&sslkey=%s/.uisce/certs/postgres-client.key", homeDir, homeDir, homeDir)
-	}
-
-	db, err := sql.Open("postgres", dsn)
-	if err == nil {
-		defer db.Close()
-
+	// 5. Connect to ephemeral PostgreSQL and ingest batch
+	db := testutil.GetEphemeralTestDB(t)
+	if db != nil {
 		// Pre-insert a dummy rule and snapshot version so FK is satisfied
 		_, _ = db.Exec("INSERT INTO compliance.compliance_rule (id, tenant_id, inherit_mode, rule_code, name, rule_phase, severity) VALUES ($1, $2, 'custom', 'REDPANDA_TEST', 'Redpanda Live Test', 'PRE_TRADE', 'HARD_BLOCK') ON CONFLICT DO NOTHING", ruleID, tenantID)
 		_, _ = db.Exec("INSERT INTO compliance.compliance_rule_version (rule_id, version, tenant_id, resolved_ast, parameter_thresholds, citation, effective_from, content_hash, compiled_bytecode_hash, created_by) VALUES ($1, 1, $2, '{}'::jsonb, '{}'::jsonb, 'Test', now(), $3, $4, 'test') ON CONFLICT DO NOTHING", ruleID, tenantID, contentHash, bytecodeHash)

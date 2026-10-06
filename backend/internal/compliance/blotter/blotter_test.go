@@ -4,51 +4,22 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/compliance"
 	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
+	"github.com/hondyman/uisce/backend/internal/compliance/testutil"
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
-func getAlphaTestDB(t *testing.T) *sql.DB {
-	dsn := os.Getenv("ALPHA_DSN")
-	if dsn == "" {
-		home, _ := os.UserHomeDir()
-		caPath := filepath.Join(home, ".uisce/certs/ca.crt")
-		certPath := filepath.Join(home, ".uisce/certs/postgres-client.crt")
-		keyPath := filepath.Join(home, ".uisce/certs/postgres-client.key")
-
-		if _, err := os.Stat(caPath); err == nil {
-			dsn = "host=100.84.50.65 port=5432 user=postgres password=postgres dbname=alpha sslmode=verify-full sslrootcert=" + caPath + " sslcert=" + certPath + " sslkey=" + keyPath
-		}
+func getAlphaTestDB(tb testing.TB) *sql.DB {
+	if tb != nil {
+		tb.Helper()
 	}
-
-	if dsn == "" {
-		t.Skip("ALPHA_DSN not set and mTLS certificates not found; skipping live DB test")
-		return nil
-	}
-
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		t.Skipf("Failed to open connection to alpha: %v", err)
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	if err := db.PingContext(ctx); err != nil {
-		t.Skipf("Cannot ping alpha database: %v", err)
-		return nil
-	}
-
-	return db
+	return testutil.GetEphemeralTestDB(tb)
 }
 
 func TestBlotterService_ListAndEvidenceBundle(t *testing.T) {
