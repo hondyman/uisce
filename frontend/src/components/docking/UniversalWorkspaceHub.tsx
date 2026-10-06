@@ -19,7 +19,7 @@ const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; r
 const AIPortfolioRebalancer = React.lazy(() => import('../AIPortfolioRebalancer'));
 const ScenarioAnalysisPro = React.lazy(() => import('../ScenarioAnalysisPro'));
 const FixedIncomeDashboard = React.lazy(() => import('../FixedIncomeDashboard'));
-const ComplianceDecisionBlotter = React.lazy(() => import('../compliance/ComplianceDecisionBlotter'));
+const ComplianceDecisionBlotter = React.lazy(() => import('../Compliance/ComplianceDecisionBlotter'));
 const RegulatoryChangeQueue = React.lazy(() => import('../Compliance/RegulatoryChangeQueue'));
 const SurveillanceFindingsQueue = React.lazy(() => import('../Compliance/SurveillanceFindingsQueue'));
 
