@@ -46,9 +46,11 @@ type OrderContext struct {
 	DepositExposurePct    decimal.Decimal
 	CountryExposurePct    decimal.Decimal
 	SectorExposurePct     decimal.Decimal
-	NavWeightPct          decimal.Decimal
-	CompliantAssetsPct    decimal.Decimal
-	Nav                   decimal.Decimal
+	NavWeightPct                    decimal.Decimal
+	CompliantAssetsPct              decimal.Decimal
+	UcitsAggregateAbove5PctExposure decimal.Decimal
+	Restricted144aExposurePct       decimal.Decimal
+	Nav                             decimal.Decimal
 	ExistingPositionValue decimal.Decimal
 	ReferencePrice        decimal.Decimal
 	PriceDeviationPct     decimal.Decimal
@@ -1749,6 +1751,120 @@ var CoreScenarioCorpus = []Scenario{
 		Input:       OrderContext{Venue: "OFF_X_UNKNOWN"},
 		Expected:    ExpectedOutcome{Status: "BLOCKED", MustContain: "approved_venues"},
 	},
+
+	// 51. UCITS_5_10_40 (Post-Trade 5/10/40 concentration limits)
+	{
+		RuleCode:    "UCITS_5_10_40",
+		Code:        "UCITS_5_10_40:PASS",
+		Description: "Compliant aggregate exposure of >5% issuers (35% <= 40%)",
+		Input: OrderContext{
+			UcitsAggregateAbove5PctExposure: d("0.350000"),
+		},
+		Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+	},
+	{
+		RuleCode:    "UCITS_5_10_40",
+		Code:        "UCITS_5_10_40:BOUNDARY",
+		Description: "Boundary aggregate exposure exactly at 40% limit",
+		Input: OrderContext{
+			UcitsAggregateAbove5PctExposure: d("0.400000"),
+		},
+		Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+	},
+	{
+		RuleCode:    "UCITS_5_10_40",
+		Code:        "UCITS_5_10_40:FAIL",
+		Description: "Breached aggregate exposure above 40% (42% > 40%)",
+		Input: OrderContext{
+			UcitsAggregateAbove5PctExposure: d("0.420000"),
+		},
+		Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "ucits_aggregate_above_5pct_exposure"},
+	},
+	{
+		RuleCode:    "UCITS_5_10_40",
+		Code:        "UCITS_5_10_40:ADVERSARIAL",
+		Description: "Extreme concentration above 40% (65% > 40%)",
+		Input: OrderContext{
+			UcitsAggregateAbove5PctExposure: d("0.650000"),
+		},
+		Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "ucits_aggregate_above_5pct_exposure"},
+	},
+
+	// 52. SEC_144A_QIB_HOLDING (Post-Trade 15% QIB / Illiquid Asset Limit)
+	{
+		RuleCode:    "SEC_144A_QIB_HOLDING",
+		Code:        "SEC_144A_QIB_HOLDING:PASS",
+		Description: "Compliant restricted 144A non-QIB holding (10% <= 15%)",
+		Input: OrderContext{
+			Restricted144aExposurePct: d("0.100000"),
+		},
+		Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+	},
+	{
+		RuleCode:    "SEC_144A_QIB_HOLDING",
+		Code:        "SEC_144A_QIB_HOLDING:BOUNDARY",
+		Description: "Boundary restricted 144A holding exactly at 15% limit",
+		Input: OrderContext{
+			Restricted144aExposurePct: d("0.150000"),
+		},
+		Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+	},
+	{
+		RuleCode:    "SEC_144A_QIB_HOLDING",
+		Code:        "SEC_144A_QIB_HOLDING:FAIL",
+		Description: "Breached restricted 144A holding (18% > 15%)",
+		Input: OrderContext{
+			Restricted144aExposurePct: d("0.180000"),
+		},
+		Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "restricted_144a_exposure_pct"},
+	},
+	{
+		RuleCode:    "SEC_144A_QIB_HOLDING",
+		Code:        "SEC_144A_QIB_HOLDING:ADVERSARIAL",
+		Description: "Extreme restricted 144A holding (50% > 15%)",
+		Input: OrderContext{
+			Restricted144aExposurePct: d("0.500000"),
+		},
+		Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "restricted_144a_exposure_pct"},
+	},
+
+	// 53. MARGIN_UTILIZATION_80 (Post-Trade Margin Capacity Warning)
+	{
+		RuleCode:    "MARGIN_UTILIZATION_80",
+		Code:        "MARGIN_UTILIZATION_80:PASS",
+		Description: "Compliant margin utilization (70% <= 80%)",
+		Input: OrderContext{
+			MarginUtilizationPct: d("0.700000"),
+		},
+		Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+	},
+	{
+		RuleCode:    "MARGIN_UTILIZATION_80",
+		Code:        "MARGIN_UTILIZATION_80:BOUNDARY",
+		Description: "Boundary margin utilization exactly at 80% limit",
+		Input: OrderContext{
+			MarginUtilizationPct: d("0.800000"),
+		},
+		Expected: ExpectedOutcome{Status: "PASSED", MustContain: "Compliant"},
+	},
+	{
+		RuleCode:    "MARGIN_UTILIZATION_80",
+		Code:        "MARGIN_UTILIZATION_80:FAIL",
+		Description: "Warning margin utilization exceeding 80% (85% > 80%)",
+		Input: OrderContext{
+			MarginUtilizationPct: d("0.850000"),
+		},
+		Expected: ExpectedOutcome{Status: "WARNING", MustContain: "margin_utilization_pct"},
+	},
+	{
+		RuleCode:    "MARGIN_UTILIZATION_80",
+		Code:        "MARGIN_UTILIZATION_80:ADVERSARIAL",
+		Description: "Extreme margin utilization (99% > 80%)",
+		Input: OrderContext{
+			MarginUtilizationPct: d("0.990000"),
+		},
+		Expected: ExpectedOutcome{Status: "WARNING", MustContain: "margin_utilization_pct"},
+	},
 }
 
 // EvaluateScenario evaluates an OrderContext against a rule AST condition and parameter thresholds.
@@ -2101,6 +2217,27 @@ func EvaluateScenario(sc Scenario) (string, string) {
 		approved := map[string]bool{"XNYS": true, "XNAS": true, "XLON": true, "XFRA": true, "XPAR": true}
 		if !approved[in.Venue] {
 			return "BLOCKED", fmt.Sprintf("Rule %s breached: venue %s not in approved_venues list", sc.RuleCode, in.Venue)
+		}
+		return "PASSED", "Compliant"
+
+	case "UCITS_5_10_40":
+		limit := d("0.400000")
+		if in.UcitsAggregateAbove5PctExposure.GreaterThan(limit) {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: ucits_aggregate_above_5pct_exposure %s exceeds max_aggregate_above_5pct_pct %s", sc.RuleCode, in.UcitsAggregateAbove5PctExposure, limit)
+		}
+		return "PASSED", "Compliant"
+
+	case "SEC_144A_QIB_HOLDING":
+		limit := d("0.150000")
+		if in.Restricted144aExposurePct.GreaterThan(limit) {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: restricted_144a_exposure_pct %s exceeds max_144a_non_qib_pct %s", sc.RuleCode, in.Restricted144aExposurePct, limit)
+		}
+		return "PASSED", "Compliant"
+
+	case "MARGIN_UTILIZATION_80":
+		limit := d("0.800000")
+		if in.MarginUtilizationPct.GreaterThan(limit) {
+			return "WARNING", fmt.Sprintf("Rule %s warning: margin_utilization_pct %s exceeds max_margin_utilization_pct %s", sc.RuleCode, in.MarginUtilizationPct, limit)
 		}
 		return "PASSED", "Compliant"
 

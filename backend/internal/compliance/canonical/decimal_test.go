@@ -92,3 +92,35 @@ func TestCanonicalDecimalMap(t *testing.T) {
 		t.Errorf("CanonicalDecimalMap() JSON mismatch:\n got:      %s\n expected: %s", string(raw), expected)
 	}
 }
+
+func TestComputePilotRuleHashes(t *testing.T) {
+	h1, err := ComputeRuleContentHashFromRaw(
+		[]byte(`{"type":"COMPARISON","left":{"type":"METRIC","path":"portfolio.ucits_aggregate_above_5pct_exposure"},"op":"LTE","right":{"type":"PARAM","name":"max_aggregate_above_5pct_pct"}}`),
+		[]byte(`{"max_aggregate_above_5pct_pct":"0.400000","max_single_issuer_pct":"0.100000"}`),
+		"UCITS Directive 2009/65/EC Art. 52(1)-(2)",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("UCITS_5_10_40 hash: %s", h1)
+
+	h2, err := ComputeRuleContentHashFromRaw(
+		[]byte(`{"type":"COMPARISON","left":{"type":"METRIC","path":"portfolio.restricted_144a_exposure_pct"},"op":"LTE","right":{"type":"PARAM","name":"max_144a_non_qib_pct"}}`),
+		[]byte(`{"max_144a_non_qib_pct":"0.150000"}`),
+		"SEC Rule 144A / Investment Company Act Rule 22e-4",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("SEC_144A_QIB_HOLDING hash: %s", h2)
+
+	h3, err := ComputeRuleContentHashFromRaw(
+		[]byte(`{"type":"COMPARISON","left":{"type":"METRIC","path":"portfolio.margin_utilization_pct"},"op":"LTE","right":{"type":"PARAM","name":"max_margin_utilization_pct"}}`),
+		[]byte(`{"max_margin_utilization_pct":"0.800000"}`),
+		"FINRA Rule 4210 / House Margin Policy",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("MARGIN_UTILIZATION_80 hash: %s", h3)
+}

@@ -198,7 +198,7 @@ func main() {
 		log.Fatalf("Prereq failed on ref db: %v", err)
 	}
 
-	// 3. Apply migrations 001-009 on refDB
+	// 3. Apply migrations 001-010 on refDB
 	migrations := []string{
 		"20261218_001_compliance_engine_core_tables.up.sql",
 		"20261218_002_governance_audit_and_privileges.up.sql",
@@ -209,6 +209,7 @@ func main() {
 		"20261218_007_regulatory_change_workflow.up.sql",
 		"20261219_008_trigger_refactor_and_draft_guard.up.sql",
 		"20261220_009_compliance_surveillance_findings.up.sql",
+		"20261221_010_post_trade_pilot_schema.up.sql",
 	}
 
 	migDir := filepath.Join("backend", "db", "migrations")
@@ -239,13 +240,13 @@ func main() {
 
 	// 5. Diff tables and columns
 	fmt.Println("======================================================================")
-	fmt.Println("MECHANICAL SCHEMA DIFF: FRESH CANONICAL BUILD (001->009) vs LIVE ALPHA")
+	fmt.Println("MECHANICAL SCHEMA DIFF: FRESH CANONICAL BUILD (001->010) vs LIVE ALPHA")
 	fmt.Println("======================================================================")
 
 	var discrepancies []string
 
-	const expectedTablesCount = 34
-	const expectedTriggersCount = 29
+	const expectedTablesCount = 36
+	const expectedTriggersCount = 30
 
 	if len(refTables) != expectedTablesCount {
 		discrepancies = append(discrepancies, fmt.Sprintf("REFERENCE TABLE COUNT MISMATCH: expected %d, got %d", expectedTablesCount, len(refTables)))

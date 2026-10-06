@@ -29,6 +29,8 @@ func TestSchemaParity_ComplianceTablesAndConstraints(t *testing.T) {
 		"compliance_notification",
 		"compliance_surveillance_finding",
 		"compliance_surveillance_event",
+		"compliance_portfolio_snapshot",
+		"compliance_finding",
 	}
 
 	for _, table := range expectedTables {
@@ -61,6 +63,7 @@ func TestSchemaParity_ComplianceTablesAndConstraints(t *testing.T) {
 		{"regulatory_draft_rule", "trg_guard_regulatory_draft_mutation"},
 		{"compliance_surveillance_finding", "trg_validate_surveillance_finding_transition"},
 		{"compliance_surveillance_event", "trg_guard_surveillance_event_append_only"},
+		{"compliance_finding", "trg_validate_compliance_finding_transition"},
 	}
 
 	for _, trg := range expectedTriggers {
@@ -92,11 +95,11 @@ func TestSchemaParity_ComplianceTablesAndConstraints(t *testing.T) {
 		t.Fatalf("failed to query master tenant counts: %v", err)
 	}
 
-	if masterCount != 50 {
-		t.Errorf("expected exactly 50 gold-copy rules, got %d", masterCount)
+	if masterCount != 53 {
+		t.Errorf("expected exactly 53 gold-copy rules, got %d", masterCount)
 	}
-	if snapshotCount != 50 {
-		t.Errorf("expected exactly 50 v1 snapshots for gold-copy rules, got %d", snapshotCount)
+	if snapshotCount != 53 {
+		t.Errorf("expected exactly 53 v1 snapshots for gold-copy rules, got %d", snapshotCount)
 	}
-	fmt.Printf("[Schema Diff Test] Verified 50 master rules, 50 v1 snapshots, 15 compliance tables, and all immutability triggers.\n")
+	fmt.Printf("[Schema Diff Test] Verified 53 master rules, 53 v1 snapshots, 17 compliance tables, and all immutability triggers.\n")
 }

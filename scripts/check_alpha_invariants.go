@@ -82,12 +82,12 @@ func main() {
 
 	fmt.Println("======================================================================")
 	fmt.Printf("POST-SUITE LIVE INVARIANTS & STRUCTURAL POLLUTION PROBE (LIVE ALPHA):\n")
-	fmt.Printf("  master_active_rules:         %d (expected 50)\n", masterActiveRules)
-	fmt.Printf("  master_library_active:       %d (expected 50)\n", masterLibraryActive)
+	fmt.Printf("  master_active_rules:         %d (expected 53)\n", masterActiveRules)
+	fmt.Printf("  master_library_active:       %d (expected 53)\n", masterLibraryActive)
 	fmt.Printf("  master_library_provisional:  %d (expected 0)\n", masterLibraryProvisional)
-	fmt.Printf("  master_snapshots:            %d (expected 50)\n", masterSnapshots)
+	fmt.Printf("  master_snapshots:            %d (expected 53)\n", masterSnapshots)
 	fmt.Printf("  master_soft_deleted:         %d (expected 0)\n", masterSoftDeleted)
-	fmt.Printf("  total_rules:                 %d (expected 50)\n", totalRules)
+	fmt.Printf("  total_rules:                 %d (expected 53)\n", totalRules)
 	fmt.Println("----------------------------------------------------------------------")
 	fmt.Printf("NON-MASTER / NON-DEMO ROW COUNTS (STRICT ZERO REQUIRED):\n")
 	fmt.Printf("  compliance_rule:                 %d (expected 0)\n", foreignRules)
@@ -100,8 +100,8 @@ func main() {
 	fmt.Printf("  regulatory_change_case:          %d (expected 0)\n", foreignCases)
 	fmt.Println("======================================================================")
 
-	if masterActiveRules != 50 || masterLibraryActive != 50 || masterLibraryProvisional != 0 ||
-		masterSnapshots != 50 || masterSoftDeleted != 0 || totalRules != 50 ||
+	if masterActiveRules != 53 || masterLibraryActive != 53 || masterLibraryProvisional != 0 ||
+		masterSnapshots != 53 || masterSoftDeleted != 0 || totalRules != 53 ||
 		foreignRules != 0 || foreignVersions != 0 || foreignActivations != 0 ||
 		foreignEvaluations != 0 || foreignAuditEvents != 0 || foreignFindings != 0 ||
 		foreignDraftRules != 0 || foreignCases != 0 {

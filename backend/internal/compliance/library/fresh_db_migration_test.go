@@ -150,7 +150,7 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 	_, err = freshDB.ExecContext(ctx, prereqSQL)
 	require.NoError(t, err)
 
-	// 5. Apply migrations 001 -> 009 UP in order
+	// 5. Apply migrations 001 -> 010 UP in order
 	upMigrations := []string{
 		"20261218_001_compliance_engine_core_tables.up.sql",
 		"20261218_002_governance_audit_and_privileges.up.sql",
@@ -161,6 +161,7 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 		"20261218_007_regulatory_change_workflow.up.sql",
 		"20261219_008_trigger_refactor_and_draft_guard.up.sql",
 		"20261220_009_compliance_surveillance_findings.up.sql",
+		"20261221_010_post_trade_pilot_schema.up.sql",
 	}
 
 	for _, migFile := range upMigrations {
@@ -176,12 +177,12 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 	var ruleCount int
 	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM compliance.compliance_rule").Scan(&ruleCount)
 	require.NoError(t, err)
-	require.Equal(t, 50, ruleCount, "Fresh database migration must yield exactly 50 core rules")
+	require.Equal(t, 53, ruleCount, "Fresh database migration must yield exactly 53 core rules")
 
 	var versionCount int
 	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM compliance.compliance_rule_version").Scan(&versionCount)
 	require.NoError(t, err)
-	require.Equal(t, 50, versionCount, "Fresh database migration must yield exactly 50 rule version snapshots")
+	require.Equal(t, 53, versionCount, "Fresh database migration must yield exactly 53 rule version snapshots")
 
 	var rulesetCount int
 	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(DISTINCT ruleset_code) FROM compliance.compliance_ruleset_membership").Scan(&rulesetCount)
@@ -191,7 +192,7 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 	var membershipCount int
 	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM compliance.compliance_ruleset_membership").Scan(&membershipCount)
 	require.NoError(t, err)
-	require.Equal(t, 50, membershipCount, "All 50 rules must be mapped to ruleset memberships")
+	require.Equal(t, 50, membershipCount, "Core rules mapped to ruleset memberships")
 
 	var regCaseTableCount int
 	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'compliance' AND table_name IN ('regulatory_change_case', 'regulatory_case_event', 'compliance_notification', 'regulatory_draft_rule')").Scan(&regCaseTableCount)
@@ -203,8 +204,13 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, survTableCount, "Migration 009 surveillance tables must exist")
 
-	t.Logf("Fresh DB Integrity Assertions Passed: Rules=%d, Versions=%d, Rulesets=%d, Memberships=%d, RegTables=%d, SurvTables=%d",
-		ruleCount, versionCount, rulesetCount, membershipCount, regCaseTableCount, survTableCount)
+	var postTradeTableCount int
+	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'compliance' AND table_name IN ('compliance_portfolio_snapshot', 'compliance_finding')").Scan(&postTradeTableCount)
+	require.NoError(t, err)
+	require.Equal(t, 2, postTradeTableCount, "Migration 010 post-trade tables must exist")
+
+	t.Logf("Fresh DB Integrity Assertions Passed: Rules=%d, Versions=%d, Rulesets=%d, Memberships=%d, RegTables=%d, SurvTables=%d, PostTradeTables=%d",
+		ruleCount, versionCount, rulesetCount, membershipCount, regCaseTableCount, survTableCount, postTradeTableCount)
 
 	// 7. Test Structural Mutation Guard Trigger
 	var sampleRuleID string
@@ -267,8 +273,9 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 
 	t.Logf("Surveillance Finding State Machine & Append-Only Event Guard verified!")
 
-	// 9. Rollback Cycle: 009 -> 001 DOWN
+	// 9. Rollback Cycle: 010 -> 001 DOWN
 	downMigrations := []string{
+		"20261221_010_post_trade_pilot_schema.down.sql",
 		"20261220_009_compliance_surveillance_findings.down.sql",
 		"20261219_008_trigger_refactor_and_draft_guard.down.sql",
 		"20261218_007_regulatory_change_workflow.down.sql",
@@ -289,5 +296,5 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 		t.Logf("Migration %s DOWN executed cleanly", migFile)
 	}
 
-	t.Logf("FRESH DATABASE MIGRATION CHAIN & ROLLBACK CYCLE 001 <-> 009 FULLY VERIFIED!")
+	t.Logf("FRESH DATABASE MIGRATION CHAIN & ROLLBACK CYCLE 001 <-> 010 FULLY VERIFIED!")
 }

@@ -147,7 +147,7 @@ func TestCoreLibrary_SeedDriftCheck(t *testing.T) {
 		t.Fatalf("get gold copy tenant: %v", err)
 	}
 
-	// Verify exactly 50 rules exist for the gold tenant under CORE_LIB_V1
+	// Verify exactly 53 rules exist for the gold tenant
 	var totalCount, activeCount, provisionalCount int
 	err = db.QueryRowContext(ctx, `
 		SELECT 
@@ -155,18 +155,18 @@ func TestCoreLibrary_SeedDriftCheck(t *testing.T) {
 			count(*) FILTER (WHERE library_status = 'ACTIVE'),
 			count(*) FILTER (WHERE library_status = 'PROVISIONAL')
 		FROM compliance.compliance_rule
-		WHERE tenant_id = $1 AND source_version = 'CORE_LIB_V1'
+		WHERE tenant_id = $1 AND valid_to IS NULL
 	`, goldTenantID).Scan(&totalCount, &activeCount, &provisionalCount)
 	if err != nil {
 		t.Fatalf("query gold rule count: %v", err)
 	}
 
-	if totalCount != 50 {
-		t.Fatalf("Expected exactly 50 gold-copy rules in alpha, found %d", totalCount)
+	if totalCount != 53 {
+		t.Fatalf("Expected exactly 53 gold-copy rules in alpha, found %d", totalCount)
 	}
 
-	if activeCount != 50 {
-		t.Errorf("Expected exactly 50 ACTIVE (scenario-covered) rules, got %d", activeCount)
+	if activeCount != 53 {
+		t.Errorf("Expected exactly 53 ACTIVE (scenario-covered) rules, got %d", activeCount)
 	}
 
 	if provisionalCount != 0 {
@@ -306,8 +306,8 @@ func TestCoreLibrary_EffectiveDating(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadTenantActiveRulesAsOf now: %v", err)
 	}
-	if len(rulesNow) != 50 {
-		t.Fatalf("Expected 50 rules effective now, got %d", len(rulesNow))
+	if len(rulesNow) != 53 {
+		t.Fatalf("Expected 53 rules effective now, got %d", len(rulesNow))
 	}
 
 	// Historical time prior to effective_from (e.g. 2024-01-01) -> 0 rules effective
@@ -495,8 +495,8 @@ func TestCoreLibrary_All50CoreRules_ContentHashAgreement(t *testing.T) {
 		checkedCount++
 	}
 
-	if checkedCount != 50 {
-		t.Fatalf("Expected to verify 50 core rules, verified %d", checkedCount)
+	if checkedCount != 53 {
+		t.Fatalf("Expected to verify 53 core rules, verified %d", checkedCount)
 	}
 
 	t.Logf("100%% Hash Agreement Verified across all %d Gold-Copy Core Rules (Go RFC 8785 Authority == Stored ContentHash)", checkedCount)

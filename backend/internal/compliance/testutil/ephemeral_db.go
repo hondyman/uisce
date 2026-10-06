@@ -46,7 +46,24 @@ func ensureTemplateDatabase(adminDB *sql.DB) error {
 	}
 
 	if exists {
-		return nil
+		// Check if latest migration is applied in template
+		adminDSN := GetAdminDSN()
+		templateDSN := strings.Replace(adminDSN, "dbname=alpha", fmt.Sprintf("dbname=%s", templateDBName), 1)
+		if !strings.Contains(adminDSN, "dbname=alpha") {
+			templateDSN = adminDSN + " dbname=" + templateDBName
+		}
+		tplDB, err := sql.Open("postgres", templateDSN)
+		if err == nil {
+			var hasLatest bool
+			_ = tplDB.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM compliance.compliance_rule_version WHERE content_hash = '3426602c668bf78f5f6cd8b7b620dd7c55956c20754d72e178853655a3d71dcb')").Scan(&hasLatest)
+			tplDB.Close()
+			if hasLatest {
+				return nil
+			}
+		}
+		// Template is stale: terminate connections and drop to rebuild from scratch
+		_, _ = adminDB.ExecContext(ctx, fmt.Sprintf("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '%s' AND pid <> pg_backend_pid()", templateDBName))
+		_, _ = adminDB.ExecContext(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", templateDBName))
 	}
 
 	// Create template database
@@ -147,6 +164,7 @@ func ensureTemplateDatabase(adminDB *sql.DB) error {
 		"20261218_007_regulatory_change_workflow.up.sql",
 		"20261219_008_trigger_refactor_and_draft_guard.up.sql",
 		"20261220_009_compliance_surveillance_findings.up.sql",
+		"20261221_010_post_trade_pilot_schema.up.sql",
 	}
 
 	// Search for migration directory
