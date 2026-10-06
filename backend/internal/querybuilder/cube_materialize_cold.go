@@ -47,6 +47,14 @@ func (w *starRocksColdWriter) ApplyCold(
 		return nil, fmt.Errorf("cube cold writer: iceberg catalog/database/table are required")
 	}
 
+	// Track B: refresh Lakekeeper bearer on the StarRocks catalog before any
+	// Iceberg DDL. Nil refresher (gate off / tests) skips.
+	if w.m.catalogAuth != nil {
+		if err := w.m.catalogAuth.Ensure(ctx, cat); err != nil {
+			return nil, err
+		}
+	}
+
 	hotQualified := fmt.Sprintf("%s.%s",
 		quoteStarRocksIdent(plan.TargetDatabase),
 		quoteStarRocksIdent(plan.MaterializationName),
