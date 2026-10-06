@@ -4290,10 +4290,27 @@ export interface PreAggFilter {
 
 /** PreAggregation node properties (stored in catalog_node.properties) */
 export interface PreAggProperties {
+  /** Cube materialization attempt metadata (CUBE-1.1). Reuses the
+pre_aggregation catalog node type; CubeRouter resolves by node_name. */
+  AttemptID: string;
   AvgLatencyReductionMs: number;
   BOName: string;
+  ColdCommittedAt: any;
+  ContractVersion: number;
+  CubeContentHash: string;
+  CubeID: string;
   Dialect: string;
+  /** Dual-commit watermark (CUBE-1.3). DualCommitWatermark is set only when
+both StarRocks hot and Iceberg cold succeed for the same attempt_id.
+HotCommittedAt / ColdCommittedAt record per-tier completion; a missing
+DualCommitWatermark means the grain must not be treated as dual-committed
+even if LifecycleStatus is active from a legacy single-tier path. */
+  DualCommitWatermark: any;
   GovernanceStatus: string;
+  Grain: string[];
+  GrainHash: string;
+  HotCommittedAt: any;
+  IcebergTable: string;
   LastMaterializedAt: any;
   LastRefreshError: string;
   LastRefreshStatus: string;

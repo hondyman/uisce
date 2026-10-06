@@ -114,6 +114,14 @@ import { useCreateReportTemplate, useUpdateReportTemplate, useReportTemplate } f
 import { buildSavePayload, BOBinding } from './builderSerialization';
 import { deserializeFromBackend, needsMigration, migrateV1ToV2 } from './tableSerialization';
 import type { ParamSpec } from '../../studio-core/params/ParamSpec';
+import {
+  SubjectPicker,
+  resolveReportCubeBinding,
+  type QuerySubject,
+} from '../../features/analytical-subject';
+import { getCube, listCubes } from '../../features/cubes/cubeDefinitionApi';
+import type { CubeDefinition } from '../../features/cubes/types';
+import { fetchBusinessObjectBindings } from '../../features/query-builder/services/queryBuilderApi';
 
 type ReportParameter = ParamSpec;
 
@@ -311,7 +319,7 @@ const SSRSReportBuilderContent: React.FC = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'info' | 'warning' | 'error' });
   const handleCloseSnackbar = () => setSnackbar(prev => ({ ...prev, open: false }));
 
-  // Business Object states
+  // Business Object / cube subject states (PR7 shared SubjectPicker)
   const [businessObjects, setBusinessObjects] = useState<any[]>([]);
   const [selectedBOId, setSelectedBOId] = useState<string>('');
   const [selectedBO, setSelectedBO] = useState<any | null>(null);
@@ -319,6 +327,9 @@ const SSRSReportBuilderContent: React.FC = () => {
   const [selectedBindingId, setSelectedBindingId] = useState<string>('');
   const [relatedBOs, setRelatedBOs] = useState<any[]>([]);
   const [activeDatasets, setActiveDatasets] = useState<any[]>([...datasets]);
+  const [subject, setSubject] = useState<QuerySubject | null>(null);
+  const [selectedCube, setSelectedCube] = useState<CubeDefinition | null>(null);
+  const [subjectMigrateError, setSubjectMigrateError] = useState<string | null>(null);
 
   // Preview state
   const [previewData, setPreviewData] = useState<any[] | null>(null);
@@ -392,7 +403,9 @@ const SSRSReportBuilderContent: React.FC = () => {
             parameters: reportParameters,
           },
           null,
-          urlReportId
+          urlReportId,
+          undefined,
+          { subject },
         );
         updateMutation.mutate({ id: urlReportId!, payload: v2Payload as any });
       } else {
@@ -412,7 +425,7 @@ const SSRSReportBuilderContent: React.FC = () => {
   // Phase 2d: Auto-select BO when report is loaded with a bo_path binding
   useEffect(() => {
     if (!loadedTemplate || businessObjects.length === 0) return;
-    if (selectedBOId) return; // already have a selection
+    if (selectedBOId || subject?.kind === 'cube') return;
 
     // Try to read bo_path from saved metadata (new format: metadata.data_bindings[0].bo_path)
     const boPath = (loadedTemplate as any)?.metadata?.data_bindings?.[0]?.bo_path;
@@ -431,8 +444,162 @@ const SSRSReportBuilderContent: React.FC = () => {
 
     if (match) {
       setSelectedBOId(match.id);
+      setSubject({ kind: 'business_object', boId: match.id, bindingId: selectedBindingId || '' });
     }
-  }, [loadedTemplate, businessObjects, selectedBOId]);
+  }, [loadedTemplate, businessObjects, selectedBOId, subject, selectedBindingId]);
+
+  // PR7 / CUBE-3.3: restore pinned subject, or migrate legacy dataBindings.primary.cube once
+  useEffect(() => {
+    if (!loadedTemplate || subject) return;
+    let cancelled = false;
+
+    const run = async () => {
+      const meta = (loadedTemplate as any)?.metadata;
+      const def = (loadedTemplate as any)?.definition;
+      const layout = (loadedTemplate as any)?.layout_config;
+      const pinned: QuerySubject | null =
+        meta?.subject ||
+        layout?.subject ||
+        def?.subject ||
+        meta?.data_bindings?.[0]?.subject ||
+        null;
+
+      if (pinned?.kind === 'cube' || pinned?.kind === 'business_object') {
+        if (cancelled) return;
+        setSubjectMigrateError(null);
+        if (pinned.kind === 'business_object') {
+          setSubject(pinned);
+          if (pinned.boId) setSelectedBOId(pinned.boId);
+          if (pinned.bindingId) setSelectedBindingId(pinned.bindingId);
+          return;
+        }
+        try {
+          const cube = await getCube(pinned.cubeId);
+          if (cancelled) return;
+          setSelectedCube(cube);
+          setSubject({
+            kind: 'cube',
+            cubeId: pinned.cubeId,
+            contractVersion: pinned.contractVersion ?? cube.contractVersion,
+          });
+          setSelectedBOId(cube.boId || '');
+        } catch (err) {
+          if (!cancelled) {
+            setSubjectMigrateError(
+              err instanceof Error ? err.message : 'Failed to load pinned cube subject',
+            );
+          }
+        }
+        return;
+      }
+
+      const primaryBinding =
+        def?.dataBindings?.primary ||
+        layout?.dataBindings?.primary ||
+        meta?.dataBindings?.primary ||
+        null;
+      if (!primaryBinding?.cube && !primaryBinding?.subject) return;
+
+      try {
+        const listed = await listCubes({ scope: 'all', limit: 200 });
+        if (cancelled) return;
+        const lookup = (listed.cubes || []).map((c) => ({
+          id: c.id,
+          name: c.name,
+          contractVersion: c.contractVersion,
+        }));
+        const resolved = resolveReportCubeBinding(primaryBinding, lookup);
+        if (!resolved.ok) {
+          setSubjectMigrateError(resolved.reason);
+          setSnackbar({
+            open: true,
+            message: `Cube subject migrate failed: ${resolved.reason}`,
+            severity: 'warning',
+          });
+          return;
+        }
+        setSubjectMigrateError(null);
+        setSubject(resolved.subject);
+        if (resolved.subject.kind === 'cube') {
+          const cube =
+            ('cube' in resolved && resolved.cube
+              ? listed.cubes.find((c) => c.id === resolved.cube!.id)
+              : null) || (await getCube(resolved.subject.cubeId));
+          if (cancelled) return;
+          setSelectedCube(cube);
+          setSelectedBOId(cube.boId || '');
+          if (resolved.migrated) {
+            setSnackbar({
+              open: true,
+              message: `Migrated legacy cube name to subject pin (${cube.name} v${cube.contractVersion})`,
+              severity: 'info',
+            });
+          }
+        } else if (resolved.subject.kind === 'business_object') {
+          setSelectedBOId(resolved.subject.boId);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setSubjectMigrateError(
+            err instanceof Error ? err.message : 'Failed to migrate legacy cube binding',
+          );
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadedTemplate, subject]);
+
+  const handleSubjectChange = useCallback(async (
+    next: QuerySubject | null,
+    meta?: { cube?: CubeDefinition },
+  ) => {
+    setSubjectMigrateError(null);
+    setPreviewData(null);
+    setPreviewSQL(null);
+
+    if (!next || next.kind === 'business_object') {
+      setSelectedCube(null);
+      setSubject(next);
+      if (next?.kind === 'business_object' && next.boId) {
+        setSelectedBOId(next.boId);
+        if (next.bindingId) setSelectedBindingId(next.bindingId);
+      } else {
+        setSelectedBOId('');
+        setSelectedBindingId('');
+        setSelectedBO(null);
+        setBindings([]);
+      }
+      return;
+    }
+
+    setSubject(next);
+    try {
+      const cube = meta?.cube || await getCube(next.cubeId);
+      setSelectedCube(cube);
+      setSelectedBOId(cube.boId || '');
+      try {
+        const bs = await fetchBusinessObjectBindings(cube.boId);
+        setBindings(bs as any[]);
+        const preferred =
+          (bs as any[]).find((b) => b.isDefault)?.bindingId ||
+          (bs as any[])[0]?.bindingId ||
+          '';
+        setSelectedBindingId(preferred);
+      } catch (bindErr) {
+        devError('Cube BO bindings unavailable', bindErr);
+        setBindings([]);
+        setSelectedBindingId('');
+      }
+    } catch (err) {
+      devError('Failed to load cube subject', err);
+      setSubjectMigrateError(err instanceof Error ? err.message : 'Failed to load cube');
+      setSelectedCube(null);
+    }
+  }, []);
 
     const isGoldCopyTenant = Boolean(
       tenant?.gold_copy === true || (tenant?.id && tenant.id === getCachedGoldCopyId())
@@ -464,7 +631,9 @@ const SSRSReportBuilderContent: React.FC = () => {
             parameters: reportParameters,
           },
           selectedBO as BOBinding | null,
-          undefined
+          undefined,
+          tenant?.id,
+          { subject },
         );
         (payload as any).is_core = false;
         (payload as any).name = cloneTitle;
@@ -489,7 +658,7 @@ const SSRSReportBuilderContent: React.FC = () => {
           severity: 'error',
         });
       }
-    }, [elements, reportTitle, sectionConfig, layoutSettingsState, reportParameters, selectedBO, loadedTemplate, createMutation, isReadOnlyCore]);
+    }, [elements, reportTitle, sectionConfig, layoutSettingsState, reportParameters, selectedBO, loadedTemplate, createMutation, isReadOnlyCore, subject, tenant?.id]);
 
     const handleSaveReport = useCallback(async () => {
       // A gold-copy-inherited report is tweak-able but never directly
@@ -511,6 +680,15 @@ const SSRSReportBuilderContent: React.FC = () => {
 
       const targetTenantId = (loadedTemplate as any)?.tenant_id || tenant?.id || getCachedGoldCopyId() || '00000000-0000-0000-0000-000000000000';
 
+      if (subjectMigrateError && subject?.kind === 'cube') {
+        setSnackbar({
+          open: true,
+          message: `Cannot save: ${subjectMigrateError}`,
+          severity: 'error',
+        });
+        return;
+      }
+
       const payload = buildSavePayload(
         {
           elements,
@@ -521,7 +699,8 @@ const SSRSReportBuilderContent: React.FC = () => {
         },
         savedBO,
         urlReportId,
-        targetTenantId
+        targetTenantId,
+        { subject },
       );
       try {
         if (urlReportId) {
@@ -537,7 +716,7 @@ const SSRSReportBuilderContent: React.FC = () => {
       } catch (err) {
         setSnackbar({ open: true, message: `Failed to save: ${err instanceof Error ? err.message : 'Unknown error'}`, severity: 'error' });
       }
-    }, [elements, reportTitle, sectionConfig, layoutSettingsState, reportParameters, selectedBO, urlReportId, isReadOnlyCore, loadedTemplate, tenant, createMutation, updateMutation, handleCloneReport]);
+    }, [elements, reportTitle, sectionConfig, layoutSettingsState, reportParameters, selectedBO, urlReportId, isReadOnlyCore, loadedTemplate, tenant, createMutation, updateMutation, handleCloneReport, subject, subjectMigrateError]);
 
   const handleRunReport = useCallback(async (paramOverrides?: Record<string, any>) => {
     if (!urlReportId && !loadedTemplate?.report_key) {
@@ -618,10 +797,14 @@ const SSRSReportBuilderContent: React.FC = () => {
         }));
 
         setBusinessObjects(normalizedList);
-        if (normalizedList.length > 0) {
+        // New reports only: default the first BO. Existing reports restore
+        // subject/bo_path via dedicated effects (do not clobber a cube pin).
+        if (normalizedList.length > 0 && !urlReportId) {
           setSelectedBOId(prev => {
             if (!prev || !normalizedList.some((b: any) => b.id === prev || b.key === prev)) {
-              return normalizedList[0].id;
+              const firstId = normalizedList[0].id;
+              setSubject((s) => s ?? { kind: 'business_object', boId: firstId, bindingId: '' });
+              return firstId;
             }
             return prev;
           });
@@ -640,7 +823,7 @@ const SSRSReportBuilderContent: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [getAuthHeaders, tenant?.id]);
+  }, [getAuthHeaders, tenant?.id, urlReportId]);
 
   // Fetch detailed BO metadata when selectedBOId changes
   useEffect(() => {
@@ -717,7 +900,15 @@ const SSRSReportBuilderContent: React.FC = () => {
           setActiveDatasets([boDataset, ...datasets]);
 
           setBindings(bList);
-          if (bList.length > 0) setSelectedBindingId(bList[0].id || bList[0].binding_id || '');
+          if (bList.length > 0) {
+            const preferred = bList[0].id || bList[0].binding_id || '';
+            setSelectedBindingId(preferred);
+            setSubject((s) =>
+              s?.kind === 'business_object' && s.boId === selectedBOId && !s.bindingId
+                ? { ...s, bindingId: preferred }
+                : s ?? { kind: 'business_object', boId: selectedBOId, bindingId: preferred },
+            );
+          }
           setRelatedBOs(rList);
         }
       } catch (err) {
@@ -1388,34 +1579,32 @@ const SSRSReportBuilderContent: React.FC = () => {
               )}
             </Box>
 
-            {/* Right: BO switcher */}
+            {/* Right: subject summary (edit on Data tab via SubjectPicker) */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: '0 0 auto' }}>
               <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.55)', fontWeight: 600, whiteSpace: 'nowrap', fontSize: '0.72rem' }}>
-                {urlReportId ? 'Business Object' : 'Business Object'}
+                Subject
               </Typography>
               {urlReportId && <LockOutlinedIcon sx={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }} />}
-              <FormControl size="small" sx={{ minWidth: 200 }}>
-                <Select
-                  value={selectedBOId}
-                  displayEmpty
-                  onChange={(e) => setSelectedBOId(e.target.value as string)}
-                  disabled={!!urlReportId && !!selectedBOId}
-                  sx={{
-                    height: 28, color: '#FFF', bgcolor: 'rgba(255,255,255,0.09)', fontSize: '0.75rem', fontWeight: 600,
-                    borderRadius: 1.5, '& .MuiSvgIcon-root': { color: '#FFF' },
-                    '& fieldset': { borderColor: 'rgba(255,255,255,0.18)' },
-                    '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.35)' },
-                    '&.Mui-disabled': { opacity: 0.6, bgcolor: 'rgba(255,255,255,0.05)' },
-                  }}
-                >
-                  <MenuItem value=""><em>Select Business Object...</em></MenuItem>
-                  {businessObjects.map((bo: any) => (
-                    <MenuItem key={bo.id} value={bo.id}>
-                      {bo.displayName || bo.name} ({bo.key || bo.technicalName || bo.name})
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <Chip
+                size="small"
+                label={
+                  subject?.kind === 'cube'
+                    ? `Cube · ${selectedCube?.name || subject.cubeId} · v${String(subject.contractVersion)}`
+                    : subject?.kind === 'business_object'
+                      ? `BO · ${selectedBO?.displayName || selectedBO?.name || subject.boId || '…'}`
+                      : 'Select on Data tab…'
+                }
+                onClick={() => setActiveTab('data')}
+                sx={{
+                  height: 28,
+                  color: '#FFF',
+                  bgcolor: 'rgba(255,255,255,0.09)',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  maxWidth: 320,
+                  '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' },
+                }}
+              />
             </Box>
           </Box>
         </TopAppBar>
@@ -1855,43 +2044,60 @@ const SSRSReportBuilderContent: React.FC = () => {
             {/* ════ DATA TAB ════ */}
             {activeTab === 'data' && (
               <Box sx={{ p: 3, overflowY: 'auto', bgcolor: colors.bg }}>
-                <Typography variant="subtitle1" fontWeight="700" sx={{ mb: 2.5, color: colors.text }}>Business Object Data Source</Typography>
+                <Typography variant="subtitle1" fontWeight="700" sx={{ mb: 2.5, color: colors.text }}>Analytical Subject</Typography>
                 <Grid container spacing={3}>
                   <Grid size={{ xs: 12, md: 7 }}>
-                    <Paper sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2.5, bgcolor: colors.cardBg, border: `1px solid ${colors.border}` }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="subtitle2" fontWeight="700" sx={{ color: colors.text }}>Primary Business Object</Typography>
+                    <Paper sx={{ p: 0, display: 'flex', flexDirection: 'column', gap: 0, bgcolor: colors.cardBg, border: `1px solid ${colors.border}`, overflow: 'hidden' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 3, pt: 2.5 }}>
+                        <Typography variant="subtitle2" fontWeight="700" sx={{ color: colors.text }}>Primary Subject</Typography>
                         {urlReportId && <LockOutlinedIcon sx={{ fontSize: 14, color: colors.textMuted }} />}
                       </Box>
-                      <FormControl fullWidth size="small">
-                        <InputLabel id="bo-select-label">Business Object</InputLabel>
-                        <Select
-                          labelId="bo-select-label"
-                          value={selectedBOId}
-                          label="Business Object"
-                          onChange={(e) => setSelectedBOId(e.target.value as string)}
-                          disabled={!!urlReportId && !!selectedBOId}
-                        >
-                          <MenuItem value=""><em>Select Business Object...</em></MenuItem>
-                          {businessObjects.map((bo: any) => (
-                            <MenuItem key={bo.id} value={bo.id}>
-                              {bo.displayName || bo.name} ({bo.key || bo.technicalName || bo.name})
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
+                      <SubjectPicker
+                        value={subject}
+                        businessObjects={businessObjects.map((bo: any) => ({
+                          id: bo.id,
+                          display_name: bo.displayName || bo.name,
+                          name: bo.name || bo.key,
+                        }))}
+                        onChange={handleSubjectChange}
+                        disabled={!!urlReportId && !!subject}
+                      />
                       {urlReportId && (
-                        <Typography variant="caption" sx={{ color: colors.textMuted, fontSize: '0.68rem' }}>
-                          Business Object cannot be changed after a report is created. Clone the report to use a different BO.
+                        <Typography variant="caption" sx={{ color: colors.textMuted, fontSize: '0.68rem', px: 3, pb: 1 }}>
+                          Subject cannot be changed after a report is created. Clone the report to use a different BO or cube.
+                        </Typography>
+                      )}
+                      {subjectMigrateError && (
+                        <Alert severity="warning" sx={{ mx: 3, mb: 2 }}>
+                          {subjectMigrateError}
+                        </Alert>
+                      )}
+                      {subject?.kind === 'cube' && selectedCube && (
+                        <Typography variant="caption" sx={{ color: colors.textMuted, fontSize: '0.68rem', px: 3, pb: 2 }}>
+                          Pinned cube {selectedCube.name} (contract v{String(subject.contractVersion)})
+                          {selectedCube.boId ? ` · driving BO ${selectedCube.boId}` : ''}
                         </Typography>
                       )}
 
-                      {selectedBOId && (
-                        <FormControl fullWidth size="small">
+                      {subject?.kind === 'business_object' && selectedBOId && (
+                        <FormControl fullWidth size="small" sx={{ px: 3, pb: 2.5 }}>
                           <InputLabel id="binding-select-label">Active Binding</InputLabel>
-                          <Select labelId="binding-select-label" value={selectedBindingId} label="Active Binding" onChange={(e) => setSelectedBindingId(e.target.value as string)}>
+                          <Select
+                            labelId="binding-select-label"
+                            value={selectedBindingId}
+                            label="Active Binding"
+                            onChange={(e) => {
+                              const bindingId = e.target.value as string;
+                              setSelectedBindingId(bindingId);
+                              setSubject({ kind: 'business_object', boId: selectedBOId, bindingId });
+                            }}
+                          >
                             {bindings.length > 0
-                              ? bindings.map((b: any) => <MenuItem key={b.id} value={b.id}>{b.name || `Binding: ${b.datasource_id || b.datasourceId}`} ({b.binding_type || b.bindingType || 'physical'})</MenuItem>)
+                              ? bindings.map((b: any) => (
+                                  <MenuItem key={b.id || b.bindingId} value={b.id || b.bindingId}>
+                                    {b.name || `Binding: ${b.datasource_id || b.datasourceId}`} ({b.binding_type || b.bindingType || 'physical'})
+                                  </MenuItem>
+                                ))
                               : <MenuItem value="" disabled>No bindings defined</MenuItem>}
                           </Select>
                         </FormControl>
@@ -1913,7 +2119,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                         </Stack>
                       ) : (
                         <Typography variant="body2" sx={{ color: colors.textMuted, mt: 1 }}>
-                          {selectedBOId ? 'No related objects defined.' : 'Select a Business Object above.'}
+                          {selectedBOId ? 'No related objects defined.' : 'Select a subject above.'}
                         </Typography>
                       )}
                     </Paper>

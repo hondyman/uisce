@@ -3,6 +3,7 @@ import { Box, Typography, Chip, CircularProgress, Alert, Breadcrumbs, Link, Butt
 import FilterAltOffIcon from '@mui/icons-material/FilterAltOff';
 import ReactECharts from 'echarts-for-react';
 import {
+  getSavedQuery,
   runSavedQuery,
   isSafeToRollUpAcrossRows,
   isAdditiveSafe,
@@ -24,6 +25,12 @@ import {
   type CrossFilterBus,
   type CrossFilterConfig,
 } from '../../features/query-builder/utils/crossFilterBus';
+import {
+  assertCubeSubjectMirror,
+  RouteBadge,
+  routeBadgeFromPreview,
+  type QuerySubject,
+} from '../../features/analytical-subject';
 
 export interface SavedQueryParamBinding {
   mode: 'static' | 'selection';
@@ -33,6 +40,11 @@ export interface SavedQueryParamBinding {
 export interface SavedQueryWidgetProps {
   widgetId?: string;
   savedQueryId: string;
+  /**
+   * Mirrored analytical subject from the page definition (PR1a).
+   * When kind=cube, compared to the saved query before execute — mismatch fail-closed.
+   */
+  subject?: QuerySubject | null;
   /** How to render the result - matches the placing widget's type. */
   widgetType: 'slicer' | 'chart' | 'gauge';
   paramBindings?: Record<string, SavedQueryParamBinding>;
@@ -52,6 +64,7 @@ export interface SavedQueryWidgetProps {
 const SavedQueryWidget: React.FC<SavedQueryWidgetProps> = ({
   widgetId,
   savedQueryId,
+  subject: mirroredSubject,
   widgetType,
   paramBindings,
   style,
@@ -71,6 +84,7 @@ const SavedQueryWidget: React.FC<SavedQueryWidgetProps> = ({
   const [loading, setLoading] = useState(true);
   const [drillSteps, setDrillSteps] = useState<DrillStep[]>([]);
   const [busVersion, setBusVersion] = useState(0);
+  const subjectKey = JSON.stringify(mirroredSubject ?? null);
 
   // Subscribe to bus changes so cross-filters re-evaluate
   useEffect(() => {
@@ -133,13 +147,35 @@ const SavedQueryWidget: React.FC<SavedQueryWidgetProps> = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    runSavedQuery(savedQueryId, resolvedParams, runtimeFilters)
+    setResult(null);
+
+    const run = async () => {
+      if (mirroredSubject?.kind === 'cube') {
+        const sq = await getSavedQuery(savedQueryId);
+        const pin = assertCubeSubjectMirror(mirroredSubject, {
+          subject: sq.subject ?? sq.state?.subject,
+          sourceKind: sq.sourceKind,
+          boId: sq.boId,
+        });
+        if (!pin.ok) {
+          throw new Error(`Cube subject pin mismatch: ${pin.reason}`);
+        }
+      }
+      return runSavedQuery(savedQueryId, resolvedParams, runtimeFilters);
+    };
+
+    run()
       .then((r) => { if (!cancelled) setResult(r); })
       .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to run saved query'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedQueryId, paramsKey, runtimeFiltersKey]);
+  }, [savedQueryId, paramsKey, runtimeFiltersKey, subjectKey]);
+
+  const routeBadge = useMemo(
+    () => routeBadgeFromPreview({ cubeHit: result?.cubeHit, cubeMiss: result?.cubeMiss }),
+    [result?.cubeHit, result?.cubeMiss],
+  );
 
   const handleChartClick = (params: any) => {
     if (!result || !params) return;
@@ -209,14 +245,36 @@ const SavedQueryWidget: React.FC<SavedQueryWidgetProps> = ({
   );
 
   if (loading && !result) return <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}><CircularProgress size={20} /></Box>;
-  if (error) return <Alert severity="error" sx={{ fontSize: '0.75rem' }}>{error}</Alert>;
-  if (!result || result.rows.length === 0) return <Typography variant="caption" color="text.secondary">No data</Typography>;
+  if (error) return <Alert severity="error" sx={{ fontSize: '0.75rem' }} data-testid="saved-query-pin-error">{error}</Alert>;
+
+  const badge = (mirroredSubject?.kind === 'cube' || routeBadge) ? (
+    <Box sx={{ px: 1, pt: 1 }} data-testid="saved-query-route-badge">
+      <RouteBadge
+        route={routeBadge ?? (mirroredSubject?.kind === 'cube' ? {
+          servedFrom: 'raw',
+          cubeId: mirroredSubject.cubeId,
+          contractVersion: typeof mirroredSubject.contractVersion === 'number' ? mirroredSubject.contractVersion : undefined,
+        } : null)}
+        emptyLabel={mirroredSubject?.kind === 'cube' ? 'raw · pinned cube (no hit yet)' : undefined}
+      />
+    </Box>
+  ) : null;
+
+  if (!result || result.rows.length === 0) {
+    return (
+      <Box>
+        {badge}
+        <Typography variant="caption" color="text.secondary" sx={{ px: 1 }}>No data</Typography>
+      </Box>
+    );
+  }
 
   if (widgetType === 'slicer') {
     const col = result.columns[0]?.name;
     const distinct = Array.from(new Set(result.rows.map((r) => String(r[col] ?? ''))));
     return (
       <Box>
+        {badge}
         {breadcrumbs}
         {crossFilterControls}
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, p: 0.5 }}>
@@ -290,6 +348,7 @@ const SavedQueryWidget: React.FC<SavedQueryWidgetProps> = ({
     if (!measureColDef || !isSafeToRollUpAcrossRows(result, measureColDef) || !isAdditiveSafe(measureColDef)) {
       return (
         <Box sx={{ textAlign: 'center', p: 1 }}>
+          {badge}
           <Typography variant="body2" color="text.secondary">
             Needs review
           </Typography>
@@ -307,6 +366,7 @@ const SavedQueryWidget: React.FC<SavedQueryWidgetProps> = ({
     const total = result.rows.reduce((sum, r) => sum + (Number(r[measureColDef.name]) || 0), 0);
     return (
       <Box sx={{ textAlign: 'center', p: 1 }}>
+        {badge}
         {breadcrumbs}
         {crossFilterControls}
         <Typography variant="h4" fontWeight={700} sx={{ color: style?.valueColor, fontSize: style?.valueFontSize ? `${style.valueFontSize}px` : undefined }}>
@@ -324,6 +384,7 @@ const SavedQueryWidget: React.FC<SavedQueryWidgetProps> = ({
   if (isOverCap || !isKnownChart || result.chartType === 'table') {
     return (
       <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {badge}
         {breadcrumbs}
         {crossFilterControls}
         {isOverCap && (
@@ -369,6 +430,7 @@ const SavedQueryWidget: React.FC<SavedQueryWidgetProps> = ({
   }
   return (
     <Box sx={{ height: 260, display: 'flex', flexDirection: 'column' }}>
+      {badge}
       {breadcrumbs}
       {crossFilterControls}
       <Box sx={{ flex: 1, minHeight: 0 }}>

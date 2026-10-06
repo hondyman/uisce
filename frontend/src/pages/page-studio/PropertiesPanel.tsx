@@ -17,6 +17,7 @@ import { ensureRelatedDataSource } from '../../studio-core/binding/ensureRelated
 import { PageStudioApi, PageStudioPage } from '../../api/pageStudio';
 import { listSavedQueries } from '../../features/query-builder/services/savedQueryApi';
 import type { SavedQuery } from '../../features/query-builder/types/queryDef';
+import { isCubeSubject, savedQueryBindProps } from '../../features/analytical-subject';
 import { apiClient } from '../../utils/apiClient';
 import { newPresentationRule, collectPresentationTargets } from './presentationEvents';
 import { RuleCard } from './PresentationEventsPanel';
@@ -95,11 +96,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, onSelectC
   const dimensionFields = tableFields.filter((t) => t.role === 'DIMENSION');
   const measureFields = tableFields.filter((t) => t.role === 'MEASURE' || t.role === 'CALCULATED');
 
-  // Saved queries for the bound BO - lets a Slicer/Chart/KPI widget source
-  // from a reusable, parameterized query (built and saved in the Query
-  // Studio / Alpha Query Builder) instead of always auto-picking its own
-  // first field. See PageComponentRenderer.tsx's savedQueryId branch for
-  // how this actually executes.
+  // Saved queries for the bound BO (plus any cube-backed queries) — lets a
+  // Slicer/Chart/KPI widget source from a reusable saved query. Binding
+  // always mirrors subject onto props (PR1b) for sync publish checks.
   const SAVED_QUERY_TYPES = ['Slicer', 'LineChart', 'KPIGroup'];
   const [savedQueriesForBO, setSavedQueriesForBO] = useState<SavedQuery[]>([]);
   useEffect(() => {
@@ -108,7 +107,23 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, onSelectC
       return;
     }
     let cancelled = false;
-    listSavedQueries(tableCfg.boId).then((qs) => { if (!cancelled) setSavedQueriesForBO(qs); }).catch(() => { if (!cancelled) setSavedQueriesForBO([]); });
+    const boId = tableCfg.boId;
+    listSavedQueries()
+      .then((qs) => {
+        if (cancelled) return;
+        setSavedQueriesForBO(
+          qs.filter(
+            (q) =>
+              q.boId === boId ||
+              q.sourceKind === 'cube' ||
+              isCubeSubject(q.subject) ||
+              isCubeSubject(q.state?.subject),
+          ),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setSavedQueriesForBO([]);
+      });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedComponent?.type, tableCfg?.boId]);
@@ -813,7 +828,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, onSelectC
               <Switch
                 size="small"
                 checked={!!component.props?.savedQueryId}
-                onChange={(e) => updateProps({ savedQueryId: e.target.checked ? (savedQueriesForBO[0]?.id || '') : undefined, savedQueryParams: undefined })}
+                onChange={(e) => {
+                  if (!e.target.checked) {
+                    updateProps(savedQueryBindProps(null));
+                    return;
+                  }
+                  updateProps(savedQueryBindProps(savedQueriesForBO[0]));
+                }}
                 disabled={savedQueriesForBO.length === 0}
               />
             }
@@ -824,9 +845,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, onSelectC
               <TextField
                 select size="small" fullWidth label="Saved query"
                 value={component.props.savedQueryId as string}
-                onChange={(e) => updateProps({ savedQueryId: e.target.value, savedQueryParams: undefined })}
+                onChange={(e) => {
+                  const sq = savedQueriesForBO.find((q) => q.id === e.target.value);
+                  updateProps(savedQueryBindProps(sq ?? { id: e.target.value }));
+                }}
               >
-                {savedQueriesForBO.map((sq) => <MenuItem key={sq.id} value={sq.id}>{sq.name}</MenuItem>)}
+                {savedQueriesForBO.map((sq) => (
+                  <MenuItem key={sq.id} value={sq.id}>
+                    {sq.sourceKind === 'cube' || isCubeSubject(sq.subject) || isCubeSubject(sq.state?.subject)
+                      ? `${sq.name} (cube)`
+                      : sq.name}
+                  </MenuItem>
+                ))}
               </TextField>
               {(() => {
                 const sq = savedQueriesForBO.find((q) => q.id === component.props?.savedQueryId);

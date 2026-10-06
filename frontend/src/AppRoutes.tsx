@@ -39,6 +39,7 @@ import { AIBusinessTermSuggestionsPage } from "./pages/catalog/AIBusinessTermSug
 import { BusinessTermDetailPage } from "./pages/catalog/BusinessTermDetailPage";
 import EntityPickerPage from "./features/custom-attributes/pages/EntityPickerPage";
 import WorkbenchPage from "./features/custom-attributes/pages/WorkbenchPage";
+
 import CustomComponentPage from "./pages/CustomComponentPage";
 import AdvancedRuleBuilderPage from "./pages/AdvancedRuleBuilderPage";
 import SystemValidationsPage from "./pages/SystemValidationsPage";
@@ -60,6 +61,7 @@ import TemporalOpsPage from "./features/admin/pages/TemporalOpsPage";
 import SeedingPage from "./features/admin/pages/SeedingPage";
 const QueryLibrary = React.lazy(() => import("./features/query-builder/pages/QueryLibrary"));
 const SavedQueryEditor = React.lazy(() => import("./features/query-builder/pages/SavedQueryEditor"));
+const BusinessObjectQueryBuilder = React.lazy(() => import("./features/query-builder/pages/BusinessObjectQueryBuilder"));
 const SqlStudioPage = React.lazy(() => import("./pages/analytical/SqlStudioPage"));
 const SemanticCatalogDetailPage = React.lazy(() => import("./pages/analytical/SemanticCatalogDetailPage"));
 const PipelinesPage = React.lazy(() => import("./pages/analytical/PipelinesPage"));
@@ -273,6 +275,7 @@ function ProtectedApp() {
             wizard on the list page, which ?new=1 opens. */}
         <Route path="business-objects/new" element={<Navigate to={`/${locale}/business-objects?new=1`} replace />} />
         <Route path="business-objects/:id" element={<ProtectedRoute><BusinessObjectDetailsPage /></ProtectedRoute>} />
+        {/* /build/cubes*, catalog + designer, are STUDIO_ROUTES (PR5/PR6). */}
         <Route path="semantic-health" element={<ProtectedRoute><SemanticHealthDashboard /></ProtectedRoute>} />
         <Route path="views" element={<ProtectedRoute><ViewsCatalogPage /></ProtectedRoute>} />
         <Route path="views/:id" element={<ProtectedRoute><ViewDetailsPage /></ProtectedRoute>} />
@@ -294,6 +297,7 @@ function ProtectedApp() {
         <Route path="core/calculated-fields" element={<ProtectedRoute><CalculatedFieldBuilderPage /></ProtectedRoute>} />
         <Route path="core/flow-builder" element={<ProtectedRoute><UisceBuilder /></ProtectedRoute>} />
         <Route path="core/validation" element={<ProtectedRoute><InvestmentValidationPage /></ProtectedRoute>} />
+        <Route path="query-builder" element={<ProtectedRoute><BusinessObjectQueryBuilder /></ProtectedRoute>} />
         <Route path="query-builder/editor/:id?" element={<ProtectedRoute><SavedQueryEditor /></ProtectedRoute>} />
         <Route path="sql-studio" element={<ProtectedRoute><SqlStudioPage /></ProtectedRoute>} />
         <Route path="semantic-catalog" element={<ProtectedRoute><SemanticCatalogDetailPage /></ProtectedRoute>} />

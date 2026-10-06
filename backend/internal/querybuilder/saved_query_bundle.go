@@ -38,6 +38,7 @@ type BundleQueryItem struct {
 	ID           string                  `json:"id"`
 	Name         string                  `json:"name"`
 	Description  string                  `json:"description,omitempty"`
+	SourceKind   string                  `json:"sourceKind,omitempty"`
 	BOID         string                  `json:"boId"`
 	BindingID    string                  `json:"bindingId,omitempty"`
 	RelatedBOIDs []string                `json:"relatedBoIds,omitempty"`
@@ -142,6 +143,7 @@ func buildBundleQueryItem(sq *SavedQuery) BundleQueryItem {
 		ID:           sq.ID,
 		Name:         sq.Name,
 		Description:  sq.Description,
+		SourceKind:   sq.SourceKind,
 		BOID:         sq.BOID,
 		BindingID:    sq.BindingID,
 		RelatedBOIDs: relBOs,
@@ -451,12 +453,20 @@ func (h *SavedQueryHandler) HandleImportSavedQueries(w http.ResponseWriter, r *h
 				tags = []string{}
 			}
 
+			sourceKind := item.SourceKind
+			if sourceKind == "" {
+				sourceKind = savedQuerySourceBusinessObject
+			}
+			var bindingID interface{}
+			if sourceKind != savedQuerySourceCube && item.BindingID != "" {
+				bindingID = item.BindingID
+			}
 			_, err = tx.ExecContext(r.Context(), `
 				INSERT INTO data_explorer.saved_query
 					(id, tenant_id, user_id, name, description, source_kind, source_id, binding_id, related_bo_ids, chart_type, query_state, tags, is_core, created_by)
-				VALUES ($1, $2, $3, $4, $5, 'business_object', $6, $7, $8, $9, $10, $11, $12, $3)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $3)
 			`, targetID, secCtx.TenantID, secCtx.UserID, finalName, item.Description,
-				item.BOID, item.BindingID, pq.Array(relBOs), item.ChartType,
+				sourceKind, item.BOID, bindingID, pq.Array(relBOs), item.ChartType,
 				stateBytes, pq.Array(tags), importAsCore)
 
 			if err != nil {

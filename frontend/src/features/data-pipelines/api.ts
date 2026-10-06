@@ -4,7 +4,8 @@ import apiClient from '../../utils/apiClient';
 
 export type NodeKind =
   | 'file_source' | 'bo_source' | 'validate' | 'rule_check' | 'map'
-  | 'bo_sink' | 'staging_sink' | 'file_sink' | 'iceberg_sink' | 'master';
+  | 'bo_sink' | 'staging_sink' | 'file_sink' | 'iceberg_sink' | 'master'
+  | 'cube_materialize';
 
 export type ColumnType = 'string' | 'int' | 'float' | 'decimal' | 'bool' | 'date' | 'timestamp';
 
@@ -24,6 +25,19 @@ export interface NodeConfigs {
   iceberg_sink: { namespace: string; table: string; partition_by?: string[]; format?: 'parquet' };
   /** Master the load the staging sink before it committed (runs after the load). */
   master: { entity: string };
+  /** Start CubeMaterializeWorkflow for a cube (CUBE-2.4 thin adapter). */
+  cube_materialize: {
+    cube_id: string;
+    grain?: string[];
+    force?: boolean;
+    federation_key_samples?: {
+      left_alias: string;
+      right_alias: string;
+      left_keys: number;
+      right_keys: number;
+      matched: number;
+    }[];
+  };
 }
 
 export interface SpecNode<K extends NodeKind = NodeKind> {
@@ -71,12 +85,16 @@ export interface RunRecord {
   start_time: string; end_time?: string; records_in: number; records_out: number; errors: number;
   errors_sample: { kind?: string; node_id?: string; row?: number; field?: string; reason?: string; run_error?: string }[];
   steps?: NodeStats[];
-  /** What the run produced beyond rows: the mastering runs its master steps started. */
-  outputs?: { mastering?: MasterResult[] };
+  /** What the run produced beyond rows: mastering runs and cube materialize starts. */
+  outputs?: { mastering?: MasterResult[]; cube_materialize?: CubeMaterializeResult[] };
 }
 export interface MasterResult {
   node_id: string; entity: string; load_run_id: string; run_id: string; status: string;
   records: number; published: number; held_for_review: number; exceptions: number; replayed?: boolean;
+}
+export interface CubeMaterializeResult {
+  node_id: string; cube_id: string; started: number; already_running: number; grains: number;
+  workflow_ids?: string[]; summary?: string;
 }
 export interface BOListItem { id: string; name: string; display_name: string; description?: string }
 export interface BOSchemaField { name: string; displayName?: string; type: string; required?: boolean; physicalColumn?: string }

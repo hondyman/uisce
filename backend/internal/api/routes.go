@@ -108,6 +108,9 @@ func (rs *Routes) RegisterAnalytics(r chi.Router, handler *AnalyticsHandler, qos
 		r.Use(CapacityMiddleware(qos, "analytics_requests"))
 		r.Get("/factors/exposure/{portfolioID}", handler.GetFactorExposure)
 		r.Get("/factors/attribution/{portfolioID}", handler.GetAttribution)
+		// CUBE-0.5: demo Aggregate Designer endpoints stay Gone if this path is wired.
+		r.Handle("/aggregates", http.HandlerFunc(HandleRetiredAggregateDemoGone))
+		r.Handle("/preview", http.HandlerFunc(HandleRetiredAggregateDemoGone))
 	})
 }
 

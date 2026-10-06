@@ -44,6 +44,21 @@ This project is indexed by GitNexus as **uisce** (396506 symbols, 583087 relatio
 
 ---
 
+# Page Designer axiom (unify Cubes + Page Designer)
+
+**One Page Designer only:** `/page-studio` (`pages/page-studio/*`, live `PageStudioHandler`). Design: `docs/design/2026-10-05-unify-cubes-page-designer.md`.
+
+## Never Do (product surfaces)
+
+- **NEVER revive** `frontend/src/components/pagestudio/` — orphan tree (tests-only; not mounted). Live designer is `/page-studio`. Archive plan: `docs/design/2026-10-05-pr8-pagestudio-archive-plan.md`.
+- **NEVER** add a full-page DomainComponent id `cubes.Designer` (or equivalent) that rehosts a coded cube designer shell / iframe.
+- **NEVER** dual-register `/build/cubes*` as both coded routes and `STUDIO_ROUTES` — catalog + designer hosts are studio blueprints (`cubes-catalog`, `cube-designer`) after PR5/PR6.
+- **NEVER** ship a second Query Builder or Report Builder for cubes — share `QuerySubject` / `SubjectPicker` (`features/analytical-subject`).
+
+Coded `CubesCatalogPage` / `CubeDesignerPage` shells were removed in PR8; keep `FederationEditor`, `cubeDefinitionApi`, `draft`, and `studio.tsx` ops/DC.
+
+---
+
 # STI Implementation — Single-Table Inheritance
 
 This project uses Single-Table Inheritance (STI) with `subtype_code TEXT NOT NULL` as the discriminator column.

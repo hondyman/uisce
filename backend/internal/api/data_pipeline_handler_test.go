@@ -84,6 +84,9 @@ func TestDataPipelines_PaletteReflectsConfiguration(t *testing.T) {
 	assert.True(t, byType["map"].Available)
 	assert.False(t, byType["staging_sink"].Available)
 	assert.Equal(t, "the staging database is not configured", byType["staging_sink"].Unavailable)
+	require.Contains(t, byType, "cube_materialize")
+	assert.False(t, byType["cube_materialize"].Available)
+	assert.Equal(t, "cube materialize is not configured", byType["cube_materialize"].Unavailable)
 }
 
 type stubCatalog struct{}

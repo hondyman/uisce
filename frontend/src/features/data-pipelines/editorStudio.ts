@@ -1,6 +1,7 @@
 import { registerOperations, type OperationDef } from '../../studio-core/operations/registry';
 import type { FormFieldSpec, RowFieldSpec } from '../../pages/page-studio/app/appModel';
 import apiClient from '../../utils/apiClient';
+import { listCubes } from '../cubes/cubeDefinitionApi';
 import { masteringApi } from '../mastering/api';
 import {
   type BOSchemaField, type Column, type ColumnType, type Condition, type FieldMap, type NodeConfigs, type NodeKind, type NodeType,
@@ -40,6 +41,7 @@ const LOOK: Record<NodeKind, { icon: string; category: 'source' | 'step' | 'dest
   file_sink: { icon: 'export', category: 'destination' },
   iceberg_sink: { icon: 'storage', category: 'destination' },
   master: { icon: 'hub', category: 'destination' },
+  cube_materialize: { icon: 'view_in_ar', category: 'destination' },
 };
 const lookOf = (k: string) => LOOK[k as NodeKind] ?? { icon: 'help', category: 'step' as const };
 export const categoryOf = (k: string) => lookOf(k).category;
@@ -56,6 +58,7 @@ export function defaultConfig(kind: NodeKind): NodeConfigs[NodeKind] {
     case 'file_sink': return { uri: '', format: 'csv' };
     case 'iceberg_sink': return { namespace: 'default', table: '', partition_by: [], format: 'parquet' };
     case 'master': return { entity: '' };
+    case 'cube_materialize': return { cube_id: '', force: false };
   }
 }
 
@@ -73,6 +76,11 @@ export function summarize(n: SpecNode): string {
     case 'file_sink': return c.uri ? `${c.uri} (${c.format})` : '';
     case 'iceberg_sink': return c.table ? `${c.namespace || 'default'}.${c.table} (iceberg)` : '';
     case 'master': return c.entity ? `master into ${c.entity} golden records` : '';
+    case 'cube_materialize': {
+      if (!c.cube_id) return '';
+      const grain = Array.isArray(c.grain) && c.grain.length ? ` · grain ${c.grain.join('+')}` : ' · all grains';
+      return `materialize ${c.cube_id}${grain}${c.force ? ' (force)' : ''}`;
+    }
   }
   return '';
 }
@@ -100,6 +108,7 @@ const stagingTables = () => cached('staging', MIN5, pipelinesApi.stagingTables);
 const files = () => cached('files', 30_000, () => pipelinesApi.files());
 const rulesOf = (k: string) => (k ? cached(`rules:${k}`, 60_000, () => platformApi.rules(k)) : Promise.resolve([]));
 const profiles = () => cached('profiles', MIN5, masteringApi.profiles);
+const cubesList = () => cached('cubes', MIN5, () => listCubes({ scope: 'all', limit: 200 }));
 
 /** Business-object schemas for every BO the spec reads or writes. */
 async function schemasFor(spec: Spec): Promise<Record<string, BOSchemaField[]>> {
@@ -429,6 +438,16 @@ async function stepFields(spec: Spec, n: SpecNode, info?: StepInfo): Promise<For
           helperText: list && list.length === 0 ? 'No mastered entities are set up' : undefined },
       ];
     }
+    case 'cube_materialize': {
+      const list = await cubesList().then((r) => r.cubes).catch(() => null);
+      return [...head,
+        note('hint', 'Start CubeMaterializeWorkflow for a cube (hot StarRocks + cold Iceberg dual-commit). Same path as Designer Deploy/Refresh and schedule kind cube_refresh. May stand alone with no upstream source, or follow a load.'),
+        { name: 'cube_id', kind: 'select', label: 'Cube', required: true,
+          options: (list ?? []).map((c) => ({ value: c.id, label: `${c.name} (v${c.contractVersion})` })),
+          helperText: list && list.length === 0 ? 'No cubes are available' : undefined },
+        { name: 'force', kind: 'switch', label: 'Force refresh', helperText: 'Skip content-hash noop and redeploy even when unchanged' },
+      ];
+    }
   }
   return head;
 }
@@ -756,7 +775,7 @@ const operations: OperationDef[] = [
   },
   {
     id: 'dataPipelines.runDetail', domain: 'dp', kind: 'query', label: 'One run in detail',
-    description: 'steps (in / out / rejected / time / error), mastering (one line per mastering run it started), errors (sample lines).',
+    description: 'steps (in / out / rejected / time / error), mastering, cube materialize starts, errors (sample lines).',
     params: [{ name: 'run', type: 'string', required: true }, { name: 'spec', type: 'object' }],
     run: async (p) => {
       const spec = specOf(p.spec);
@@ -772,6 +791,13 @@ const operations: OperationDef[] = [
           color: m.status === 'FAILED' ? 'error' : m.status === 'PARTIAL' ? 'warning' : 'success',
           text: `${m.records} records · ${m.published} published · ${m.held_for_review} held · ${m.exceptions} exceptions${m.replayed ? ' (already mastered)' : ''}`,
           link_label: `Open ${m.entity} mastering`, href: `/${lang}/data/mastering`,
+        })),
+        cube_materialize: (d.outputs?.cube_materialize ?? []).map((m) => ({
+          id: m.node_id + ':' + (m.workflow_ids?.[0] ?? m.cube_id),
+          label: `${label(m.node_id) || 'Cube materialize'}: ${m.cube_id}`,
+          color: m.started > 0 ? 'success' : m.already_running > 0 ? 'warning' : 'default',
+          text: m.summary || `started ${m.started} · already running ${m.already_running} · grains ${m.grains}`,
+          link_label: 'Open Cubes', href: `/${lang}/build/cubes/${encodeURIComponent(m.cube_id)}`,
         })),
         errors: d.errors_sample.slice(0, 100).map((e, i) => ({
           id: String(i), text: e.run_error ?? `Row ${e.row} · ${label(e.node_id)} · ${e.reason}`, tone: e.run_error || e.kind === 'error' ? 'error' : 'warning',

@@ -52,6 +52,7 @@ import type {
 } from '../../../features/query-builder/types/queryDef';
 import { previewQuery } from '../../../features/query-builder/services/queryBuilderApi';
 import { friendlyQueryError, savedQueryResultToSet, type SavedQueryRunShape } from '../../../features/query-execution';
+import { subjectFromSavedQuery } from '../../../features/analytical-subject';
 import { useTenant } from '../../../contexts/TenantContext';
 import type { PageQuery, ParamBinding, PageVariable } from './appModel';
 
@@ -277,11 +278,14 @@ export default function QueryBuilderModal({
         tags: [],
       });
 
-      // Pass saved query as PageQuery
+      // Pass saved query as PageQuery (mirror subject for cube pins — PR1b).
+      // operation: '' satisfies the required field; AppRuntime branches on kind.
       onSave({
         id: queryName,
         kind: 'savedQuery',
+        operation: '',
         savedQueryId: sq.id,
+        subject: subjectFromSavedQuery(sq),
         paramBindings: {},
       });
       onClose();
@@ -298,7 +302,7 @@ export default function QueryBuilderModal({
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
   const [loadingQueries, setLoadingQueries] = useState(false);
   const [selectedQueryId, setSelectedQueryId] = useState<string>(
-    initialQuery?.kind === 'savedQuery' ? initialQuery.savedQueryId : ''
+    initialQuery?.kind === 'savedQuery' ? (initialQuery.savedQueryId ?? '') : ''
   );
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -375,7 +379,9 @@ export default function QueryBuilderModal({
     onSave({
       id: editingQueryId || selectedQuery.name.replace(/[^\w]/g, '_').toLowerCase(),
       kind: 'savedQuery',
+      operation: '',
       savedQueryId: selectedQuery.id,
+      subject: subjectFromSavedQuery(selectedQuery),
       paramBindings,
     });
     onClose();

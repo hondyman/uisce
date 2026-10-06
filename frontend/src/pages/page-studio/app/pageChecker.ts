@@ -72,6 +72,12 @@ export function checkPage(page: Pick<CorePageDefinition, 'components' | 'layout'
 
   // --- queries: operations exist and get their required params ----------------------------------
   for (const q of app.queries ?? []) {
+    if (q.kind === 'savedQuery') {
+      if (!q.savedQueryId) {
+        add('error', 'missing-saved-query', `Query "${q.id}" is savedQuery-backed but has no savedQueryId.`, `query ${q.id}`);
+      }
+      continue;
+    }
     const op = getOperation(q.operation);
     if (!op) {
       add('error', 'unknown-operation', `Query "${q.id}" uses operation "${q.operation}", which is not registered.`, `query ${q.id}`);
@@ -156,6 +162,33 @@ export function checkPage(page: Pick<CorePageDefinition, 'components' | 'layout'
     }
     if (c.type === 'ActionButton' && !p.label && p.variant !== 'chip') {
       add('warning', 'no-label', 'This button has no label; screen readers and users cannot tell what it does.', `component ${id}`, id);
+    }
+    // Cube consume (PR1a): mirrored subject on props — publish requires numeric pin.
+    const subject = p.subject as { kind?: string; cubeId?: string; contractVersion?: unknown } | undefined;
+    if (subject && typeof subject === 'object' && subject.kind === 'cube') {
+      if (!subject.cubeId || typeof subject.cubeId !== 'string' || !subject.cubeId.trim()) {
+        add('error', 'cube-pin-missing-id', 'This cube tile has no cubeId on its mirrored subject.', `component ${id}`, id);
+      }
+      const ver = subject.contractVersion;
+      const numeric = typeof ver === 'number' && ver > 0;
+      if (!numeric) {
+        add(
+          'error',
+          'cube-pin-latest',
+          'Published pages must pin a numeric cube contractVersion (not "latest").',
+          `component ${id}`,
+          id,
+        );
+      }
+      if (!p.savedQueryId || typeof p.savedQueryId !== 'string') {
+        add(
+          'error',
+          'cube-pin-no-saved-query',
+          'This cube subject has no savedQueryId; v1 cube tiles run only via saved queries.',
+          `component ${id}`,
+          id,
+        );
+      }
     }
   }
 

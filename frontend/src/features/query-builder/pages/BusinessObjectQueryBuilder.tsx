@@ -77,7 +77,17 @@ import {
   previewQuery,
   executeQuery,
 } from '../services/queryBuilderApi';
-import { QueryEngineIndicator, EngineRouteState } from '../../../components/BusinessObjectManager/QueryEngineIndicator';
+import {
+  SubjectPicker,
+  RouteBadge,
+  routeBadgeFromPreview,
+  buildCubeFieldCatalog,
+  businessObjectSubject,
+  isCubeSubject,
+  type QuerySubject,
+} from '../../analytical-subject';
+import { getCube, listCubeMetrics } from '../../cubes/cubeDefinitionApi';
+import type { CubeDefinition } from '../../cubes/types';
 import {
   createEmptyQueryDef,
   makeAlias,
@@ -235,6 +245,10 @@ const BusinessObjectQueryBuilder: React.FC = () => {
     Record<string, { name: string; cardinalityHint: 'one' | 'many'; terms: SemanticTermView[] }>
   >({});
   const [relatedTermsLoading, setRelatedTermsLoading] = useState<string | null>(null);
+  // Shared QuerySubject (business_object | cube). Cube subjects pin cubeId +
+  // contractVersion and drive the field catalog from the cube contract.
+  const [subject, setSubject] = useState<QuerySubject | null>(null);
+  const [selectedCube, setSelectedCube] = useState<CubeDefinition | null>(null);
 
   // Query state
   const [queryDef, setQueryDef] = useState<QueryDef | null>(null);
@@ -355,14 +369,18 @@ const BusinessObjectQueryBuilder: React.FC = () => {
         }
       } catch (err) {
         devError('Failed to load bindings', err);
-        setError('Failed to load bindings for the selected Business Object');
+        // Cube subjects can still browse the contract catalog without a BO
+        // binding; only BO subjects treat missing bindings as a hard stop.
+        if (!isCubeSubject(subject)) {
+          setError('Failed to load bindings for the selected Business Object');
+        }
       } finally {
         setLoading(false);
       }
     };
 
     load();
-  }, [selectedBO, tenantId]);
+  }, [selectedBO, tenantId, subject?.kind]);
 
   // Fetch related business objects when the subject area changes, so the
   // user can see (and jump to) BOs reachable from this one via its driving
@@ -391,9 +409,78 @@ const BusinessObjectQueryBuilder: React.FC = () => {
     };
   }, [selectedBO, tenantId, datasource?.id]);
 
-  // Fetch terms when binding changes
+  // Fetch terms when binding / cube subject changes.
   useEffect(() => {
-    if (!selectedBO || !selectedBindingId || !tenantId) {
+    if (!tenantId) {
+      setTerms([]);
+      setQueryDef(null);
+      return;
+    }
+
+    // Cube subject can build a catalog from the contract alone; BO subject
+    // still requires a resolved binding.
+    if (isCubeSubject(subject) && selectedCube) {
+      let cancelled = false;
+      const loadCubeCatalog = async () => {
+        setLoading(true);
+        try {
+          let resolved: SemanticTermView[] = [];
+          let schema: BOSchema | null = null;
+          if (selectedBO && selectedBindingId) {
+            try {
+              const [t, s] = await Promise.all([
+                fetchBOTerms(selectedBO.id, selectedBindingId),
+                fetchBOSchema(selectedBO.id, tenantId),
+              ]);
+              resolved = t.filter((term) => term.bindingStatus === 'RESOLVED');
+              schema = s;
+            } catch (err) {
+              devError('BO terms unavailable for cube catalog; using contract only', err);
+            }
+          }
+          let metrics: Awaited<ReturnType<typeof listCubeMetrics>> = [];
+          try {
+            metrics = await listCubeMetrics(selectedCube.boId);
+          } catch (err) {
+            // boId on some cubes is a logical name rather than a UUID; metrics
+            // list is optional for browsing the contract dimensions.
+            devError('listCubeMetrics failed for cube catalog', err);
+          }
+          if (cancelled) return;
+          const catalog = buildCubeFieldCatalog(selectedCube, resolved, metrics);
+          setTerms(catalog);
+          setBoSchema(schema);
+          setSubject(subject);
+          if (selectedBO && selectedBindingId) {
+            setQueryDef(createEmptyQueryDef({
+              boId: selectedBO.id,
+              bindingId: selectedBindingId,
+              tenantId,
+              subject,
+            }));
+          } else {
+            setQueryDef(null);
+          }
+          setPreviewResult(null);
+          setExecuteResult(null);
+          setSavedQueryId(null);
+          setSavedQueryName('');
+          setSavedQueryDescription('');
+          setParameters([]);
+          setChartDimTerm('');
+          setChartMeasureTerm('');
+        } catch (err) {
+          devError('Failed to load cube field catalog', err);
+          setError(err instanceof Error ? err.message : 'Failed to load cube field catalog');
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      };
+      loadCubeCatalog();
+      return () => { cancelled = true; };
+    }
+
+    if (!selectedBO || !selectedBindingId) {
       setTerms([]);
       setQueryDef(null);
       return;
@@ -407,17 +494,19 @@ const BusinessObjectQueryBuilder: React.FC = () => {
           fetchBOTerms(selectedBO.id, selectedBindingId),
           fetchBOSchema(selectedBO.id, tenantId),
         ]);
-        setTerms(t.filter((term) => term.bindingStatus === 'RESOLVED'));
+        const resolved = t.filter((term) => term.bindingStatus === 'RESOLVED');
+        const nextSubject: QuerySubject = businessObjectSubject(selectedBO.id, selectedBindingId);
+        setTerms(resolved);
         setBoSchema(schema);
+        setSubject(nextSubject);
         setQueryDef(createEmptyQueryDef({
           boId: selectedBO.id,
           bindingId: selectedBindingId,
           tenantId,
+          subject: nextSubject,
         }));
         setPreviewResult(null);
         setExecuteResult(null);
-        // Switching BO/binding starts a fresh query, not an edit of
-        // whatever saved query happened to be loaded before.
         setSavedQueryId(null);
         setSavedQueryName('');
         setSavedQueryDescription('');
@@ -433,16 +522,74 @@ const BusinessObjectQueryBuilder: React.FC = () => {
     };
 
     load();
-  }, [selectedBO, selectedBindingId, tenantId]);
+  }, [selectedBO, selectedBindingId, tenantId, subject?.kind, selectedCube?.id]);
 
   // Saved queries for the selected BO - the "Cube Playground"-style list of
   // reusable queries a Page Studio widget (or an external REST caller) can
   // already point at, shown alongside the ad-hoc builder above it.
   const refreshSavedQueries = useCallback(() => {
     if (!selectedBO) { setSavedQueries([]); return; }
-    listSavedQueries(selectedBO.id).then(setSavedQueries).catch(() => setSavedQueries([]));
+    listSavedQueries({ boId: selectedBO.id }).then(setSavedQueries).catch(() => setSavedQueries([]));
   }, [selectedBO]);
   useEffect(() => { refreshSavedQueries(); }, [refreshSavedQueries]);
+
+  const handleSubjectChange = useCallback(async (
+    next: QuerySubject | null,
+    meta?: { cube?: CubeDefinition },
+  ) => {
+    setIncludedRelatedBOs({});
+    setPreviewResult(null);
+    setExecuteResult(null);
+    setSavedQueryId(null);
+    setQueryDef(null);
+    setTerms([]);
+
+    if (!next || next.kind === 'business_object') {
+      setSelectedCube(null);
+      setSubject(next);
+      if (next?.kind === 'business_object' && next.boId) {
+        const bo = businessObjects.find((b) => b.id === next.boId) || null;
+        setSelectedBO(bo);
+      } else {
+        setSelectedBO(null);
+        setSelectedBindingId('');
+      }
+      return;
+    }
+
+    // Cube subject: resolve cube → underlying BO + default binding, pin subject.
+    setSubject(next);
+    try {
+      setLoading(true);
+      setError(null);
+      const cube = meta?.cube || await getCube(next.cubeId);
+      setSelectedCube(cube);
+      const bo = businessObjects.find((b) => b.id === cube.boId) || {
+        id: cube.boId,
+        name: cube.boId,
+        display_name: cube.boId,
+      };
+      setSelectedBO(bo);
+      try {
+        const bs = await fetchBusinessObjectBindings(cube.boId);
+        setBindings(bs);
+        const preferred = bs.find((b) => b.isDefault)?.bindingId || bs[0]?.bindingId || '';
+        setSelectedBindingId(preferred);
+      } catch (bindErr) {
+        // Cubes authored with a logical boId (e.g. "account") may not resolve
+        // bindings as UUIDs; keep the cube subject and catalog anyway.
+        devError('Cube BO bindings unavailable', bindErr);
+        setBindings([]);
+        setSelectedBindingId('');
+      }
+    } catch (err) {
+      devError('Failed to load cube subject', err);
+      setError(err instanceof Error ? err.message : 'Failed to load cube');
+      setSelectedCube(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [businessObjects]);
 
   // Default the Chart tab's category/value pickers to the first
   // dimension/measure whenever the query shape changes and nothing (or a
@@ -483,11 +630,13 @@ const BusinessObjectQueryBuilder: React.FC = () => {
     debouncedPreview(queryDef);
   }, [queryDef, debouncedPreview]);
 
-  // Handlers
-  const handleSelectBO = (boId: string) => {
-    const bo = businessObjects.find((b) => b.id === boId) || null;
-    setSelectedBO(bo);
-  };
+  const routeBadge = useMemo(
+    () => routeBadgeFromPreview({
+      cubeHit: executeResult?.cubeHit || previewResult?.cubeHit,
+      cubeMiss: executeResult?.cubeMiss || previewResult?.cubeMiss,
+    }),
+    [executeResult?.cubeHit, executeResult?.cubeMiss, previewResult?.cubeHit, previewResult?.cubeMiss],
+  );
 
   const cardinalityHintFromString = (c: string): 'one' | 'many' => {
     const norm = (c || '').toUpperCase().replace(/\s/g, '');
@@ -927,34 +1076,15 @@ const BusinessObjectQueryBuilder: React.FC = () => {
           borderRadius: 0,
         }}
       >
-        {/* BO Selector */}
-        <Box sx={{ p: 2, borderBottom: '1px solid #eee' }}>
-          <Typography variant="overline" color="text.secondary">
-            Subject Area
-          </Typography>
-          <TextField
-            select
-            fullWidth
-            size="small"
-            value={selectedBO?.id || ''}
-            onChange={(e) => handleSelectBO(e.target.value)}
-            SelectProps={{ native: true }}
-            inputProps={{ 'aria-label': 'Subject Area' }}
-            sx={{ mt: 1 }}
-          >
-            <option value="" disabled>
-              Select Business Object...
-            </option>
-            {businessObjects.map((bo) => (
-              <option key={bo.id} value={bo.id}>
-                {bo.display_name}
-              </option>
-            ))}
-          </TextField>
-        </Box>
+        {/* Shared subject picker: Business Object | Cube (CUBE-1.6) */}
+        <SubjectPicker
+          value={subject}
+          businessObjects={businessObjects}
+          onChange={handleSubjectChange}
+        />
 
-        {/* Binding Selector */}
-        {selectedBO && bindings.length > 0 && (
+        {/* Binding Selector (BO path; cube subjects still need a binding for compile) */}
+        {selectedBO && bindings.length > 0 && subject?.kind !== 'cube' && (
           <Box sx={{ p: 2, borderBottom: '1px solid #eee' }}>
             <Typography variant="overline" color="text.secondary">
               Binding
@@ -975,6 +1105,13 @@ const BusinessObjectQueryBuilder: React.FC = () => {
                 </option>
               ))}
             </TextField>
+          </Box>
+        )}
+        {subject?.kind === 'cube' && selectedCube && (
+          <Box sx={{ px: 2, py: 1, borderBottom: '1px solid #eee' }}>
+            <Typography variant="caption" color="text.secondary">
+              Cube contract v{selectedCube.contractVersion} · BO {selectedCube.boId}
+            </Typography>
           </Box>
         )}
 
@@ -1015,8 +1152,8 @@ const BusinessObjectQueryBuilder: React.FC = () => {
           </Box>
         )}
 
-        {/* Related Business Objects */}
-        {selectedBO && relatedBOs.length > 0 && (
+        {/* Related Business Objects (BO subject only — cube catalog is single-contract) */}
+        {selectedBO && subject?.kind !== 'cube' && relatedBOs.length > 0 && (
           <Box sx={{ p: 2, borderBottom: '1px solid #eee' }}>
             <Typography variant="overline" color="text.secondary">
               Related Business Objects
@@ -1202,8 +1339,14 @@ const BusinessObjectQueryBuilder: React.FC = () => {
             </Typography>
             <AutoFormRenderer
               schema={boSchema}
-              onAddField={handleAddSchemaField}
-              onAddFilter={handleAddSchemaFilter}
+              onAddField={(fieldId) => {
+                const field = boSchema.fields?.find((f) => f.id === fieldId);
+                if (field) handleAddSchemaField(field);
+              }}
+              onAddFilter={(fieldId) => {
+                const field = boSchema.fields?.find((f) => f.id === fieldId);
+                if (field) handleAddSchemaFilter(field);
+              }}
               isInQuery={isSchemaFieldInQuery}
             />
           </Box>
@@ -1530,14 +1673,9 @@ const BusinessObjectQueryBuilder: React.FC = () => {
           </Box>
 
           <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-            <QueryEngineIndicator
-              state={
-                queryDef?.query?.filters?.some(f => String(f.value).includes('2025') || String(f.value).includes('2024'))
-                  ? 'HYBRID_SEAM'
-                  : 'OLAP'
-              }
-              estimatedLatencyMs={executeResult ? 240 : 180}
-              estimatedRows={executeResult ? executeResult.rows.length : 847}
+            <RouteBadge
+              route={routeBadge}
+              emptyLabel={subject?.kind === 'cube' ? 'raw · pinned cube (no hit yet)' : 'raw · base BO path'}
             />
           </Box>
 

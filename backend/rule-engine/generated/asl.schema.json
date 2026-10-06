@@ -12548,16 +12548,43 @@
     "PreAggProperties": {
       "description": "PreAggregation node properties (stored in catalog_node.properties)",
       "properties": {
+        "AttemptID": {
+          "description": "Cube materialization attempt metadata (CUBE-1.1). Reuses the\npre_aggregation catalog node type; CubeRouter resolves by node_name.",
+          "type": "string"
+        },
         "AvgLatencyReductionMs": {
           "type": "number"
         },
         "BOName": {
           "type": "string"
         },
+        "ColdCommittedAt": {},
+        "ContractVersion": {
+          "type": "number"
+        },
+        "CubeContentHash": {
+          "type": "string"
+        },
+        "CubeID": {
+          "type": "string"
+        },
         "Dialect": {
           "type": "string"
         },
+        "DualCommitWatermark": {
+          "description": "Dual-commit watermark (CUBE-1.3). DualCommitWatermark is set only when\nboth StarRocks hot and Iceberg cold succeed for the same attempt_id.\nHotCommittedAt / ColdCommittedAt record per-tier completion; a missing\nDualCommitWatermark means the grain must not be treated as dual-committed\neven if LifecycleStatus is active from a legacy single-tier path."
+        },
         "GovernanceStatus": {
+          "type": "string"
+        },
+        "Grain": {
+          "$ref": "#/definitions/string[]"
+        },
+        "GrainHash": {
+          "type": "string"
+        },
+        "HotCommittedAt": {},
+        "IcebergTable": {
           "type": "string"
         },
         "LastMaterializedAt": {},
@@ -12612,6 +12639,16 @@
         "NextScheduledRefresh",
         "RowCount",
         "SizeBytes",
+        "AttemptID",
+        "CubeID",
+        "ContractVersion",
+        "Grain",
+        "GrainHash",
+        "CubeContentHash",
+        "DualCommitWatermark",
+        "HotCommittedAt",
+        "ColdCommittedAt",
+        "IcebergTable",
         "UsageCount",
         "AvgLatencyReductionMs"
       ],

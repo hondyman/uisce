@@ -9,9 +9,10 @@ import (
 
 func sampleCube() CubeDefinition {
 	return CubeDefinition{
-		Name:      "sales_cube",
-		BOID:      "bo_sales",
-		MetricIDs: []string{"m_revenue", "m_units"},
+		Name:            "sales_cube",
+		BOID:            "bo_sales",
+		ContractVersion: 1,
+		MetricIDs:       []string{"m_revenue", "m_units"},
 		Dimensions: []CubeDimension{
 			{TermNodeID: "country"},
 			{TermNodeID: "product", DrillPath: []string{"product_category", "product"}},
@@ -25,9 +26,34 @@ func sampleCube() CubeDefinition {
 			Strategy:               "starrocks_mv",
 			RefreshStrategy:        "interval",
 			RefreshIntervalMinutes: 15,
+			HotEngine:              "starrocks",
+			ColdEngine:             "iceberg",
 			StalePolicy:            "serve_with_flag",
 		},
 	}
+}
+
+func sampleFederatedCube() CubeDefinition {
+	c := sampleCube()
+	c.Name = "position_valuation"
+	c.BOID = "oms.position"
+	c.Federation = CubeFederation{
+		Sources: []CubeFederationSource{
+			{BOID: "oms.position", Alias: "pos", BindingHint: "orm"},
+			{BOID: "oms.account", Alias: "acct", BindingHint: "orm"},
+		},
+		Joins: []CubeFederationJoin{
+			{
+				LeftAlias:    "pos",
+				RightAlias:   "acct",
+				KeyKind:      "common",
+				LeftTermIDs:  []string{"account_number"},
+				RightTermIDs: []string{"account_number"},
+			},
+		},
+		OrphanRateMaxPercent: 1.0,
+	}
+	return c
 }
 
 // TestComputeCubeContentHash_Stable verifies the hash is deterministic and
@@ -196,7 +222,7 @@ func TestValidateCubeMetricReferences(t *testing.T) {
 			"m_revenue": known["m_revenue"],
 			"m_units":   known["m_units"],
 			"m_margin": {
-				ID:   "m_margin",
+				ID: "m_margin",
 				Expression: MetricExpression{
 					Kind:          "derived",
 					BaseMetricIDs: []string{"m_revenue", "m_units"},
@@ -215,7 +241,7 @@ func TestValidateCubeMetricReferences(t *testing.T) {
 	t.Run("a ratio with explicit operands is accepted", func(t *testing.T) {
 		explicit := map[string]MetricDefinition{
 			"m_margin": {
-				ID:   "m_margin",
+				ID: "m_margin",
 				Expression: MetricExpression{
 					Kind:          "derived",
 					BaseMetricIDs: []string{"m_revenue", "m_units"},
@@ -331,4 +357,151 @@ func TestCubeContentHashChangesWithContent(t *testing.T) {
 	changed := sampleCube()
 	changed.Grains = append(changed.Grains, []string{"customer", "order_date"})
 	assert.NotEqual(t, base, ComputeCubeContentHash(changed, nil))
+}
+
+func TestComputeCubeContentHash_FederationChangesHash(t *testing.T) {
+	base := sampleCube()
+	baseHash := ComputeCubeContentHash(base, nil)
+	fed := sampleFederatedCube()
+	fed.Name = base.Name
+	fed.BOID = base.BOID
+	fed.MetricIDs = append([]string{}, base.MetricIDs...)
+	fed.Dimensions = append([]CubeDimension{}, base.Dimensions...)
+	fed.Grains = base.Grains
+	fed.Materialization = base.Materialization
+	assert.NotEqual(t, baseHash, ComputeCubeContentHash(fed, nil),
+		"federation is part of the semantic surface")
+}
+
+func TestComputeCubeContentHash_FederationSourceOrderIrrelevant(t *testing.T) {
+	a := sampleFederatedCube()
+	b := sampleFederatedCube()
+	b.Federation.Sources = []CubeFederationSource{
+		a.Federation.Sources[1],
+		a.Federation.Sources[0],
+	}
+	assert.Equal(t, ComputeCubeContentHash(a, nil), ComputeCubeContentHash(b, nil))
+}
+
+func TestValidateCubeFederation(t *testing.T) {
+	t.Run("empty is ok", func(t *testing.T) {
+		require.NoError(t, ValidateCubeFederation(CubeFederation{}))
+	})
+
+	t.Run("valid common join", func(t *testing.T) {
+		require.NoError(t, ValidateCubeFederation(sampleFederatedCube().Federation))
+	})
+
+	t.Run("transform requires transformTermId", func(t *testing.T) {
+		f := sampleFederatedCube().Federation
+		f.Joins[0].KeyKind = "transform"
+		f.Joins[0].TransformTermID = ""
+		require.ErrorIs(t, ValidateCubeFederation(f), ErrCubeFederationInvalid)
+	})
+
+	t.Run("common rejects transformTermId", func(t *testing.T) {
+		f := sampleFederatedCube().Federation
+		f.Joins[0].TransformTermID = "norm_isin"
+		require.ErrorIs(t, ValidateCubeFederation(f), ErrCubeFederationInvalid)
+	})
+
+	t.Run("composite key length mismatch", func(t *testing.T) {
+		f := sampleFederatedCube().Federation
+		f.Joins[0].LeftTermIDs = []string{"a", "b"}
+		f.Joins[0].RightTermIDs = []string{"a"}
+		require.ErrorIs(t, ValidateCubeFederation(f), ErrCubeFederationInvalid)
+	})
+
+	t.Run("unknown alias", func(t *testing.T) {
+		f := sampleFederatedCube().Federation
+		f.Joins[0].RightAlias = "missing"
+		require.ErrorIs(t, ValidateCubeFederation(f), ErrCubeFederationInvalid)
+	})
+
+	t.Run("joins without two sources", func(t *testing.T) {
+		f := CubeFederation{
+			Sources: []CubeFederationSource{{BOID: "oms.position", Alias: "pos"}},
+			Joins: []CubeFederationJoin{{
+				LeftAlias: "pos", RightAlias: "acct", KeyKind: "common",
+				LeftTermIDs: []string{"x"}, RightTermIDs: []string{"x"},
+			}},
+		}
+		require.ErrorIs(t, ValidateCubeFederation(f), ErrCubeFederationInvalid)
+	})
+}
+
+func TestValidateCubeStructural_FederationAndVersion(t *testing.T) {
+	t.Run("negative contract version rejected", func(t *testing.T) {
+		c := sampleCube()
+		c.ContractVersion = -1
+		require.ErrorIs(t, ValidateCubeStructural(c), ErrCubeContractVersionInvalid)
+	})
+
+	t.Run("zero contract version allowed (defaults at persist)", func(t *testing.T) {
+		c := sampleCube()
+		c.ContractVersion = 0
+		require.NoError(t, ValidateCubeStructural(c))
+	})
+
+	t.Run("invalid federation rejected via structural", func(t *testing.T) {
+		c := sampleFederatedCube()
+		c.Federation.Joins[0].LeftTermIDs = nil
+		require.ErrorIs(t, ValidateCubeStructural(c), ErrCubeFederationInvalid)
+	})
+}
+
+func TestDetectCubeContractBreaking(t *testing.T) {
+	pub := sampleCube()
+
+	t.Run("additive metric is not breaking", func(t *testing.T) {
+		draft := sampleCube()
+		draft.MetricIDs = append(draft.MetricIDs, "m_margin")
+		assert.Empty(t, DetectCubeContractBreaking(pub, draft))
+	})
+
+	t.Run("additive dimension already covered by grains is not breaking", func(t *testing.T) {
+		draft := sampleCube()
+		// order_date is already in grains; exposing it on the axis surface is additive.
+		draft.Dimensions = append(draft.Dimensions, CubeDimension{TermNodeID: "order_date"})
+		assert.Empty(t, DetectCubeContractBreaking(pub, draft))
+	})
+
+	t.Run("grain set change is breaking", func(t *testing.T) {
+		draft := sampleCube()
+		draft.Dimensions = append(draft.Dimensions, CubeDimension{TermNodeID: "channel"})
+		draft.Grains[0] = append(draft.Grains[0], "channel")
+		assert.Contains(t, DetectCubeContractBreaking(pub, draft), CubeBreakGrainChange)
+	})
+
+	t.Run("metric removal is breaking", func(t *testing.T) {
+		draft := sampleCube()
+		draft.MetricIDs = []string{"m_revenue"}
+		assert.Contains(t, DetectCubeContractBreaking(pub, draft), CubeBreakMetricRemoved)
+	})
+
+	t.Run("dimension removal is breaking", func(t *testing.T) {
+		draft := sampleCube()
+		draft.Dimensions = []CubeDimension{{TermNodeID: "country"}}
+		assert.Contains(t, DetectCubeContractBreaking(pub, draft), CubeBreakDimensionRemoved)
+	})
+
+	t.Run("federation change is breaking", func(t *testing.T) {
+		draft := sampleFederatedCube()
+		draft.Name = pub.Name
+		draft.BOID = pub.BOID
+		draft.MetricIDs = pub.MetricIDs
+		draft.Dimensions = pub.Dimensions
+		draft.Grains = pub.Grains
+		draft.Materialization = pub.Materialization
+		assert.Contains(t, DetectCubeContractBreaking(pub, draft), CubeBreakFederationChanged)
+	})
+
+	t.Run("identical is not breaking", func(t *testing.T) {
+		assert.Empty(t, DetectCubeContractBreaking(pub, sampleCube()))
+	})
+}
+
+func TestEffectiveOrphanRateMax(t *testing.T) {
+	assert.Equal(t, DefaultFederationOrphanRatePercent, EffectiveOrphanRateMax(CubeFederation{}))
+	assert.Equal(t, 2.5, EffectiveOrphanRateMax(CubeFederation{OrphanRateMaxPercent: 2.5}))
 }

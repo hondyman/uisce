@@ -1,10 +1,92 @@
 package boresolver
 
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"strings"
+)
+
 // QueryDef is the frontend Query Builder contract. It is the only input the
 // UI ever sends; SQL construction happens exclusively in the backend.
 type QueryDef struct {
 	Context QueryContext `json:"context"`
 	Query   QueryRequest `json:"query"`
+}
+
+// QuerySubjectKind discriminates the analytical subject for Query / Report builders.
+const (
+	QuerySubjectBusinessObject = "business_object"
+	QuerySubjectCube           = "cube"
+)
+
+// ContractVersionPin is a cube contract pin: a positive integer, or "latest"
+// (wire) which unmarshals to Latest=true / Version=0.
+type ContractVersionPin struct {
+	Latest  bool
+	Version int
+}
+
+// UnmarshalJSON accepts a JSON number or the string "latest".
+func (p *ContractVersionPin) UnmarshalJSON(b []byte) error {
+	b = bytes.TrimSpace(b)
+	if len(b) == 0 || bytes.Equal(b, []byte("null")) {
+		*p = ContractVersionPin{Latest: true}
+		return nil
+	}
+	if bytes.Equal(b, []byte(`"latest"`)) {
+		*p = ContractVersionPin{Latest: true}
+		return nil
+	}
+	var n int
+	if err := json.Unmarshal(b, &n); err != nil {
+		return fmt.Errorf("contractVersion: want number or \"latest\": %w", err)
+	}
+	if n <= 0 {
+		*p = ContractVersionPin{Latest: true}
+		return nil
+	}
+	*p = ContractVersionPin{Version: n}
+	return nil
+}
+
+// MarshalJSON emits "latest" or a positive integer.
+func (p ContractVersionPin) MarshalJSON() ([]byte, error) {
+	if p.Latest || p.Version <= 0 {
+		return []byte(`"latest"`), nil
+	}
+	return json.Marshal(p.Version)
+}
+
+// QuerySubject is the shared analytical subject for Query Builder and Report
+// Builder (CUBE-1.6). Absent Subject on QueryContext means a legacy BO-only
+// row: synthesize business_object from boId/bindingId.
+type QuerySubject struct {
+	Kind string `json:"kind"`
+
+	// business_object fields (also copied onto QueryContext.BOID/BindingID for
+	// the compile path so existing generators keep working).
+	BOID         string   `json:"boId,omitempty"`
+	BindingID    string   `json:"bindingId,omitempty"`
+	RelatedBOIDs []string `json:"relatedBoIds,omitempty"`
+
+	// cube fields — pin cubeId + contractVersion (fail closed when unresolved).
+	CubeID          string             `json:"cubeId,omitempty"`
+	ContractVersion ContractVersionPin `json:"contractVersion,omitempty"`
+}
+
+// NormalizedKind returns the canonical subject kind, defaulting empty to
+// business_object for backward compatibility.
+func (s *QuerySubject) NormalizedKind() string {
+	if s == nil {
+		return QuerySubjectBusinessObject
+	}
+	switch strings.ToLower(strings.TrimSpace(s.Kind)) {
+	case QuerySubjectCube:
+		return QuerySubjectCube
+	default:
+		return QuerySubjectBusinessObject
+	}
 }
 
 // QueryContext carries the security + binding scope for the query.
@@ -18,6 +100,10 @@ type QueryContext struct {
 	// the server resolves and validates the join, the client never supplies
 	// raw join SQL.
 	RelatedBOIDs []string `json:"relatedBoIds,omitempty"`
+	// Subject is the shared QuerySubject (business_object | cube). Optional for
+	// backward compatibility: when omitted, callers treat the query as a BO
+	// subject synthesized from BOID/BindingID/RelatedBOIDs.
+	Subject *QuerySubject `json:"subject,omitempty"`
 }
 
 // QueryRequest is the user-intent portion of the QueryDef.
@@ -84,6 +170,11 @@ type CubeHitInfo struct {
 	CubeName        string   `json:"cubeName"`
 	Materialization string   `json:"materialization"`
 	Grain           []string `json:"grain"`
+	// ServedFrom is the dual-tier route taken: "hot" (StarRocks MV), "cold"
+	// (Iceberg), or empty when unset. Preview/Execute badges read this field.
+	ServedFrom string `json:"servedFrom,omitempty"`
+	// ContractVersion is the cube contract version that served the hit.
+	ContractVersion int `json:"contractVersion,omitempty"`
 	// Stale is true when the materialization is behind its source. The data is
 	// still served, flagged, unless the cube's stalePolicy forces a fallback.
 	Stale bool `json:"stale"`

@@ -48,25 +48,98 @@ func (s *PreAggLifecycleService) updateProps(ctx context.Context, id uuid.UUID, 
 }
 
 func (s *PreAggLifecycleService) MarkMaterializing(ctx context.Context, id uuid.UUID) error {
+	return s.MarkMaterializingAttempt(ctx, id, "")
+}
+
+// MarkMaterializingAttempt starts a deploy/refresh attempt. attemptID tags the
+// in-flight write for dual-commit reconcile (CUBE-1.1 / 1.3). Empty attemptID
+// keeps legacy callers working.
+func (s *PreAggLifecycleService) MarkMaterializingAttempt(ctx context.Context, id uuid.UUID, attemptID string) error {
 	return s.updateProps(ctx, id, func(p *models.PreAggProperties) {
 		p.LifecycleStatus = models.LifecycleMaterializing
 		now := time.Now().UTC()
 		p.LastMaterializedAt = &now
 		p.LastRefreshStatus = ""
 		p.LastRefreshError = ""
+		if strings.TrimSpace(attemptID) != "" {
+			p.AttemptID = strings.TrimSpace(attemptID)
+		}
 	})
 }
 
 func (s *PreAggLifecycleService) MarkActive(ctx context.Context, id uuid.UUID, stats *models.PreAggStats) error {
+	return s.MarkActiveAttempt(ctx, id, "", stats)
+}
+
+// MarkActiveAttempt completes a successful refresh. LastRefreshedAt is the
+// freshness clock (refresh completion time), compared at query time by
+// CubeRouter / EvaluateMVWatermarkStaleness.
+func (s *PreAggLifecycleService) MarkActiveAttempt(ctx context.Context, id uuid.UUID, attemptID string, stats *models.PreAggStats) error {
 	return s.updateProps(ctx, id, func(p *models.PreAggProperties) {
 		p.LifecycleStatus = models.LifecycleActive
 		now := time.Now().UTC()
 		p.LastRefreshedAt = &now
 		p.LastRefreshStatus = "success"
 		p.LastRefreshError = ""
+		if strings.TrimSpace(attemptID) != "" {
+			p.AttemptID = strings.TrimSpace(attemptID)
+		}
 		if stats != nil {
 			p.RowCount = &stats.RowCount
 			p.SizeBytes = &stats.SizeBytes
+		}
+	})
+}
+
+// DualCommitMeta is stamped only after both hot (StarRocks) and cold (Iceberg)
+// succeed for the same attempt (CUBE-1.3).
+type DualCommitMeta struct {
+	IcebergTable    string
+	HotCommittedAt  time.Time
+	ColdCommittedAt time.Time
+}
+
+// MarkActiveDualCommitAttempt marks Active, advances LastRefreshedAt, and sets
+// DualCommitWatermark. Call only after both tiers succeeded; a hot-only success
+// must not reach this path.
+func (s *PreAggLifecycleService) MarkActiveDualCommitAttempt(
+	ctx context.Context,
+	id uuid.UUID,
+	attemptID string,
+	stats *models.PreAggStats,
+	meta DualCommitMeta,
+) error {
+	return s.updateProps(ctx, id, func(p *models.PreAggProperties) {
+		p.LifecycleStatus = models.LifecycleActive
+		now := time.Now().UTC()
+		p.LastRefreshedAt = &now
+		p.LastRefreshStatus = "success"
+		p.LastRefreshError = ""
+		if strings.TrimSpace(attemptID) != "" {
+			p.AttemptID = strings.TrimSpace(attemptID)
+		}
+		if stats != nil {
+			p.RowCount = &stats.RowCount
+			p.SizeBytes = &stats.SizeBytes
+		}
+		hotAt := meta.HotCommittedAt.UTC()
+		coldAt := meta.ColdCommittedAt.UTC()
+		if hotAt.IsZero() {
+			hotAt = now
+		}
+		if coldAt.IsZero() {
+			coldAt = now
+		}
+		p.HotCommittedAt = &hotAt
+		p.ColdCommittedAt = &coldAt
+		// Watermark is the later of the two tier commits (both must have finished).
+		wm := coldAt
+		if hotAt.After(coldAt) {
+			wm = hotAt
+		}
+		p.DualCommitWatermark = &wm
+		if t := strings.TrimSpace(meta.IcebergTable); t != "" {
+			p.IcebergTable = t
 		}
 	})
 }
@@ -86,9 +159,17 @@ func (s *PreAggLifecycleService) MarkStale(ctx context.Context, id uuid.UUID, re
 }
 
 func (s *PreAggLifecycleService) MarkFailed(ctx context.Context, id uuid.UUID, err error) error {
+	return s.MarkFailedAttempt(ctx, id, "", err)
+}
+
+// MarkFailedAttempt records a failed deploy/refresh for the given attempt.
+func (s *PreAggLifecycleService) MarkFailedAttempt(ctx context.Context, id uuid.UUID, attemptID string, err error) error {
 	return s.updateProps(ctx, id, func(p *models.PreAggProperties) {
 		p.LifecycleStatus = models.LifecycleFailed
 		p.LastRefreshStatus = "failed"
+		if strings.TrimSpace(attemptID) != "" {
+			p.AttemptID = strings.TrimSpace(attemptID)
+		}
 		if err != nil {
 			p.LastRefreshError = err.Error()
 		}

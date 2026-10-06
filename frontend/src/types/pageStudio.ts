@@ -1,17 +1,11 @@
 import type { ConditionNode, PageAppModel } from '../pages/page-studio/app/appModel';
 
 /**
- * ZERO-PAGE WINDOW: no page definitions persist durably today. The frontend
- * (src/api/pageStudio.ts) calls `/api/page-studio`, but that route has no
- * backend implementation anywhere in the Go codebase (checked repo-wide) —
- * the same unwired-API pattern found in BO Studio's governance screens.
- * There is no serialized-format compatibility to preserve, but also no
- * existing page definitions this schema needs to be compatible *with* —
- * these types are defining the format for the first real pages ever saved.
- * That's the cheapest this design gets: once pages persist, decisions like
- * the closed breakpoint enum and whole-overlay-replace below become
- * migrations instead of type changes. Treat that as a closing window, not
- * a permanent freedom.
+ * Page definitions persist via `/api/page-studio` (`PageStudioHandler` /
+ * `internal/pagestudio`). The older "ZERO-PAGE WINDOW" note (no backend) is
+ * obsolete — treat schema changes as migrations once pages are saved in an
+ * environment. Cube-backed analytical widgets mirror `subject` on component
+ * props alongside `savedQueryId` so publish checks stay sync (see pageChecker).
  */
 export interface ComponentDefinition {
   id: string;
@@ -171,9 +165,16 @@ export interface PageGridLayout {
   responsive?: Partial<Record<ResponsiveBreakpoint, GridLayoutItem[]>>;
 }
 
+/** Mirrored analytical subject on page widgets (CUBE consume / PR1a). */
+export type PageWidgetSubject =
+  | { kind: 'business_object'; boId: string; bindingId: string; relatedBoIds?: string[] }
+  | { kind: 'cube'; cubeId: string; contractVersion: number | 'latest' };
+
 export interface KpiTileConfig {
   metricId?: string; // Phase 7.3: Metric definition ID (takes precedence over measureAlias)
   savedQueryId?: string;
+  /** Mirrored pin for cube saved queries — required for publish when kind=cube. */
+  subject?: PageWidgetSubject;
   queryRef?: string;
   measureAlias: string;
   trendDimensionAlias?: string;
@@ -208,6 +209,8 @@ export interface KpiTileConfig {
 
 export interface SlicerTileConfig {
   savedQueryId?: string;
+  /** Mirrored pin for cube saved queries — required for publish when kind=cube. */
+  subject?: PageWidgetSubject;
   queryRef?: string;
   dimensionAlias: string;
   termNodeId: string;
