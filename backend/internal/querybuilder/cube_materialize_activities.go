@@ -10,14 +10,16 @@ import (
 
 // Activity names for CubeMaterializeWorkflow (stable for registration + tests).
 const (
-	ActCubeValidateAndPlan     = "CubeValidateAndPlan"
-	ActCubeBeginAttempt        = "CubeBeginAttempt"
-	ActCubeApplyHot            = "CubeApplyHot"
-	ActCubeApplyCold           = "CubeApplyCold"
-	ActCubeCompensateHot       = "CubeCompensateHot"
-	ActCubeCompleteDualCommit  = "CubeCompleteDualCommit"
-	ActCubeCompleteAttempt     = "CubeCompleteAttempt" // legacy hot-only; prefer dual-commit
-	ActCubeFailAttempt         = "CubeFailAttempt"
+	ActCubeValidateAndPlan    = "CubeValidateAndPlan"
+	ActCubeBeginAttempt       = "CubeBeginAttempt"
+	ActCubeExtractSources     = "CubeExtractSources"
+	ActCubeDropStaging        = "CubeDropStaging"
+	ActCubeApplyHot           = "CubeApplyHot"
+	ActCubeApplyCold          = "CubeApplyCold"
+	ActCubeCompensateHot      = "CubeCompensateHot"
+	ActCubeCompleteDualCommit = "CubeCompleteDualCommit"
+	ActCubeCompleteAttempt    = "CubeCompleteAttempt" // legacy hot-only; prefer dual-commit
+	ActCubeFailAttempt        = "CubeFailAttempt"
 )
 
 // CubeMaterializeActivities wraps CubeMaterializer for Temporal.
@@ -48,6 +50,25 @@ func (a *CubeMaterializeActivities) CubeBeginAttempt(ctx context.Context, plan *
 		return fmt.Errorf("cube materialize activities: not configured")
 	}
 	return a.Materializer.BeginAttempt(ctx, plan)
+}
+
+// CubeExtractSources CTAS federation sources into attempt-scoped StarRocks staging (Track C).
+func (a *CubeMaterializeActivities) CubeExtractSources(ctx context.Context, plan *CubeMaterializePlan) (*CubeExtractResult, error) {
+	if a == nil || a.Materializer == nil {
+		return nil, fmt.Errorf("cube materialize activities: not configured")
+	}
+	return a.Materializer.ExtractSources(ctx, plan)
+}
+
+// CubeDropStaging drops attempt-scoped extract staging tables.
+func (a *CubeMaterializeActivities) CubeDropStaging(ctx context.Context, plan *CubeMaterializePlan) error {
+	if a == nil || a.Materializer == nil {
+		return fmt.Errorf("cube materialize activities: not configured")
+	}
+	if plan == nil {
+		return nil
+	}
+	return a.Materializer.DropStagingTables(ctx, plan.StagingTables)
 }
 
 // CubeApplyHot creates the StarRocks MV (single-BO extract+load via AS SELECT).

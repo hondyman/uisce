@@ -57,6 +57,11 @@ type CubeMaterializePlan struct {
 	MeasureColumns      map[string]string `json:"measure_columns,omitempty"`
 	GroupByColumns      []string          `json:"group_by_columns,omitempty"`
 	LifecycleBefore     string            `json:"lifecycle_before,omitempty"`
+	// Track C extract-N (federated staging). Empty / false for single-BO cubes.
+	FederationSources []FederationSourcePlan `json:"federation_sources,omitempty"`
+	ExtractEnabled    bool                   `json:"extract_enabled,omitempty"`
+	ExtractApplied    bool                   `json:"extract_applied,omitempty"`
+	StagingTables     []string               `json:"staging_tables,omitempty"`
 }
 
 // CubeMaterializeHotResult is the outcome of applying the hot StarRocks step.
@@ -291,6 +296,10 @@ func (m *CubeMaterializer) ValidateAndPlan(ctx context.Context, req CubeMaterial
 		MeasureColumns:      generated.MeasureColumns,
 		GroupByColumns:      generated.GroupByColumns,
 		LifecycleBefore:     node.Properties.LifecycleStatus,
+	}
+	if fedJoin != nil {
+		plan.FederationSources = append([]FederationSourcePlan(nil), fedJoin.Sources...)
+		plan.ExtractEnabled = federationExtractEnabled()
 	}
 
 	if !req.Force &&

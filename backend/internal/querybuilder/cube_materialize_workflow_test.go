@@ -17,6 +17,8 @@ func containsStr(s, sub string) bool { return strings.Contains(s, sub) }
 func registerCubeMaterializeTestActs(env *testsuite.TestWorkflowEnvironment, acts *CubeMaterializeActivities) {
 	env.RegisterActivityWithOptions(acts.CubeValidateAndPlan, activity.RegisterOptions{Name: ActCubeValidateAndPlan})
 	env.RegisterActivityWithOptions(acts.CubeBeginAttempt, activity.RegisterOptions{Name: ActCubeBeginAttempt})
+	env.RegisterActivityWithOptions(acts.CubeExtractSources, activity.RegisterOptions{Name: ActCubeExtractSources})
+	env.RegisterActivityWithOptions(acts.CubeDropStaging, activity.RegisterOptions{Name: ActCubeDropStaging})
 	env.RegisterActivityWithOptions(acts.CubeApplyHot, activity.RegisterOptions{Name: ActCubeApplyHot})
 	env.RegisterActivityWithOptions(acts.CubeApplyCold, activity.RegisterOptions{Name: ActCubeApplyCold})
 	env.RegisterActivityWithOptions(acts.CubeCompensateHot, activity.RegisterOptions{Name: ActCubeCompensateHot})
@@ -208,4 +210,72 @@ func TestCubeMaterializeWorkflow_HotFailureMarksFailed(t *testing.T) {
 	env.ExecuteWorkflow(CubeMaterializeWorkflow, req)
 	require.True(t, env.IsWorkflowCompleted())
 	require.Error(t, env.GetWorkflowError())
+}
+
+func TestCubeMaterializeWorkflow_ExtractThenDualCommit(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+
+	req := CubeMaterializeRequest{
+		TenantID: "t1",
+		CubeID:   "c1",
+		Grain:    []string{"account_id"},
+	}
+	plan := &CubeMaterializePlan{
+		TenantID:            req.TenantID,
+		CubeID:              req.CubeID,
+		ContractVersion:     1,
+		GrainHash:           GrainHash(req.Grain),
+		NodeID:              "44444444-4444-4444-4444-444444444444",
+		AttemptID:           "attempt-extract",
+		MaterializationName: "cube_fed",
+		TargetDatabase:      "tenant_t1",
+		IcebergTable:        "lakekeeper_iceberg.cubes.cube_fed",
+		SourceTable:         "pg_alpha.oms.position AS pos\nINNER JOIN pg_alpha.oms.account AS acct ON pos.a = acct.a",
+		DDL:                 "CREATE MATERIALIZED VIEW cube_fed AS SELECT 1 FROM pg_alpha.oms.position AS pos\nINNER JOIN pg_alpha.oms.account AS acct ON pos.a = acct.a GROUP BY 1;",
+		ExtractEnabled:      true,
+		FederationSources: []FederationSourcePlan{
+			{Alias: "pos", DrivingTable: "pg_alpha.oms.position"},
+			{Alias: "acct", DrivingTable: "pg_alpha.oms.account"},
+		},
+	}
+	extractedPlan := *plan
+	extractedPlan.ExtractApplied = true
+	extractedPlan.StagingTables = []string{"`tenant_t1`.`cube_ext_x_y_pos`", "`tenant_t1`.`cube_ext_x_y_acct`"}
+	extractedPlan.SourceTable = "`tenant_t1`.`cube_ext_x_y_pos` AS pos\nINNER JOIN `tenant_t1`.`cube_ext_x_y_acct` AS acct ON pos.a = acct.a"
+	extracted := &CubeExtractResult{Plan: &extractedPlan, StagingTables: extractedPlan.StagingTables}
+
+	hot := &CubeMaterializeHotResult{
+		MaterializationName: plan.MaterializationName,
+		TargetDatabase:      plan.TargetDatabase,
+		AppliedDDL:          true,
+		RowCount:            3,
+		CommittedAt:         time.Now().UTC(),
+	}
+	cold := &CubeMaterializeColdResult{
+		IcebergTable: plan.IcebergTable,
+		Applied:      true,
+		RowCount:     3,
+		CommittedAt:  time.Now().UTC(),
+	}
+
+	acts := &CubeMaterializeActivities{}
+	registerCubeMaterializeTestActs(env, acts)
+
+	env.OnActivity(ActCubeValidateAndPlan, mock.Anything, req).Return(plan, nil)
+	env.OnActivity(ActCubeBeginAttempt, mock.Anything, plan).Return(nil)
+	env.OnActivity(ActCubeExtractSources, mock.Anything, plan).Return(extracted, nil)
+	env.OnActivity(ActCubeApplyHot, mock.Anything, mock.MatchedBy(func(p *CubeMaterializePlan) bool {
+		return p != nil && p.ExtractApplied && len(p.StagingTables) == 2
+	})).Return(hot, nil)
+	env.OnActivity(ActCubeApplyCold, mock.Anything, mock.Anything, hot).Return(cold, nil)
+	env.OnActivity(ActCubeCompleteDualCommit, mock.Anything, mock.Anything, hot, cold).Return(nil)
+	env.OnActivity(ActCubeDropStaging, mock.Anything, mock.MatchedBy(func(p *CubeMaterializePlan) bool {
+		return p != nil && len(p.StagingTables) == 2
+	})).Return(nil)
+
+	env.ExecuteWorkflow(CubeMaterializeWorkflow, req)
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	env.AssertExpectations(t)
 }
