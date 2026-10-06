@@ -1858,23 +1858,68 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		mcp.TraceRegister("streamable call site api.go:Server.HTTPHandler ALL /mcp [" + mcp.CutoverMarker + "]")
 		// Staged MCP-first cutover: MCP pool runs as uisce_mcp_app (SET ROLE on
 		// connect when UISCE_APP_DSN TCP is unavailable). HTTP/api keep sqlxDB/postgres.
-		mcpDB := sqlxDB
+		// Fail-loud: never attach MCP to the shared fleet pool when OpenMCPAppDB fails
+		// (see docs/design/2026-10-06-rls-mcp-production-binding.md). Escape hatch:
+		// UISCE_MCP_ALLOW_SHARED_POOL=1 (WARNING; forbids production-binding claim).
+		mcpStartedAt := time.Now().UTC()
+		mcpPID := os.Getpid()
+		var mcpDB *sqlx.DB
+		mcpReady := false
 		if parentDSN := os.Getenv("DATABASE_URL"); parentDSN != "" || os.Getenv("POSTGRES_DSN") != "" {
 			if parentDSN == "" {
 				parentDSN = os.Getenv("POSTGRES_DSN")
 			}
 			if pinned, mode, err := dbpkg.OpenMCPAppDB(parentDSN); err != nil {
-				log.Printf("[mcp-cutover] OpenMCPAppDB failed (MCP stays on shared pool): %v", err)
+				if dbpkg.MCPAllowSharedPool() {
+					log.Printf("[mcp-cutover] WARNING OpenMCPAppDB failed; UISCE_MCP_ALLOW_SHARED_POOL=1 — degrading to shared pool (production binding forbidden): %v", err)
+					mcpDB = sqlxDB
+					mcpReady = sqlxDB != nil
+				} else {
+					log.Printf("[mcp-cutover] OpenMCPAppDB failed — MCP endpoints refuse shared-pool degrade pid=%d started_at=%s: %v",
+						mcpPID, mcpStartedAt.Format(time.RFC3339Nano), err)
+				}
 			} else {
 				mcpDB = pinned
-				log.Printf("[mcp-cutover] MCP DB pool mode=%s", mode)
+				mcpReady = true
+				probeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				probe, perr := dbpkg.ProbeMCPAppRole(probeCtx, pinned)
+				cancel()
+				if perr != nil {
+					log.Printf("[mcp-cutover] MCP DB pool mode=%s pid=%d started_at=%s probe_err=%v",
+						mode, mcpPID, mcpStartedAt.Format(time.RFC3339Nano), perr)
+				} else {
+					log.Printf("[mcp-cutover] MCP DB pool mode=%s pid=%d started_at=%s session_user=%s current_user=%s rolbypassrls=%v",
+						mode, mcpPID, mcpStartedAt.Format(time.RFC3339Nano),
+						probe.SessionUser, probe.CurrentUser, probe.RolBypassRLS)
+					if probe.RolBypassRLS {
+						log.Printf("[mcp-cutover] WARNING current_user=%s has rolbypassrls=true — FORCE RLS ineffective", probe.CurrentUser)
+					}
+				}
+			}
+		} else if sqlxDB != nil {
+			// No DSN env (unusual); keep prior behavior only when shared-pool escape is on.
+			if dbpkg.MCPAllowSharedPool() {
+				log.Printf("[mcp-cutover] WARNING no DATABASE_URL/POSTGRES_DSN; UISCE_MCP_ALLOW_SHARED_POOL=1 using shared pool")
+				mcpDB = sqlxDB
+				mcpReady = true
+			} else {
+				log.Printf("[mcp-cutover] no DATABASE_URL/POSTGRES_DSN — MCP endpoints refuse shared-pool degrade pid=%d started_at=%s",
+					mcpPID, mcpStartedAt.Format(time.RFC3339Nano))
 			}
 		}
-		mcpServer := mcp.NewServer(mcpDB).SetTemporal(temporalClient)
-		if srv.DataPipelines != nil {
-			mcpServer.SetPipelines(pipelineMCP{h: srv.DataPipelines})
+		if mcpReady && mcpDB != nil {
+			mcpServer := mcp.NewServer(mcpDB).SetTemporal(temporalClient)
+			if srv.DataPipelines != nil {
+				mcpServer.SetPipelines(pipelineMCP{h: srv.DataPipelines})
+			}
+			r.Handle("/mcp", mcpServer.HTTPHandler())
+		} else {
+			r.Handle("/mcp", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte(`{"error":"mcp_db_unavailable","detail":"OpenMCPAppDB failed; shared-pool degrade refused. Set UISCE_APP_DSN or fix SET ROLE; UISCE_MCP_ALLOW_SHARED_POOL=1 only for emergency."}`))
+			}))
 		}
-		r.Handle("/mcp", mcpServer.HTTPHandler())
 
 		// Register handlers that were previously orphaned
 		ipWhitelistHandler.RegisterRoutes(r)

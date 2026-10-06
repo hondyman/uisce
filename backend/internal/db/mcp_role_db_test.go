@@ -1,9 +1,28 @@
 package db
 
 import (
+	"context"
 	"os"
 	"testing"
 )
+
+func TestMCPAllowSharedPool(t *testing.T) {
+	t.Setenv("UISCE_MCP_ALLOW_SHARED_POOL", "")
+	if MCPAllowSharedPool() {
+		t.Fatal("default must refuse shared-pool degrade")
+	}
+	t.Setenv("UISCE_MCP_ALLOW_SHARED_POOL", "1")
+	if !MCPAllowSharedPool() {
+		t.Fatal("UISCE_MCP_ALLOW_SHARED_POOL=1 must enable escape")
+	}
+}
+
+func TestProbeMCPAppRole_NilDB(t *testing.T) {
+	_, err := ProbeMCPAppRole(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected error for nil db")
+	}
+}
 
 func TestOpenMCPAppDB_RequiresDSN(t *testing.T) {
 	os.Unsetenv("UISCE_APP_DSN")

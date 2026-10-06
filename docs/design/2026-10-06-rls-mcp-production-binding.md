@@ -1,0 +1,93 @@
+# RLS / MCP production binding (staged MCP-first)
+
+**Status:** R0 approved (receipt amendments folded) — implementing R1  
+**Date:** 2026-10-06  
+**Depends on:** Gold-aware FORCE RLS (`20261020_001`+), grants (`20261020_002`), `OpenMCPAppDB` (`9701efac4`).  
+**Branch:** `feat/rls-mcp-production-binding`.
+
+## Claim boundary
+
+**In scope to claim:** MCP Server DB pool runs as `uisce_mcp_app` with FORCE RLS effective, secrets in Infisical, dated triple receipt.
+
+**Out of scope / not claimed:** Full fleet `DATABASE_URL` flip to app role. BeginTx inventory (2026-10-06): 93 BeginTx / 82 unfenced / **66 fence-needed**. Fleet flip waits on fence-needed→0 (R3 parked).
+
+## Modes (honest)
+
+| Mode | Login (`session_user`) | Effective (`current_user`) | How |
+|------|------------------------|----------------------------|-----|
+| Direct DSN | `uisce_mcp_app` | `uisce_mcp_app` | `UISCE_APP_DSN` TCP login |
+| SET ROLE fallback | `postgres` (or parent) | `uisce_mcp_app` | `DATABASE_URL` + `AfterConnect SET ROLE` |
+
+Both are valid MCP bindings **if** receipts distinguish them. Prefer direct DSN when pg_hba allows.
+
+## Fail-loud (R1 deliverable)
+
+If `DATABASE_URL`/`POSTGRES_DSN` is set and `OpenMCPAppDB` fails, the process **must not** attach MCP handlers to the shared HTTP/postgres pool.
+
+- Log `[mcp-cutover] OpenMCPAppDB failed — MCP endpoints refuse shared-pool degrade`
+- Register `/mcp` as **503** (or omit tool execution), never `mcp.NewServer(sqlxDB)` on failure
+- Receipt A includes **process PID** and **startup timestamp** so a receipt cannot be paired with stale logs from a prior process
+
+Emergency only: `UISCE_MCP_ALLOW_SHARED_POOL=1` re-enables legacy degrade (logged as WARNING); forbidden for claiming production binding.
+
+## Pre-receipt role check
+
+Before A–C, once against the MCP pool connection:
+
+```sql
+SELECT current_user AS effective_user,
+       session_user AS login_user,
+       r.rolbypassrls
+FROM pg_roles r
+WHERE r.rolname = current_user;
+```
+
+Require `rolbypassrls = false`. Confirm MCP pool is dedicated (SET ROLE only on MCP pool connections opened by `OpenMCPAppDB`, never on the shared HTTP pool).
+
+## Triple receipt (amended)
+
+Capture with redacted secrets. Include PID + startup time from receipt A on every artifact.
+
+### A — Startup mode
+
+Log line: `[mcp-cutover] MCP DB pool mode=<uisce-app-dsn|set-role:uisce_mcp_app> pid=<N> started_at=<RFC3339>`
+
+### B — Role identity (mode-sensitive)
+
+MCP-side probe (startup or one-shot) records **both**:
+
+- Direct DSN: `session_user=uisce_mcp_app`, `current_user=uisce_mcp_app`
+- SET ROLE: `session_user=<parent>`, `current_user=uisce_mcp_app`
+
+**Do not** use `pg_stat_activity.usename` alone as proof under SET ROLE — that column is the **login** role and will show `postgres`.
+
+### C — IDOR with positive control
+
+Same MCP path, same process:
+
+1. **Positive:** tenant A JWT **can** read tenant A page/BO (or MCP tool equivalent).
+2. **Negative:** tenant A JWT **cannot** read tenant B page/BO (not found / empty / deny).
+
+Negative-only proof is insufficient (deny-all or broken pool would pass).
+
+## Flip checklist (ordered)
+
+1. Infisical: store `UISCE_APP_DSN` (and optional `UISCE_MCP_DB_ROLE`) in project `uisce` / env `dev` — **operator token required**.
+2. `scripts/infisical-bootstrap.sh` / `START_BACKEND.sh` export the key when present.
+3. Pre-receipt role check (`rolbypassrls=false`).
+4. Restart backend; capture A (mode + pid + started_at).
+5. Capture B (session_user + current_user).
+6. Capture C (positive + negative).
+7. Update `topics/uisce-rls.md` + observation; claim MCP-only binding with mode named.
+
+## PR plan
+
+| PR | Scope |
+|----|--------|
+| **R0+R1** | This design + fail-loud + probe log + Infisical bootstrap key + tripwire |
+| **R2** | Ops restart + triple receipt (after Infisical gate) |
+| **R3** | BeginTx fence waves (parked; prefer R3b BO HTTP writers later) |
+
+## Secrets hygiene
+
+Never echo DSN passwords, tokens, or full connection strings in chat, commits, or PR bodies. Receipts name paths and key names only.
