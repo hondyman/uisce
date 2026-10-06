@@ -1,0 +1,42 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: compliance-gateway-alerts
+  namespace: uisce-system
+  labels:
+    app.kubernetes.io/name: uisce-compliance
+    role: alert-rules
+spec:
+  groups:
+    - name: compliance_ingress_routing.rules
+      rules:
+        # Tripwire alert for Envoy vs Pod ring disagreement / ingress misroutes
+        - alert: ComplianceGatewayProxyMisrouteSpike
+          expr: rate(uisce_compliance_proxy_misroutes_total[2m]) > 5
+          for: 1m
+          labels:
+            severity: warning
+            team: compliance-sre
+          annotations:
+            summary: "High rate of compliance order proxy misroutes ({{ $value }} misroutes/sec)"
+            description: "Pods are receiving orders for unassigned accounts and reverse-proxying across replicas. Check Envoy RING_HASH consistent hash configuration or pod replica topology drift."
+
+        - alert: ComplianceGatewayProxyMisrouteElevated
+          expr: increase(uisce_compliance_proxy_misroutes_total[15m]) > 50
+          for: 5m
+          labels:
+            severity: page
+            team: compliance-sre
+          annotations:
+            summary: "Elevated compliance inter-pod proxy forwarding ({{ $value }} in 15m)"
+            description: "Sustained proxy forwarding detected. Verify X-Account-ID header propagation from FIX / DMA gateways and Envoy hash ring health."
+
+        - alert: ComplianceDefaultPartitionActiveBreach
+          expr: uisce_compliance_default_partition_incident_count > 0
+          for: 1m
+          labels:
+            severity: critical
+            team: compliance-dba
+          annotations:
+            summary: "Active rows detected in compliance_evaluation_event_default partition"
+            description: "Evaluations are landing in the unpartitioned default table due to missing future monthly partitions. Run weekly partition maintenance immediately."

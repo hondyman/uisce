@@ -24,6 +24,10 @@ type ComplianceRule struct {
 	Status            string           `json:"status" db:"status"`
 	EffectiveFrom     time.Time        `json:"effective_from" db:"effective_from"`
 	EffectiveTo       *time.Time       `json:"effective_to" db:"effective_to"`
+	Citation          *string          `json:"citation" db:"citation"`
+	Jurisdictions     []string         `json:"jurisdictions" db:"jurisdictions"`
+	SourceVersion     *string          `json:"source_version" db:"source_version"`
+	LibraryStatus     string           `json:"library_status" db:"library_status"`
 	ValidFrom         time.Time        `json:"valid_from" db:"valid_from"`
 	ValidTo           time.Time        `json:"valid_to" db:"valid_to"`
 	SystemFrom        time.Time        `json:"system_from" db:"system_from"`
@@ -34,6 +38,26 @@ type ComplianceRule struct {
 	UpdatedBy         *uuid.UUID       `json:"updated_by" db:"updated_by"`
 	CreatedAt         time.Time        `json:"created_at" db:"created_at"`
 	UpdatedAt         time.Time        `json:"updated_at" db:"updated_at"`
+}
+
+// TenantRuleActivation represents compliance.tenant_rule_activation
+type TenantRuleActivation struct {
+	TenantID      uuid.UUID  `json:"tenant_id" db:"tenant_id"`
+	RuleID        uuid.UUID  `json:"rule_id" db:"rule_id"`
+	Enabled       bool       `json:"enabled" db:"enabled"`
+	InheritMode   string     `json:"inherit_mode" db:"inherit_mode"`
+	ActivatedBy   *string    `json:"activated_by,omitempty" db:"activated_by"`
+	ActivatedAt   *time.Time `json:"activated_at,omitempty" db:"activated_at"`
+	AuditRequired bool       `json:"audit_required" db:"audit_required"`
+	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at" db:"updated_at"`
+}
+
+// ComplianceRulesetMembership represents compliance.compliance_ruleset_membership
+type ComplianceRulesetMembership struct {
+	RulesetCode string    `json:"ruleset_code" db:"ruleset_code"`
+	RuleID      uuid.UUID `json:"rule_id" db:"rule_id"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 }
 
 // ComplianceEvaluation represents edm.compliance_evaluation

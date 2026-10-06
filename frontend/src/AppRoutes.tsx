@@ -167,6 +167,13 @@ const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; r
   import('./pages/PageBrowser').then((m) => ({ default: m.StandalonePageRenderer }))
 );
 const FixedIncomeDashboard = React.lazy(() => import('./components/FixedIncomeDashboard'));
+const ComplianceDecisionBlotter = React.lazy(() => import('./components/Compliance/ComplianceDecisionBlotter'));
+const RegulatoryChangeQueue = React.lazy(() =>
+  import('./components/Compliance/RegulatoryChangeQueue').then((m) => ({ default: m.RegulatoryChangeQueue }))
+);
+const SurveillanceFindingsQueue = React.lazy(() =>
+  import('./components/Compliance/SurveillanceFindingsQueue').then((m) => ({ default: m.SurveillanceFindingsQueue }))
+);
 const AIPortfolioRebalancer = React.lazy(() => import('./components/AIPortfolioRebalancer'));
 const ScenarioAnalysisPro = React.lazy(() => import('./components/ScenarioAnalysisPro'));
 
@@ -366,6 +373,60 @@ function ProtectedApp() {
                 <FixedIncomeDashboard />
               </ProtectedRoute>
             </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="view/compliance-blotter"
+          element={
+            <StandaloneWindowWrapper title="Pre-Trade Compliance Blotter">
+              <ProtectedRoute>
+                <ComplianceDecisionBlotter />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="view/regulatory-queue"
+          element={
+            <StandaloneWindowWrapper title="Regulatory Change Queue">
+              <ProtectedRoute>
+                <RegulatoryChangeQueue />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="view/surveillance-findings"
+          element={
+            <StandaloneWindowWrapper title="Surveillance Findings Queue">
+              <ProtectedRoute>
+                <SurveillanceFindingsQueue />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="compliance/blotter"
+          element={
+            <ProtectedRoute>
+              <ComplianceDecisionBlotter />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="compliance/regulatory"
+          element={
+            <ProtectedRoute>
+              <RegulatoryChangeQueue />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="compliance/surveillance"
+          element={
+            <ProtectedRoute>
+              <SurveillanceFindingsQueue />
+            </ProtectedRoute>
           }
         />
         <Route
