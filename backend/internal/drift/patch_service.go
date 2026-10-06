@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/audit"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -37,6 +38,10 @@ func (s *PatchService) ApplyHotSwapPatch(
 		return err
 	}
 	defer tx.Rollback()
+	// Predicate delta: none — SQL already binds tenantID; choke SET LOCALs GUCs for FORCE RLS (R3 wave1).
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx.Tx, tenantID.String(), ""); err != nil {
+		return fmt.Errorf("tenant GUC: %w", err)
+	}
 
 	var prop struct {
 		BOID                 uuid.UUID `db:"bo_id"`

@@ -1,15 +1,15 @@
 # RLS / MCP production binding (staged MCP-first)
 
-**Status:** R0+R1 merged (#416); **R2 CLOSED** (SET ROLE, #418); **R2b CLOSED 2026-10-06** (direct `uisce-app-dsn` + Infisical `UISCE_APP_DSN` durability). R3 parked.  
+**Status:** R0+R1 merged (#416); **R2 CLOSED** (SET ROLE, #418); **R2b CLOSED** (#419); **R3 wave1 in flight** (BO/page HTTP BeginTx fences).  
 **Date:** 2026-10-06  
 **Depends on:** Gold-aware FORCE RLS (`20261020_001`+), grants (`20261020_002`), `OpenMCPAppDB` (`9701efac4`).  
-**Branch:** `feat/rls-mcp-production-binding` (merged).
+**Branch:** `feat/rls-mcp-production-binding` (merged); R3 on `feat/r3-wave1-bo-http-fence`.
 
 ## Claim boundary
 
 **In scope to claim:** MCP Server DB pool runs as `uisce_mcp_app` with FORCE RLS effective, secrets in Infisical, dated triple receipt.
 
-**Out of scope / not claimed:** Full fleet `DATABASE_URL` flip to app role. BeginTx inventory (2026-10-06): 93 BeginTx / 82 unfenced / **66 fence-needed**. Fleet flip waits on fence-needed→0 (R3 parked).
+**Out of scope / not claimed:** Full fleet `DATABASE_URL` flip to app role. BeginTx inventory after R3 wave1: 93 BeginTx / 77 unfenced / **61 fence-needed** (was 66). Fleet flip waits on fence-needed→0.
 
 ## Modes (honest)
 
@@ -86,7 +86,7 @@ Negative-only proof is insufficient (deny-all or broken pool would pass).
 |----|--------|
 | **R0+R1** | This design + fail-loud + probe log + Infisical bootstrap key + tripwire |
 | **R2** | Ops restart + triple receipt (after Infisical gate) |
-| **R3** | BeginTx fence waves (parked; prefer R3b BO HTTP writers later) |
+| **R3** | BeginTx fence waves toward fleet flip (wave1 = BO/page HTTP writers) |
 
 ## Secrets hygiene
 
@@ -123,4 +123,22 @@ Endpoint: `POST /api/mcp` (streamable, stateless). Local ops log: `/tmp/uisce-se
 | C− | same JWT: B Page absent; `get_page` → `found:false` |
 
 Local ops log: `/tmp/uisce-server-r2b.log`. Redacted captures: `/tmp/r2b-triple-receipt.md`, `/tmp/r2b-infisical-durability-receipt.md`.
+
+## R3 wave1 (BO/page HTTP writers, 2026-10-06)
+
+**Goal:** shrink fence-needed BeginTx countdown; predicate delta **none** (SQL already binds `tenant_id`; choke only SET LOCALs GUCs).
+
+**Inventory:** before 93/82/66/16 → after **93/77/61/16** (`TestBeginTxInventory_DocumentsCutoverBlastRadius`).
+
+**Fenced this wave (ApplyTenantGUCs):**
+
+| File | Sites |
+|------|-------|
+| `api/business_object_handlers.go` | create/update/delete binding txs |
+| `api/bo_binding_fields.go` | upsert binding fields (replaces `tenant.SetRLSContext`) |
+| `handlers/page_studio_core.go` | cloneCore / revertToCore (with gold GUC) |
+| `handlers/page_studio_bundle.go` | applyImportPlan (with gold GUC) |
+| `drift/patch_service.go` | ApplyHotSwapPatch |
+
+**Still open:** 61 fence-needed files; fleet `DATABASE_URL` flip waits on fence-needed→0.
 
