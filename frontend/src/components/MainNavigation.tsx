@@ -263,6 +263,7 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <BuildIcon />,
         items: [
           { label: 'Business Objects', path: '/business-objects', icon: <BusinessIcon />, description: 'Core entities' },
+          { label: 'Cubes', path: '/build/cubes', icon: <ViewModuleIcon />, description: 'Aggregation contracts — dims, metrics, grains, impact', badge: { label: 'New', color: 'success' } },
           { label: 'Views Catalog', path: '/views', icon: <AssessmentIcon />, description: 'Semantic views' },
           { label: 'Bundles', path: '/fabric/bundles', icon: <CategoryIcon />, description: 'Curated bundles', badge: { label: 'AI', color: 'info' } },
         ]

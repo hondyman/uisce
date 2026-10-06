@@ -21,6 +21,10 @@ export const STUDIO_ROUTES: { path: string; slug: string }[] = [
   { path: 'lakehouse-streaming', slug: 'lakehouse-streaming' },
   { path: 'system/lakehouse', slug: 'system-lakehouse' },
   { path: 'system/lakehouse-status', slug: 'lakehouse-status' },
+  { path: 'build/cubes', slug: 'cubes-catalog' },
+  // PR6: composed designer host (param :id so {{route.id}} binds; /new = absent id)
+  { path: 'build/cubes/new', slug: 'cube-designer' },
+  { path: 'build/cubes/:id', slug: 'cube-designer' },
 ];
 
 /** The app routes a page is served at, e.g. ['/data/mastering']. */

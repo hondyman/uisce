@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 )
 
 // Page bundles: a page with every fragment it depends on, as one portable
@@ -247,6 +248,13 @@ func (h *PageStudioHandler) applyImportPlan(ctx context.Context, tenantID uuid.U
 		return err
 	}
 	defer tx.Rollback() //nolint:errcheck
+	gold := ""
+	if g := h.goldCopyID(ctx); g != uuid.Nil {
+		gold = g.String()
+	}
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx.Tx, tenantID.String(), gold); err != nil {
+		return fmt.Errorf("tenant GUC: %w", err)
+	}
 	for _, f := range plan.Create {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO page_fragments (tenant_id, slug, version, name, description, content, content_hash, is_core, created_by)

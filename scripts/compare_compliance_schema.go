@@ -198,7 +198,7 @@ func main() {
 		log.Fatalf("Prereq failed on ref db: %v", err)
 	}
 
-	// 3. Apply migrations 001-016 on refDB
+	// 3. Apply migrations 001-017 on refDB
 	migrations := []string{
 		"20261218_001_compliance_engine_core_tables.up.sql",
 		"20261218_002_governance_audit_and_privileges.up.sql",
@@ -216,6 +216,7 @@ func main() {
 		"20261224_014_provenance_least_privilege_and_audit.up.sql",
 		"20261224_015_phase2_tranche2_rules_and_pack.up.sql",
 		"20261224_016_phase2_tranche2_rule_corrections.up.sql",
+		"20261224_017_phase2_tranche3_waci_and_sfdr_rules.up.sql",
 	}
 
 	migDir := filepath.Join("backend", "db", "migrations")
@@ -246,7 +247,7 @@ func main() {
 
 	// 5. Diff tables and columns
 	fmt.Println("======================================================================")
-	fmt.Println("MECHANICAL SCHEMA DIFF: FRESH CANONICAL BUILD (001->016) vs LIVE ALPHA")
+	fmt.Println("MECHANICAL SCHEMA DIFF: FRESH CANONICAL BUILD (001->017) vs LIVE ALPHA")
 	fmt.Println("======================================================================")
 
 	var discrepancies []string

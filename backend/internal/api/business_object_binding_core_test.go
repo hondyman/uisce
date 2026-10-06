@@ -46,6 +46,9 @@ func TestCreateBusinessObjectBinding_IsCoreFollowsGoldCopyTenant(t *testing.T) {
 			mock.ExpectQuery(regexp.QuoteMeta(`SELECT COALESCE($1::uuid = public.uisce_gold_copy_tenant_id(), false)`)).
 				WithArgs("ten").WillReturnRows(sqlmock.NewRows([]string{"gold"}).AddRow(tc.gold))
 			mock.ExpectBegin()
+			// ApplyTenantGUCs (R3 wave1): uisce.current_tenant + app.tenant_id
+			mock.ExpectExec("SELECT set_config").WithArgs("ten").WillReturnResult(sqlmock.NewResult(0, 0))
+			mock.ExpectExec("SELECT set_config").WithArgs("ten").WillReturnResult(sqlmock.NewResult(0, 0))
 			mock.ExpectExec(`UPDATE public.business_object_binding SET is_default = false`).
 				WillReturnResult(sqlmock.NewResult(0, 0))
 			mock.ExpectQuery(`INSERT INTO public.business_object_binding`).

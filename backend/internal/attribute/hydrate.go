@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -26,9 +27,9 @@ func LoadProjectionsForTable(ctx context.Context, db *sqlx.DB, tenantID uuid.UUI
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx,
-		`SELECT set_config('app.current_tenant', $1, true)`, tenantID.String()); err != nil {
-		return nil, err
+	// ApplyTenantGUCs for FORCE RLS (R3 wave3); replaces app.current_tenant-only set_config.
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx.Tx, tenantID.String(), ""); err != nil {
+		return nil, fmt.Errorf("tenant GUC: %w", err)
 	}
 
 	rows, err := tx.QueryxContext(ctx, `

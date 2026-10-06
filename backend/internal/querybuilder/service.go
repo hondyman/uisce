@@ -70,7 +70,17 @@ func (s *QueryService) CubeContentHashForCache(ctx context.Context, secCtx *secu
 		limit = 1000
 	}
 	qd := savedQueryDef(*sq, tenantID, nil, limit)
-	decision := s.cubes.Route(ctx, secCtx.TenantID, qd, abacRestrictedGrainsFrom(secCtx))
+	abac := abacRestrictedGrainsFrom(secCtx)
+	var decision CubeRouteDecision
+	if subj := qd.Context.Subject; subj != nil && subj.NormalizedKind() == boresolver.QuerySubjectCube {
+		pin := 0
+		if !subj.ContractVersion.Latest && subj.ContractVersion.Version > 0 {
+			pin = subj.ContractVersion.Version
+		}
+		decision = s.cubes.RoutePinned(ctx, secCtx.TenantID, subj.CubeID, pin, qd, abac)
+	} else {
+		decision = s.cubes.Route(ctx, secCtx.TenantID, qd, abac)
+	}
 	if decision.Route == nil {
 		return NoCubeCacheTerm
 	}
@@ -187,22 +197,55 @@ func (s *QueryService) Preview(ctx context.Context, secCtx *security.Context, qd
 	// never from client input: defaulting it to empty would silently disable
 	// the sub-grain check that stops an aggregated-away dimension from being
 	// served to a restricted caller (ADR-014).
-	if s.cubes != nil {
-		decision := s.cubes.Route(ctx, secCtx.TenantID, qd, abacRestrictedGrainsFrom(secCtx))
-		if decision.Route != nil {
-			resp.CubeHit = &boresolver.CubeHitInfo{
-				CubeID:          decision.Route.CubeID,
-				CubeName:        decision.Route.CubeName,
-				Materialization: decision.Route.Materialization,
-				Grain:           decision.Route.Grain,
-				Stale:           decision.Route.Stale,
-			}
-		} else {
-			resp.CubeMiss = string(decision.MissReason)
-		}
-	}
+	s.applyCubeRoute(ctx, secCtx, qd, resp)
 
 	return resp, nil
+}
+
+// applyCubeRoute stamps CubeHit / CubeMiss onto a preview response. BO subjects
+// use opportunistic Route; cube subjects use RoutePinned for that cube only.
+func (s *QueryService) applyCubeRoute(
+	ctx context.Context,
+	secCtx *security.Context,
+	qd *boresolver.QueryDef,
+	resp *boresolver.QueryPreviewResponse,
+) {
+	if s == nil || s.cubes == nil || resp == nil || qd == nil || secCtx == nil {
+		return
+	}
+	abac := abacRestrictedGrainsFrom(secCtx)
+	var decision CubeRouteDecision
+	if subj := qd.Context.Subject; subj != nil && subj.NormalizedKind() == boresolver.QuerySubjectCube {
+		pin := 0
+		if !subj.ContractVersion.Latest && subj.ContractVersion.Version > 0 {
+			pin = subj.ContractVersion.Version
+		}
+		cubeID := strings.TrimSpace(subj.CubeID)
+		if cubeID == "" {
+			resp.CubeMiss = string(CubeMissCubeNotFound)
+			return
+		}
+		decision = s.cubes.RoutePinned(ctx, secCtx.TenantID, cubeID, pin, qd, abac)
+	} else {
+		decision = s.cubes.Route(ctx, secCtx.TenantID, qd, abac)
+	}
+	if decision.Route != nil {
+		served := decision.Route.ServedFrom
+		if served == "" {
+			served = ServedFromHot
+		}
+		resp.CubeHit = &boresolver.CubeHitInfo{
+			CubeID:          decision.Route.CubeID,
+			CubeName:        decision.Route.CubeName,
+			Materialization: decision.Route.Materialization,
+			Grain:           decision.Route.Grain,
+			ServedFrom:      served,
+			ContractVersion: decision.Route.ContractVersion,
+			Stale:           decision.Route.Stale,
+		}
+		return
+	}
+	resp.CubeMiss = string(decision.MissReason)
 }
 
 // abacRestrictedGrainsFrom extracts the dimension terms the caller is

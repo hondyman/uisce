@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"log"
 
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.uber.org/zap"
 
+	"github.com/hondyman/uisce/backend/internal/analytics"
+	"github.com/hondyman/uisce/backend/internal/querybuilder"
 	"github.com/hondyman/uisce/backend/internal/temporal/activities"
 	"github.com/hondyman/uisce/backend/internal/temporal/workflows"
 	"github.com/jmoiron/sqlx"
@@ -81,8 +84,10 @@ func registerWorkflows(w worker.Worker) {
 	w.RegisterWorkflow(workflows.RuleReviewWorkflow)
 	w.RegisterWorkflow(workflows.RuleHealthCheckWorkflow)
 	w.RegisterWorkflow(workflows.ViolationAuditAnchorWorkflow)
+	w.RegisterWorkflow(querybuilder.CubeMaterializeWorkflow)
+	w.RegisterWorkflow(querybuilder.CubeReconcileWorkflow)
 
-	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow, CustomizationIntelligenceWorkflow, TenantInstanceProvisioningWorkflowFn, ReportGenerationWorkflow, ClientBurstReportWorkflow, RuleReviewWorkflow, RuleHealthCheckWorkflow, ViolationAuditAnchorWorkflow")
+	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow, CustomizationIntelligenceWorkflow, TenantInstanceProvisioningWorkflowFn, ReportGenerationWorkflow, ClientBurstReportWorkflow, RuleReviewWorkflow, RuleHealthCheckWorkflow, ViolationAuditAnchorWorkflow, CubeMaterializeWorkflow, CubeReconcileWorkflow")
 }
 
 // registerActivities registers all activity definitions
@@ -159,5 +164,23 @@ func registerActivities(w worker.Worker, db *sql.DB, controlDB *sql.DB, logger *
 	w.RegisterActivity(reportActs.DispatchClientDistributionsActivity)
 	log.Println("Report activities registered: QuerySemanticViewsActivity, GenerateArtifactActivity, StoreExecutionResultActivity, burst activities")
 
-	log.Println("Activities registered: RunDataFusionQueryActivity, RunSparkJobActivity, RunPythonScriptActivity, PublishEventActivity, TenantActivities, TenantProvisioningActivities, ReportActivities")
+	// Cube materialize (CUBE-1.2). Primary poller is the uisce-cubes worker
+	// started in-process from the API; analytics-worker also registers so a
+	// standalone temporal-worker process can run the same workflow type.
+	if db != nil {
+		sqlxDB := sqlx.NewDb(db, "postgres")
+		starrocksDB := analytics.OpenStarRocksDB()
+		cubeActs := querybuilder.NewCubeMaterializeActivities(sqlxDB, starrocksDB)
+		w.RegisterActivityWithOptions(cubeActs.CubeValidateAndPlan, activity.RegisterOptions{Name: querybuilder.ActCubeValidateAndPlan})
+		w.RegisterActivityWithOptions(cubeActs.CubeBeginAttempt, activity.RegisterOptions{Name: querybuilder.ActCubeBeginAttempt})
+		w.RegisterActivityWithOptions(cubeActs.CubeApplyHot, activity.RegisterOptions{Name: querybuilder.ActCubeApplyHot})
+		w.RegisterActivityWithOptions(cubeActs.CubeApplyCold, activity.RegisterOptions{Name: querybuilder.ActCubeApplyCold})
+		w.RegisterActivityWithOptions(cubeActs.CubeCompensateHot, activity.RegisterOptions{Name: querybuilder.ActCubeCompensateHot})
+		w.RegisterActivityWithOptions(cubeActs.CubeCompleteDualCommit, activity.RegisterOptions{Name: querybuilder.ActCubeCompleteDualCommit})
+		w.RegisterActivityWithOptions(cubeActs.CubeFailAttempt, activity.RegisterOptions{Name: querybuilder.ActCubeFailAttempt})
+		reconcileActs := querybuilder.NewCubeReconcileActivities(querybuilder.NewCubeReconciler(sqlxDB, starrocksDB))
+		w.RegisterActivityWithOptions(reconcileActs.CubeReconcile, activity.RegisterOptions{Name: querybuilder.ActCubeReconcile})
+	}
+
+	log.Println("Activities registered: RunDataFusionQueryActivity, RunSparkJobActivity, RunPythonScriptActivity, PublishEventActivity, TenantActivities, TenantProvisioningActivities, ReportActivities, CubeMaterializeActivities, CubeReconcileActivities")
 }

@@ -21,8 +21,10 @@
 //
 // Still before claiming production binding: Infisical home for UISCE_APP_DSN
 // (do not leave only .env), optional pg_hba for direct role login, restart
-// server and triple-receipt via pg_stat_activity usename + MCP IDOR through
-// that pool + standing flip checklist.
+// server and amended triple receipt (session_user+current_user; IDOR with
+// positive control; pid+started_at) — see
+// docs/design/2026-10-06-rls-mcp-production-binding.md. Fail-loud: OpenMCPAppDB
+// failure must not attach MCP to the shared fleet pool.
 //
 // Rejected alternative: single fleet DATABASE_URL flip after full BeginTx
 // migration — cleaner ops story, longer wait, couples MCP headline claim to

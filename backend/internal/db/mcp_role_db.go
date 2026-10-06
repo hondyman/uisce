@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -114,4 +115,35 @@ func OpenMCPAppDBWithSetRole(parentDSN, role string) (*sqlx.DB, string, error) {
 	}
 	_ = user
 	return sqlx.NewDb(sqlDB, "pgx"), "set-role:" + role, nil
+}
+
+// MCPAppRoleProbe is the mode-sensitive identity receipt (session_user + current_user).
+type MCPAppRoleProbe struct {
+	SessionUser  string // login role (pg_stat_activity.usename)
+	CurrentUser  string // effective role after SET ROLE
+	RolBypassRLS bool
+}
+
+// ProbeMCPAppRole records session_user, current_user, and rolbypassrls for receipts B + pre-check.
+func ProbeMCPAppRole(ctx context.Context, xdb *sqlx.DB) (*MCPAppRoleProbe, error) {
+	if xdb == nil {
+		return nil, fmt.Errorf("ProbeMCPAppRole: nil db")
+	}
+	var p MCPAppRoleProbe
+	err := xdb.QueryRowContext(ctx, `
+		SELECT session_user::text,
+		       current_user::text,
+		       COALESCE((SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user), false)
+	`).Scan(&p.SessionUser, &p.CurrentUser, &p.RolBypassRLS)
+	if err != nil {
+		return nil, fmt.Errorf("ProbeMCPAppRole: %w", err)
+	}
+	return &p, nil
+}
+
+// MCPAllowSharedPool reports whether emergency shared-pool degrade is enabled.
+// Forbidden when claiming production MCP binding.
+func MCPAllowSharedPool() bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv("UISCE_MCP_ALLOW_SHARED_POOL")))
+	return v == "1" || v == "true" || v == "yes" || v == "on"
 }

@@ -72,6 +72,8 @@ var openerInventory = map[string]opener{
 	"cmd/verify/verify_engagement_notifications.go":              {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/verify_calc_measure/main.go":                            {Kind: kindTool, Max: 2, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/verify_collection_aggregation/main.go":                  {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
+	"cmd/compliance-seed/main.go":                               {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
+	"cmd/crd-bakeoff-demo/main.go":                              {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/verify_compliance_domain/main.go":                       {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/verify_mdm_e2e/main.go":                                 {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/verify_oms_validations/main.go":                         {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},

@@ -8,6 +8,8 @@ import { sourceScoringBlueprint } from './sourceScoring';
 import { validationRulesBlueprint } from './validationRules';
 import { lakehouseStreamingBlueprint } from './lakehouseStreaming';
 import { systemLakehouseBlueprint } from './systemLakehouse';
+import { cubesCatalogBlueprint } from './cubesCatalog';
+import { cubeDesignerBlueprint } from './cubeDesigner';
 import { lakehouseStatusBlueprint } from './lakehouseStatus';
 
 /**
@@ -99,6 +101,18 @@ export const PAGE_BLUEPRINTS: PageBlueprint[] = [
     name: 'Lakehouse status',
     description: 'Read-only panel: cluster health, resource groups, per-tenant wiring, and cross-check warnings.',
     build: lakehouseStatusBlueprint,
+  },
+  {
+    id: 'cubes-catalog',
+    name: 'Cubes',
+    description: 'Aggregation contracts: dimensions, governed metrics, grains, and materialization. Built in Page Studio.',
+    build: cubesCatalogBlueprint,
+  },
+  {
+    id: 'cube-designer',
+    name: 'Cube designer',
+    description: 'Composed cube editor at /build/cubes/new and /build/cubes/:id (overview, axes, federation, materialization).',
+    build: cubeDesignerBlueprint,
   },
 ];
 

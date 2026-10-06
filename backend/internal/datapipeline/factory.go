@@ -18,12 +18,18 @@ type Deps struct {
 	Bindings BindingSource
 	// Master masters committed staging loads (master steps; nil: they can't run).
 	Master Masterer
+	// CubeMaterialize starts CubeMaterializeWorkflow (cube_materialize steps;
+	// nil: they can't run).
+	CubeMaterialize CubeMaterializer
 	// Queues powers queue_source / queue_sink (Kafka/Redpanda/SQS/Service Bus).
 	Queues QueueBroker
 }
 
 // Masterer returns the master step's dependency.
 func (d Deps) Masterer() Masterer { return d.Master }
+
+// CubeMaterializer returns the cube_materialize step's dependency.
+func (d Deps) CubeMaterializer() CubeMaterializer { return d.CubeMaterialize }
 
 // BindingSource resolves the approved binding of a staging table to a
 // business object: field -> staging column, nil when there is none.

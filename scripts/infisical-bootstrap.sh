@@ -274,6 +274,23 @@ generate_composite_secrets() {
             echo "POSTGRES_DSN=postgresql://${db_user}:${db_pass}@${db_host}:${db_port}/${db_name}?sslmode=disable" >> "$tmp_path"
         fi
     fi
+    # MCP staged cutover: prefer Infisical UISCE_APP_DSN; else preserve prior .env.
+    # Absence is OK — OpenMCPAppDB falls back to SET ROLE on DATABASE_URL.
+    # Never invent a default password here (see rls-mcp-production-binding design).
+    if ! grep -q "^UISCE_APP_DSN=" "$tmp_path"; then
+        prev_uisce_app_dsn=$(capture_env_value "$output_path" "UISCE_APP_DSN")
+        if [ -n "$prev_uisce_app_dsn" ]; then
+            echo "UISCE_APP_DSN=\"${prev_uisce_app_dsn}\"" >> "$tmp_path"
+        else
+            warn "No UISCE_APP_DSN from Infisical or prior $output_path — MCP will use SET ROLE on DATABASE_URL until the secret is stored (docs/design/2026-10-06-rls-mcp-production-binding.md)."
+        fi
+    fi
+    if ! grep -q "^UISCE_MCP_DB_ROLE=" "$tmp_path"; then
+        prev_mcp_role=$(capture_env_value "$output_path" "UISCE_MCP_DB_ROLE")
+        if [ -n "$prev_mcp_role" ]; then
+            echo "UISCE_MCP_DB_ROLE=\"${prev_mcp_role}\"" >> "$tmp_path"
+        fi
+    fi
     if ! grep -q "^REDIS_URL=" "$tmp_path"; then
         echo "REDIS_URL=redis://${db_host}:6379" >> "$tmp_path"
     fi

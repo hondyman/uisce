@@ -23,10 +23,31 @@ var quartetChoked = []string{
 	"handlers/calc_handler.go",
 }
 
+// R3 wave1: BO/page HTTP writers + drift hot-swap (were fence-needed; now ApplyTenantGUCs).
+var wave1Choked = []string{
+	"api/business_object_handlers.go",
+	"api/bo_binding_fields.go",
+	"handlers/page_studio_core.go",
+	"handlers/page_studio_bundle.go",
+	"drift/patch_service.go",
+}
+
+// R3 wave2: catalog graph batch writers.
+var wave2Choked = []string{
+	"catalog/writer.go",
+}
+
+// R3 wave3: attribute package ad-hoc GUC → ApplyTenantGUCs.
+var wave3Choked = []string{
+	"attribute/service.go",
+	"attribute/hydrate.go",
+}
+
 // Remaining known fence-needed paths (tenant-bearing tables + Begin, no choke).
 // Grow this list as classification proceeds; shrink as files migrate.
+// Wave1 removed the five paths above; walk heuristics still count the rest.
 var fenceNeededRemaining = []string{
-	// empty after quartet — next wave fills from walk heuristics
+	// intentionally sparse — walk log is source of truth; named waves prove shrink
 }
 
 var tenantTableHints = []string{
@@ -94,6 +115,42 @@ func TestBeginTxInventory_DocumentsCutoverBlastRadius(t *testing.T) {
 		body := string(b)
 		if !strings.Contains(body, "ApplyTenantGUCs") {
 			t.Errorf("quartet %s must call ApplyTenantGUCs", rel)
+		}
+	}
+	for _, rel := range wave1Choked {
+		path := filepath.Join(root, rel)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("wave1 missing %s", rel)
+			continue
+		}
+		body := string(b)
+		if !strings.Contains(body, "ApplyTenantGUCs") {
+			t.Errorf("wave1 %s must call ApplyTenantGUCs", rel)
+		}
+	}
+	for _, rel := range wave2Choked {
+		path := filepath.Join(root, rel)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("wave2 missing %s", rel)
+			continue
+		}
+		body := string(b)
+		if !strings.Contains(body, "ApplyTenantGUCs") {
+			t.Errorf("wave2 %s must call ApplyTenantGUCs", rel)
+		}
+	}
+	for _, rel := range wave3Choked {
+		path := filepath.Join(root, rel)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("wave3 missing %s", rel)
+			continue
+		}
+		body := string(b)
+		if !strings.Contains(body, "ApplyTenantGUCs") {
+			t.Errorf("wave3 %s must call ApplyTenantGUCs", rel)
 		}
 	}
 	for _, rel := range fenceNeededRemaining {

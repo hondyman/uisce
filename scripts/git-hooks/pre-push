@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Blocks `git push` if literal secrets appear in the diff vs the upstream branch.
+# Specifically catches:
+#   - ENCRYPTION_KEY=<32-hex>
+#   - AUTH_SECRET=<32-hex>
+#   - LAKEKEEPER__PG_ENCRYPTION_KEY=<non-empty, non-${...}>
+#   - password= literals in compose env vars
+#   - any 32+ hex string after a `KEY=` or `SECRET=` or `PASSWORD=` in compose/.env files
+#
+# Bypass with `git push --no-verify` if you have a legitimate reason; AGENTS.md
+# "uisce-infisical password migration" section documents the rationale.
+#
+# Installed at: .git/hooks/pre-push
+# Activated by: git push (any branch)
+
+set -e
+
+# What is being pushed (remote + refspec from git's stdin to the hook)
+remote="$1"
+while read local_ref local_oid remote_ref remote_oid; do
+  if [ "$local_oid" = "0000000000000000000000000000000000000000" ]; then
+    continue  # deletion, skip
+  fi
+  if [ "$remote_oid" = "0000000000000000000000000000000000000000" ]; then
+    # New branch — diff against origin/main (or fallback)
+    base="$(git rev-parse --verify origin/main 2>/dev/null || git rev-parse --verify main 2>/dev/null || echo "")"
+    if [ -z "$base" ]; then
+      continue
+    fi
+    range="$base..$local_oid"
+  else
+    range="$remote_oid..$local_oid"
+  fi
+
+  # Inspect files in the diff (compose + .env files only)
+  files="$(git diff --name-only "$range" 2>/dev/null | grep -E '(docker-compose|compose\.|\.env|\.env\.)' || true)"
+  [ -z "$files" ] && continue
+
+  # Only check ADDED lines (those starting with `+`) — removed secrets are good.
+  # Header lines from git diff start with `+++` or `---` — filter those out.
+  # Patterns caught:
+  #   ENCRYPTION_KEY=<32-hex>           (Infisical kms key, Lakekeeper PG key)
+  #   AUTH_SECRET=<32-hex>             (Infisical session signing)
+  #   INFISICAL_TOKEN=st.<uuid>...      (Infisical service token)
+  #   PASSWORD=<non-placeholder>       (postgres password in compose env)
+  #   <REDACTED>                       (intentional tripwire)
+  #   postgres:Gu1nn3ss / admin:Gu1nn3ss  (legacy infisical user)
+  #   API_TOKEN_ENCRYPTION_KEY=<literal> (would mean rotating the alpha-DB tenant creds key — dangerous)
+  #   UISCE_APP_DSN=…user:password@…   (MCP app-role DSN — Infisical only)
+  bad="$(git diff "$range" -- $files 2>/dev/null | grep -E '^\+' | grep -vE '^\+\+\+' | \
+    grep -E 'ENCRYPTION_KEY=[0-9a-f]{32}|AUTH_SECRET=[0-9a-f]{32}|INFISICAL_TOKEN=st\.[0-9a-f]{8}-|PASSWORD=[^${]|<REDACTED>|postgres:Gu1nn3ss|admin:Gu1nn3ss|API_TOKEN_ENCRYPTION_KEY=[^$[:space:]]|UISCE_APP_DSN=[^$[:space:]]*:[^$[:space:]/]*@' || true)"
+
+  if [ -n "$bad" ]; then
+    echo "===================================================================="
+    echo "BLOCKED: literal secret(s) detected in push diff ($local_ref -> $remote:$remote_ref)"
+    echo "===================================================================="
+    echo "$bad"
+    echo ""
+    echo "Move secrets to .env (gitignored) and use \${VAR} interpolation."
+    echo "See AGENTS.md 'uisce-infisical password migration' section."
+    echo ""
+    echo "Bypass with: git push --no-verify  (use only after rotating the secret)"
+    exit 1
+  fi
+done
+
+exit 0

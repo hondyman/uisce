@@ -41,6 +41,10 @@ const (
 	// publish, as a mastering run linked to this pipeline run.
 	NodeMaster        = "master"
 	NodeVendorScoring = "vendor_scoring"
+	// NodeCubeMaterialize starts CubeMaterializeWorkflow for a cube grain
+	// (CUBE-2.4 thin adapter). Runs after the stream like master; may also
+	// stand alone with no upstream (action-only pipeline).
+	NodeCubeMaterialize = "cube_materialize"
 )
 
 // Error policies (data_pipeline_definitions.error_policy).
@@ -161,6 +165,25 @@ type MasterConfig struct {
 	Entity string `json:"entity"`
 }
 
+// CubeMaterializeConfig starts CubeMaterializeWorkflow for one cube (CUBE-2.4).
+// Grain empty ⇒ every declared grain. FederationKeySamples feed the orphan gate
+// when the cube declares federation.
+type CubeMaterializeConfig struct {
+	CubeID               string                     `json:"cube_id"`
+	Grain                []string                   `json:"grain,omitempty"`
+	Force                bool                       `json:"force,omitempty"`
+	FederationKeySamples []CubeMaterializeKeySample `json:"federation_key_samples,omitempty"`
+}
+
+// CubeMaterializeKeySample is the orphan-gate fixture for one join edge.
+type CubeMaterializeKeySample struct {
+	LeftAlias  string `json:"left_alias"`
+	RightAlias string `json:"right_alias"`
+	LeftKeys   int64  `json:"left_keys"`
+	RightKeys  int64  `json:"right_keys"`
+	Matched    int64  `json:"matched"`
+}
+
 type StagingSinkConfig struct {
 	Table    string `json:"table"`     // must be staging.<name>
 	SourceCd string `json:"source_cd"` // e.g. FACTSET
@@ -250,7 +273,7 @@ func (s *Spec) Validate() []error {
 	}
 
 	ids := map[string]*Node{}
-	var sources, sinks int
+	var sources, sinks, cubeMat int
 	for i := range s.Nodes {
 		n := &s.Nodes[i]
 		if n.ID == "" {
@@ -268,6 +291,9 @@ func (s *Spec) Validate() []error {
 		case NodeBOSink, NodeFileSink, NodeStagingSink, NodeIcebergSink, NodeVendorScoring, NodeQueueSink:
 			sinks++
 		case NodeValidate, NodeMap, NodeRuleCheck, NodeMaster:
+		case NodeCubeMaterialize:
+			cubeMat++
+			sinks++ // counts as a destination / action sink
 		default:
 			add("node %q: unknown type %q", n.ID, n.Type)
 			continue
@@ -276,7 +302,8 @@ func (s *Spec) Validate() []error {
 			add("node %q: %v", n.ID, e)
 		}
 	}
-	if sources == 0 {
+	actionOnly := sources == 0 && cubeMat > 0 && cubeMat == len(ids)
+	if sources == 0 && !actionOnly {
 		add("pipeline needs at least one source node")
 	}
 	if sinks == 0 {
@@ -307,6 +334,14 @@ func (s *Spec) Validate() []error {
 			}
 			if out[id] == 0 {
 				add("node %q: source has no outgoing edge", id)
+			}
+		case NodeCubeMaterialize:
+			// Standalone action node (0 inputs) or post-stream finisher (1 input).
+			if in[id] > 1 {
+				add("node %q: multiple inputs are not supported", id)
+			}
+			if out[id] > 0 {
+				add("node %q: a cube materialize step cannot have outputs", id)
 			}
 		default:
 			if in[id] == 0 {
@@ -520,6 +555,14 @@ func validateNodeConfig(n *Node) []error {
 		}
 		if strings.TrimSpace(c.Entity) == "" {
 			add("entity is required")
+		}
+	case NodeCubeMaterialize:
+		var c CubeMaterializeConfig
+		if !decode(&c) {
+			return errs
+		}
+		if strings.TrimSpace(c.CubeID) == "" {
+			add("cube_id is required")
 		}
 	case NodeIcebergSink:
 		var c IcebergSinkConfig

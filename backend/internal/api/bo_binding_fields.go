@@ -9,8 +9,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/handlers"
-	"github.com/hondyman/uisce/backend/internal/tenant"
 )
 
 // bindingFieldInput is one field from the binding wizard.
@@ -95,7 +95,8 @@ func (h *BusinessObjectHandler) UpsertBindingFields(w http.ResponseWriter, r *ht
 		return
 	}
 	defer tx.Rollback() //nolint:errcheck
-	if err := tenant.SetRLSContext(ctx, tx, secCtx.TenantID); err != nil {
+	// Replaces tenant.SetRLSContext: ApplyTenantGUCs also sets app.tenant_id (legacy belt) for FORCE RLS (R3 wave1).
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx.Tx, secCtx.TenantID, ""); err != nil {
 		http.Error(w, "database unavailable", http.StatusInternalServerError)
 		return
 	}

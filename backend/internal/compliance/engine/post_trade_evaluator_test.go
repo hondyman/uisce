@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -71,14 +72,15 @@ func TestPostTradeEvaluator_E2E_PilotRulesAndSupersession(t *testing.T) {
 		GrossExposure: decimal.RequireFromString("12000000.000000"),
 		NetExposure:   decimal.RequireFromString("10000000.000000"),
 		CashBalance:   decimal.RequireFromString("4000000.000000"),
-		MarginLimit:   decimal.RequireFromString("15000000.000000"),
+		MarginLimit:            decimal.RequireFromString("15000000.000000"),
+		LiquidityCoverageRatio: decimal.RequireFromString("1.250000"),
 		Positions: []PortfolioPosition{
-			{SecurityID: "SEC-001", Symbol: "EQ1", IssuerID: "ISS-1", MarketValue: decimal.RequireFromString("800000.000000"), Sector: "Information Technology", IndustryGroup: "Software", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false},
-			{SecurityID: "SEC-002", Symbol: "EQ2", IssuerID: "ISS-2", MarketValue: decimal.RequireFromString("900000.000000"), Sector: "Health Care", IndustryGroup: "Pharmaceuticals", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false},
-			{SecurityID: "SEC-003", Symbol: "EQ3", IssuerID: "ISS-3", MarketValue: decimal.RequireFromString("900000.000000"), Sector: "Financials", IndustryGroup: "Banks", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false},
-			{SecurityID: "SEC-004", Symbol: "EQ4", IssuerID: "ISS-4", MarketValue: decimal.RequireFromString("850000.000000"), Sector: "Consumer Staples", IndustryGroup: "Food", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false},
-			{SecurityID: "SEC-005", Symbol: "EQ5", IssuerID: "ISS-5", MarketValue: decimal.RequireFromString("850000.000000"), Sector: "Communication Services", IndustryGroup: "Media", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false},
-			{SecurityID: "SEC-006", Symbol: "BD1", IssuerID: "ISS-6", MarketValue: decimal.RequireFromString("500000.000000"), Sector: "Utilities", IndustryGroup: "Electric", CountryClassification: "DEVELOPED", Is144A: true, IsQIBEligible: false},
+			{SecurityID: "SEC-001", Symbol: "EQ1", IssuerID: "ISS-1", MarketValue: decimal.RequireFromString("800000.000000"), Sector: "Information Technology", IndustryGroup: "Software", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false, HasEmissionsData: true, WaciIntensity: decimal.RequireFromString("120.000000"), GhgScope12Intensity: decimal.RequireFromString("70.000000"), BoardGenderDiversityPct: decimal.RequireFromString("0.350000"), HazardousWasteRatio: decimal.RequireFromString("2.000000"), EuTaxonomyAlignmentPct: decimal.RequireFromString("0.200000")},
+			{SecurityID: "SEC-002", Symbol: "EQ2", IssuerID: "ISS-2", MarketValue: decimal.RequireFromString("900000.000000"), Sector: "Health Care", IndustryGroup: "Pharmaceuticals", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false, HasEmissionsData: true, WaciIntensity: decimal.RequireFromString("120.000000"), GhgScope12Intensity: decimal.RequireFromString("70.000000"), BoardGenderDiversityPct: decimal.RequireFromString("0.350000"), HazardousWasteRatio: decimal.RequireFromString("2.000000"), EuTaxonomyAlignmentPct: decimal.RequireFromString("0.200000")},
+			{SecurityID: "SEC-003", Symbol: "EQ3", IssuerID: "ISS-3", MarketValue: decimal.RequireFromString("900000.000000"), Sector: "Financials", IndustryGroup: "Banks", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false, HasEmissionsData: true, WaciIntensity: decimal.RequireFromString("120.000000"), GhgScope12Intensity: decimal.RequireFromString("70.000000"), BoardGenderDiversityPct: decimal.RequireFromString("0.350000"), HazardousWasteRatio: decimal.RequireFromString("2.000000"), EuTaxonomyAlignmentPct: decimal.RequireFromString("0.200000")},
+			{SecurityID: "SEC-004", Symbol: "EQ4", IssuerID: "ISS-4", MarketValue: decimal.RequireFromString("850000.000000"), Sector: "Consumer Staples", IndustryGroup: "Food", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false, HasEmissionsData: true, WaciIntensity: decimal.RequireFromString("120.000000"), GhgScope12Intensity: decimal.RequireFromString("70.000000"), BoardGenderDiversityPct: decimal.RequireFromString("0.350000"), HazardousWasteRatio: decimal.RequireFromString("2.000000"), EuTaxonomyAlignmentPct: decimal.RequireFromString("0.200000")},
+			{SecurityID: "SEC-005", Symbol: "EQ5", IssuerID: "ISS-5", MarketValue: decimal.RequireFromString("850000.000000"), Sector: "Communication Services", IndustryGroup: "Media", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false, HasEmissionsData: true, WaciIntensity: decimal.RequireFromString("120.000000"), GhgScope12Intensity: decimal.RequireFromString("70.000000"), BoardGenderDiversityPct: decimal.RequireFromString("0.350000"), HazardousWasteRatio: decimal.RequireFromString("2.000000"), EuTaxonomyAlignmentPct: decimal.RequireFromString("0.200000")},
+			{SecurityID: "SEC-006", Symbol: "BD1", IssuerID: "ISS-6", MarketValue: decimal.RequireFromString("500000.000000"), Sector: "Utilities", IndustryGroup: "Electric", CountryClassification: "DEVELOPED", Is144A: true, IsQIBEligible: false, HasEmissionsData: true, WaciIntensity: decimal.RequireFromString("120.000000"), GhgScope12Intensity: decimal.RequireFromString("70.000000"), BoardGenderDiversityPct: decimal.RequireFromString("0.350000"), HazardousWasteRatio: decimal.RequireFromString("2.000000"), EuTaxonomyAlignmentPct: decimal.RequireFromString("0.200000")},
 		},
 	}
 
@@ -104,10 +106,18 @@ func TestPostTradeEvaluator_E2E_PilotRulesAndSupersession(t *testing.T) {
 	require.Equal(t, 1, snapCount)
 
 	// Verify Finding row exists in DB
-	var openFindingsCount int
-	err = db.QueryRowContext(ctx, "SELECT count(*) FROM compliance.compliance_finding WHERE tenant_id = $1 AND status = 'OPEN'", tenantA).Scan(&openFindingsCount)
+	rows, err := db.QueryContext(ctx, "SELECT rule_code, action, finding_severity, status, details FROM compliance.compliance_finding WHERE tenant_id = $1 AND status = 'OPEN'", tenantA)
 	require.NoError(t, err)
-	require.Equal(t, 1, openFindingsCount)
+	defer rows.Close()
+	var openRules []string
+	for rows.Next() {
+		var rc, act, sev, st string
+		var dt []byte
+		require.NoError(t, rows.Scan(&rc, &act, &sev, &st, &dt))
+		openRules = append(openRules, fmt.Sprintf("%s (%s/%s: %s)", rc, act, sev, string(dt)))
+	}
+	t.Logf("Open Findings in DB (%d): %v", len(openRules), openRules)
+	require.Equal(t, 1, len(openRules), "Expected exactly 1 open finding (UCITS_5_10_40)")
 
 	// =========================================================================
 	// Scenario 2: Idempotency Re-run with Exact Same Input
@@ -162,11 +172,11 @@ func TestPostTradeEvaluator_E2E_PilotRulesAndSupersession(t *testing.T) {
 	// Rebalancing: Positions trimmed so aggregate above 5% drops to 35% (within 40% limit)
 	state3 := state1
 	state3.Positions = []PortfolioPosition{
-		{SecurityID: "SEC-001", Symbol: "EQ1", IssuerID: "ISS-1", MarketValue: decimal.RequireFromString("700000.000000"), Sector: "Information Technology", IndustryGroup: "Software", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false},
-		{SecurityID: "SEC-002", Symbol: "EQ2", IssuerID: "ISS-2", MarketValue: decimal.RequireFromString("700000.000000"), Sector: "Health Care", IndustryGroup: "Pharmaceuticals", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false},
-		{SecurityID: "SEC-003", Symbol: "EQ3", IssuerID: "ISS-3", MarketValue: decimal.RequireFromString("700000.000000"), Sector: "Financials", IndustryGroup: "Banks", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false},
-		{SecurityID: "SEC-004", Symbol: "EQ4", IssuerID: "ISS-4", MarketValue: decimal.RequireFromString("700000.000000"), Sector: "Consumer Staples", IndustryGroup: "Food", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false},
-		{SecurityID: "SEC-005", Symbol: "EQ5", IssuerID: "ISS-5", MarketValue: decimal.RequireFromString("700000.000000"), Sector: "Communication Services", IndustryGroup: "Media", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false}, // Total 35%
+		{SecurityID: "SEC-001", Symbol: "EQ1", IssuerID: "ISS-1", MarketValue: decimal.RequireFromString("700000.000000"), Sector: "Information Technology", IndustryGroup: "Software", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false, HasEmissionsData: true, WaciIntensity: decimal.RequireFromString("120.000000"), GhgScope12Intensity: decimal.RequireFromString("70.000000"), BoardGenderDiversityPct: decimal.RequireFromString("0.350000"), HazardousWasteRatio: decimal.RequireFromString("2.000000"), EuTaxonomyAlignmentPct: decimal.RequireFromString("0.200000")},
+		{SecurityID: "SEC-002", Symbol: "EQ2", IssuerID: "ISS-2", MarketValue: decimal.RequireFromString("700000.000000"), Sector: "Health Care", IndustryGroup: "Pharmaceuticals", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false, HasEmissionsData: true, WaciIntensity: decimal.RequireFromString("120.000000"), GhgScope12Intensity: decimal.RequireFromString("70.000000"), BoardGenderDiversityPct: decimal.RequireFromString("0.350000"), HazardousWasteRatio: decimal.RequireFromString("2.000000"), EuTaxonomyAlignmentPct: decimal.RequireFromString("0.200000")},
+		{SecurityID: "SEC-003", Symbol: "EQ3", IssuerID: "ISS-3", MarketValue: decimal.RequireFromString("700000.000000"), Sector: "Financials", IndustryGroup: "Banks", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false, HasEmissionsData: true, WaciIntensity: decimal.RequireFromString("120.000000"), GhgScope12Intensity: decimal.RequireFromString("70.000000"), BoardGenderDiversityPct: decimal.RequireFromString("0.350000"), HazardousWasteRatio: decimal.RequireFromString("2.000000"), EuTaxonomyAlignmentPct: decimal.RequireFromString("0.200000")},
+		{SecurityID: "SEC-004", Symbol: "EQ4", IssuerID: "ISS-4", MarketValue: decimal.RequireFromString("700000.000000"), Sector: "Consumer Staples", IndustryGroup: "Food", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false, HasEmissionsData: true, WaciIntensity: decimal.RequireFromString("120.000000"), GhgScope12Intensity: decimal.RequireFromString("70.000000"), BoardGenderDiversityPct: decimal.RequireFromString("0.350000"), HazardousWasteRatio: decimal.RequireFromString("2.000000"), EuTaxonomyAlignmentPct: decimal.RequireFromString("0.200000")},
+		{SecurityID: "SEC-005", Symbol: "EQ5", IssuerID: "ISS-5", MarketValue: decimal.RequireFromString("700000.000000"), Sector: "Communication Services", IndustryGroup: "Media", CountryClassification: "DEVELOPED", Is144A: false, IsQIBEligible: false, HasEmissionsData: true, WaciIntensity: decimal.RequireFromString("120.000000"), GhgScope12Intensity: decimal.RequireFromString("70.000000"), BoardGenderDiversityPct: decimal.RequireFromString("0.350000"), HazardousWasteRatio: decimal.RequireFromString("2.000000"), EuTaxonomyAlignmentPct: decimal.RequireFromString("0.200000")}, // Total 35%
 	}
 
 	results4, err := evaluator.EvaluateAndPersist(ctx, state3)

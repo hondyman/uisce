@@ -170,28 +170,16 @@ describe('mapping table, on the staging binding editor', () => {
 });
 
 describe('no widget in the app still shows a JSON box in its form', () => {
-  it('on every widget of every shipped page', async () => {
-    const seen: string[] = [];
-    // Yield to the event loop between widgets. This loop renders every app
-    // widget of every shipped page - 206 renders - and it used to run as one
-    // uninterrupted block: measured with a 25ms interval sampler, the
-    // unyielding loop served ZERO timer callbacks across 20,706ms. A vitest
-    // worker starved that long cannot answer the main thread's progress RPC,
-    // and under `--coverage` (what CI runs; the v8 instrumentation makes the
-    // loop appreciably slower) it tipped into `[vitest-worker]: Timeout
-    // calling "onTaskUpdate"`. That fails the whole suite with every assertion
-    // green - `Test Files 113 passed (114)`, `Tests 662 passed (668)` - and
-    // six tests silently unreported, so it reads as a phantom failure in
-    // whichever file happened to be running.
-    //
-    // With the yield: 150 timer callbacks served, worst single block 802ms,
-    // and the loop costs 164ms more (20,706ms -> 20,870ms).
-    //
-    // This was already failing on `main` before it was seen on a branch: 4 of
-    // main's last 8 CI/CD Pipeline runs were red on Build Frontend with this
-    // exact signature, so it is a pre-existing defect, not something a change
-    // to backend code could have introduced.
-    for (const b of PAGE_BLUEPRINTS) {
+  // One it() per blueprint so the vitest worker reports progress between
+  // pages. A single 14-blueprint loop (cubes-catalog + cube-designer joined
+  // the prior 12) still starves under `--coverage` even with setTimeout(0)
+  // yields: CI then fails with `[vitest-worker]: Timeout calling
+  // "onTaskUpdate"` while every assertion is green (Build Frontend on
+  // #411 @ 5554573d4: Test Files 121 passed (122), Tests 736 passed (742),
+  // 3 unhandled Errors). Splitting restores per-page RPC heartbeats.
+  for (const b of PAGE_BLUEPRINTS) {
+    it(`on every widget of ${b.id}`, async () => {
+      const seen: string[] = [];
       const bp = b.build();
       for (const [id, c] of Object.entries(bp.components)) {
         if (!(APP_WIDGET_TYPES as readonly string[]).includes(c.type)) continue;
@@ -201,7 +189,7 @@ describe('no widget in the app still shows a JSON box in its form', () => {
         cleanup();
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
-    }
-    expect(seen).toEqual([]);
-  }, 180000);
+      expect(seen).toEqual([]);
+    }, 60000);
+  }
 });

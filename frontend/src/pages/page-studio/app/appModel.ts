@@ -45,11 +45,30 @@ export interface PageVariable {
   description?: string;
 }
 
+/** How a saved-query page query binds a parameter to page/runtime scope. */
+export type ParamBinding =
+  | { mode: 'pageVar'; varName: string }
+  | { mode: 'selectionContext'; field: string }
+  | { mode: 'staticLiteral'; value: string | number | boolean }
+  | { mode: 'urlParam'; paramName: string };
+
+/**
+ * Page query: operation-backed (registered operation id) or saved-query-backed
+ * (Query Builder / analytical tiles). `operation` stays required so existing
+ * readers keep typing; saved-query rows use `operation: ''` and set
+ * `kind: 'savedQuery'` (AppRuntime branches on kind first). Mirrored
+ * `subject` carries cube pins for publish gates (PR1b).
+ */
 export interface PageQuery {
   id: string;
-  /** Registered operation id, e.g. mastering.golden.list. */
+  /** Registered operation id, e.g. mastering.golden.list. Empty string when kind==='savedQuery'. */
   operation: string;
   params?: Record<string, Binding>;
+  /** Discriminator for saved-query-backed page queries. */
+  kind?: 'savedQuery';
+  savedQueryId?: string;
+  subject?: import('../../../features/analytical-subject').QuerySubject;
+  paramBindings?: Record<string, ParamBinding>;
   /** Only run while this holds (e.g. an entity has been chosen). Absent = always. */
   enabledWhen?: ConditionNode;
   /** Keep showing the previous result while new params load (filters, paging). Search inputs debounce themselves. */

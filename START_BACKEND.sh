@@ -143,6 +143,18 @@ fi
 
 export POSTGRES_DSN="${POSTGRES_DSN:-${DATABASE_URL:-postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable}}"
 export DATABASE_URL="${DATABASE_URL:-$POSTGRES_DSN}"
+# MCP staged cutover (docs/design/2026-10-06-rls-mcp-production-binding.md):
+# UISCE_APP_DSN from Infisical/.env when present; else OpenMCPAppDB SET ROLE on DATABASE_URL.
+# Do not invent a default password here. Never echo the DSN.
+if [ -n "${UISCE_APP_DSN:-}" ]; then
+  export UISCE_APP_DSN
+  echo -e "${YELLOW}   UISCE_APP_DSN: set (MCP prefers direct app-role DSN)${NC}"
+else
+  echo -e "${YELLOW}   UISCE_APP_DSN: unset (MCP uses SET ROLE uisce_mcp_app on DATABASE_URL)${NC}"
+fi
+if [ -n "${UISCE_MCP_DB_ROLE:-}" ]; then
+  export UISCE_MCP_DB_ROLE
+fi
 : "${JWT_SECRET:?JWT_SECRET not set — refusing to start with the test-secret default that is in git history}"
 export JWT_SECRET
 export PORT="${PORT:-8080}"

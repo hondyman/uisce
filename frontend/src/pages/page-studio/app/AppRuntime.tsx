@@ -158,7 +158,7 @@ export const AppRuntimeProvider: React.FC<{
       queryKey: isSavedQuery
         ? ['savedQuery', q.savedQueryId, params]
         : [op?.domain ?? 'studio', 'studio', q.operation, params],
-      queryFn: () => (isSavedQuery ? runSavedQuery(q.savedQueryId, params) : op!.run(params)),
+      queryFn: () => (isSavedQuery ? runSavedQuery(q.savedQueryId!, params) : op!.run(params)),
       enabled: ready,
       refetchInterval: polling[q.id] ? (q.refetchMs ?? 2000) : false,
       // useQueries does not hand placeholderData the previous key's data, so keep it here.

@@ -31,11 +31,12 @@ implementations of the same feature — sometimes 3-5 deep. Concretely found:
 - **Two Page Studio implementations.** The live one is `/page-studio` →
   `PageStudioPage.tsx` → `PageEditor.tsx` → `LayoutCanvas.tsx`, using
   `CorePageDefinition`/`ComponentDefinition`. There is a second, newer-
-  looking, more complete-seeming one (`PageStudioCanvas.tsx`,
-  `pageStudioTypes.ts`, `widgetRegistry.tsx`, `PageStudioPropertiesPanel.tsx`,
-  tabs, subtypes, `relatedObject` widgets) that is **not mounted anywhere**
-  — only referenced from its own test file. Verify with `grep -rn
-  "<PageStudioCanvas"` before assuming it's real.
+  looking, more complete-seeming one under `frontend/src/components/pagestudio/`
+  (`PageStudioCanvas.tsx`, `pageStudioTypes.ts`, `widgetRegistry.tsx`,
+  `PageStudioPropertiesPanel.tsx`, tabs, subtypes, `relatedObject` widgets)
+  that is **not mounted anywhere** — only referenced from its own vitests.
+  **Do not revive or wire it.** Product ban is in `Agents.md` (Page Designer
+  axiom); archive plan: `docs/design/2026-10-05-pr8-pagestudio-archive-plan.md`.
 - **A third, abandoned "Page Designer"** exists only on two stale worktree
   branches (`claude/wonderful-hawking-0ae04c`,
   `claude/relaxed-antonelli-f74b57`), 31 commits behind `main`. Do not merge

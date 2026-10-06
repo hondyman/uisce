@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/dberrors"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	catalogmeta "github.com/hondyman/uisce/backend/internal/metadata"
@@ -887,6 +888,11 @@ func (h *BusinessObjectHandler) CreateBusinessObjectBinding(w http.ResponseWrite
 		return
 	}
 	defer tx.Rollback()
+	// Predicate delta: none — SQL already binds secCtx.TenantID; choke SET LOCALs GUCs for FORCE RLS (R3 wave1).
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx.Tx, secCtx.TenantID, ""); err != nil {
+		http.Error(w, "failed to set tenant context: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	if isDefault {
 		if _, err := tx.ExecContext(ctx, `UPDATE public.business_object_binding SET is_default = false WHERE bo_id = $1::uuid AND tenant_id = $2::uuid`, boID, secCtx.TenantID); err != nil {
@@ -982,6 +988,10 @@ func (h *BusinessObjectHandler) UpdateBusinessObjectBinding(w http.ResponseWrite
 		return
 	}
 	defer tx.Rollback()
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx.Tx, secCtx.TenantID, ""); err != nil {
+		http.Error(w, "failed to set tenant context: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	if req.IsDefault != nil && *req.IsDefault {
 		if _, err := tx.ExecContext(ctx, `UPDATE public.business_object_binding SET is_default = false WHERE bo_id = $1::uuid AND tenant_id = $2::uuid AND bo_binding_id != $3::uuid`, boID, secCtx.TenantID, bindingID); err != nil {
@@ -1058,6 +1068,10 @@ func (h *BusinessObjectHandler) DeleteBusinessObjectBinding(w http.ResponseWrite
 		return
 	}
 	defer tx.Rollback()
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx.Tx, secCtx.TenantID, ""); err != nil {
+		http.Error(w, "failed to set tenant context: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM public.business_object_binding WHERE bo_binding_id = $1::uuid AND bo_id = $2::uuid AND tenant_id = $3::uuid`, bindingID, boID, secCtx.TenantID); err != nil {
 		http.Error(w, "failed to delete binding: "+err.Error(), http.StatusInternalServerError)

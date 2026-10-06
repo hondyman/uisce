@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"regexp"
@@ -14,6 +15,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/msgcat"
+	"github.com/hondyman/uisce/backend/internal/querybuilder"
 	"github.com/hondyman/uisce/backend/internal/reports"
 	"github.com/hondyman/uisce/backend/internal/schedule"
 	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
@@ -74,12 +76,31 @@ func (s *Server) registerScheduleRoutes(r chi.Router, sqlxDB *sqlx.DB, tc tempor
 		siSvc := si.NewService(sqlxDB, si.NewSemanticAdapter(sqlxDB, s.SemanticSvc), logging.GetLogger())
 		runners.Register(newJobDAGRunner(siSvc, tc, si.NewRepository(sqlxDB)))
 	}
+	if s.CubeHandler != nil {
+		runners.Register(&cubeRefreshRunner{cubes: s.CubeHandler, starter: s})
+	}
 	s.ScheduleRunners = runners
 
 	store := &schedule.Store{DB: sqlxDB}
 	cals := &schedule.MDMCalendars{DB: calDB, GoldTenantID: gold}
 	svc := &schedule.Service{Store: store, Engine: &schedule.TemporalEngine{Client: tc}, Calendars: cals, Runners: runners}
 	s.ScheduleService = svc
+
+	// Cube cascade side-effects: pause schedules (A4) + start materialize (A5).
+	if s.CubeHandler != nil {
+		s.CubeHandler.SetCascadeSideEffects(querybuilder.CubeCascadeSideEffects{
+			PauseSchedule: func(ctx context.Context, tenantID, scheduleID, actorUserID string) error {
+				_, err := svc.SetEnabled(ctx, schedule.Actor{
+					UserID:   actorUserID,
+					TenantID: tenantID,
+				}, scheduleID, false)
+				return err
+			},
+			StartMaterialize: func(ctx context.Context, req querybuilder.CubeMaterializeRequest) (string, *querybuilder.CubeMaterializePlan, error) {
+				return s.StartCubeMaterialize(ctx, req)
+			},
+		})
+	}
 
 	if tc != nil {
 		acts := &schedule.Activities{Store: store, Calendars: cals, Runners: runners}

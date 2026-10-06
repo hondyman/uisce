@@ -27,6 +27,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/corecustom"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/security"
 )
 
@@ -368,6 +369,14 @@ func (h *PageStudioHandler) cloneCore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
+	gold := ""
+	if g := h.goldCopyID(r.Context()); g != uuid.Nil {
+		gold = g.String()
+	}
+	if err := dbpkg.ApplyTenantGUCs(r.Context(), tx.Tx, tenantID.String(), gold); err != nil {
+		http.Error(w, "failed to set tenant context: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	cloneID := uuid.New()
 	var clone PageStudioPage
 	err = tx.GetContext(r.Context(), &clone, `
@@ -417,6 +426,14 @@ func (h *PageStudioHandler) revertToCore(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	defer tx.Rollback()
+	gold := ""
+	if g := h.goldCopyID(r.Context()); g != uuid.Nil {
+		gold = g.String()
+	}
+	if err := dbpkg.ApplyTenantGUCs(r.Context(), tx.Tx, tenantID.String(), gold); err != nil {
+		http.Error(w, "failed to set tenant context: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if a != nil && a.CloneObjectID.Valid {
 		if _, err := tx.ExecContext(r.Context(), `DELETE FROM page_definitions WHERE id = $1 AND tenant_id = $2 AND is_core = false`, a.CloneObjectID.UUID, tenantID); err != nil {
 			http.Error(w, "failed to delete clone: "+err.Error(), http.StatusInternalServerError)

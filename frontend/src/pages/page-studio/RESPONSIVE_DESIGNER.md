@@ -125,4 +125,4 @@ in breakpoint frame is landing in, per the materialize-on-touch rule above).
   pending `term_node_id` migration — see `BO_SERVICES.md`)
 - Any AI-assisted layout suggestion
 - Actual save-path wiring (see wire-later note)
-- Reconciling this module with `components/pagestudio/*`
+- Reconciling this module with orphan `components/pagestudio/*` — **do not**; ban + archive plan in `docs/design/2026-10-05-pr8-pagestudio-archive-plan.md`

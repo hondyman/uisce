@@ -96,6 +96,34 @@ type Masterer interface {
 	MasterLoad(ctx context.Context, r MasterRequest) (*MasterResult, error)
 }
 
+// CubeMaterializeStartRequest asks the cube materialize adapter to start
+// CubeMaterializeWorkflow for one cube (all grains, or Grain when set).
+type CubeMaterializeStartRequest struct {
+	TenantID             string
+	CubeID               string
+	Grain                []string // empty ⇒ every declared grain
+	Force                bool
+	FederationKeySamples []CubeMaterializeKeySample
+	PipelineRunID        string
+}
+
+// CubeMaterializeResult is what a cube_materialize step started.
+type CubeMaterializeResult struct {
+	NodeID         string   `json:"node_id"`
+	CubeID         string   `json:"cube_id"`
+	Started        int      `json:"started"`
+	AlreadyRunning int      `json:"already_running"`
+	Grains         int      `json:"grains"`
+	WorkflowIDs    []string `json:"workflow_ids,omitempty"`
+	Summary        string   `json:"summary,omitempty"`
+}
+
+// CubeMaterializer starts CubeMaterializeWorkflow (wired by the API server;
+// nil: cube_materialize steps can't run).
+type CubeMaterializer interface {
+	MaterializeCube(ctx context.Context, r CubeMaterializeStartRequest) (*CubeMaterializeResult, error)
+}
+
 // Recorder receives per-run observability. Implementations persist to
 // data_pipeline_runs / data_pipeline_step_telemetry / staging._mapping_error.
 type Recorder interface {
@@ -130,11 +158,13 @@ type Factory interface {
 type Summary struct {
 	Nodes []NodeStats
 	// Mastering: the mastering runs the pipeline's master steps started.
-	Mastering  []MasterResult   `json:"mastering,omitempty"`
-	Samples    map[string][]Row `json:"samples,omitempty"` // preview only
-	RecordsIn  int64            // rows read from sources
-	RecordsOut int64            // rows accepted by sinks
-	Errors     int64
+	Mastering []MasterResult `json:"mastering,omitempty"`
+	// CubeMaterialize: cube deploy/refresh workflows cube_materialize steps started.
+	CubeMaterialize []CubeMaterializeResult `json:"cube_materialize,omitempty"`
+	Samples         map[string][]Row        `json:"samples,omitempty"` // preview only
+	RecordsIn       int64                   // rows read from sources
+	RecordsOut      int64                   // rows accepted by sinks
+	Errors          int64
 }
 
 const defaultBatchSize = 2000
@@ -164,13 +194,18 @@ func Run(ctx context.Context, spec *Spec, rc *RunContext, f Factory, rec Recorde
 	for _, n := range spec.Nodes {
 		nodes[n.ID] = n
 	}
-	// Master steps run after the stream, once every sink has committed; they
-	// are not in the stream (a staging sink with one is still a sink).
+	// Master and cube_materialize steps run after the stream, once every sink
+	// has committed; they are not in the stream. cube_materialize may also
+	// stand alone with no upstream (action-only pipeline).
 	children := map[string][]string{}
 	masterOf := map[string]string{} // master node -> its staging sink
 	for _, e := range spec.Edges {
-		if nodes[e.To].Type == NodeMaster {
+		switch nodes[e.To].Type {
+		case NodeMaster:
 			masterOf[e.To] = e.From
+			continue
+		case NodeCubeMaterialize:
+			// Optional parent is ordering only; do not push rows into it.
 			continue
 		}
 		children[e.From] = append(children[e.From], e.To)
@@ -185,7 +220,7 @@ func Run(ctx context.Context, spec *Spec, rc *RunContext, f Factory, rec Recorde
 		n := nodes[id]
 		stats[id] = &NodeStats{NodeID: id, Label: n.Label, Type: n.Type, OrderIndex: i, Status: "COMPLETED"}
 		switch n.Type {
-		case NodeFileSource, NodeBOSource, NodeQueueSource, NodeMaster:
+		case NodeFileSource, NodeBOSource, NodeQueueSource, NodeMaster, NodeCubeMaterialize:
 		default:
 			p, err := f.Processor(n)
 			if err != nil {
@@ -377,6 +412,30 @@ func Run(ctx context.Context, spec *Spec, rc *RunContext, f Factory, rec Recorde
 				id, errors.New(st.Err))
 		}
 	}
+	// Cube materialize steps (CUBE-2.4): after the stream (and masters), start
+	// CubeMaterializeWorkflow for each cube_materialize node. Standalone
+	// action-only pipelines have no sources; they still reach here.
+	for _, id := range order {
+		if nodes[id].Type != NodeCubeMaterialize {
+			continue
+		}
+		st := stats[id]
+		if runErr != nil || rc.DryRun {
+			st.Status = "SKIPPED"
+			continue
+		}
+		res, err := cubeMaterializeStep(ctx, f, rc, nodes[id])
+		if res != nil {
+			sum.CubeMaterialize = append(sum.CubeMaterialize, *res)
+			st.Out = int64(res.Started)
+			st.Warnings = int64(res.AlreadyRunning)
+		}
+		if err != nil {
+			st.Status, st.Err = "FAILED", err.Error()
+			runErr = fmt.Errorf("node %q: cube materialize failed: %w", id, err)
+			continue
+		}
+	}
 	out := summarize(order, stats, nodes)
 	sum.Nodes = out.Nodes
 	if rec != nil {
@@ -440,6 +499,33 @@ func masterStep(ctx context.Context, f Factory, rc *RunContext, n, staging Node)
 		Entity: strings.ToLower(strings.TrimSpace(c.Entity)), StagingTable: sc.Table, LoadRunID: load, PipelineRunID: rc.RunID})
 	if res != nil {
 		res.NodeID, res.LoadRunID = n.ID, load
+	}
+	return res, err
+}
+
+// cubeMaterializeStep starts CubeMaterializeWorkflow for the node's cube.
+func cubeMaterializeStep(ctx context.Context, f Factory, rc *RunContext, n Node) (*CubeMaterializeResult, error) {
+	var c CubeMaterializeConfig
+	if err := decodeConfig(n, &c); err != nil {
+		return nil, err
+	}
+	m, ok := f.(interface{ CubeMaterializer() CubeMaterializer })
+	if !ok || m.CubeMaterializer() == nil {
+		return nil, fmt.Errorf("cube materialize is not configured for this environment")
+	}
+	res, err := m.CubeMaterializer().MaterializeCube(context.WithoutCancel(ctx), CubeMaterializeStartRequest{
+		TenantID:             rc.TenantID,
+		CubeID:               strings.TrimSpace(c.CubeID),
+		Grain:                c.Grain,
+		Force:                c.Force,
+		FederationKeySamples: c.FederationKeySamples,
+		PipelineRunID:        rc.RunID,
+	})
+	if res != nil {
+		res.NodeID = n.ID
+		if res.CubeID == "" {
+			res.CubeID = strings.TrimSpace(c.CubeID)
+		}
 	}
 	return res, err
 }

@@ -514,52 +514,47 @@ func (e *PostTradeEvaluator) ComputePortfolioMetrics(state *PortfolioState) map[
 	}
 	metrics["portfolio.settlement_fail_exposure_pct"] = failedSettlementWeight
 
-	// 31. WACI (Weighted Average Carbon Intensity) + Emissions Data Coverage Ratio
-	var waciSum, coveredEmissionsWeight decimal.Decimal
+	// 31-35. ESG & Sustainability Metrics (Normalized over Invested Portfolio Assets)
+	var totalInvestedMV decimal.Decimal
 	for _, pos := range state.Positions {
-		if pos.HasEmissionsData || pos.WaciIntensity.GreaterThan(decimal.Zero) {
-			coveredEmissionsWeight = coveredEmissionsWeight.Add(pos.Weight)
-			waciSum = waciSum.Add(pos.Weight.Mul(pos.WaciIntensity))
-		}
+		totalInvestedMV = totalInvestedMV.Add(pos.MarketValue)
 	}
-	metrics["portfolio.esg_waci_tco2e_per_m_revenue"] = waciSum
-	metrics["portfolio.esg_emissions_data_coverage_pct"] = coveredEmissionsWeight
 
-	// 32. Scope 1 & 2 GHG Emissions Intensity
-	var scope12Sum decimal.Decimal
-	for _, pos := range state.Positions {
-		if pos.GhgScope12Intensity.GreaterThan(decimal.Zero) {
-			scope12Sum = scope12Sum.Add(pos.Weight.Mul(pos.GhgScope12Intensity))
+	if totalInvestedMV.GreaterThan(decimal.Zero) {
+		var waciSum, coveredEmissionsMV, scope12Sum, diversitySum, wasteSum, taxonomySum decimal.Decimal
+		for _, pos := range state.Positions {
+			invWeight := pos.MarketValue.Div(totalInvestedMV)
+			if pos.HasEmissionsData || pos.WaciIntensity.GreaterThan(decimal.Zero) {
+				coveredEmissionsMV = coveredEmissionsMV.Add(pos.MarketValue)
+				waciSum = waciSum.Add(invWeight.Mul(pos.WaciIntensity))
+			}
+			if pos.GhgScope12Intensity.GreaterThan(decimal.Zero) {
+				scope12Sum = scope12Sum.Add(invWeight.Mul(pos.GhgScope12Intensity))
+			}
+			if pos.BoardGenderDiversityPct.GreaterThan(decimal.Zero) {
+				diversitySum = diversitySum.Add(invWeight.Mul(pos.BoardGenderDiversityPct))
+			}
+			if pos.HazardousWasteRatio.GreaterThan(decimal.Zero) {
+				wasteSum = wasteSum.Add(invWeight.Mul(pos.HazardousWasteRatio))
+			}
+			if pos.EuTaxonomyAlignmentPct.GreaterThan(decimal.Zero) {
+				taxonomySum = taxonomySum.Add(invWeight.Mul(pos.EuTaxonomyAlignmentPct))
+			}
 		}
+		metrics["portfolio.esg_waci_tco2e_per_m_revenue"] = waciSum
+		metrics["portfolio.esg_emissions_data_coverage_pct"] = coveredEmissionsMV.Div(totalInvestedMV)
+		metrics["portfolio.esg_ghg_scope_1_2_intensity"] = scope12Sum
+		metrics["portfolio.esg_board_gender_diversity_pct"] = diversitySum
+		metrics["portfolio.esg_hazardous_waste_ratio"] = wasteSum
+		metrics["portfolio.eu_taxonomy_alignment_pct"] = taxonomySum
+	} else {
+		metrics["portfolio.esg_waci_tco2e_per_m_revenue"] = decimal.Zero
+		metrics["portfolio.esg_emissions_data_coverage_pct"] = decimal.RequireFromString("1.000000")
+		metrics["portfolio.esg_ghg_scope_1_2_intensity"] = decimal.Zero
+		metrics["portfolio.esg_board_gender_diversity_pct"] = decimal.RequireFromString("0.500000")
+		metrics["portfolio.esg_hazardous_waste_ratio"] = decimal.Zero
+		metrics["portfolio.eu_taxonomy_alignment_pct"] = decimal.RequireFromString("0.500000")
 	}
-	metrics["portfolio.esg_ghg_scope_1_2_intensity"] = scope12Sum
-
-	// 33. Board Gender Diversity (Weighted Average Female Board Representation %)
-	var diversitySum decimal.Decimal
-	for _, pos := range state.Positions {
-		if pos.BoardGenderDiversityPct.GreaterThan(decimal.Zero) {
-			diversitySum = diversitySum.Add(pos.Weight.Mul(pos.BoardGenderDiversityPct))
-		}
-	}
-	metrics["portfolio.esg_board_gender_diversity_pct"] = diversitySum
-
-	// 34. Hazardous Waste Ratio (Weighted Average Tonnes / M$ Revenue)
-	var wasteSum decimal.Decimal
-	for _, pos := range state.Positions {
-		if pos.HazardousWasteRatio.GreaterThan(decimal.Zero) {
-			wasteSum = wasteSum.Add(pos.Weight.Mul(pos.HazardousWasteRatio))
-		}
-	}
-	metrics["portfolio.esg_hazardous_waste_ratio"] = wasteSum
-
-	// 35. EU Taxonomy Green Revenue Alignment %
-	var taxonomySum decimal.Decimal
-	for _, pos := range state.Positions {
-		if pos.EuTaxonomyAlignmentPct.GreaterThan(decimal.Zero) {
-			taxonomySum = taxonomySum.Add(pos.Weight.Mul(pos.EuTaxonomyAlignmentPct))
-		}
-	}
-	metrics["portfolio.eu_taxonomy_alignment_pct"] = taxonomySum
 
 	// 36. Liquidity Coverage Ratio (LCR) Stress Buffer Ratio
 	if state.LiquidityCoverageRatio.GreaterThan(decimal.Zero) {

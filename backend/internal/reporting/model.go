@@ -267,16 +267,27 @@ type ParamValidation struct {
 	Message string      `json:"message,omitempty"`
 }
 
+// DataBindingSubject is the PR7 / CUBE-3.3 pin stored alongside (then instead of)
+// legacy Cube name strings. Prefer Subject when present; Cube is migrate-once only.
+type DataBindingSubject struct {
+	Kind            string      `json:"kind"`
+	CubeID          string      `json:"cubeId,omitempty"`
+	ContractVersion interface{} `json:"contractVersion,omitempty"` // number | "latest"
+	BoID            string      `json:"boId,omitempty"`
+	BindingID       string      `json:"bindingId,omitempty"`
+}
+
 // DataBinding defines how a report section connects to semantic data
 type DataBinding struct {
-	Cube          string            `json:"cube"`
-	Measures      []string          `json:"measures,omitempty"`
-	Dimensions    []string          `json:"dimensions,omitempty"`
-	Filters       []DataFilter      `json:"filters,omitempty"`
-	TimeDimension *TimeDimension    `json:"timeDimension,omitempty"`
-	Order         map[string]string `json:"order,omitempty"`
-	Limit         int               `json:"limit,omitempty"`
-	Conditional   *ConditionalBind  `json:"conditional,omitempty"`
+	Cube          string               `json:"cube,omitempty"`
+	Subject       *DataBindingSubject  `json:"subject,omitempty"`
+	Measures      []string             `json:"measures,omitempty"`
+	Dimensions    []string             `json:"dimensions,omitempty"`
+	Filters       []DataFilter         `json:"filters,omitempty"`
+	TimeDimension *TimeDimension       `json:"timeDimension,omitempty"`
+	Order         map[string]string    `json:"order,omitempty"`
+	Limit         int                  `json:"limit,omitempty"`
+	Conditional   *ConditionalBind     `json:"conditional,omitempty"`
 }
 
 // DataFilter for cube queries

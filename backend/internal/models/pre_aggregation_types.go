@@ -20,12 +20,32 @@ type PreAggProperties struct {
 	// Lifecycle fields
 	LifecycleStatus      string     `json:"lifecycle_status,omitempty"` // idle, materializing, active, refreshing, stale, failed
 	LastMaterializedAt   *time.Time `json:"last_materialized_at,omitempty"`
-	LastRefreshedAt      *time.Time `json:"last_refreshed_at,omitempty"`
+	LastRefreshedAt      *time.Time `json:"last_refreshed_at,omitempty"` // freshness clock = refresh completion (CUBE-1.1)
 	LastRefreshStatus    string     `json:"last_refresh_status,omitempty"` // success, failed
 	LastRefreshError     string     `json:"last_refresh_error,omitempty"`
 	NextScheduledRefresh *time.Time `json:"next_scheduled_refresh,omitempty"`
 	RowCount             *int64     `json:"row_count,omitempty"`
 	SizeBytes            *int64     `json:"size_bytes,omitempty"`
+
+	// Cube materialization attempt metadata (CUBE-1.1). Reuses the
+	// pre_aggregation catalog node type; CubeRouter resolves by node_name.
+	AttemptID       string   `json:"attempt_id,omitempty"`
+	CubeID          string   `json:"cube_id,omitempty"`
+	ContractVersion int      `json:"contract_version,omitempty"`
+	Grain           []string `json:"grain,omitempty"`
+	GrainHash       string   `json:"grain_hash,omitempty"`
+	CubeContentHash string   `json:"cube_content_hash,omitempty"`
+
+	// Dual-commit watermark (CUBE-1.3). DualCommitWatermark is set only when
+	// both StarRocks hot and Iceberg cold succeed for the same attempt_id.
+	// HotCommittedAt / ColdCommittedAt record per-tier completion; a missing
+	// DualCommitWatermark means the grain must not be treated as dual-committed
+	// even if LifecycleStatus is active from a legacy single-tier path.
+	DualCommitWatermark *time.Time `json:"dual_commit_watermark,omitempty"`
+	HotCommittedAt      *time.Time `json:"hot_committed_at,omitempty"`
+	ColdCommittedAt     *time.Time `json:"cold_committed_at,omitempty"`
+	IcebergTable        string     `json:"iceberg_table,omitempty"` // qualified cold table name
+
 	// Usage tracking (persisted snapshot)
 	UsageCount            int64   `json:"usage_count,omitempty"`
 	AvgLatencyReductionMs float64 `json:"avg_latency_reduction_ms,omitempty"`

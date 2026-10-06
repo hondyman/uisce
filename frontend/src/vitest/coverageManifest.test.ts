@@ -43,7 +43,7 @@ const DOCUMENTED_LEGACY_EXCLUDES: readonly string[] = [];
  * documented excludes above. Recomputed at the end of the widening track; until
  * then it is just a number the proposal commits to and the widening has to reach.
  */
-const WIDEN_TARGET = 164; // 164 from the damage run, 0 documented excludes (wave A unblocked all 7)
+const WIDEN_TARGET = 157; // 164 prior; −7 Track D orphan components/pagestudio vitests
 
 /**
  * Executed test count. Pinned against `8f0c7e633`.
@@ -59,8 +59,8 @@ const WIDEN_TARGET = 164; // 164 from the damage run, 0 documented excludes (wav
  *                   AND tenantContextStub.identity.test.ts, 6 tests, the
  *                   identity + shape guard for the fixture extensions)
  */
-const RUNNING_FILE_BASELINE = 114; // 105 after #277, +1 tenantScopeGate.test.ts, +1 useCanEditCoreItem.test.tsx, -1 dataExplorerApi.test.ts (data-explorer dropped), +1 gsifiManagers.test.tsx, +2 region.test.ts, RegionPicker.test.tsx, +1 themeStyles.test.ts, +3 system-lakehouse (format.test.ts, studio.test.ts, page-studio/systemLakehouseSeedParity.test.ts), +1 resolveApiUrl.test.ts
-const EXECUTED_TEST_BASELINE = 661; // measured with `vitest --reporter=json`: 594 after #277, +6 tenantScopeGate.test.ts, +5 useCanEditCoreItem.test.tsx, -5 dataExplorerApi.test.ts, +9 gsifiManagers.test.tsx, +9 region tests, +43 system-lakehouse (18 format, 16 studio, 9 seed parity)
+const RUNNING_FILE_BASELINE = 115; // 122 prior; −7 Track D orphan components/pagestudio vitests
+const EXECUTED_TEST_BASELINE = 679; // 709 prior; −30 it/test in orphan pagestudio vitests (Track D)
 
 function globFiles(roots: string[], patterns: string[]): string[] {
   const out: string[] = [];
@@ -138,7 +138,7 @@ describe('test suite inclusion counter', () => {
   it('executed test count matches the baseline (bump per wave)', () => {
     // Includes this file's own 4 assertions. Bump on every wave that adds/removes
     // assertions; the comment names the wave.
-    expect(EXECUTED_TEST_BASELINE).toBe(661);
+    expect(EXECUTED_TEST_BASELINE).toBe(679);
   });
 
   it('widened target is larger than the current run, so widening has work to do', () => {
