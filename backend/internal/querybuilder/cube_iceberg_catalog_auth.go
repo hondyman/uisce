@@ -71,9 +71,10 @@ func (r *starRocksCatalogTokenRefresher) Ensure(ctx context.Context, catalog str
 	if err != nil {
 		return fmt.Errorf("iceberg catalog token refresh: mint token: %w", err)
 	}
-	// StarRocks docs: ALTER CATALOG name SET PROPERTIES (...).
+	// StarRocks 3.3.22: ALTER CATALOG name SET ("k" = 'v') — no PROPERTIES keyword
+	// (SET PROPERTIES is a parse error: Unexpected input 'PROPERTIES').
 	q := fmt.Sprintf(
-		`ALTER CATALOG %s SET PROPERTIES ("iceberg.catalog.token" = %s)`,
+		`ALTER CATALOG %s SET ("iceberg.catalog.token" = %s)`,
 		quoteStarRocksIdent(ident),
 		quoteStarRocksString(tok),
 	)
