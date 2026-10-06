@@ -166,6 +166,12 @@ const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; r
 );
 const FixedIncomeDashboard = React.lazy(() => import('./components/FixedIncomeDashboard'));
 const ComplianceDecisionBlotter = React.lazy(() => import('./components/compliance/ComplianceDecisionBlotter'));
+const RegulatoryChangeQueue = React.lazy(() =>
+  import('./components/compliance/RegulatoryChangeQueue').then((m) => ({ default: m.RegulatoryChangeQueue }))
+);
+const SurveillanceFindingsQueue = React.lazy(() =>
+  import('./components/compliance/SurveillanceFindingsQueue').then((m) => ({ default: m.SurveillanceFindingsQueue }))
+);
 const AIPortfolioRebalancer = React.lazy(() => import('./components/AIPortfolioRebalancer'));
 const ScenarioAnalysisPro = React.lazy(() => import('./components/ScenarioAnalysisPro'));
 
@@ -376,10 +382,46 @@ function ProtectedApp() {
           }
         />
         <Route
+          path="view/regulatory-queue"
+          element={
+            <StandaloneWindowWrapper title="Regulatory Change Queue">
+              <ProtectedRoute>
+                <RegulatoryChangeQueue />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="view/surveillance-findings"
+          element={
+            <StandaloneWindowWrapper title="Surveillance Findings Queue">
+              <ProtectedRoute>
+                <SurveillanceFindingsQueue />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
           path="compliance/blotter"
           element={
             <ProtectedRoute>
               <ComplianceDecisionBlotter />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="compliance/regulatory"
+          element={
+            <ProtectedRoute>
+              <RegulatoryChangeQueue />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="compliance/surveillance"
+          element={
+            <ProtectedRoute>
+              <SurveillanceFindingsQueue />
             </ProtectedRoute>
           }
         />

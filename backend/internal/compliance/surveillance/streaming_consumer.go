@@ -3,6 +3,7 @@ package surveillance
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -80,18 +81,31 @@ type PostTradeSurveillanceEngine struct {
 	fairnessDetector *AllocationFairnessDetector
 	lookthroughAgg   *MultiAssetLookthroughAggregator
 	metrics          *SurveillanceMetrics
+	db               *sql.DB
 	tradeHistory     map[uuid.UUID][]TradeRecord // Keyed by BeneficialOwnerID
 	accountOwners    map[uuid.UUID]uuid.UUID     // AccountID -> BeneficialOwnerID mapping
 }
 
-func NewPostTradeSurveillanceEngine() *PostTradeSurveillanceEngine {
+func NewPostTradeSurveillanceEngine(dbs ...*sql.DB) *PostTradeSurveillanceEngine {
+	var db *sql.DB
+	if len(dbs) > 0 {
+		db = dbs[0]
+	}
 	return &PostTradeSurveillanceEngine{
+		db:               db,
 		washSaleDetector: NewWashSaleDetector(30),
 		fairnessDetector: NewAllocationFairnessDetector(decimal.RequireFromString("0.01"), decimal.RequireFromString("0.05")),
 		metrics:          &SurveillanceMetrics{},
 		tradeHistory:     make(map[uuid.UUID][]TradeRecord),
 		accountOwners:    make(map[uuid.UUID]uuid.UUID),
 	}
+}
+
+// SetDB sets or updates the PostgreSQL database connection for finding persistence
+func (e *PostTradeSurveillanceEngine) SetDB(db *sql.DB) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.db = db
 }
 
 // RegisterAccountOwner registers account to beneficial owner mapping for cross-account surveillance
@@ -164,8 +178,73 @@ func (e *PostTradeSurveillanceEngine) ProcessExecutionCDC(ctx context.Context, r
 	washViolations, err := e.washSaleDetector.DetectWashSales(ctx, tradesForOwner)
 	if err == nil && len(washViolations) > 0 {
 		e.metrics.WashSaleBreaches.Add(int64(len(washViolations)))
+		for _, v := range washViolations {
+			_ = e.persistWashSaleFinding(ctx, v)
+		}
 		log.Printf("[SURVEILLANCE ALERT] Wash-Sale breach detected for owner=%s, exec=%s", ownerID, execID)
 	}
+
+	return nil
+}
+
+func (e *PostTradeSurveillanceEngine) persistWashSaleFinding(ctx context.Context, v WashSaleViolation) error {
+	e.mu.RLock()
+	db := e.db
+	e.mu.RUnlock()
+
+	if db == nil {
+		return nil
+	}
+
+	dedupKey := fmt.Sprintf("WASH_SALE:%s:%s:%s", v.BeneficialOwnerID, v.LossExecutionID, v.ReplacementExecID)
+	severity := "MEDIUM"
+	if v.LossAmount.GreaterThan(decimal.NewFromInt(50000)) {
+		severity = "CRITICAL"
+	} else if v.LossAmount.GreaterThan(decimal.NewFromInt(10000)) {
+		severity = "HIGH"
+	}
+
+	windowStart := v.DetectedAt.Add(-time.Duration(v.WindowDays*24) * time.Hour)
+	windowEnd := v.DetectedAt
+
+	metadata, _ := json.Marshal(map[string]any{
+		"loss_execution_id":        v.LossExecutionID,
+		"loss_account_id":          v.LossAccountID,
+		"loss_amount":              v.LossAmount.StringFixed(2),
+		"replacement_execution_id": v.ReplacementExecID,
+		"replacement_account_id":   v.ReplacementAcctID,
+		"security_id":              v.SecurityID,
+		"window_days":              v.WindowDays,
+	})
+
+	var findingID uuid.UUID
+	err := db.QueryRowContext(ctx, `
+		INSERT INTO compliance.compliance_surveillance_finding (
+			tenant_id, detector_type, severity, status, dedup_key, title, description,
+			entity_id, entity_type, metadata, detected_at, activity_window_start, activity_window_end
+		) VALUES (
+			$1, 'WASH_SALE', $2, 'OPEN', $3,
+			$4, $5, $6, 'BENEFICIAL_OWNER',
+			$7::jsonb, $8, $9, $10
+		)
+		ON CONFLICT (tenant_id, dedup_key) DO UPDATE
+		SET metadata = EXCLUDED.metadata,
+		    updated_at = now()
+		RETURNING id
+	`, v.TenantID, severity, dedupKey,
+		fmt.Sprintf("Wash Sale: Loss harvesting on %s", v.SecurityID),
+		fmt.Sprintf("Loss of $%s matched with replacement buy within %d-day window.", v.LossAmount.StringFixed(2), v.WindowDays),
+		v.BeneficialOwnerID, string(metadata), v.DetectedAt, windowStart, windowEnd,
+	).Scan(&findingID)
+	if err != nil {
+		return err
+	}
+
+	_, _ = db.ExecContext(ctx, `
+		INSERT INTO compliance.compliance_surveillance_event (
+			finding_id, tenant_id, event_type, actor, payload
+		) VALUES ($1, $2, 'DETECTED', 'streaming_surveillance_engine', $3::jsonb)
+	`, findingID, v.TenantID, string(metadata))
 
 	return nil
 }
@@ -235,8 +314,68 @@ func (e *PostTradeSurveillanceEngine) ProcessExecutionAllocationCDC(ctx context.
 	violations, err := e.fairnessDetector.EvaluateBlockFairness(ctx, block)
 	if err == nil && len(violations) > 0 {
 		e.metrics.FairnessBreaches.Add(int64(len(violations)))
+		for _, v := range violations {
+			_ = e.persistFairnessFinding(ctx, block, v)
+		}
 		log.Printf("[SURVEILLANCE ALERT] Pro-rata fairness breach for execution=%s: %d violations", execID, len(violations))
 	}
+
+	return nil
+}
+
+func (e *PostTradeSurveillanceEngine) persistFairnessFinding(ctx context.Context, block BlockOrderExecution, v AllocationFairnessViolation) error {
+	e.mu.RLock()
+	db := e.db
+	e.mu.RUnlock()
+
+	if db == nil {
+		return nil
+	}
+
+	dedupKey := fmt.Sprintf("FAIRNESS:%s:%s:%s", block.BlockOrderID, v.AccountID, v.ViolationType)
+	severity := "MEDIUM"
+	if v.DeviationPercent.Abs().GreaterThan(decimal.RequireFromString("0.05")) {
+		severity = "HIGH"
+	}
+
+	metadata, _ := json.Marshal(map[string]any{
+		"block_order_id":    block.BlockOrderID,
+		"account_id":        v.AccountID,
+		"violation_type":    v.ViolationType,
+		"expected_ratio":    v.ExpectedRatio.StringFixed(4),
+		"actual_ratio":      v.ActualRatio.StringFixed(4),
+		"deviation_percent": v.DeviationPercent.StringFixed(4),
+		"price_variance":    v.PriceVariance.StringFixed(4),
+	})
+
+	var findingID uuid.UUID
+	err := db.QueryRowContext(ctx, `
+		INSERT INTO compliance.compliance_surveillance_finding (
+			tenant_id, detector_type, severity, status, dedup_key, title, description,
+			entity_id, entity_type, metadata, detected_at, activity_window_start, activity_window_end
+		) VALUES (
+			$1, 'PRO_RATA_ALLOCATION_FAIRNESS', $2, 'OPEN', $3,
+			$4, $5, $6, 'EXECUTION_BLOCK',
+			$7::jsonb, $8, $8, $8
+		)
+		ON CONFLICT (tenant_id, dedup_key) DO UPDATE
+		SET metadata = EXCLUDED.metadata,
+		    updated_at = now()
+		RETURNING id
+	`, block.TenantID, severity, dedupKey,
+		fmt.Sprintf("Pro-Rata Allocation Fairness: Block %s", block.BlockOrderID),
+		v.Details,
+		block.BlockOrderID, string(metadata), v.DetectedAt,
+	).Scan(&findingID)
+	if err != nil {
+		return err
+	}
+
+	_, _ = db.ExecContext(ctx, `
+		INSERT INTO compliance.compliance_surveillance_event (
+			finding_id, tenant_id, event_type, actor, payload
+		) VALUES ($1, $2, 'DETECTED', 'streaming_surveillance_engine', $3::jsonb)
+	`, findingID, block.TenantID, string(metadata))
 
 	return nil
 }
@@ -245,3 +384,4 @@ func (e *PostTradeSurveillanceEngine) ProcessExecutionAllocationCDC(ctx context.
 func (e *PostTradeSurveillanceEngine) Metrics() *SurveillanceMetrics {
 	return e.metrics
 }
+

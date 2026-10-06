@@ -41,6 +41,8 @@ import (
 	"github.com/hondyman/uisce/backend/internal/cashflow/settlement"
 	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/compliance/blotter"
+	"github.com/hondyman/uisce/backend/internal/compliance/regulatory"
+	"github.com/hondyman/uisce/backend/internal/compliance/surveillance"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
 	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/sourceconn"
@@ -2030,6 +2032,15 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				blotterSvc := blotter.NewService(db, blotterHub)
 				blotterHandler := blotter.NewHandler(blotterSvc, blotterHub)
 				blotterHandler.RegisterRoutes(r)
+
+				// Regulatory Change Workflow & Steward Triage/Review
+				regSvc := regulatory.NewService(db)
+				regHandler := regulatory.NewHandler(regSvc)
+				regHandler.RegisterRoutes(r)
+
+				// Post-Trade Streaming Surveillance Findings Queue
+				survHandler := surveillance.NewHandler(db)
+				survHandler.RegisterRoutes(r)
 			}
 		}
 

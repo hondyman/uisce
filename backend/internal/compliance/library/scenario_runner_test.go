@@ -301,7 +301,7 @@ func TestCoreLibrary_EffectiveDating(t *testing.T) {
 	_, _ = db.ExecContext(ctx, `
 		UPDATE compliance.compliance_rule 
 		SET valid_to = NULL, effective_from = '2026-01-01T00:00:00Z', is_active = true
-		WHERE tenant_id = $1 AND rule_code NOT LIKE 'TEST_%' AND (valid_to IS NOT NULL OR effective_from > now());
+		WHERE tenant_id = $1 AND rule_code NOT LIKE 'TEST_%' AND rule_code NOT LIKE 'JOIN_TEST_%' AND (valid_to IS NOT NULL OR effective_from > now());
 	`, goldTenant)
 
 	// Current time (2026+) -> all 50 rules are effective
@@ -458,7 +458,7 @@ func TestCoreLibrary_All50CoreRules_ContentHashAgreement(t *testing.T) {
 		FROM compliance.compliance_rule r
 		JOIN compliance.compliance_rule_version v 
 		  ON r.id = v.rule_id AND COALESCE(r.current_version, 1) = v.version
-		WHERE r.tenant_id = $1 AND r.valid_to IS NULL AND r.rule_code NOT LIKE 'TEST_%'
+		WHERE r.tenant_id = $1 AND r.valid_to IS NULL AND r.rule_code NOT LIKE 'TEST_%' AND r.rule_code NOT LIKE 'JOIN_TEST_%'
 		ORDER BY r.rule_code
 	`, goldTenant)
 	if err != nil {

@@ -20,6 +20,8 @@ const AIPortfolioRebalancer = React.lazy(() => import('../AIPortfolioRebalancer'
 const ScenarioAnalysisPro = React.lazy(() => import('../ScenarioAnalysisPro'));
 const FixedIncomeDashboard = React.lazy(() => import('../FixedIncomeDashboard'));
 const ComplianceDecisionBlotter = React.lazy(() => import('../compliance/ComplianceDecisionBlotter'));
+const RegulatoryChangeQueue = React.lazy(() => import('../Compliance/RegulatoryChangeQueue'));
+const SurveillanceFindingsQueue = React.lazy(() => import('../Compliance/SurveillanceFindingsQueue'));
 
 // Module-level guard to prevent React StrictMode double-restoration on desktop boot
 let hasAutoRestoredOnBoot = false;
@@ -157,6 +159,24 @@ const dockComponents = {
       </div>
     </PanelErrorBoundary>
   ),
+  regulatory_queue: (_props: IDockviewPanelProps) => (
+    <PanelErrorBoundary panelTitle="Regulatory Change Queue & Steward Review">
+      <div style={{ height: '100%', width: '100%', overflow: 'auto', background: '#050d1a' }}>
+        <React.Suspense fallback={<div style={{ padding: 20, color: '#94a3b8' }}>Loading Regulatory Queue...</div>}>
+          <RegulatoryChangeQueue />
+        </React.Suspense>
+      </div>
+    </PanelErrorBoundary>
+  ),
+  surveillance_findings: (_props: IDockviewPanelProps) => (
+    <PanelErrorBoundary panelTitle="Post-Trade Surveillance Findings">
+      <div style={{ height: '100%', width: '100%', overflow: 'auto', background: '#050d1a' }}>
+        <React.Suspense fallback={<div style={{ padding: 20, color: '#94a3b8' }}>Loading Surveillance Findings...</div>}>
+          <SurveillanceFindingsQueue />
+        </React.Suspense>
+      </div>
+    </PanelErrorBoundary>
+  ),
 };
 
 export interface WorkstationAlert {
@@ -169,7 +189,9 @@ export interface WorkstationAlert {
   onDismiss: () => void;
 }
 
-export function getComponentForRoute(route: string): 'orders' | 'rebalancer' | 'scenario' | 'fixed_income' | 'compliance_blotter' | null {
+export function getComponentForRoute(route: string): 'orders' | 'rebalancer' | 'scenario' | 'fixed_income' | 'compliance_blotter' | 'regulatory_queue' | 'surveillance_findings' | null {
+  if (route.includes('regulatory')) return 'regulatory_queue';
+  if (route.includes('surveillance')) return 'surveillance_findings';
   if (route.includes('compliance') || route.includes('blotter')) return 'compliance_blotter';
   if (route.includes('rebalancer')) return 'rebalancer';
   if (route.includes('scenario')) return 'scenario';
@@ -584,7 +606,7 @@ export const UniversalWorkspaceHub: React.FC = () => {
   }, [dockApi, consolidatedPanelIds]);
 
   // Add individual panel to workspace
-  const handleAddPanel = (component: 'orders' | 'rebalancer' | 'scenario' | 'fixed_income' | 'compliance_blotter', title: string) => {
+  const handleAddPanel = (component: 'orders' | 'rebalancer' | 'scenario' | 'fixed_income' | 'compliance_blotter' | 'regulatory_queue' | 'surveillance_findings', title: string) => {
     if (!dockApi) return;
     const id = `panel_${component}_${Date.now()}`;
     dockApi.addPanel({
@@ -879,6 +901,30 @@ export const UniversalWorkspaceHub: React.FC = () => {
               title="Add Pre-Trade Compliance Blotter"
             >
               + Compliance Blotter
+            </button>
+            <button
+              onClick={() => handleAddPanel('regulatory_queue', 'Regulatory Change Queue')}
+              style={{
+                ...btnStyle,
+                color: '#38bdf8',
+                borderColor: '#0284c740',
+                background: '#0284c720',
+              }}
+              title="Add Regulatory Change Queue & Steward Review"
+            >
+              + Regulatory Queue
+            </button>
+            <button
+              onClick={() => handleAddPanel('surveillance_findings', 'Surveillance Findings')}
+              style={{
+                ...btnStyle,
+                color: '#f59e0b',
+                borderColor: '#d9770640',
+                background: '#d9770620',
+              }}
+              title="Add Post-Trade Surveillance Findings Queue"
+            >
+              + Surveillance
             </button>
           </div>
 

@@ -142,11 +142,15 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 			RETURN '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid;
 		END;
 		$$ LANGUAGE plpgsql IMMUTABLE;
+
+		INSERT INTO public.tenants (id, name, display_name, gold_copy, is_active, status, plan, is_suspended, is_deleted)
+		VALUES ('99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid, 'northwind', 'Northwind Traders', true, true, 'active', 'enterprise', false, false)
+		ON CONFLICT (id) DO NOTHING;
 	`
 	_, err = freshDB.ExecContext(ctx, prereqSQL)
 	require.NoError(t, err)
 
-	// 5. Apply migrations 001 -> 008 UP in order
+	// 5. Apply migrations 001 -> 009 UP in order
 	upMigrations := []string{
 		"20261218_001_compliance_engine_core_tables.up.sql",
 		"20261218_002_governance_audit_and_privileges.up.sql",
@@ -156,6 +160,7 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 		"20261218_006_rule_version_snapshots.up.sql",
 		"20261218_007_regulatory_change_workflow.up.sql",
 		"20261219_008_trigger_refactor_and_draft_guard.up.sql",
+		"20261220_009_compliance_surveillance_findings.up.sql",
 	}
 
 	for _, migFile := range upMigrations {
@@ -193,8 +198,13 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 4, regCaseTableCount, "Migration 007 and 008 tables must exist")
 
-	t.Logf("Fresh DB Integrity Assertions Passed: Rules=%d, Versions=%d, Rulesets=%d, Memberships=%d, RegTables=%d",
-		ruleCount, versionCount, rulesetCount, membershipCount, regCaseTableCount)
+	var survTableCount int
+	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'compliance' AND table_name IN ('compliance_surveillance_finding', 'compliance_surveillance_event')").Scan(&survTableCount)
+	require.NoError(t, err)
+	require.Equal(t, 2, survTableCount, "Migration 009 surveillance tables must exist")
+
+	t.Logf("Fresh DB Integrity Assertions Passed: Rules=%d, Versions=%d, Rulesets=%d, Memberships=%d, RegTables=%d, SurvTables=%d",
+		ruleCount, versionCount, rulesetCount, membershipCount, regCaseTableCount, survTableCount)
 
 	// 7. Test Structural Mutation Guard Trigger
 	var sampleRuleID string
@@ -208,8 +218,58 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 
 	t.Logf("Structural Mutation Guard Trigger verified: unauthorized mutation correctly blocked!")
 
-	// 8. Rollback Cycle: 008 -> 001 DOWN
+	// 8. Test Surveillance Finding State Machine & Append-Only Event Guard
+	goldTenantUUID := "99e99e99-99e9-49e9-89e9-99e99e99e999"
+	var findingID string
+	err = freshDB.QueryRowContext(ctx, `
+		INSERT INTO compliance.compliance_surveillance_finding (
+			tenant_id, detector_type, severity, status, dedup_key, title, description, entity_type,
+			activity_window_start, activity_window_end
+		) VALUES (
+			$1, 'WASH_SALE', 'HIGH', 'OPEN', 'dedup_test_001', 'Wash sale detected', 'Simulated wash sale', 'BENEFICIAL_OWNER',
+			now() - interval '30 days', now()
+		) RETURNING id
+	`, goldTenantUUID).Scan(&findingID)
+	require.NoError(t, err)
+
+	// Valid transition OPEN -> IN_REVIEW
+	_, err = freshDB.ExecContext(ctx, "UPDATE compliance.compliance_surveillance_finding SET status = 'IN_REVIEW' WHERE id = $1", findingID)
+	require.NoError(t, err)
+
+	// Invalid transition IN_REVIEW -> DISMISSED without resolution notes must fail
+	_, err = freshDB.ExecContext(ctx, "UPDATE compliance.compliance_surveillance_finding SET status = 'DISMISSED' WHERE id = $1", findingID)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "requires resolution_notes")
+
+	// Valid transition with resolution notes
+	_, err = freshDB.ExecContext(ctx, `
+		UPDATE compliance.compliance_surveillance_finding 
+		SET status = 'DISMISSED', resolution_notes = 'False positive non-substantially identical instrument', resolved_by = 'officer_1'
+		WHERE id = $1
+	`, findingID)
+	require.NoError(t, err)
+
+	// Test append-only event insertion
+	var eventID string
+	err = freshDB.QueryRowContext(ctx, `
+		INSERT INTO compliance.compliance_surveillance_event (
+			finding_id, tenant_id, event_type, actor, payload
+		) VALUES (
+			$1, $2, 'DETECTED', 'streaming_consumer', '{"qty": 5000}'::jsonb
+		) RETURNING id
+	`, findingID, goldTenantUUID).Scan(&eventID)
+	require.NoError(t, err)
+
+	// Mutation of event must fail
+	_, err = freshDB.ExecContext(ctx, "DELETE FROM compliance.compliance_surveillance_event WHERE id = $1", eventID)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "compliance.compliance_surveillance_event is strictly append-only")
+
+	t.Logf("Surveillance Finding State Machine & Append-Only Event Guard verified!")
+
+	// 9. Rollback Cycle: 009 -> 001 DOWN
 	downMigrations := []string{
+		"20261220_009_compliance_surveillance_findings.down.sql",
 		"20261219_008_trigger_refactor_and_draft_guard.down.sql",
 		"20261218_007_regulatory_change_workflow.down.sql",
 		"20261218_006_rule_version_snapshots.down.sql",
@@ -229,5 +289,5 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 		t.Logf("Migration %s DOWN executed cleanly", migFile)
 	}
 
-	t.Logf("FRESH DATABASE MIGRATION CHAIN & ROLLBACK CYCLE 001 <-> 008 FULLY VERIFIED!")
+	t.Logf("FRESH DATABASE MIGRATION CHAIN & ROLLBACK CYCLE 001 <-> 009 FULLY VERIFIED!")
 }
