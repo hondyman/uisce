@@ -27,8 +27,8 @@ func TestListCoreRules_All50(t *testing.T) {
 		t.Fatalf("ListCoreRules failed: %v", err)
 	}
 
-	if len(rules) != 53 {
-		t.Fatalf("expected 53 core rules, got %d", len(rules))
+	if len(rules) != 57 {
+		t.Fatalf("expected 57 core rules, got %d", len(rules))
 	}
 
 	// Verify domain derivation and hash presence
@@ -182,11 +182,11 @@ func TestTenantActivationMatrix_GoldMaster(t *testing.T) {
 	if !matrix.GoldCopy {
 		t.Errorf("expected master tenant to be gold_copy=true")
 	}
-	if matrix.TotalRules != 53 {
-		t.Errorf("expected 53 rules in matrix, got %d", matrix.TotalRules)
+	if matrix.TotalRules != 57 {
+		t.Errorf("expected 57 rules in matrix, got %d", matrix.TotalRules)
 	}
-	if matrix.TotalActive != 53 {
-		t.Errorf("expected 53 active rules for gold copy tenant, got %d", matrix.TotalActive)
+	if matrix.TotalActive != 57 {
+		t.Errorf("expected 57 active rules for gold copy tenant, got %d", matrix.TotalActive)
 	}
 	if matrix.DriftCount != 0 {
 		t.Errorf("expected 0 drift count for gold copy tenant, got %d", matrix.DriftCount)
@@ -378,8 +378,8 @@ func TestHTTPHandler_Endpoints(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&listResp); err != nil {
 		t.Fatalf("decode list response: %v", err)
 	}
-	if listResp.TotalCount != 53 {
-		t.Errorf("expected 53 rules, got %d", listResp.TotalCount)
+	if listResp.TotalCount != 57 {
+		t.Errorf("expected 57 rules, got %d", listResp.TotalCount)
 	}
 
 	// 2. GET /api/compliance/library/rules/{id}

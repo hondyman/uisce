@@ -64,7 +64,7 @@ func main() {
 		log.Fatalf("Failed to drop schema: %v", err)
 	}
 
-	log.Println("--- Step 2: Applying canonical migrations 001 through 010 ---")
+	log.Println("--- Step 2: Applying canonical migrations 001 through 011 ---")
 	migrations := []string{
 		"20261218_001_compliance_engine_core_tables.up.sql",
 		"20261218_002_governance_audit_and_privileges.up.sql",
@@ -76,6 +76,7 @@ func main() {
 		"20261219_008_trigger_refactor_and_draft_guard.up.sql",
 		"20261220_009_compliance_surveillance_findings.up.sql",
 		"20261221_010_post_trade_pilot_schema.up.sql",
+		"20261222_011_phase1_counterparty_and_group_schema.up.sql",
 	}
 
 	migDir := filepath.Join("backend", "db", "migrations")
@@ -116,13 +117,13 @@ func main() {
 
 	fmt.Println("======================================================================")
 	fmt.Printf("INVARIANTS ON ALPHA POST-REBUILD:\n")
-	fmt.Printf("  master_active_rules: %d (expected 53)\n", masterActiveRules)
-	fmt.Printf("  master_snapshots:    %d (expected 53)\n", masterSnapshots)
+	fmt.Printf("  master_active_rules: %d (expected 57)\n", masterActiveRules)
+	fmt.Printf("  master_snapshots:    %d (expected 57)\n", masterSnapshots)
 	fmt.Printf("  master_soft_deleted: %d (expected 0)\n", masterSoftDeleted)
 	fmt.Printf("  test_rules_count:    %d (expected 0)\n", testRulesCount)
 	fmt.Println("======================================================================")
 
-	if masterActiveRules != 53 || masterSnapshots != 53 || masterSoftDeleted != 0 || testRulesCount != 0 {
+	if masterActiveRules != 57 || masterSnapshots != 57 || masterSoftDeleted != 0 || testRulesCount != 0 {
 		log.Fatalf("INVARIANT CHECK FAILED!")
 	}
 	log.Println("SUCCESS: Alpha rebuild and invariant check verified cleanly.")

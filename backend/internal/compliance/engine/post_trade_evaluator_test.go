@@ -32,15 +32,19 @@ func TestPostTradeEvaluator_E2E_PilotRulesAndSupersession(t *testing.T) {
 	`, tenantA, tenantB)
 	require.NoError(t, err)
 
-	// Verify Seed of Pilot Post-Trade Rules
+	// Verify Seed of Phase 1 Post-Trade Rules
 	var pilotRuleCount int
 	err = db.QueryRowContext(ctx, `
 		SELECT count(*) FROM compliance.compliance_rule 
-		WHERE rule_code IN ('UCITS_5_10_40', 'SEC_144A_QIB_HOLDING', 'MARGIN_UTILIZATION_80')
+		WHERE rule_code IN (
+			'UCITS_5_10_40', 'SEC_144A_QIB_HOLDING', 'MARGIN_UTILIZATION_80',
+			'POST_TRADE_GROUP_ISSUER_20', 'POST_TRADE_ISSUER_DEBT_15',
+			'POST_TRADE_COUNTERPARTY_PFE_10', 'POST_TRADE_CASH_MIN_5'
+		)
 		  AND library_status = 'ACTIVE'
 	`).Scan(&pilotRuleCount)
 	require.NoError(t, err)
-	require.Equal(t, 3, pilotRuleCount, "All 3 pilot post-trade rules must be ACTIVE in compliance_rule")
+	require.Equal(t, 7, pilotRuleCount, "All 7 Phase 1 post-trade rules must be ACTIVE in compliance_rule")
 
 	// =========================================================================
 	// Scenario 1: Initial Portfolio Evaluation with UCITS 5/10/40 Breach
@@ -254,7 +258,51 @@ func TestPostTradeEvaluator_E2E_PilotRulesAndSupersession(t *testing.T) {
 	require.Contains(t, err.Error(), "Illegal compliance finding status transition")
 
 	// =========================================================================
-	// Scenario 8: Row-Level Security Isolation Assertion
+	// Scenario 8: Phase 1 Tranche 1 Rule Evaluations (Group, Debt, Counterparty PFE, Cash Floor)
+	// =========================================================================
+	statePhase1 := PortfolioState{
+		TenantID:      tenantA,
+		AccountID:     uuid.New(),
+		AsOfDate:      asOfDate,
+		NAV:           decimal.RequireFromString("20000000.000000"),
+		GrossExposure: decimal.RequireFromString("22000000.000000"),
+		NetExposure:   decimal.RequireFromString("20000000.000000"),
+		CashBalance:   decimal.RequireFromString("600000.000000"), // 600,000 / 20,000,000 = 3% < 5% Cash Floor -> WARNING
+		MarginLimit:   decimal.RequireFromString("10000000.000000"),
+		Positions: []PortfolioPosition{
+			// Group exposure: Parent GRP_ALPHA has two subsidiaries: ISS_A1 (2.5M) + ISS_A2 (2.0M) = 4.5M (22.5% > 20%) -> BREACH!
+			{SecurityID: "SEC-G1", Symbol: "EQ-G1", IssuerID: "ISS_A1", ParentEntityID: "GRP_ALPHA", MarketValue: decimal.RequireFromString("2500000.000000")},
+			{SecurityID: "SEC-G2", Symbol: "EQ-G2", IssuerID: "ISS_A2", ParentEntityID: "GRP_ALPHA", MarketValue: decimal.RequireFromString("2000000.000000")},
+			// Debt exposure: Issuer ISS_DEBT has 3.6M fixed income = 18% > 15% -> BREACH!
+			{SecurityID: "SEC-D1", Symbol: "BOND1", IssuerID: "ISS_DEBT", AssetClass: "FIXED_INCOME", MarketValue: decimal.RequireFromString("3600000.000000")},
+			// Counterparty PFE: Counterparty CP_SWAP has 1.5M MTM + 1.0M PFE = 2.5M (12.5% > 10%) -> BREACH!
+			{SecurityID: "SEC-SW1", Symbol: "IRS1", IssuerID: "ISS_SW", CounterpartyID: "CP_SWAP", AssetClass: "DERIVATIVE", MarketValue: decimal.RequireFromString("1500000.000000"), PFEAmount: decimal.RequireFromString("1000000.000000")},
+		},
+	}
+
+	resultsPhase1, err := evaluator.EvaluateAndPersist(ctx, statePhase1)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(resultsPhase1), 7)
+
+	for _, res := range resultsPhase1 {
+		switch res.RuleCode {
+		case "POST_TRADE_GROUP_ISSUER_20":
+			require.Equal(t, "BREACHED", res.Action)
+			require.Equal(t, "OPEN", res.Status)
+		case "POST_TRADE_ISSUER_DEBT_15":
+			require.Equal(t, "BREACHED", res.Action)
+			require.Equal(t, "OPEN", res.Status)
+		case "POST_TRADE_COUNTERPARTY_PFE_10":
+			require.Equal(t, "BREACHED", res.Action)
+			require.Equal(t, "OPEN", res.Status)
+		case "POST_TRADE_CASH_MIN_5":
+			require.Equal(t, "WARNING", res.Action)
+			require.Equal(t, "OPEN", res.Status)
+		}
+	}
+
+	// =========================================================================
+	// Scenario 9: Row-Level Security Isolation Assertion
 	// =========================================================================
 	// Evaluate portfolio for Tenant B
 	stateTenantB := PortfolioState{
@@ -264,6 +312,7 @@ func TestPostTradeEvaluator_E2E_PilotRulesAndSupersession(t *testing.T) {
 		NAV:           decimal.RequireFromString("1000000.000000"),
 		GrossExposure: decimal.RequireFromString("1000000.000000"),
 		NetExposure:   decimal.RequireFromString("1000000.000000"),
+		CashBalance:   decimal.RequireFromString("100000.000000"),
 		Positions: []PortfolioPosition{
 			{SecurityID: "SEC-B", Symbol: "EQB", IssuerID: "ISS-B", MarketValue: decimal.RequireFromString("1000000.000000")},
 		},
@@ -285,11 +334,11 @@ func TestPostTradeEvaluator_E2E_PilotRulesAndSupersession(t *testing.T) {
 	var visibleSnapshotsForA, visibleFindingsForA int
 	err = txA.QueryRowContext(ctx, "SELECT count(*) FROM compliance.compliance_portfolio_snapshot").Scan(&visibleSnapshotsForA)
 	require.NoError(t, err)
-	require.Equal(t, 3, visibleSnapshotsForA, "Tenant A must only see its own 3 snapshots")
+	require.Equal(t, 4, visibleSnapshotsForA, "Tenant A must only see its own 4 snapshots")
 
 	err = txA.QueryRowContext(ctx, "SELECT count(*) FROM compliance.compliance_finding").Scan(&visibleFindingsForA)
 	require.NoError(t, err)
-	require.Equal(t, 6, visibleFindingsForA, "Tenant A must only see its own findings")
+	require.Equal(t, 14, visibleFindingsForA, "Tenant A must only see its own findings")
 
-	t.Logf("Post-Trade Batch Evaluator E2E Test PASSED: All 3 Pilot Rules, UUIDv5 Lineage, Restatement Supersession, State Machine Triggers, and RLS Isolation Verified 100%%!")
+	t.Logf("Post-Trade Batch Evaluator E2E Test PASSED: All 7 Phase 1 Rules, Corporate Group Lookthrough, Debt, Counterparty PFE, Cash Floor, UUIDv5 Lineage, Restatement Supersession, State Machine Triggers, and RLS Isolation Verified 100%%!")
 }

@@ -18,7 +18,7 @@ func TestEphemeralTestDB_CreationAndIsolation(t *testing.T) {
 	var ruleCount int
 	err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM compliance.compliance_rule").Scan(&ruleCount)
 	require.NoError(t, err)
-	require.Equal(t, 53, ruleCount)
+	require.Equal(t, 57, ruleCount)
 
 	// Mutate something inside ephemeral DB
 	_, err = db.ExecContext(ctx, "DELETE FROM compliance.compliance_ruleset_membership")

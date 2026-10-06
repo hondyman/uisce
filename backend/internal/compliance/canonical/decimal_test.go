@@ -124,3 +124,45 @@ func TestComputePilotRuleHashes(t *testing.T) {
 	}
 	t.Logf("MARGIN_UTILIZATION_80 hash: %s", h3)
 }
+
+func TestComputePhase1Tranche1RuleHashes(t *testing.T) {
+	h1, err := ComputeRuleContentHashFromRaw(
+		[]byte(`{"type":"COMPARISON","left":{"type":"METRIC","path":"portfolio.max_group_issuer_exposure_pct"},"op":"LTE","right":{"type":"PARAM","name":"max_group_issuer_pct"}}`),
+		[]byte(`{"max_group_issuer_pct":"0.200000"}`),
+		"UCITS Directive 2009/65/EC Art. 52(3) / Investment Company Act Sec. 12(d)",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("POST_TRADE_GROUP_ISSUER_20 hash: %s", h1)
+
+	h2, err := ComputeRuleContentHashFromRaw(
+		[]byte(`{"type":"COMPARISON","left":{"type":"METRIC","path":"portfolio.max_issuer_debt_exposure_pct"},"op":"LTE","right":{"type":"PARAM","name":"max_issuer_debt_pct"}}`),
+		[]byte(`{"max_issuer_debt_pct":"0.150000"}`),
+		"FINRA Rule 4210 / Institutional Fixed Income Mandate",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("POST_TRADE_ISSUER_DEBT_15 hash: %s", h2)
+
+	h3, err := ComputeRuleContentHashFromRaw(
+		[]byte(`{"type":"COMPARISON","left":{"type":"METRIC","path":"portfolio.max_counterparty_pfe_exposure_pct"},"op":"LTE","right":{"type":"PARAM","name":"max_counterparty_pfe_pct"}}`),
+		[]byte(`{"max_counterparty_pfe_pct":"0.100000"}`),
+		"BCBS 279 Standardised Approach for Counterparty Credit Risk (SA-CCR) / EMIR Art. 11",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("POST_TRADE_COUNTERPARTY_PFE_10 hash: %s", h3)
+
+	h4, err := ComputeRuleContentHashFromRaw(
+		[]byte(`{"type":"COMPARISON","left":{"type":"METRIC","path":"portfolio.cash_and_equivalent_pct"},"op":"GTE","right":{"type":"PARAM","name":"min_cash_pct"}}`),
+		[]byte(`{"min_cash_pct":"0.050000"}`),
+		"ESMA Guidelines on Liquidity Stress Testing / UCITS Liquidity Management",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("POST_TRADE_CASH_MIN_5 hash: %s", h4)
+}

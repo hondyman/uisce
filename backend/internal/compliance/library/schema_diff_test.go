@@ -95,11 +95,24 @@ func TestSchemaParity_ComplianceTablesAndConstraints(t *testing.T) {
 		t.Fatalf("failed to query master tenant counts: %v", err)
 	}
 
-	if masterCount != 53 {
-		t.Errorf("expected exactly 53 gold-copy rules, got %d", masterCount)
+	if masterCount != 57 {
+		t.Errorf("expected exactly 57 gold-copy rules, got %d", masterCount)
 	}
-	if snapshotCount != 53 {
-		t.Errorf("expected exactly 53 v1 snapshots for gold-copy rules, got %d", snapshotCount)
+	if snapshotCount != 57 {
+		t.Errorf("expected exactly 57 v1 snapshots for gold-copy rules, got %d", snapshotCount)
 	}
-	fmt.Printf("[Schema Diff Test] Verified 53 master rules, 53 v1 snapshots, 17 compliance tables, and all immutability triggers.\n")
+
+	// 4. Verify master schema tables
+	var relTableExists bool
+	err = db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.tables 
+			WHERE table_schema = 'master' AND table_name = 'entity_relationship_snapshot'
+		)
+	`).Scan(&relTableExists)
+	if err != nil || !relTableExists {
+		t.Errorf("expected master.entity_relationship_snapshot table to exist")
+	}
+
+	fmt.Printf("[Schema Diff Test] Verified 57 master rules, 57 v1 snapshots, 17 compliance tables, master hierarchy table, and all triggers.\n")
 }

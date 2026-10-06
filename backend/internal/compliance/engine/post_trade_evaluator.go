@@ -24,9 +24,12 @@ type PortfolioPosition struct {
 	AssetClass    string          `json:"asset_class"`
 	Sector        string          `json:"sector"`
 	CountryOfRisk string          `json:"country_of_risk"`
-	Is144A        bool            `json:"is_144a"`
-	IsQIBEligible bool            `json:"is_qib_eligible"`
-	CreditRating  string          `json:"credit_rating"`
+	Is144A          bool            `json:"is_144a"`
+	IsQIBEligible   bool            `json:"is_qib_eligible"`
+	CreditRating    string          `json:"credit_rating"`
+	ParentEntityID  string          `json:"parent_entity_id,omitempty"`
+	CounterpartyID  string          `json:"counterparty_id,omitempty"`
+	PFEAmount       decimal.Decimal `json:"pfe_amount,omitempty"`
 }
 
 // PortfolioState represents the aggregated point-in-time state of an account's portfolio.
@@ -125,6 +128,68 @@ func (e *PostTradeEvaluator) ComputePortfolioMetrics(state *PortfolioState) map[
 		metrics["portfolio.margin_utilization_pct"] = marginUtilization
 	} else {
 		metrics["portfolio.margin_utilization_pct"] = decimal.Zero
+	}
+
+	// 4. Corporate Group / Related-Party Issuer Exposure
+	groupExposureMap := make(map[string]decimal.Decimal)
+	for _, pos := range state.Positions {
+		groupID := pos.ParentEntityID
+		if groupID == "" {
+			groupID = pos.IssuerID
+		}
+		if groupID != "" {
+			groupExposureMap[groupID] = groupExposureMap[groupID].Add(pos.Weight)
+		}
+	}
+	var maxGroupExposure decimal.Decimal
+	for _, exp := range groupExposureMap {
+		if exp.GreaterThan(maxGroupExposure) {
+			maxGroupExposure = exp
+		}
+	}
+	metrics["portfolio.max_group_issuer_exposure_pct"] = maxGroupExposure
+
+	// 5. Single-Issuer Debt / Fixed Income Exposure
+	debtExposureMap := make(map[string]decimal.Decimal)
+	for _, pos := range state.Positions {
+		if pos.AssetClass == "FIXED_INCOME" || pos.AssetClass == "DEBT" || pos.AssetClass == "BOND" {
+			debtExposureMap[pos.IssuerID] = debtExposureMap[pos.IssuerID].Add(pos.Weight)
+		}
+	}
+	var maxDebtExposure decimal.Decimal
+	for _, exp := range debtExposureMap {
+		if exp.GreaterThan(maxDebtExposure) {
+			maxDebtExposure = exp
+		}
+	}
+	metrics["portfolio.max_issuer_debt_exposure_pct"] = maxDebtExposure
+
+	// 6. OTC Derivative Counterparty Net Exposure + PFE
+	counterpartyExposureMap := make(map[string]decimal.Decimal)
+	for _, pos := range state.Positions {
+		if pos.CounterpartyID != "" {
+			totalExp := pos.Weight
+			if state.NAV.GreaterThan(decimal.Zero) && pos.PFEAmount.GreaterThan(decimal.Zero) {
+				pfeWeight := pos.PFEAmount.Div(state.NAV)
+				totalExp = totalExp.Add(pfeWeight)
+			}
+			counterpartyExposureMap[pos.CounterpartyID] = counterpartyExposureMap[pos.CounterpartyID].Add(totalExp)
+		}
+	}
+	var maxCounterpartyPFE decimal.Decimal
+	for _, exp := range counterpartyExposureMap {
+		if exp.GreaterThan(maxCounterpartyPFE) {
+			maxCounterpartyPFE = exp
+		}
+	}
+	metrics["portfolio.max_counterparty_pfe_exposure_pct"] = maxCounterpartyPFE
+
+	// 7. Cash and Cash Equivalent Liquidity Ratio
+	if state.NAV.GreaterThan(decimal.Zero) {
+		cashRatio := state.CashBalance.Div(state.NAV)
+		metrics["portfolio.cash_and_equivalent_pct"] = cashRatio
+	} else {
+		metrics["portfolio.cash_and_equivalent_pct"] = decimal.Zero
 	}
 
 	state.Metrics = metrics
@@ -386,6 +451,90 @@ func (e *PostTradeEvaluator) evaluateRule(
 			res.Action = "WARNING"
 			res.Status = "OPEN"
 			res.Details["breach_reason"] = fmt.Sprintf("Margin utilization %s exceeds 80%% warning threshold %s", utilization.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_GROUP_ISSUER_20":
+		maxLimit := decimal.RequireFromString("0.200000")
+		if v, ok := thresholds["max_group_issuer_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+
+		groupExp := metrics["portfolio.max_group_issuer_exposure_pct"]
+		res.Details["max_group_issuer_exposure_pct"] = groupExp.StringFixed(6)
+		res.Details["max_group_issuer_pct"] = maxLimit.StringFixed(6)
+
+		if groupExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Corporate group aggregate exposure %s exceeds 20%% limit %s", groupExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_ISSUER_DEBT_15":
+		maxLimit := decimal.RequireFromString("0.150000")
+		if v, ok := thresholds["max_issuer_debt_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+
+		debtExp := metrics["portfolio.max_issuer_debt_exposure_pct"]
+		res.Details["max_issuer_debt_exposure_pct"] = debtExp.StringFixed(6)
+		res.Details["max_issuer_debt_pct"] = maxLimit.StringFixed(6)
+
+		if debtExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Single-issuer debt exposure %s exceeds 15%% limit %s", debtExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_COUNTERPARTY_PFE_10":
+		maxLimit := decimal.RequireFromString("0.100000")
+		if v, ok := thresholds["max_counterparty_pfe_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+
+		cpExp := metrics["portfolio.max_counterparty_pfe_exposure_pct"]
+		res.Details["max_counterparty_pfe_exposure_pct"] = cpExp.StringFixed(6)
+		res.Details["max_counterparty_pfe_pct"] = maxLimit.StringFixed(6)
+
+		if cpExp.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("OTC counterparty net + PFE exposure %s exceeds 10%% limit %s", cpExp.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_CASH_MIN_5":
+		minLimit := decimal.RequireFromString("0.050000")
+		if v, ok := thresholds["min_cash_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				minLimit = d
+			}
+		}
+
+		cashExp := metrics["portfolio.cash_and_equivalent_pct"]
+		res.Details["cash_and_equivalent_pct"] = cashExp.StringFixed(6)
+		res.Details["min_cash_pct"] = minLimit.StringFixed(6)
+
+		if cashExp.LessThan(minLimit) {
+			res.Action = "WARNING"
+			res.Status = "OPEN"
+			res.Details["breach_reason"] = fmt.Sprintf("Cash & cash equivalent ratio %s is below 5%% liquidity floor %s", cashExp.StringFixed(4), minLimit.StringFixed(4))
 		} else {
 			res.Action = "WITHIN_LIMITS"
 			res.Status = "RESOLVED"

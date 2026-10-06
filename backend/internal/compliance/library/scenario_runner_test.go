@@ -161,12 +161,12 @@ func TestCoreLibrary_SeedDriftCheck(t *testing.T) {
 		t.Fatalf("query gold rule count: %v", err)
 	}
 
-	if totalCount != 53 {
-		t.Fatalf("Expected exactly 53 gold-copy rules in alpha, found %d", totalCount)
+	if totalCount != 57 {
+		t.Fatalf("Expected exactly 57 gold-copy rules in alpha, found %d", totalCount)
 	}
 
-	if activeCount != 53 {
-		t.Errorf("Expected exactly 53 ACTIVE (scenario-covered) rules, got %d", activeCount)
+	if activeCount != 57 {
+		t.Errorf("Expected exactly 57 ACTIVE (scenario-covered) rules, got %d", activeCount)
 	}
 
 	if provisionalCount != 0 {
@@ -306,8 +306,8 @@ func TestCoreLibrary_EffectiveDating(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadTenantActiveRulesAsOf now: %v", err)
 	}
-	if len(rulesNow) != 53 {
-		t.Fatalf("Expected 53 rules effective now, got %d", len(rulesNow))
+	if len(rulesNow) != 57 {
+		t.Fatalf("Expected 57 rules effective now, got %d", len(rulesNow))
 	}
 
 	// Historical time prior to effective_from (e.g. 2024-01-01) -> 0 rules effective
@@ -440,8 +440,8 @@ func TestCoreLibrary_RepinProvisionalRejection(t *testing.T) {
 	}
 }
 
-// 8. 53-Rule Canonical Content Hash Agreement (Go RFC 8785 Authority == DB Snapshot)
-func TestCoreLibrary_All53CoreRules_ContentHashAgreement(t *testing.T) {
+// 8. 57-Rule Canonical Content Hash Agreement (Go RFC 8785 Authority == DB Snapshot)
+func TestCoreLibrary_All57CoreRules_ContentHashAgreement(t *testing.T) {
 	db := getAlphaTestDB(t)
 	defer db.Close()
 
@@ -495,8 +495,8 @@ func TestCoreLibrary_All53CoreRules_ContentHashAgreement(t *testing.T) {
 		checkedCount++
 	}
 
-	if checkedCount != 53 {
-		t.Fatalf("Expected to verify 53 core rules, verified %d", checkedCount)
+	if checkedCount != 57 {
+		t.Fatalf("Expected to verify 57 core rules, verified %d", checkedCount)
 	}
 
 	t.Logf("100%% Hash Agreement Verified across all %d Gold-Copy Core Rules (Go RFC 8785 Authority == Stored ContentHash)", checkedCount)

@@ -3,10 +3,12 @@ package infra
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -43,8 +45,13 @@ type AuditRow struct {
 }
 
 // AuditDestinationSpec identifies a tenant's warehouse and the credential StarRocks reads it with.
+//
+// TenantName is the tenant's canonical name (matches public.tenants.name). The audit destination
+// router uses it to look up the per-tenant DSN and resource group; without it, the router falls
+// back to the legacy single-DSN path (or errors under LAKEHOUSE_STARROCKS_REQUIRE_TENANT_DSN).
 type AuditDestinationSpec struct {
 	TenantID      uuid.UUID
+	TenantName    string
 	WarehouseName string
 	AccessKeyID   string
 	SecretKey     string
@@ -124,15 +131,56 @@ func NewStarRocks(db *sql.DB, cfg StarRocksConfig) (*StarRocks, error) {
 }
 
 // OpenStarRocksDSN opens a StarRocks connection from a MySQL DSN and forces client-side parameter
-// interpolation.
-func OpenStarRocksDSN(dsn string) (*sql.DB, error) {
+// interpolation. Optional init statements run on every new physical connection (database/sql may
+// open multiple per *sql.DB; the init connector pins each one). A failing init statement closes
+// the connection and returns the error — a bad init is a deployment-critical outage for that
+// tenant, so the cost of returning here is the right one.
+func OpenStarRocksDSN(dsn string, initSQL ...string) (*sql.DB, error) {
 	c, err := mysql.ParseDSN(dsn)
 	if err != nil {
 		return nil, errors.New("the StarRocks DSN is not valid") // never echo it: it holds a password
 	}
 	c.InterpolateParams = true
-	return sql.Open("mysql", c.FormatDSN())
+	base, err := mysql.NewConnector(c)
+	if err != nil {
+		return nil, fmt.Errorf("cannot connect to StarRocks: %w", err)
+	}
+	if len(initSQL) == 0 {
+		return sql.OpenDB(base), nil
+	}
+	return sql.OpenDB(&initConnector{base: base, init: append([]string(nil), initSQL...)}), nil
 }
+
+// initConnector wraps a driver.Connector so every new physical connection runs the given init
+// statements. The init list is copied so a caller mutating their slice cannot affect subsequent
+// connections.
+type initConnector struct {
+	base driver.Connector
+	init []string
+}
+
+func (c *initConnector) Connect(ctx context.Context) (driver.Conn, error) {
+	conn, err := c.base.Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, q := range c.init {
+		// go-sql-driver/mysql implements ExecerContext; assert with the two-value form so a
+		// future driver swap that drops it fails with a clear error rather than a panic.
+		exec, ok := conn.(driver.ExecerContext)
+		if !ok {
+			_ = conn.Close()
+			return nil, fmt.Errorf("the StarRocks driver does not implement ExecerContext, init SQL %q cannot run", q)
+		}
+		if _, err := exec.ExecContext(ctx, q, nil); err != nil {
+			_ = conn.Close()
+			return nil, fmt.Errorf("run init SQL %q: %w", q, err)
+		}
+	}
+	return conn, nil
+}
+
+func (c *initConnector) Driver() driver.Driver { return c.base.Driver() }
 
 func (s *StarRocks) redactor(spec AuditDestinationSpec) func(error) error {
 	return func(err error) error {
@@ -330,10 +378,21 @@ func parseCopyTimeText(s string) (time.Time, error) {
 // ErrNotConfigured. It is built on first use: opening the connection must never slow or break
 // worker startup.
 //
-//	LAKEHOUSE_STARROCKS_DSN          user:password@tcp(host:9030)/
-//	LAKEHOUSE_STARROCKS_CATALOG_URI  Lakekeeper's Iceberg REST URL as StarRocks reaches it
-//	LAKEHOUSE_STARROCKS_S3_ENDPOINT  the object store as StarRocks' backends reach it
-//	LAKEHOUSE_STARROCKS_S3_REGION    optional
+//	LAKEHOUSE_STARROCKS_DSN                          user:password@tcp(host:9030)/  (legacy fallback)
+//	LAKEHOUSE_STARROCKS_CATALOG_URI                  Lakekeeper's Iceberg REST URL as StarRocks reaches it
+//	LAKEHOUSE_STARROCKS_S3_ENDPOINT                  the object store as StarRocks' backends reach it
+//	LAKEHOUSE_STARROCKS_S3_REGION                    optional
+//
+// Per-tenant overrides (any of these present switches the destination into per-tenant mode;
+// env vars whose suffix after TENANT_ does not match a real tenant name silently win nothing,
+// and the destination falls back to LAKEHOUSE_STARROCKS_DSN with a WARN log):
+//
+//	LAKEHOUSE_STARROCKS_DSN_TENANT_<NAME>            user:password@tcp(host:9030)/<db>  (DB in path: cross-tenant access fails at connect time)
+//	LAKEHOUSE_STARROCKS_RESOURCE_GROUP_TENANT_<NAME> resource group name to pin via SET resource_group = '<rg>'
+//
+//	LAKEHOUSE_STARROCKS_REQUIRE_TENANT_DSN           "true" → unmapped tenants ERROR (no silent fallback).
+//	                                                 Default false keeps single-tenant deploys unbroken;
+//	                                                 flip on once every real tenant has its own DSN.
 func AuditDestinationFromEnv() AuditDestination {
 	return &lazyDestination{build: func() (AuditDestination, error) { return destinationBuilder() }}
 }
@@ -342,17 +401,89 @@ func AuditDestinationFromEnv() AuditDestination {
 var destinationBuilder = buildDestinationFromEnv
 
 func buildDestinationFromEnv() (AuditDestination, error) {
-	dsn := os.Getenv("LAKEHOUSE_STARROCKS_DSN")
 	uri := os.Getenv("LAKEHOUSE_STARROCKS_CATALOG_URI")
 	endpoint := os.Getenv("LAKEHOUSE_STARROCKS_S3_ENDPOINT")
-	if dsn == "" || uri == "" || endpoint == "" {
+	if uri == "" || endpoint == "" {
 		return nil, notConfigured("StarRocks", "LAKEHOUSE_STARROCKS_DSN", "LAKEHOUSE_STARROCKS_CATALOG_URI", "LAKEHOUSE_STARROCKS_S3_ENDPOINT")
 	}
-	db, err := OpenStarRocksDSN(dsn)
-	if err != nil {
-		return nil, err
+	cfg := StarRocksConfig{CatalogURI: uri, S3Endpoint: endpoint, S3Region: os.Getenv("LAKEHOUSE_STARROCKS_S3_REGION")}
+
+	// Per-tenant overrides win when any are present; otherwise we fall back to the legacy DSN
+	// (a single tenant cluster keeps working unchanged).
+	name2dsn, name2rg := scanTenantEnv(os.Environ())
+	require := strings.EqualFold(os.Getenv("LAKEHOUSE_STARROCKS_REQUIRE_TENANT_DSN"), "true")
+	if len(name2dsn) == 0 {
+		dsn := os.Getenv("LAKEHOUSE_STARROCKS_DSN")
+		if dsn == "" {
+			return nil, notConfigured("StarRocks", "LAKEHOUSE_STARROCKS_DSN")
+		}
+		db, err := OpenStarRocksDSN(dsn)
+		if err != nil {
+			return nil, err
+		}
+		return NewStarRocks(db, cfg)
 	}
-	return NewStarRocks(db, StarRocksConfig{CatalogURI: uri, S3Endpoint: endpoint, S3Region: os.Getenv("LAKEHOUSE_STARROCKS_S3_REGION")})
+	return newTenantRouter(cfg, name2dsn, name2rg, os.Getenv("LAKEHOUSE_STARROCKS_DSN"), require, defaultLogger{})
+}
+
+// tenantEnvKey is the canonical env-var suffix for a tenant name. Tenant names that don't
+// slug to a valid env-var key (spaces, hyphens) are mapped here so the router can look up
+// LAKEHOUSE_STARROCKS_DSN_TENANT_<KEY> reliably. ASCII letters and digits are kept verbatim;
+// every run of any other character collapses to a single underscore; leading and trailing
+// underscores are stripped.
+//
+//	"Demo Tenant CRD Bakeoff" → DEMO_TENANT_CRD_BAKEOFF
+//	"northwinds-prod"         → NORTHWINDS_PROD
+//	"  tenant-A  "            → TENANT_A
+func tenantEnvKey(name string) string {
+	if name == "" {
+		return ""
+	}
+	var b strings.Builder
+	lastUnderscore := true // suppresses a leading underscore
+	for _, r := range strings.ToUpper(name) {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastUnderscore = false
+		case !lastUnderscore:
+			b.WriteByte('_')
+			lastUnderscore = true
+		}
+	}
+	return strings.TrimRight(b.String(), "_")
+}
+
+const (
+	dsnTenantPrefix      = "LAKEHOUSE_STARROCKS_DSN_TENANT_"
+	resourceGroupPrefix  = "LAKEHOUSE_STARROCKS_RESOURCE_GROUP_TENANT_"
+	tenantMaxOpenConns   = 10              // matches the resource group's concurrency_limit
+	tenantConnMaxLifetime = 5 * time.Minute // rotates stale resource-group bindings after classifier edits
+)
+
+// scanTenantEnv returns one map per tenant override. It does not validate DSNs or resource-group
+// names; the router does that on first use so a typo in one tenant doesn't prevent the cluster
+// from booting. Collisions (two distinct env-var suffixes that differ only by case or punctuation
+// collapse to the same slug) are logged via the returned keys map so a startup pass can surface
+// them; the actual collision detection happens at first build, not here, because env-var values
+// hold the configured DSN, not a tenant name.
+func scanTenantEnv(env []string) (name2dsn, name2rg map[string]string) {
+	name2dsn = make(map[string]string)
+	name2rg = make(map[string]string)
+	for _, kv := range env {
+		eq := strings.IndexByte(kv, '=')
+		if eq <= 0 {
+			continue
+		}
+		k, v := kv[:eq], kv[eq+1:]
+		switch {
+		case strings.HasPrefix(k, dsnTenantPrefix):
+			name2dsn[k[len(dsnTenantPrefix):]] = v
+		case strings.HasPrefix(k, resourceGroupPrefix):
+			name2rg[k[len(resourceGroupPrefix):]] = v
+		}
+	}
+	return name2dsn, name2rg
 }
 
 type lazyDestination struct {
@@ -413,4 +544,226 @@ func (l *lazyDestination) AuditRange(ctx context.Context, tenantID uuid.UUID, af
 		return nil, err
 	}
 	return d.AuditRange(ctx, tenantID, afterID, limit)
+}
+
+// ---- per-tenant router ----
+
+// tenantRouter fans audit-copy traffic across per-tenant StarRocks destinations. Per-tenant
+// DSNs and resource groups are configured via env vars; an unmapped tenant falls back to the
+// legacy single-DSN with a WARN log unless LAKEHOUSE_STARROCKS_REQUIRE_TENANT_DSN is set,
+// in which case the call errors. TenantName (in AuditDestinationSpec) is the lookup key;
+// calls that don't pass a name (MaxAuditID, etc.) require EnsureAuditDestination to have
+// been called for that tenant first so the id→name mapping is known.
+type tenantRouter struct {
+	cfg      StarRocksConfig
+	name2dsn map[string]string
+	name2rg  map[string]string
+	require  bool
+
+	// legacy is built lazily from LAKEHOUSE_STARROCKS_DSN and used as the fallback. nil if
+	// that env var is empty; in that case unmapped tenants always error.
+	legacyOnce sync.Once
+	legacyErr  error
+	legacy     AuditDestination
+	legacyDSN  string
+
+	mu      sync.Mutex
+	id2name map[uuid.UUID]string
+	cache   map[string]*StarRocks // tenant name → built
+
+	openDB func(dsn string, initSQL []string) (*sql.DB, error)
+	newSR  func(*sql.DB, StarRocksConfig) (*StarRocks, error)
+	logf   func(format string, args ...any)
+}
+
+type defaultLogger struct{}
+
+func (defaultLogger) Printf(format string, args ...any) { fmt.Fprintf(os.Stderr, format+"\n", args...) }
+
+func newTenantRouter(cfg StarRocksConfig, name2dsn, name2rg map[string]string, legacyDSN string, require bool, logf interface {
+	Printf(format string, args ...any)
+}) (*tenantRouter, error) {
+	if name2dsn == nil || name2rg == nil || logf == nil {
+		return nil, errors.New("name2dsn, name2rg and a logger are required")
+	}
+	r := &tenantRouter{
+		cfg:      cfg,
+		name2dsn: name2dsn,
+		name2rg:  name2rg,
+		require:  require,
+		legacyDSN: legacyDSN,
+		id2name:  make(map[uuid.UUID]string),
+		cache:    make(map[string]AuditDestination),
+		openDB:   func(dsn string, initSQL []string) (*sql.DB, error) { return OpenStarRocksDSN(dsn, initSQL...) },
+		newSR:    func(db *sql.DB, cfg StarRocksConfig) (AuditDestination, error) { return NewStarRocks(db, cfg) },
+	}
+	// Wrap the interface logger in a closure that matches logf's signature, so tests can
+	// inject a recorder.
+	if l, ok := logf.(interface {
+		Printf(format string, args ...any)
+	}); ok {
+		r.logf = l.Printf
+	} else {
+		r.logf = defaultLogger{}.Printf
+	}
+	for name := range name2dsn {
+		r.logf("StarRocks tenant %q → DSN configured (resource group: %q)", name, name2rg[name])
+	}
+	if require {
+		r.logf("StarRocks LAKEHOUSE_STARROCKS_REQUIRE_TENANT_DSN=true: unmapped tenants will error")
+	} else if legacyDSN != "" {
+		r.logf("StarRocks legacy DSN is set; unmapped tenants will fall back with a WARN")
+	} else {
+		r.logf("StarRocks has no legacy DSN; unmapped tenants will error")
+	}
+	return r, nil
+}
+
+// forTenantByName returns the destination for the given tenant name (the lookup key). If the
+// name has a per-tenant override the destination is built lazily and cached; otherwise it
+// falls back to the legacy DSN (with a WARN) or errors.
+func (r *tenantRouter) forTenantByName(name string) (AuditDestination, error) {
+	if name == "" {
+		// No name on the call: caller did not enforce tenant. Use legacy, but only if it
+		// exists — silently failing here is worse than erroring.
+		return r.getLegacy(true)
+	}
+	r.mu.Lock()
+	if d, ok := r.cache[name]; ok {
+		r.mu.Unlock()
+		return d, nil
+	}
+	r.mu.Unlock()
+
+	dsn, hasOverride := r.name2dsn[name]
+	if !hasOverride {
+		if r.require {
+			envName := dsnTenantPrefix + tenantEnvKey(name)
+			return nil, fmt.Errorf("no per-tenant StarRocks DSN configured for tenant %q (looked for %s); LAKEHOUSE_STARROCKS_REQUIRE_TENANT_DSN=true refuses the legacy fallback", name, envName)
+		}
+		r.logf("WARN: tenant %q has no per-tenant StarRocks DSN; falling back to the legacy LAKEHOUSE_STARROCKS_DSN — set %s%s to silence this", name, dsnTenantPrefix, tenantEnvKey(name))
+		return r.getLegacy(true)
+	}
+	initSQL := []string{}
+	if rg := r.name2rg[name]; rg != "" {
+		// 3.3 form: SET resource_group = '<rg>'. Verified against the live cluster —
+		// SET RESOURCE GROUP (no underscore, no `=`) is parser-rejected on 3.3.
+		initSQL = append(initSQL, "SET resource_group = '"+rg+"'")
+	}
+	db, err := r.openDB(dsn, initSQL)
+	if err != nil {
+		return nil, fmt.Errorf("open StarRocks DSN for tenant %q: %w", name, err)
+	}
+	sr, err := r.newSR(db, r.cfg)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("wrap StarRocks for tenant %q: %w", name, err)
+	}
+	db.SetMaxOpenConns(tenantMaxOpenConns)
+	db.SetConnMaxLifetime(tenantConnMaxLifetime)
+	r.mu.Lock()
+	r.cache[name] = sr
+	r.mu.Unlock()
+	return sr, nil
+}
+
+// forTenantByID resolves a tenant ID to its name (recorded by EnsureAuditDestination) and
+// delegates. If the name has never been recorded, the call errors — the caller forgot to
+// call EnsureAuditDestination first. The legacy fallback handles the case where the tenant
+// is configured before the router sees the ID, but never for a name we have not seen.
+func (r *tenantRouter) forTenantByID(id uuid.UUID) (AuditDestination, error) {
+	r.mu.Lock()
+	name, ok := r.id2name[id]
+	r.mu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("no tenant name recorded for id %s; EnsureAuditDestination must be called first", id)
+	}
+	return r.forTenantByName(name)
+}
+
+// getLegacy builds and caches the legacy single-DSN destination. Called from the unmapped
+// path. logWhenUnknown controls whether to emit the explanatory WARN the first time it's
+// used for a tenant that has no override (the forTenantByName branch logs before this is
+// reached, so this method only logs in the no-name-on-the-call branch).
+func (r *tenantRouter) getLegacy(logWhenUnknown bool) (AuditDestination, error) {
+	r.legacyOnce.Do(func() {
+		if r.legacyDSN == "" {
+			r.legacyErr = notConfigured("StarRocks", "LAKEHOUSE_STARROCKS_DSN")
+			return
+		}
+		db, err := r.openDB(r.legacyDSN, nil)
+		if err != nil {
+			r.legacyErr = fmt.Errorf("open legacy StarRocks DSN: %w", err)
+			return
+		}
+		sr, err := r.newSR(db, r.cfg)
+		if err != nil {
+			_ = db.Close()
+			r.legacyErr = fmt.Errorf("wrap legacy StarRocks: %w", err)
+			return
+		}
+		r.legacy = sr
+		if logWhenUnknown {
+			r.logf("WARN: using legacy LAKEHOUSE_STARROCKS_DSN for a call that did not supply a tenant name")
+		}
+	})
+	if r.legacyErr != nil {
+		return nil, r.legacyErr
+	}
+	return r.legacy, nil
+}
+
+func (r *tenantRouter) EnsureAuditDestination(ctx context.Context, spec AuditDestinationSpec) error {
+	d, err := r.forTenantByName(spec.TenantName)
+	if err != nil {
+		return err
+	}
+	r.mu.Lock()
+	r.id2name[spec.TenantID] = spec.TenantName
+	r.mu.Unlock()
+	return d.EnsureAuditDestination(ctx, spec)
+}
+
+func (r *tenantRouter) MaxAuditID(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	d, err := r.forTenantByID(tenantID)
+	if err != nil {
+		return 0, err
+	}
+	return d.MaxAuditID(ctx, tenantID)
+}
+
+func (r *tenantRouter) AuditHash(ctx context.Context, tenantID uuid.UUID, id int64) (string, bool, error) {
+	d, err := r.forTenantByID(tenantID)
+	if err != nil {
+		return "", false, err
+	}
+	return d.AuditHash(ctx, tenantID, id)
+}
+
+func (r *tenantRouter) AppendAudit(ctx context.Context, tenantID uuid.UUID, rows []AuditRow) error {
+	d, err := r.forTenantByID(tenantID)
+	if err != nil {
+		return err
+	}
+	return d.AppendAudit(ctx, tenantID, rows)
+}
+
+func (r *tenantRouter) AuditRange(ctx context.Context, tenantID uuid.UUID, afterID int64, limit int) ([]AuditRow, error) {
+	d, err := r.forTenantByID(tenantID)
+	if err != nil {
+		return nil, err
+	}
+	return d.AuditRange(ctx, tenantID, afterID, limit)
+}
+
+// asInt reads a positive integer from an env var, returning 0 if unset or unparseable.
+func asInt(s string) int {
+	if s == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
 }
