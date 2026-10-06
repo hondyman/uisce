@@ -1,15 +1,15 @@
 # RLS / MCP production binding (staged MCP-first)
 
-**Status:** R0+R1 merged (#416); **R2 CLOSED** (SET ROLE, #418); **R2b CLOSED** (#419); **R3 wave1 in flight** (BO/page HTTP BeginTx fences).  
+**Status:** R0+R1 merged (#416); **R2/#418**; **R2b/#419**; **R3 wave1/#420**; **R3 wave2** catalog writer (fence-needed 60).  
 **Date:** 2026-10-06  
 **Depends on:** Gold-aware FORCE RLS (`20261020_001`+), grants (`20261020_002`), `OpenMCPAppDB` (`9701efac4`).  
-**Branch:** `feat/rls-mcp-production-binding` (merged); R3 on `feat/r3-wave1-bo-http-fence`.
+**Branch:** R3 wave2 on `feat/r3-wave2-catalog-writer`.
 
 ## Claim boundary
 
 **In scope to claim:** MCP Server DB pool runs as `uisce_mcp_app` with FORCE RLS effective, secrets in Infisical, dated triple receipt.
 
-**Out of scope / not claimed:** Full fleet `DATABASE_URL` flip to app role. BeginTx inventory after R3 wave1: 93 BeginTx / 77 unfenced / **61 fence-needed** (was 66). Fleet flip waits on fence-needed→0.
+**Out of scope / not claimed:** Full fleet `DATABASE_URL` flip to app role. BeginTx inventory after R3 wave2: 93 BeginTx / 76 unfenced / **60 fence-needed**. Fleet flip waits on fence-needed→0.
 
 ## Modes (honest)
 
@@ -140,5 +140,11 @@ Local ops log: `/tmp/uisce-server-r2b.log`. Redacted captures: `/tmp/r2b-triple-
 | `handlers/page_studio_bundle.go` | applyImportPlan (with gold GUC) |
 | `drift/patch_service.go` | ApplyHotSwapPatch |
 
-**Still open:** 61 fence-needed files; fleet `DATABASE_URL` flip waits on fence-needed→0.
+**Still open after wave1:** 61 fence-needed files; fleet `DATABASE_URL` flip waits on fence-needed→0.
+
+## R3 wave2 (catalog writer, 2026-10-06)
+
+**Fenced:** `catalog/writer.go` — `CreateNodes` / `CreateEdges` call `ApplyTenantGUCs`; batches must be single-tenant.
+
+**Inventory target:** fence-needed **61→60**.
 

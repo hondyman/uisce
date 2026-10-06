@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 )
 
 // Writer defines the interface for writing to the catalog graph
@@ -74,6 +76,20 @@ func (w *catalogWriter) CreateNodes(ctx context.Context, nodes []CatalogNode) er
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
+
+	tenantID := nodes[0].TenantID
+	if tenantID == "" {
+		return fmt.Errorf("tenant_id cannot be empty for node %s", nodes[0].ID)
+	}
+	for _, n := range nodes[1:] {
+		if n.TenantID != tenantID {
+			return fmt.Errorf("CreateNodes batch must be single-tenant (got %s and %s)", tenantID, n.TenantID)
+		}
+	}
+	// Predicate delta: none for single-tenant batches; choke SET LOCALs GUCs for FORCE RLS (R3 wave2).
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx, tenantID, ""); err != nil {
+		return fmt.Errorf("tenant GUC: %w", err)
+	}
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO catalog_node (id, node_type, qualified_path, properties, tenant_id, tenant_datasource_id, created_at, updated_at)
@@ -153,6 +169,19 @@ func (w *catalogWriter) CreateEdges(ctx context.Context, edges []CatalogEdge) er
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
+
+	tenantID := edges[0].TenantID
+	if tenantID == "" {
+		return fmt.Errorf("tenant_id cannot be empty for edge %s", edges[0].ID)
+	}
+	for _, e := range edges[1:] {
+		if e.TenantID != tenantID {
+			return fmt.Errorf("CreateEdges batch must be single-tenant (got %s and %s)", tenantID, e.TenantID)
+		}
+	}
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx, tenantID, ""); err != nil {
+		return fmt.Errorf("tenant GUC: %w", err)
+	}
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO catalog_edge (id, edge_type, from_node, to_node, properties, tenant_id, tenant_datasource_id, created_at)
