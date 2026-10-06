@@ -136,6 +136,11 @@ func TestImportBundle_ConflictWritesNothing_DryRunWritesNothing_ApplyWritesAll(t
 	}
 	absent()
 	mock.ExpectBegin()
+	// goldCopyID + ApplyTenantGUCs (R3 wave1): gold resolve, then current/app/gold GUCs
+	mock.ExpectQuery(`uisce_gold_copy_tenant_id`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldTenant))
+	mock.ExpectExec("SELECT set_config").WithArgs(goldTenant.String()).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("SELECT set_config").WithArgs(goldTenant.String()).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("SELECT set_config").WithArgs(goldTenant.String()).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`INSERT INTO page_fragments`).WithArgs(goldTenant, "a", 1, "a", "", sqlmock.AnyArg(), a.ContentHash, "u").WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 	if w := post(""); w.Code != http.StatusCreated || !strings.Contains(w.Body.String(), `"applied":true`) {
