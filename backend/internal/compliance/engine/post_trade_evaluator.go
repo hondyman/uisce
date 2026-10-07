@@ -55,6 +55,35 @@ type PortfolioPosition struct {
 	HazardousWasteRatio       decimal.Decimal `json:"hazardous_waste_ratio,omitempty"`
 	EuTaxonomyAlignmentPct    decimal.Decimal `json:"eu_taxonomy_alignment_pct,omitempty"`
 	LiquidityCoverageRatio    decimal.Decimal `json:"liquidity_coverage_ratio,omitempty"`
+	SharesHeld                decimal.Decimal `json:"shares_held,omitempty"`
+	SharesOutstanding         decimal.Decimal `json:"shares_outstanding,omitempty"`
+	VotingSharesHeld          decimal.Decimal `json:"voting_shares_held,omitempty"`
+	VotingSharesOutstanding   decimal.Decimal `json:"voting_shares_outstanding,omitempty"`
+	TotalVotingPowerPct       decimal.Decimal `json:"total_voting_power_pct,omitempty"`
+	GrossShortShares          decimal.Decimal `json:"gross_short_shares,omitempty"`
+	GrossLongShares           decimal.Decimal `json:"gross_long_shares,omitempty"`
+	DeltaEquivShortShares     decimal.Decimal `json:"delta_equiv_short_shares,omitempty"`
+	DeltaEquivLongShares      decimal.Decimal `json:"delta_equiv_long_shares,omitempty"`
+	IsTakeoverTarget          bool            `json:"is_takeover_target,omitempty"`
+}
+
+// FundHierarchyEdge represents an active relationship edge in the fund structure graph.
+type FundHierarchyEdge struct {
+	ParentAccountID  uuid.UUID       `json:"parent_account_id"`
+	ChildAccountID   uuid.UUID       `json:"child_account_id"`
+	RelationshipType string          `json:"relationship_type"`
+	EconomicSharePct decimal.Decimal `json:"economic_share_pct"`
+	VotingControlPct decimal.Decimal `json:"voting_control_pct"`
+}
+
+// InvestorEquityHolding represents an investor's equity commitment and regulatory classification.
+type InvestorEquityHolding struct {
+	InvestorID      string          `json:"investor_id"`
+	InvestorName    string          `json:"investor_name,omitempty"`
+	InvestorType    string          `json:"investor_type"` // ERISA_BENEFIT_PLAN, IRA_INDIVIDUAL, PLAN_ASSET_ENTITY, PUBLIC_PENSION, GP_MANAGEMENT
+	EquityValue     decimal.Decimal `json:"equity_value"`
+	IsBenefitPlan   bool            `json:"is_benefit_plan"`
+	IsGPDisregarded bool            `json:"is_gp_disregarded"`
 }
 
 // PortfolioState represents the aggregated point-in-time state of an account's portfolio.
@@ -72,7 +101,12 @@ type PortfolioState struct {
 	LiquidityCoverageRatio          decimal.Decimal            `json:"liquidity_coverage_ratio,omitempty"`
 	CyclicalSectors                 []string                   `json:"cyclical_sectors,omitempty"`
 	ClassificationOverrides         map[string]string          `json:"classification_overrides,omitempty"`
+	HierarchyEdges                  []FundHierarchyEdge        `json:"hierarchy_edges,omitempty"`
+	PriorSnapshotMetrics            map[string]decimal.Decimal `json:"prior_snapshot_metrics,omitempty"`
 	Positions                       []PortfolioPosition        `json:"positions"`
+	IsPassiveIntent                 *bool                      `json:"is_passive_intent,omitempty"`
+	ErisaBpiEquityPct               decimal.Decimal            `json:"erisa_bpi_equity_pct,omitempty"`
+	Investors                       []InvestorEquityHolding    `json:"investors,omitempty"`
 	Metrics                         map[string]decimal.Decimal `json:"metrics,omitempty"`
 }
 
@@ -93,6 +127,7 @@ type PostTradeEvaluationResult struct {
 	SupersededReason    string                 `json:"superseded_reason,omitempty"`
 	LineageHash         string                 `json:"lineage_hash"`
 	PortfolioSnapshotID uuid.UUID              `json:"portfolio_snapshot_id"`
+	FilingDeadlineAt    *time.Time             `json:"filing_deadline_at,omitempty"`
 	Details             map[string]interface{} `json:"details"`
 }
 
@@ -117,6 +152,7 @@ func (e *PostTradeEvaluator) ComputePortfolioMetrics(state *PortfolioState) map[
 	computeCreditAndCounterpartyMetrics(state, metrics)
 	computeLiquidityAndSettlementMetrics(state, metrics)
 	computeESGAndSustainabilityMetrics(state, metrics)
+	computeOwnershipAndDisclosureMetrics(state, metrics)
 
 	state.Metrics = metrics
 	return metrics
@@ -1021,6 +1057,342 @@ func (e *PostTradeEvaluator) evaluateRule(
 			res.Status = "RESOLVED"
 		}
 
+	case "POST_TRADE_SEC_SCHEDULE_13D_5PCT":
+		maxLimit := decimal.RequireFromString("0.050000")
+		if v, ok := thresholds["max_voting_equity_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		voting := metrics["portfolio.firmwide_equity_voting_pct"]
+		priorVoting := metrics["portfolio.prior_firmwide_equity_voting_pct"]
+		res.Details["firmwide_equity_voting_pct"] = voting.StringFixed(6)
+		res.Details["prior_firmwide_equity_voting_pct"] = priorVoting.StringFixed(6)
+		res.Details["max_voting_equity_pct"] = maxLimit.StringFixed(6)
+
+		if voting.GreaterThan(maxLimit) && priorVoting.LessThanOrEqual(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			tc := NewTradingCalendar()
+			dl := tc.NextTradingDayCutoff(state.AsOfDate, 5, 17, 30, time.UTC, "US_SEC")
+			res.FilingDeadlineAt = &dl
+			res.Details["filing_deadline_at"] = dl.Format(time.RFC3339)
+			res.Details["breach_reason"] = fmt.Sprintf("Firm-wide voting equity %s crosses 5%% threshold %s (prior %s) triggering SEC Schedule 13D filing deadline (%s)", voting.StringFixed(4), maxLimit.StringFixed(4), priorVoting.StringFixed(4), dl.Format("2006-01-02 15:04:05 MST"))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_UK_FCA_DTR5_INITIAL_3PCT":
+		initLimit := decimal.RequireFromString("0.030000")
+		stepSize := decimal.RequireFromString("0.010000")
+		if v, ok := thresholds["initial_disclosure_threshold_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				initLimit = d
+			}
+		}
+		if v, ok := thresholds["step_size_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				stepSize = d
+			}
+		}
+		voting := metrics["portfolio.firmwide_equity_voting_pct"]
+		priorVoting := metrics["portfolio.prior_firmwide_equity_voting_pct"]
+		res.Details["firmwide_equity_voting_pct"] = voting.StringFixed(6)
+		res.Details["prior_firmwide_equity_voting_pct"] = priorVoting.StringFixed(6)
+		res.Details["initial_disclosure_threshold_pct"] = initLimit.StringFixed(6)
+		res.Details["step_size_pct"] = stepSize.StringFixed(6)
+
+		isBreached := false
+		var breachReason string
+		if voting.GreaterThan(initLimit) {
+			if priorVoting.LessThanOrEqual(initLimit) {
+				isBreached = true
+				breachReason = fmt.Sprintf("Firm-wide UK voting rights %s crosses initial threshold %s (prior %s)", voting.StringFixed(4), initLimit.StringFixed(4), priorVoting.StringFixed(4))
+			} else {
+				currStep := voting.Div(stepSize).Floor()
+				priorStep := priorVoting.Div(stepSize).Floor()
+				if currStep.GreaterThan(priorStep) {
+					isBreached = true
+					breachReason = fmt.Sprintf("Firm-wide UK voting rights %s crosses %s step boundary from prior %s", voting.StringFixed(4), stepSize.StringFixed(4), priorVoting.StringFixed(4))
+				}
+			}
+		}
+		if isBreached {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			tc := NewTradingCalendar()
+			dl := tc.NextTradingDayCutoff(state.AsOfDate, 2, 17, 30, time.UTC, "UK_FCA")
+			res.FilingDeadlineAt = &dl
+			res.Details["filing_deadline_at"] = dl.Format(time.RFC3339)
+			res.Details["breach_reason"] = fmt.Sprintf("%s triggering UK FCA DTR5 notification deadline (%s)", breachReason, dl.Format("2006-01-02 15:04:05 MST"))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_EU_TRANSPARENCY_DIR_5PCT":
+		initLimit := decimal.RequireFromString("0.050000")
+		tierStep := decimal.RequireFromString("0.050000")
+		if v, ok := thresholds["initial_threshold_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				initLimit = d
+			}
+		}
+		if v, ok := thresholds["tier_step_size_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				tierStep = d
+			}
+		}
+		voting := metrics["portfolio.firmwide_equity_voting_pct"]
+		priorVoting := metrics["portfolio.prior_firmwide_equity_voting_pct"]
+		res.Details["firmwide_equity_voting_pct"] = voting.StringFixed(6)
+		res.Details["prior_firmwide_equity_voting_pct"] = priorVoting.StringFixed(6)
+		res.Details["initial_threshold_pct"] = initLimit.StringFixed(6)
+		res.Details["tier_step_size_pct"] = tierStep.StringFixed(6)
+
+		isBreached := false
+		var breachReason string
+		if voting.GreaterThan(initLimit) {
+			if priorVoting.LessThanOrEqual(initLimit) {
+				isBreached = true
+				breachReason = fmt.Sprintf("Firm-wide EU voting rights %s crosses initial threshold %s (prior %s)", voting.StringFixed(4), initLimit.StringFixed(4), priorVoting.StringFixed(4))
+			} else {
+				currTier := voting.Div(tierStep).Floor()
+				priorTier := priorVoting.Div(tierStep).Floor()
+				if currTier.GreaterThan(priorTier) {
+					isBreached = true
+					breachReason = fmt.Sprintf("Firm-wide EU voting rights %s crosses statutory tier boundary %s (prior %s)", voting.StringFixed(4), currTier.Mul(tierStep).StringFixed(4), priorVoting.StringFixed(4))
+				}
+			}
+		}
+		if isBreached {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			tc := NewTradingCalendar()
+			dl := tc.NextTradingDayCutoff(state.AsOfDate, 4, 17, 30, time.UTC, "EU_ESMA")
+			res.FilingDeadlineAt = &dl
+			res.Details["filing_deadline_at"] = dl.Format(time.RFC3339)
+			res.Details["breach_reason"] = fmt.Sprintf("%s triggering EU Transparency Directive filing deadline (%s)", breachReason, dl.Format("2006-01-02 15:04:05 MST"))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_UK_TAKEOVER_MANDATORY_BID_30":
+		maxLimit := decimal.RequireFromString("0.300000")
+		if v, ok := thresholds["mandatory_bid_threshold_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+		control := metrics["portfolio.firmwide_voting_control_pct"]
+		res.Details["firmwide_voting_control_pct"] = control.StringFixed(6)
+		res.Details["mandatory_bid_threshold_pct"] = maxLimit.StringFixed(6)
+
+		if control.GreaterThan(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			dl := state.AsOfDate
+			res.FilingDeadlineAt = &dl
+			res.Details["filing_deadline_at"] = dl.Format(time.RFC3339)
+			res.Details["breach_reason"] = fmt.Sprintf("Firm-wide voting control in takeover target %s exceeds 30%% mandatory bid threshold %s triggering immediate UK Takeover Code Rule 9 cash offer obligations", control.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_EU_SSR_SHORT_DISCLOSURE_01":
+		notifLimit := decimal.RequireFromString("0.001000")
+		stepSize := decimal.RequireFromString("0.001000")
+		if v, ok := thresholds["notification_threshold_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				notifLimit = d
+			}
+		}
+		if v, ok := thresholds["step_increment_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				stepSize = d
+			}
+		}
+		netShort := metrics["portfolio.firmwide_net_short_pct"]
+		priorNetShort := metrics["portfolio.prior_firmwide_net_short_pct"]
+		res.Details["firmwide_net_short_pct"] = netShort.StringFixed(6)
+		res.Details["prior_firmwide_net_short_pct"] = priorNetShort.StringFixed(6)
+		res.Details["notification_threshold_pct"] = notifLimit.StringFixed(6)
+		res.Details["step_increment_pct"] = stepSize.StringFixed(6)
+
+		isBreached := false
+		var breachReason string
+		if netShort.GreaterThan(notifLimit) {
+			if priorNetShort.LessThanOrEqual(notifLimit) {
+				isBreached = true
+				breachReason = fmt.Sprintf("Firm-wide EU net short position %s crosses initial notification threshold %s (prior %s)", netShort.StringFixed(4), notifLimit.StringFixed(4), priorNetShort.StringFixed(4))
+			} else {
+				currStep := netShort.Div(stepSize).Floor()
+				priorStep := priorNetShort.Div(stepSize).Floor()
+				if currStep.GreaterThan(priorStep) {
+					isBreached = true
+					breachReason = fmt.Sprintf("Firm-wide EU net short position %s crosses %s step boundary from prior %s", netShort.StringFixed(4), stepSize.StringFixed(4), priorNetShort.StringFixed(4))
+				}
+			}
+		}
+		if isBreached {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			tc := NewTradingCalendar()
+			dl := tc.NextTradingDayCutoff(state.AsOfDate, 1, 15, 30, time.UTC, "EU_ESMA")
+			res.FilingDeadlineAt = &dl
+			res.Details["filing_deadline_at"] = dl.Format(time.RFC3339)
+			res.Details["breach_reason"] = fmt.Sprintf("%s triggering EU SSR T+1 15:30 CET notification deadline (%s)", breachReason, dl.Format("2006-01-02 15:04:05 MST"))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_UK_FCA_SSR_SHORT_DISCLOSURE_02":
+		notifLimit := decimal.RequireFromString("0.002000")
+		stepSize := decimal.RequireFromString("0.001000")
+		if v, ok := thresholds["notification_threshold_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				notifLimit = d
+			}
+		}
+		if v, ok := thresholds["step_increment_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				stepSize = d
+			}
+		}
+		netShort := metrics["portfolio.firmwide_net_short_pct"]
+		priorNetShort := metrics["portfolio.prior_firmwide_net_short_pct"]
+		res.Details["firmwide_net_short_pct"] = netShort.StringFixed(6)
+		res.Details["prior_firmwide_net_short_pct"] = priorNetShort.StringFixed(6)
+		res.Details["notification_threshold_pct"] = notifLimit.StringFixed(6)
+		res.Details["step_increment_pct"] = stepSize.StringFixed(6)
+
+		isBreached := false
+		var breachReason string
+		if netShort.GreaterThan(notifLimit) {
+			if priorNetShort.LessThanOrEqual(notifLimit) {
+				isBreached = true
+				breachReason = fmt.Sprintf("Firm-wide UK net short position %s crosses initial notification threshold %s (prior %s)", netShort.StringFixed(4), notifLimit.StringFixed(4), priorNetShort.StringFixed(4))
+			} else {
+				currStep := netShort.Div(stepSize).Floor()
+				priorStep := priorNetShort.Div(stepSize).Floor()
+				if currStep.GreaterThan(priorStep) {
+					isBreached = true
+					breachReason = fmt.Sprintf("Firm-wide UK net short position %s crosses %s step boundary from prior %s", netShort.StringFixed(4), stepSize.StringFixed(4), priorNetShort.StringFixed(4))
+				}
+			}
+		}
+		if isBreached {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			tc := NewTradingCalendar()
+			dl := tc.NextTradingDayCutoff(state.AsOfDate, 1, 15, 30, time.UTC, "UK_FCA")
+			res.FilingDeadlineAt = &dl
+			res.Details["filing_deadline_at"] = dl.Format(time.RFC3339)
+			res.Details["breach_reason"] = fmt.Sprintf("%s triggering UK FCA SSR T+1 15:30 UK notification deadline (%s)", breachReason, dl.Format("2006-01-02 15:04:05 MST"))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_SEC_SCHEDULE_13G_PASSIVE":
+		initLimit := decimal.RequireFromString("0.050000")
+		accelLimit := decimal.RequireFromString("0.100000")
+		ceilLimit := decimal.RequireFromString("0.200000")
+		if v, ok := thresholds["initial_passive_threshold_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				initLimit = d
+			}
+		}
+		if v, ok := thresholds["accelerated_threshold_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				accelLimit = d
+			}
+		}
+		if v, ok := thresholds["max_passive_ownership_ceiling_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				ceilLimit = d
+			}
+		}
+
+		voting := metrics["portfolio.firmwide_equity_voting_pct"]
+		priorVoting := metrics["portfolio.prior_firmwide_equity_voting_pct"]
+		isPassiveVal := metrics["portfolio.is_passive_intent"]
+		isPassive := !isPassiveVal.IsZero()
+
+		res.Details["firmwide_equity_voting_pct"] = voting.StringFixed(6)
+		res.Details["prior_firmwide_equity_voting_pct"] = priorVoting.StringFixed(6)
+		res.Details["is_passive_intent"] = isPassive
+		res.Details["initial_passive_threshold_pct"] = initLimit.StringFixed(6)
+		res.Details["accelerated_threshold_pct"] = accelLimit.StringFixed(6)
+
+		tc := NewTradingCalendar()
+
+		if !isPassive && voting.GreaterThan(initLimit) {
+			// Activist transition: immediate forfeiture of 13G eligibility -> mandatory 13D conversion
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			dl := tc.NextTradingDayCutoff(state.AsOfDate, 5, 17, 30, time.UTC, "US_SEC")
+			res.FilingDeadlineAt = &dl
+			res.Details["filing_deadline_at"] = dl.Format(time.RFC3339)
+			res.Details["breach_reason"] = fmt.Sprintf("Loss of passive intent / activist engagement detected (%s voting equity); Schedule 13G eligibility forfeited, triggering mandatory Schedule 13D conversion within 5 business days (%s)", voting.StringFixed(4), dl.Format("2006-01-02 15:04:05 MST"))
+		} else if voting.GreaterThanOrEqual(ceilLimit) {
+			// Exceeds 20% passive ceiling (Rule 13d-1(c))
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			dl := tc.NextTradingDayCutoff(state.AsOfDate, 5, 17, 30, time.UTC, "US_SEC")
+			res.FilingDeadlineAt = &dl
+			res.Details["filing_deadline_at"] = dl.Format(time.RFC3339)
+			res.Details["breach_reason"] = fmt.Sprintf("Passive ownership %s exceeds 20.0%% ceiling (Rule 13d-1(c)); disqualifies Schedule 13G and triggers mandatory Schedule 13D filing deadline (%s)", voting.StringFixed(4), dl.Format("2006-01-02 15:04:05 MST"))
+		} else if voting.GreaterThan(accelLimit) && priorVoting.LessThanOrEqual(accelLimit) {
+			// Accelerated 10% threshold crossing (5 business days)
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			dl := tc.NextTradingDayCutoff(state.AsOfDate, 5, 17, 30, time.UTC, "US_SEC")
+			res.FilingDeadlineAt = &dl
+			res.Details["filing_deadline_at"] = dl.Format(time.RFC3339)
+			res.Details["breach_reason"] = fmt.Sprintf("Passive voting equity %s crosses 10%% accelerated threshold (prior %s); triggers 5-business-day filing deadline (%s)", voting.StringFixed(4), priorVoting.StringFixed(4), dl.Format("2006-01-02 15:04:05 MST"))
+		} else if voting.GreaterThan(initLimit) && priorVoting.LessThanOrEqual(initLimit) {
+			// Standard 5% initial crossing (45 calendar days post year-end)
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			yearEnd := time.Date(state.AsOfDate.Year(), time.December, 31, 17, 30, 0, 0, time.UTC)
+			dl := yearEnd.AddDate(0, 0, 45)
+			res.FilingDeadlineAt = &dl
+			res.Details["filing_deadline_at"] = dl.Format(time.RFC3339)
+			res.Details["breach_reason"] = fmt.Sprintf("Passive voting equity %s crosses 5%% initial threshold (prior %s); triggers annual Schedule 13G filing deadline 45 calendar days post year-end (%s)", voting.StringFixed(4), priorVoting.StringFixed(4), dl.Format("2006-01-02 15:04:05 MST"))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
+	case "POST_TRADE_ERISA_PLAN_ASSET_25PCT":
+		maxLimit := decimal.RequireFromString("0.250000")
+		if v, ok := thresholds["max_bpi_equity_pct"].(string); ok {
+			if d, err := decimal.NewFromString(v); err == nil {
+				maxLimit = d
+			}
+		}
+
+		bpiPct := metrics["portfolio.erisa_bpi_equity_pct"]
+		res.Details["erisa_bpi_equity_pct"] = bpiPct.StringFixed(6)
+		res.Details["max_bpi_equity_pct"] = maxLimit.StringFixed(6)
+
+		if bpiPct.GreaterThanOrEqual(maxLimit) {
+			res.Action = "BREACHED"
+			res.Status = "OPEN"
+			dl := state.AsOfDate
+			res.FilingDeadlineAt = &dl
+			res.Details["filing_deadline_at"] = dl.Format(time.RFC3339)
+			res.Details["breach_reason"] = fmt.Sprintf("Benefit Plan Investor (BPI) equity participation %s reaches or exceeds 25.0%% significant participation threshold %s (ERISA § 3(42) / 29 CFR 2510.3-101); fund assets are deemed ERISA plan assets subjecting manager to Title I fiduciary duties", bpiPct.StringFixed(4), maxLimit.StringFixed(4))
+		} else {
+			res.Action = "WITHIN_LIMITS"
+			res.Status = "RESOLVED"
+		}
+
 	default:
 		res.Action = "WITHIN_LIMITS"
 		res.Status = "RESOLVED"
@@ -1086,20 +1458,21 @@ func (e *PostTradeEvaluator) persistFindingLifecycle(
 				id, tenant_id, rule_id, rule_version, rule_code, account_id,
 				as_of_date, evaluation_tier, status, action, finding_severity,
 				supersedes_finding_id, superseded_reason, lineage_hash,
-				portfolio_snapshot_id, details
+				portfolio_snapshot_id, filing_deadline_at, details
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
 				$7, $8, 'OPEN', $9, $10,
 				$11, $12, $13,
-				$14, $15::jsonb
+				$14, $15, $16::jsonb
 			)
 			ON CONFLICT (id) DO UPDATE SET
+				filing_deadline_at = EXCLUDED.filing_deadline_at,
 				details = EXCLUDED.details,
 				updated_at = now()
 		`, res.FindingID, res.TenantID, res.RuleID, res.RuleVersion, res.RuleCode, res.AccountID,
 			res.AsOfDate.Format("2006-01-02"), res.EvaluationTier, res.Action, res.FindingSeverity,
 			res.SupersedesFindingID, res.SupersededReason, res.LineageHash,
-			res.PortfolioSnapshotID, detailsJSON,
+			res.PortfolioSnapshotID, res.FilingDeadlineAt, detailsJSON,
 		)
 		if err != nil {
 			return fmt.Errorf("insert new compliance finding failed: %w", err)
@@ -1125,3 +1498,4 @@ func (e *PostTradeEvaluator) persistFindingLifecycle(
 
 	return nil
 }
+

@@ -161,12 +161,12 @@ func TestCoreLibrary_SeedDriftCheck(t *testing.T) {
 		t.Fatalf("query gold rule count: %v", err)
 	}
 
-	if totalCount != 86 {
-		t.Fatalf("Expected exactly 86 gold-copy rules in alpha, found %d", totalCount)
+	if totalCount != 94 {
+		t.Fatalf("Expected exactly 94 gold-copy rules in alpha, found %d", totalCount)
 	}
 
-	if activeCount != 86 {
-		t.Errorf("Expected exactly 86 ACTIVE (scenario-covered) rules, got %d", activeCount)
+	if activeCount != 94 {
+		t.Errorf("Expected exactly 94 ACTIVE (scenario-covered) rules, got %d", activeCount)
 	}
 
 	if provisionalCount != 0 {
@@ -204,8 +204,8 @@ func TestCoreLibrary_SeedDriftCheck(t *testing.T) {
 	if rulesets["INSTITUTIONAL_CONTROLS"] != 21 {
 		t.Errorf("Expected 21 rules in INSTITUTIONAL_CONTROLS, got %d", rulesets["INSTITUTIONAL_CONTROLS"])
 	}
-	if rulesets["POST_TRADE_MONITORING"] != 28 {
-		t.Errorf("Expected 28 rules in POST_TRADE_MONITORING, got %d", rulesets["POST_TRADE_MONITORING"])
+	if rulesets["POST_TRADE_MONITORING"] != 36 {
+		t.Errorf("Expected 36 rules in POST_TRADE_MONITORING, got %d", rulesets["POST_TRADE_MONITORING"])
 	}
 	if rulesets["ESG_AND_SUSTAINABILITY"] != 8 {
 		t.Errorf("Expected 8 rules in ESG_AND_SUSTAINABILITY, got %d", rulesets["ESG_AND_SUSTAINABILITY"])
@@ -312,8 +312,8 @@ func TestCoreLibrary_EffectiveDating(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadTenantActiveRulesAsOf now: %v", err)
 	}
-	if len(rulesNow) != 86 {
-		t.Fatalf("Expected 86 rules effective now, got %d", len(rulesNow))
+	if len(rulesNow) != 94 {
+		t.Fatalf("Expected 94 rules effective now, got %d", len(rulesNow))
 	}
 	// Historical time prior to effective_from (e.g. 2024-01-01) -> 0 rules effective
 	asOfPast := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -445,8 +445,8 @@ func TestCoreLibrary_RepinProvisionalRejection(t *testing.T) {
 	}
 }
 
-// 8. 86-Rule Canonical Content Hash Agreement (Go RFC 8785 Authority == DB Snapshot)
-func TestCoreLibrary_All86CoreRules_ContentHashAgreement(t *testing.T) {
+// 8. 94-Rule Canonical Content Hash Agreement (Go RFC 8785 Authority == DB Snapshot)
+func TestCoreLibrary_All94CoreRules_ContentHashAgreement(t *testing.T) {
 	db := getAlphaTestDB(t)
 	defer db.Close()
 
@@ -500,8 +500,8 @@ func TestCoreLibrary_All86CoreRules_ContentHashAgreement(t *testing.T) {
 		checkedCount++
 	}
 
-	if checkedCount != 86 {
-		t.Fatalf("Expected to verify 86 core rules, verified %d", checkedCount)
+	if checkedCount != 94 {
+		t.Fatalf("Expected to verify 94 core rules, verified %d", checkedCount)
 	}
 
 	t.Logf("100%% Hash Agreement Verified across all %d Gold-Copy Core Rules (Go RFC 8785 Authority == Stored ContentHash)", checkedCount)

@@ -85,6 +85,14 @@ type OrderContext struct {
 	EsgHazardousWasteRatio          decimal.Decimal
 	EuTaxonomyAlignmentPct          decimal.Decimal
 	LiquidityCoverageRatio          decimal.Decimal
+	FirmwideEquityVotingPct         decimal.Decimal
+	PriorFirmwideEquityVotingPct    decimal.Decimal
+	FirmwideVotingControlPct        decimal.Decimal
+	PriorFirmwideVotingControlPct   decimal.Decimal
+	FirmwideNetShortPct             decimal.Decimal
+	PriorFirmwideNetShortPct        decimal.Decimal
+	IsPassiveIntent                 *bool
+	ErisaBpiEquityPct               decimal.Decimal
 	Nav                             decimal.Decimal
 	ExistingPositionValue decimal.Decimal
 	ReferencePrice        decimal.Decimal
@@ -92,6 +100,9 @@ type OrderContext struct {
 	AdvRatio              decimal.Decimal
 	DuplicateCount        int
 	OrdersPerMinute       int
+
+	// Rule Parameter Overrides (for testing dynamic parameter thresholds)
+	ParameterOverrides map[string]string
 
 	// List & Eligibility Flags
 	InRestrictedList          bool
@@ -172,6 +183,7 @@ func buildScenarioCorpus() []Scenario {
 	corpus = append(corpus, getCorePreTradeScenarios()...)
 	corpus = append(corpus, getPhase1PostTradeScenarios()...)
 	corpus = append(corpus, getPhase2PostTradeScenarios()...)
+	corpus = append(corpus, getPhase7PostTradeScenarios()...)
 	return corpus
 }
 
@@ -181,6 +193,9 @@ func EvaluateScenario(sc Scenario) (string, string) {
 		return status, explain
 	}
 	if status, explain, ok := evaluatePhase2Scenario(sc); ok {
+		return status, explain
+	}
+	if status, explain, ok := evaluatePhase7Scenario(sc); ok {
 		return status, explain
 	}
 	in := sc.Input

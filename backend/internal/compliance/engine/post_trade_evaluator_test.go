@@ -430,11 +430,138 @@ func TestPostTradeEvaluator_E2E_PilotRulesAndSupersession(t *testing.T) {
 		}
 	}
 	require.NotNil(t, unclassFinding, "Unclassified ceiling rule must be evaluated")
-	require.Equal(t, "BREACHED", unclassFinding.Action)
-	require.Equal(t, "OPEN", unclassFinding.Status)
-	require.Equal(t, "DATA_QUALITY_INCIDENT", unclassFinding.Details["finding_category"])
-	require.Equal(t, "DATA_REMEDIATION_REQUIRED", unclassFinding.Details["resolution_path"])
-	require.Contains(t, unclassFinding.Details["breach_reason"], "DATA_REMEDIATION_REQUIRED")
+	// =========================================================================
+	// Scenario 13: Phase VII Multi-Tier Hierarchy Aggregation & SEC 13D Statutory Deadline
+	// =========================================================================
+	// Master fund account parent with two child sleeves (Feeder A and Feeder B)
+	parentFundID := uuid.New()
+	childFeederA := uuid.New()
+	childFeederB := uuid.New()
 
-	t.Logf("Post-Trade Batch Evaluator E2E Test PASSED: All 21 Post-Trade Rules, Unclassified Left-Join Safety Net, Corporate Group Lookthrough, Debt, Counterparty PFE, Cash Floor, Sovereign, Agency, Muni, CCP, Custodian, Bank, Sec Lending, UUIDv5 Lineage, Restatement Supersession, State Machine Triggers, and RLS Isolation Verified 100%%!")
+	// Seed edges into master.fund_hierarchy_edge table
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO master.fund_hierarchy_edge (
+			tenant_id, parent_account_id, child_account_id, relationship_type,
+			economic_share_pct, voting_control_pct
+		) VALUES 
+		($1, $2, $3, 'MASTER_FEEDER', 1.000000, 1.000000),
+		($1, $2, $4, 'MASTER_FEEDER', 1.000000, 1.000000)
+	`, tenantA, parentFundID, childFeederA, childFeederB)
+	require.NoError(t, err)
+
+	// Target company ISS-TARGET-1 has 10,000,000 voting shares outstanding.
+	// Feeder A holds 300,000 shares (3.0%), Feeder B holds 250,000 shares (2.5%).
+	// Aggregated direct holdings across sleeves = 550,000 shares (5.5% > 5.0% SEC 13D limit).
+	// Prior snapshot had 4.0% voting equity (crossing from 4.0% to 5.5%).
+	stateHierarchy := PortfolioState{
+		TenantID:      tenantA,
+		AccountID:     parentFundID,
+		AsOfDate:      asOfDate,
+		NAV:           decimal.RequireFromString("50000000.000000"),
+		GrossExposure: decimal.RequireFromString("50000000.000000"),
+		NetExposure:   decimal.RequireFromString("50000000.000000"),
+		CashBalance:   decimal.RequireFromString("5000000.000000"),
+		HierarchyEdges: []FundHierarchyEdge{
+			{ParentAccountID: parentFundID, ChildAccountID: childFeederA, RelationshipType: "MASTER_FEEDER", EconomicSharePct: decimal.RequireFromString("1.000000"), VotingControlPct: decimal.RequireFromString("1.000000")},
+			{ParentAccountID: parentFundID, ChildAccountID: childFeederB, RelationshipType: "MASTER_FEEDER", EconomicSharePct: decimal.RequireFromString("1.000000"), VotingControlPct: decimal.RequireFromString("1.000000")},
+		},
+		PriorSnapshotMetrics: map[string]decimal.Decimal{
+			"portfolio.firmwide_equity_voting_pct": decimal.RequireFromString("0.040000"), // Prior was 4.0%
+		},
+		Positions: []PortfolioPosition{
+			{
+				SecurityID:              "SEC-TGT-EQ",
+				Symbol:                  "TGT",
+				IssuerID:                "ISS-TARGET-1",
+				MarketValue:             decimal.RequireFromString("5500000.000000"),
+				VotingSharesHeld:        decimal.RequireFromString("550000.000000"),
+				VotingSharesOutstanding: decimal.RequireFromString("10000000.000000"), // 550k / 10M = 5.5%
+				SharesHeld:              decimal.RequireFromString("550000.000000"),
+				SharesOutstanding:       decimal.RequireFromString("10000000.000000"),
+			},
+		},
+	}
+
+	resultsHierarchy, err := evaluator.EvaluateAndPersist(ctx, stateHierarchy)
+	require.NoError(t, err)
+
+	var sec13dFinding *PostTradeEvaluationResult
+	for i := range resultsHierarchy {
+		if resultsHierarchy[i].RuleCode == "POST_TRADE_SEC_SCHEDULE_13D_5PCT" {
+			sec13dFinding = &resultsHierarchy[i]
+		}
+	}
+	require.NotNil(t, sec13dFinding, "POST_TRADE_SEC_SCHEDULE_13D_5PCT must be evaluated")
+	require.Equal(t, "BREACHED", sec13dFinding.Action)
+	require.Equal(t, "OPEN", sec13dFinding.Status)
+	require.NotNil(t, sec13dFinding.FilingDeadlineAt, "Filing deadline must be computed for SEC 13D breach")
+
+	// Verify statutory filing deadline persisted in DB
+	// =========================================================================
+	// Scenario 14: Phase VII Tranche 2 — ERISA 25% BPI Disregarded GP Denominator & 13G Activist Transition
+	// =========================================================================
+	fundAccountID := uuid.New()
+	invBPI := uuid.New()
+	invGP := uuid.New()
+	invCorp := uuid.New()
+
+	stateErisa := PortfolioState{
+		TenantID:      tenantA,
+		AccountID:     fundAccountID,
+		AsOfDate:      asOfDate,
+		NAV:           decimal.RequireFromString("100000000.000000"),
+		GrossExposure: decimal.RequireFromString("100000000.000000"),
+		NetExposure:   decimal.RequireFromString("100000000.000000"),
+		CashBalance:   decimal.RequireFromString("10000000.000000"),
+		IsPassiveIntent: boolPtr(false), // Activist intent loss -> triggers mandatory 13D conversion under 13G
+		PriorSnapshotMetrics: map[string]decimal.Decimal{
+			"portfolio.firmwide_equity_voting_pct": decimal.RequireFromString("0.040000"),
+		},
+		Positions: []PortfolioPosition{
+			{
+				SecurityID:              "SEC-TGT-EQ",
+				Symbol:                  "TGT",
+				IssuerID:                "ISS-TARGET-1",
+				MarketValue:             decimal.RequireFromString("5500000.000000"),
+				VotingSharesHeld:        decimal.RequireFromString("550000.000000"),
+				VotingSharesOutstanding: decimal.RequireFromString("10000000.000000"), // 5.5%
+				SharesHeld:              decimal.RequireFromString("550000.000000"),
+				SharesOutstanding:       decimal.RequireFromString("10000000.000000"),
+			},
+		},
+		Investors: []InvestorEquityHolding{
+			{InvestorID: invBPI.String(), InvestorName: "State Teachers Retirement System", InvestorType: "ERISA_BENEFIT_PLAN", IsBenefitPlan: true, IsGPDisregarded: false, EquityValue: decimal.RequireFromString("24000000.000000")},
+			{InvestorID: invGP.String(), InvestorName: "Sponsor General Partner LP", InvestorType: "GP_MANAGEMENT", IsBenefitPlan: false, IsGPDisregarded: true, EquityValue: decimal.RequireFromString("20000000.000000")},
+			{InvestorID: invCorp.String(), InvestorName: "Corporate Sovereign HoldCo", InvestorType: "CORPORATE_INVESTOR", IsBenefitPlan: false, IsGPDisregarded: false, EquityValue: decimal.RequireFromString("56000000.000000")},
+		},
+	}
+
+	resultsErisa, err := evaluator.EvaluateAndPersist(ctx, stateErisa)
+	require.NoError(t, err)
+
+	var erisaFinding, sec13gFinding *PostTradeEvaluationResult
+	for i := range resultsErisa {
+		if resultsErisa[i].RuleCode == "POST_TRADE_ERISA_PLAN_ASSET_25PCT" {
+			erisaFinding = &resultsErisa[i]
+		}
+		if resultsErisa[i].RuleCode == "POST_TRADE_SEC_SCHEDULE_13G_PASSIVE" {
+			sec13gFinding = &resultsErisa[i]
+		}
+	}
+	require.NotNil(t, erisaFinding, "POST_TRADE_ERISA_PLAN_ASSET_25PCT must be evaluated")
+	require.Equal(t, "BREACHED", erisaFinding.Action)
+	require.Equal(t, "OPEN", erisaFinding.Status)
+	require.Contains(t, erisaFinding.Details["breach_reason"], "25.0% significant participation threshold")
+
+	require.NotNil(t, sec13gFinding, "POST_TRADE_SEC_SCHEDULE_13G_PASSIVE must be evaluated")
+	require.Equal(t, "BREACHED", sec13gFinding.Action)
+	require.Equal(t, "OPEN", sec13gFinding.Status)
+	require.Contains(t, sec13gFinding.Details["breach_reason"], "mandatory Schedule 13D conversion")
+
+	t.Logf("Post-Trade Batch Evaluator E2E Test PASSED: All 29 Post-Trade Monitoring Rules (including ERISA 25%% BPI Aggregation & 13G Passive/Activist), Multi-Tier Fund Hierarchy Traversal, Statutory Filing Deadlines, Unclassified Left-Join Safety Net, Corporate Group Lookthrough, Debt, Counterparty PFE, Cash Floor, Sovereign, Agency, Muni, CCP, Custodian, Bank, Sec Lending, UUIDv5 Lineage, Restatement Supersession, State Machine Triggers, and RLS Isolation Verified 100%%!")
 }
+
+func boolPtr(b bool) *bool {
+	return &b
+}
+

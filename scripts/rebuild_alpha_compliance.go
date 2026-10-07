@@ -83,6 +83,8 @@ func main() {
 		"20261224_015_phase2_tranche2_rules_and_pack.up.sql",
 		"20261224_016_phase2_tranche2_rule_corrections.up.sql",
 		"20261224_017_phase2_tranche3_waci_and_sfdr_rules.up.sql",
+		"20261224_018_phase7_entity_graph_and_rule_families.up.sql",
+		"20261224_019_phase7_tranche2_and_class_b_lists.up.sql",
 	}
 
 	migDir := filepath.Join("backend", "db", "migrations")
@@ -123,13 +125,13 @@ func main() {
 
 	fmt.Println("======================================================================")
 	fmt.Printf("INVARIANTS ON ALPHA POST-REBUILD:\n")
-	fmt.Printf("  master_active_rules: %d (expected 86)\n", masterActiveRules)
-	fmt.Printf("  master_snapshots:    %d (expected 86)\n", masterSnapshots)
+	fmt.Printf("  master_active_rules: %d (expected 94)\n", masterActiveRules)
+	fmt.Printf("  master_snapshots:    %d (expected 94)\n", masterSnapshots)
 	fmt.Printf("  master_soft_deleted: %d (expected 0)\n", masterSoftDeleted)
 	fmt.Printf("  test_rules_count:    %d (expected 0)\n", testRulesCount)
 	fmt.Println("======================================================================")
 
-	if masterActiveRules != 86 || masterSnapshots != 86 || masterSoftDeleted != 0 || testRulesCount != 0 {
+	if masterActiveRules != 94 || masterSnapshots != 94 || masterSoftDeleted != 0 || testRulesCount != 0 {
 		log.Fatalf("INVARIANT CHECK FAILED!")
 	}
 	log.Println("SUCCESS: Alpha rebuild and invariant check verified cleanly.")

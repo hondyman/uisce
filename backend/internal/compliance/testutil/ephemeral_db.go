@@ -58,7 +58,7 @@ func ensureTemplateDatabase(adminDB *sql.DB) error {
 			_ = tplDB.QueryRowContext(ctx, `
 				SELECT EXISTS(
 					SELECT 1 FROM compliance.compliance_rule_version 
-					WHERE content_hash = 'f292765cfcd9d6883d997856a5ea07ad91243dd3f19ae1a2a89f26148795faee'
+					WHERE content_hash = '9b51f1a16678c5030f365ad8afbd7995cb3192f42830e9e90eea1d188d678ecf'
 				)
 			`).Scan(&hasLatest)
 			tplDB.Close()
@@ -158,7 +158,7 @@ func ensureTemplateDatabase(adminDB *sql.DB) error {
 		return fmt.Errorf("apply prereqs on template db: %w", err)
 	}
 
-	// Apply migrations 001 -> 017
+	// Apply migrations 001 -> 018
 	migrations := []string{
 		"20261218_001_compliance_engine_core_tables.up.sql",
 		"20261218_002_governance_audit_and_privileges.up.sql",
@@ -177,6 +177,8 @@ func ensureTemplateDatabase(adminDB *sql.DB) error {
 		"20261224_015_phase2_tranche2_rules_and_pack.up.sql",
 		"20261224_016_phase2_tranche2_rule_corrections.up.sql",
 		"20261224_017_phase2_tranche3_waci_and_sfdr_rules.up.sql",
+		"20261224_018_phase7_entity_graph_and_rule_families.up.sql",
+		"20261224_019_phase7_tranche2_and_class_b_lists.up.sql",
 	}
 
 	// Search for migration directory

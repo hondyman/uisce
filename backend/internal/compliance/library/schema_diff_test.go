@@ -31,6 +31,9 @@ func TestSchemaParity_ComplianceTablesAndConstraints(t *testing.T) {
 		"compliance_surveillance_event",
 		"compliance_portfolio_snapshot",
 		"compliance_finding",
+		"compliance_rule_family",
+		"compliance_restricted_list",
+		"compliance_restricted_list_item",
 	}
 
 	for _, table := range expectedTables {
@@ -95,24 +98,26 @@ func TestSchemaParity_ComplianceTablesAndConstraints(t *testing.T) {
 		t.Fatalf("failed to query master tenant counts: %v", err)
 	}
 
-	if masterCount != 86 {
-		t.Errorf("expected exactly 86 gold-copy rules, got %d", masterCount)
+	if masterCount != 94 {
+		t.Errorf("expected exactly 94 gold-copy rules, got %d", masterCount)
 	}
-	if snapshotCount != 86 {
-		t.Errorf("expected exactly 86 v1 snapshots for gold-copy rules, got %d", snapshotCount)
+	if snapshotCount != 94 {
+		t.Errorf("expected exactly 94 v1 snapshots for gold-copy rules, got %d", snapshotCount)
 	}
 
 	// 4. Verify master schema tables
-	var relTableExists bool
+	var relTableExists, fundHierarchyExists bool
 	err = db.QueryRowContext(ctx, `
-		SELECT EXISTS (
-			SELECT 1 FROM information_schema.tables 
-			WHERE table_schema = 'master' AND table_name = 'entity_relationship_snapshot'
-		)
-	`).Scan(&relTableExists)
+		SELECT 
+			EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'master' AND table_name = 'entity_relationship_snapshot'),
+			EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'master' AND table_name = 'fund_hierarchy_edge')
+	`).Scan(&relTableExists, &fundHierarchyExists)
 	if err != nil || !relTableExists {
 		t.Errorf("expected master.entity_relationship_snapshot table to exist")
 	}
+	if !fundHierarchyExists {
+		t.Errorf("expected master.fund_hierarchy_edge table to exist")
+	}
 
-	fmt.Printf("[Schema Diff Test] Verified 86 master rules, 86 v1 snapshots, 17 compliance tables, master hierarchy table, and all triggers.\n")
+	fmt.Printf("[Schema Diff Test] Verified 94 master rules, 94 v1 snapshots, 20 compliance tables, master hierarchy table, and all triggers.\n")
 }
