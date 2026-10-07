@@ -83,9 +83,12 @@ import {
   routeBadgeFromPreview,
   buildCubeFieldCatalog,
   businessObjectSubject,
+  cubeSubject,
   isCubeSubject,
   type QuerySubject,
 } from '../../analytical-subject';
+import { useParams } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
 import { getCube, listCubeMetrics } from '../../cubes/cubeDefinitionApi';
 import type { CubeDefinition } from '../../cubes/types';
 import {
@@ -250,6 +253,16 @@ const BusinessObjectQueryBuilder: React.FC = () => {
   const [subject, setSubject] = useState<QuerySubject | null>(null);
   const [selectedCube, setSelectedCube] = useState<CubeDefinition | null>(null);
 
+  // Mount guard: when this component is reached under
+  // /query-builder/cube/:cubeId, read the param, pin subject to that cube at
+  // contractVersion='latest', and hydrate selectedCube via cubes.get. On 404
+  // surface an inline empty state with a link back to /build/cubes. When
+  // status != 'active' show a non-blocking deploy hint so the empty preview
+  // is explained rather than surprising.
+  const { cubeId: routeCubeId } = useParams<{ cubeId: string }>();
+  const [cubeNotFound, setCubeNotFound] = useState(false);
+  const [cubeMountHydrating, setCubeMountHydrating] = useState(false);
+
   // Query state
   const [queryDef, setQueryDef] = useState<QueryDef | null>(null);
 
@@ -295,6 +308,46 @@ const BusinessObjectQueryBuilder: React.FC = () => {
     }
     if (id) setTenantId(id);
   }, [tenant]);
+
+  // Mount guard (route /query-builder/cube/:cubeId): pin subject to the URL
+  // cube id, fetch cubes.get to hydrate selectedCube, and surface 404 inline
+  // rather than falling into the BO picker.
+  useEffect(() => {
+    if (!routeCubeId) {
+      setCubeNotFound(false);
+      return;
+    }
+    let cancelled = false;
+    setCubeMountHydrating(true);
+    setCubeNotFound(false);
+    setError(null);
+    setSubject(cubeSubject(routeCubeId, 'latest'));
+    (async () => {
+      try {
+        const cube = await getCube(routeCubeId);
+        if (cancelled) return;
+        setSelectedCube(cube);
+        // queryDef is left null; the existing flow will populate it once the
+        // user picks dimensions/metrics via the catalog. Pre-seeding here
+        // would require a QueryContext which is the user's first action.
+      } catch (e: unknown) {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : 'Unknown error';
+        // 404 (cube missing) vs other failures (network, 5xx) — different UX.
+        if (/404|not\s*found/i.test(msg)) {
+          setCubeNotFound(true);
+          setSelectedCube(null);
+        } else {
+          setError(`Failed to load cube: ${msg}`);
+        }
+      } finally {
+        if (!cancelled) setCubeMountHydrating(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [routeCubeId]);
 
   // Fetch business objects
   useEffect(() => {
@@ -1064,6 +1117,35 @@ const BusinessObjectQueryBuilder: React.FC = () => {
 
   const isRunDisabled = !queryDef || (!queryDef.query.dimensions.length && !queryDef.query.measures.length);
 
+  // Mount-guard: when reached under /query-builder/cube/:cubeId, surface a
+  // 404 inline state instead of falling into the BO picker. We render the
+  // 404 INSIDE the editor chrome so the page shell (sidebar/header) stays
+  // mounted and the user can navigate back without a Suspense re-flash.
+  if (routeCubeId && cubeNotFound) {
+    return (
+      <Box sx={{ p: 4 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Cube <code>{routeCubeId}</code> not found.
+        </Alert>
+        <Typography variant="body2" sx={{ mb: 2 }}>
+          The cube may have been archived, deleted, or its id mistyped.
+        </Typography>
+        <Button component={RouterLink} to="/build/cubes" variant="contained">
+          Back to Cubes catalog
+        </Button>
+      </Box>
+    );
+  }
+
+  if (routeCubeId && cubeMountHydrating) {
+    return (
+      <Box sx={{ p: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
+        <CircularProgress size={20} />
+        <Typography variant="body2">Loading cube {routeCubeId}…</Typography>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ display: 'flex', height: 'calc(100vh - 64px)', bgcolor: '#f5f5f5' }}>
       {/* ── Left Sidebar ── */}
@@ -1699,6 +1781,32 @@ const BusinessObjectQueryBuilder: React.FC = () => {
             {error && (
               <Box sx={{ p: 2 }}>
                 <Alert severity="error">{error}</Alert>
+              </Box>
+            )}
+
+            {/* Undeployed / non-active cube: surface a non-blocking warning
+                before the user runs Preview and gets empty rows back. Plan
+                said "explained rather than surprising". Source: cubes.get
+                returns CubeDefinition.status; we treat anything other than
+                'active' as a deploy/refresh signal. */}
+            {routeCubeId && selectedCube && selectedCube.status !== 'active' && (
+              <Box sx={{ p: 2 }}>
+                <Alert
+                  severity="warning"
+                  action={
+                    <Button
+                      component={RouterLink}
+                      to={`/build/cubes/${encodeURIComponent(selectedCube.id)}`}
+                      size="small"
+                    >
+                      Open in Cube designer
+                    </Button>
+                  }
+                >
+                  Cube status: <strong>{selectedCube.status}</strong>. Preview
+                  will return empty rows until Deploy + Refresh succeed at{' '}
+                  <code>/build/cubes</code>.
+                </Alert>
               </Box>
             )}
 

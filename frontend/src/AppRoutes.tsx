@@ -60,6 +60,10 @@ import TemporalOpsPage from "./features/admin/pages/TemporalOpsPage";
 import SeedingPage from "./features/admin/pages/SeedingPage";
 const QueryLibrary = React.lazy(() => import("./features/query-builder/pages/QueryLibrary"));
 const SavedQueryEditor = React.lazy(() => import("./features/query-builder/pages/SavedQueryEditor"));
+// Cube-aware Query Builder — subject.kind='cube' preview path. Mounted under
+// /query-builder/cube/:cubeId so a cube row / designer row action can deep-link
+// straight into a cube-pinned saved-query editor. Untouched by the BO flow.
+const CubeQueryBuilder = React.lazy(() => import("./features/query-builder/pages/BusinessObjectQueryBuilder"));
 const SqlStudioPage = React.lazy(() => import("./pages/analytical/SqlStudioPage"));
 const SemanticCatalogDetailPage = React.lazy(() => import("./pages/analytical/SemanticCatalogDetailPage"));
 const PipelinesPage = React.lazy(() => import("./pages/analytical/PipelinesPage"));
@@ -165,13 +169,14 @@ const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; r
   import('./pages/PageBrowser').then((m) => ({ default: m.StandalonePageRenderer }))
 );
 const FixedIncomeDashboard = React.lazy(() => import('./components/FixedIncomeDashboard'));
-const ComplianceDecisionBlotter = React.lazy(() => import('./components/compliance/ComplianceDecisionBlotter'));
+const ComplianceDecisionBlotter = React.lazy(() => import('./components/Compliance/ComplianceDecisionBlotter'));
 const RegulatoryChangeQueue = React.lazy(() =>
-  import('./components/compliance/RegulatoryChangeQueue').then((m) => ({ default: m.RegulatoryChangeQueue }))
+  import('./components/Compliance/RegulatoryChangeQueue').then((m) => ({ default: m.RegulatoryChangeQueue }))
 );
 const SurveillanceFindingsQueue = React.lazy(() =>
-  import('./components/compliance/SurveillanceFindingsQueue').then((m) => ({ default: m.SurveillanceFindingsQueue }))
+  import('./components/Compliance/SurveillanceFindingsQueue').then((m) => ({ default: m.SurveillanceFindingsQueue }))
 );
+const ComplianceHubPage = React.lazy(() => import('./pages/Compliance/ComplianceHubPage'));
 const AIPortfolioRebalancer = React.lazy(() => import('./components/AIPortfolioRebalancer'));
 const ScenarioAnalysisPro = React.lazy(() => import('./components/ScenarioAnalysisPro'));
 
@@ -302,6 +307,11 @@ function ProtectedApp() {
         <Route path="core/flow-builder" element={<ProtectedRoute><UisceBuilder /></ProtectedRoute>} />
         <Route path="core/validation" element={<ProtectedRoute><InvestmentValidationPage /></ProtectedRoute>} />
         <Route path="query-builder/editor/:id?" element={<ProtectedRoute><SavedQueryEditor /></ProtectedRoute>} />
+        {/* Cube-pinned query builder (subject.kind='cube'). See CubeQueryBuilder
+            mount guard in BusinessObjectQueryBuilder.tsx — it reads :cubeId from
+            the URL, calls cubes.get to populate state, and surfaces an
+            undeployed-state banner before preview returns empty rows. */}
+        <Route path="query-builder/cube/:cubeId" element={<ProtectedRoute><CubeQueryBuilder /></ProtectedRoute>} />
         <Route path="sql-studio" element={<ProtectedRoute><SqlStudioPage /></ProtectedRoute>} />
         <Route path="semantic-catalog" element={<ProtectedRoute><SemanticCatalogDetailPage /></ProtectedRoute>} />
         <Route path="pipelines" element={<ProtectedRoute><PipelinesPage /></ProtectedRoute>} />
@@ -402,10 +412,50 @@ function ProtectedApp() {
           }
         />
         <Route
+          path="governance/compliance"
+          element={
+            <ProtectedRoute>
+              <ComplianceHubPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="compliance"
+          element={
+            <ProtectedRoute>
+              <ComplianceHubPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="compliance/rules"
+          element={
+            <ProtectedRoute>
+              <ComplianceHubPage initialTab="library" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="compliance/matrix"
+          element={
+            <ProtectedRoute>
+              <ComplianceHubPage initialTab="matrix" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="compliance/activations"
+          element={
+            <ProtectedRoute>
+              <ComplianceHubPage initialTab="matrix" />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="compliance/blotter"
           element={
             <ProtectedRoute>
-              <ComplianceDecisionBlotter />
+              <ComplianceHubPage initialTab="blotter" />
             </ProtectedRoute>
           }
         />
@@ -413,7 +463,7 @@ function ProtectedApp() {
           path="compliance/regulatory"
           element={
             <ProtectedRoute>
-              <RegulatoryChangeQueue />
+              <ComplianceHubPage initialTab="regulatory" />
             </ProtectedRoute>
           }
         />
@@ -421,7 +471,7 @@ function ProtectedApp() {
           path="compliance/surveillance"
           element={
             <ProtectedRoute>
-              <SurveillanceFindingsQueue />
+              <ComplianceHubPage initialTab="surveillance" />
             </ProtectedRoute>
           }
         />
