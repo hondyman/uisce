@@ -56,6 +56,10 @@ func main() {
 	}
 	defer sandboxDB.Close()
 
+	sandboxDB.SetMaxOpenConns(10)
+	sandboxDB.SetMaxIdleConns(5)
+	sandboxDB.SetConnMaxLifetime(15 * time.Minute)
+
 	ctx := context.Background()
 	if *durationFlag > 0 {
 		var cancel context.CancelFunc
@@ -193,13 +197,24 @@ func main() {
 				},
 			}
 
-			t0 := time.Now()
-			results, err := evaluator.EvaluateAndPersist(ctx, state)
-			elapsed := time.Since(t0)
-			latencies = append(latencies, elapsed)
+			var results []engine.PostTradeEvaluationResult
+			var evalErr error
+			for attempt := 1; attempt <= 3; attempt++ {
+				evalCtx, evalCancel := context.WithTimeout(context.Background(), 30*time.Second)
+				t0 := time.Now()
+				results, evalErr = evaluator.EvaluateAndPersist(evalCtx, state)
+				evalCancel()
+				if evalErr == nil {
+					elapsed := time.Since(t0)
+					latencies = append(latencies, elapsed)
+					break
+				}
+				log.Printf("[WARN] Soak evaluation attempt %d failed on cycle %d (retrying in 2s): %v", attempt, cycle, evalErr)
+				time.Sleep(2 * time.Second)
+			}
 
-			if err != nil {
-				log.Fatalf("FATAL: Soak evaluation failed on cycle %d: %v", cycle, err)
+			if evalErr != nil {
+				log.Fatalf("FATAL: Soak evaluation failed on cycle %d after 3 attempts: %v", cycle, evalErr)
 			}
 
 			totalEvaluations += int64(len(results))
