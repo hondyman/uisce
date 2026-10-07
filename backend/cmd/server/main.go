@@ -33,11 +33,17 @@ import (
 // table names like `tenants` silently resolve to that other schema's
 // same-named-but-differently-shaped tables instead of public.tenants.
 func withPublicSearchPath(dsn string) string {
-	sep := "&"
-	if !strings.Contains(dsn, "?") {
-		sep = "?"
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		sep := "&"
+		if !strings.Contains(dsn, "?") {
+			sep = "?"
+		}
+		return dsn + sep + "options=" + url.QueryEscape("-c search_path=public")
 	}
-	return dsn + sep + "options=" + url.QueryEscape("-c search_path=public")
+	if !strings.Contains(dsn, "search_path") {
+		return dsn + " search_path=public"
+	}
+	return dsn
 }
 
 func main() {
@@ -71,6 +77,10 @@ func main() {
 
 	if err := db.Ping(); err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := api.AssertSafeDatabaseRole(context.Background(), db); err != nil {
+		log.Fatalf("FATAL: database role assertion failed: %v", err)
 	}
 
 	log.Println("Connected to database successfully")

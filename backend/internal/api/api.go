@@ -41,6 +41,8 @@ import (
 	"github.com/hondyman/uisce/backend/internal/cashflow/settlement"
 	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/compliance/blotter"
+	"github.com/hondyman/uisce/backend/internal/compliance/calendar"
+	"github.com/hondyman/uisce/backend/internal/compliance/limits"
 	"github.com/hondyman/uisce/backend/internal/compliance/regulatory"
 	"github.com/hondyman/uisce/backend/internal/compliance/surveillance"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
@@ -2103,6 +2105,16 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				// Post-Trade Streaming Surveillance Findings Queue
 				survHandler := surveillance.NewHandler(db)
 				survHandler.RegisterRoutes(r)
+
+				// Statutory Compliance Calendar
+				calSvc := calendar.NewService(db)
+				calHandler := calendar.NewHandler(calSvc)
+				calHandler.RegisterRoutes(r)
+
+				// Portfolio Limits & Headroom Utilization Dashboard
+				limitsSvc := limits.NewService(db)
+				limitsHandler := limits.NewHandler(limitsSvc)
+				limitsHandler.RegisterRoutes(r)
 			}
 		}
 

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -126,6 +127,12 @@ type TenantContext struct {
 // Call this once at startup (before db.Ping) and log.Fatalf on error.
 func AssertProductionConfig() error {
 	env := strings.ToLower(getEnv("ENVIRONMENT", ""))
+	if env == "" {
+		env = strings.ToLower(getEnv("APP_ENV", ""))
+	}
+	if env == "" {
+		env = strings.ToLower(getEnv("NODE_ENV", ""))
+	}
 	safeEnvs := map[string]bool{
 		"development": true,
 		"local":       true,
@@ -148,6 +155,12 @@ func AssertProductionConfig() error {
 				"(only development/local/test); durable workflow orchestration requires Temporal in production",
 			env,
 		)
+	}
+	if getEnv("UISCE_DEV_TENANT_HEADER", "false") == "true" {
+		return fmt.Errorf("UISCE_DEV_TENANT_HEADER=true cannot be enabled in environment %q (only development/local/test)", env)
+	}
+	if getEnv("UISCE_ALLOW_PRIVILEGED_DSN", "false") == "true" {
+		return fmt.Errorf("UISCE_ALLOW_PRIVILEGED_DSN=true cannot be enabled in environment %q (only development/local/test)", env)
 	}
 	return nil
 }
@@ -397,3 +410,31 @@ func nullString(s string) *string {
 	}
 	return &s
 }
+
+// AssertSafeDatabaseRole ensures that in production, the app server connects with the least-privilege role
+// (e.g. 'uisce_mcp_app') and refuses to boot if running as a superuser or role with BYPASSRLS unless explicitly bypassed.
+func AssertSafeDatabaseRole(ctx context.Context, db *sql.DB) error {
+	if os.Getenv("UISCE_ALLOW_PRIVILEGED_DSN") == "true" {
+		return nil
+	}
+	if db == nil {
+		return nil
+	}
+	var currentRole string
+	var isSuper, bypassRLS bool
+	err := db.QueryRowContext(ctx, `
+		SELECT current_user, rolsuper, rolbypassrls 
+		FROM pg_roles 
+		WHERE rolname = current_user;
+	`).Scan(&currentRole, &isSuper, &bypassRLS)
+	if err != nil {
+		return fmt.Errorf("check database role: %w", err)
+	}
+
+	if isSuper || bypassRLS || currentRole == "postgres" {
+		return fmt.Errorf("refusing to boot with privileged database role %q (super=%v, bypassrls=%v); production must use least-privilege role 'uisce_mcp_app' without SUPERUSER/BYPASSRLS unless UISCE_ALLOW_PRIVILEGED_DSN=true is set", currentRole, isSuper, bypassRLS)
+	}
+	return nil
+}
+
+

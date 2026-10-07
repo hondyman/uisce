@@ -219,6 +219,7 @@ func main() {
 		"20261224_017_phase2_tranche3_waci_and_sfdr_rules.up.sql",
 		"20261224_018_phase7_entity_graph_and_rule_families.up.sql",
 		"20261224_019_phase7_tranche2_and_class_b_lists.up.sql",
+		"20261224_022_compliance_statutory_calendar_schedule.up.sql",
 	}
 
 	migDir := filepath.Join("backend", "db", "migrations")
@@ -249,12 +250,12 @@ func main() {
 
 	// 5. Diff tables and columns
 	fmt.Println("======================================================================")
-	fmt.Println("MECHANICAL SCHEMA DIFF: FRESH CANONICAL BUILD (001->019) vs LIVE ALPHA")
+	fmt.Println("MECHANICAL SCHEMA DIFF: FRESH CANONICAL BUILD (001->022) vs LIVE ALPHA")
 	fmt.Println("======================================================================")
 
 	var discrepancies []string
 
-	const expectedTablesCount = 40
+	const expectedTablesCount = 41
 	const expectedTriggersCount = 30
 
 	if len(refTables) != expectedTablesCount {
