@@ -27,5 +27,4 @@
 
 # --- modified (git-base mode): shipped migrations legitimately edited ---------------
 # (prior modified entries for 20260914/20261021/20261027 were STALE vs Track A base and removed)
-20261220_001_seed_cubes_catalog_page.up.sql	modified	A3 regenerated seed for cubes.ImpactPanel blueprint parity; live installs updated via additive 20261223_001_cubes_impact_panel_pages ON CONFLICT UPDATE
-20261221_001_seed_cube_designer_page.up.sql	modified	A3 regenerated seed for cubes.ImpactPanel + Impact tab blueprint parity; live installs updated via additive 20261223_001_cubes_impact_panel_pages ON CONFLICT UPDATE
+20261218_005_core_rule_library_seed.up.sql	modified	Sprint 1A promotion hardening: promote 50 core rules from PROVISIONAL to ACTIVE for deterministic test suite and gold-copy library baseline
