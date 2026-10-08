@@ -132,6 +132,58 @@ func TestEveryCapturedTableHasALoaderService(t *testing.T) {
 	}
 }
 
+// 1b. No loader service may write to the shared `oms` schema once per-tenant routing
+// is enabled. The routing flip sets STREAM_LOAD_TENANT_ROUTES_DIR and clears
+// STARROCKS_DB on every loader service in the same commit. If STARROCKS_DB is set to
+// "oms" on any loader, the loader either hasn't been flipped or was reverted — and
+// because routing is per-service, one un-flipped loader causes split-brain data that
+// is not caught by any other check.
+//
+// The mutation form of this check: flip one service back to STARROCKS_DB: oms, run the
+// test, confirm it fails. A permanently passing check is a ritual, not a guard.
+func TestNoLoaderWritesToSharedSchema(t *testing.T) {
+	compose := readRepoFile(t, "docker-compose.remote.yml")
+
+	// Only the loader services are in scope; other services (provisioning, backfill)
+	// may legitimately target oms during transition.
+	loaderPrefixes := []string{
+		"uisce-stream-loader-execution",
+		"uisce-stream-loader-order",
+		"uisce-stream-loader-placement",
+		"uisce-stream-loader-order-allocation",
+		"uisce-stream-loader-execution-allocation",
+	}
+
+	for _, svc := range loaderPrefixes {
+		// Extract the environment block for this service. If the service is removed
+		// entirely, that is also a finding — but a different one (nothing to check).
+		idx := strings.Index(compose, svc+":")
+		if idx == -1 {
+			t.Logf("%s: service removed from compose; skipping", svc)
+			continue
+		}
+		// Find the next top-level key (starts at column 0, followed by ':')
+		// to bound the environment block.
+		block := compose[idx:]
+		if nextIdx := strings.Index(block[1:], "\n[^ ]"); nextIdx != -1 {
+			block = block[:nextIdx+1]
+		}
+
+		assert.NotContains(t, block, "STARROCKS_DB: oms",
+			"%s still points at the shared oms schema — it has not been flipped "+
+				"to per-tenant routing, or was reverted. Run the routing flip before "+
+				"this test. See AGENTS.md: Testing disciplines.", svc)
+
+		// Routing-enabled loaders must have the routes directory set, otherwise
+		// the empty STARROCKS_DB causes an immediate fatal at startup and the
+		// tripwire has already caught it — but this assertion makes the requirement
+		// explicit in the test contract.
+		assert.Contains(t, block, "STREAM_LOAD_TENANT_ROUTES_DIR:",
+			"%s has STARROCKS_DB cleared but does not set STREAM_LOAD_TENANT_ROUTES_DIR; "+
+				"the loader will fatal at startup with no usable route", svc)
+	}
+}
+
 // 2. Every captured table has a StarRocks destination in the canonical DDL.
 //
 // This is the file scripts/provision_starrocks_tenants.sh replays for every tenant

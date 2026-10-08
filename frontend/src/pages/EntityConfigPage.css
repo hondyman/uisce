@@ -1,7 +1,0 @@
-.entity-config-root { padding: 20px; }
-.entity-config-card-title { margin: 0; }
-.entity-config-layout { display: flex; gap: 16px; align-items: flex-start; }
-.entity-config-tree-wrap { flex: 0 0 40%; min-width: 300px; }
-.entity-config-tree { font-size: 14px; }
-.entity-config-fields-wrap { flex: 1; }
-.entity-title-strong { font-weight: bold; }

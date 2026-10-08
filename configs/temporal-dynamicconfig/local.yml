@@ -1,6 +1,0 @@
-- key: numHistoryShards
-  value: 4
-- key: persistenceDefaultStore
-  value: postgres
-- key: persistenceVisibilityStore
-  value: postgres

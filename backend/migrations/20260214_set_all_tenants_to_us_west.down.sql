@@ -1,2 +1,0 @@
--- Revert tenant regions (no-op since we don't know original values)
--- This migration is not reversible

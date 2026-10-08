@@ -1,5 +1,0 @@
-services:
-  backend:
-    environment:
-      # Enable unauthenticated policy endpoints for local development only.
-      - DEV_ALLOW_UNAUTH_POLICIES=true

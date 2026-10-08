@@ -1,7 +1,0 @@
-# postgres_exporter custom query definitions for compliance engine monitoring
-compliance_partition_status:
-  query: "SELECT count(*) as active_breaches FROM compliance.compliance_evaluation_default WHERE evaluated_at > NOW() - INTERVAL '5 minutes';"
-  metrics:
-    - active_breaches:
-        usage: "GAUGE"
-        description: "Number of active evaluations landing in the compliance default partition (indicates partition lifecycle failure)"
