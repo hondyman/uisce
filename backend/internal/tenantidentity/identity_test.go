@@ -112,9 +112,9 @@ type fakeIssuers struct {
 	err    error
 }
 
-func (f *fakeIssuers) SetIssuer(_ context.Context, code, issuer string) error {
+func (f *fakeIssuers) SetIssuer(_ context.Context, tenantID, issuer string) error {
 	f.calls++
-	f.code = code
+	f.code = tenantID
 	f.issuer = issuer
 	return f.err
 }
@@ -156,8 +156,8 @@ func TestConfigureTenantIdentityLocalUsers(t *testing.T) {
 	if !res.RealmCreated || !res.ClientCreated || !res.SecretsWritten {
 		t.Fatalf("result flags = %+v", res)
 	}
-	if res.Issuer != testBase+"/realms/acme" || iss.issuer != res.Issuer || iss.code != "acme" {
-		t.Fatalf("issuer = %q, recorded %q for %q", res.Issuer, iss.issuer, iss.code)
+	if res.Issuer != testBase+"/realms/acme" || iss.issuer != res.Issuer || iss.code != testTenantID {
+		t.Fatalf("issuer = %q, recorded %q for tenant %q", res.Issuer, iss.issuer, iss.code)
 	}
 	if kc.realms["acme"] != testTenantID {
 		t.Fatalf("realm owner = %q, want the tenant ID", kc.realms["acme"])
