@@ -92,7 +92,7 @@ jobs:
       # 2. Deploy to remote — SSH as the deploy user (not root), run the script.
       # -----------------------------------------------------------------------
       - name: Start ssh-agent and add key
-        uses: webfactory/ssh-agent@v0.8.1
+        uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.REMOTE_SSH_PRIVATE_KEY }}
 
