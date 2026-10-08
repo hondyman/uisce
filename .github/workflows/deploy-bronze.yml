@@ -61,15 +61,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Keycloak CA for build-time truststore import
-        run: |
-          # Fetch Keycloak TLS cert at build time so the CA is baked into the image.
-          # This is the same cert the JVM will trust at runtime.
-          mkdir -p certs
-          openssl s_client -connect ${{ secrets.REMOTE_SSH_HOST }}:8443 </dev/null 2>/dev/null | \
-            openssl x509 -outform PEM -out certs/keycloak-ca.crt
-          echo "Keycloak CA extracted ($(wc -l < certs/keycloak-ca.crt) lines)"
-
       - name: Build and push
         id: build
         uses: docker/build-push-action@v5
