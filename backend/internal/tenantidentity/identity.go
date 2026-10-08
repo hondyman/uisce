@@ -1,8 +1,11 @@
 // Package tenantidentity provisions a tenant's identity realm in Keycloak: one
 // realm per tenant, named by tenant_code, with an optional LDAP federation.
 //
-// Secrets never appear in error messages or return values. They go to the
-// SecretStore and nowhere else.
+// Boundary rule for every activity in this repo: inputs are references (tenant
+// code, environment, region ID, secret paths), never secret values. The
+// activity reads secrets from the store itself. Outputs are paths, statuses and
+// non-secret identifiers, never values. Temporal stores both inputs and outputs
+// in permanent event history.
 package tenantidentity
 
 import (
@@ -26,27 +29,36 @@ const (
 	errTypeIdentityInput    = "TenantIdentityInvalidInput"
 	errTypeIdentityConfig   = "TenantIdentityNotConfigured"
 	errTypeIdentityConflict = "TenantIdentityRealmExists"
+
+	// LDAPBindPasswordKey is the key under the identity path where the wizard
+	// handler stores the LDAP bind password before the workflow starts.
+	LDAPBindPasswordKey = "ldap_bind_password"
+	// ClientSecretKey is where the activity stores the platform client secret.
+	ClientSecretKey = "client_secret"
+
+	maxBindPasswordLen = 256
 )
 
 // KeycloakAdmin is the subset of Keycloak's admin API the identity step needs.
-// Implementations must use the dedicated realm-management service account, not
-// the master-realm admin.
+// Implementations must use a realm-management service account, not the
+// master-realm admin. The adapter is not built yet; see the plan.
 type KeycloakAdmin interface {
 	// CreateRealm creates the realm, or returns ErrRealmExists if it is there.
 	CreateRealm(ctx context.Context, realm string) error
 	// DeleteRealm removes the realm. Used only for realms this run created.
 	DeleteRealm(ctx context.Context, realm string) error
 	// CreatePlatformClient creates the platform's OIDC client in the realm and
-	// returns its client secret.
+	// returns its client secret. The secret is returned to this package only.
 	CreatePlatformClient(ctx context.Context, realm string) (clientSecret string, err error)
 	// AddLDAPFederation attaches an LDAP user-federation provider to the realm.
-	AddLDAPFederation(ctx context.Context, realm string, ldap LDAPConfig) error
+	AddLDAPFederation(ctx context.Context, realm string, ldap LDAPConfig, bindPassword string) error
 }
 
 // SecretStore is the subset of secrets.Provider the identity step needs.
 // secrets.Provider satisfies it.
 type SecretStore interface {
 	PutMap(ctx context.Context, key string, values map[string]string) error
+	GetMap(ctx context.Context, key string) (map[string]string, error)
 }
 
 // IssuerStore records the realm's issuer URL on the tenant.
@@ -54,13 +66,13 @@ type IssuerStore interface {
 	SetIssuer(ctx context.Context, tenantCode, issuer string) error
 }
 
-// LDAPConfig is the optional LDAP federation. The bind password is a secret.
+// LDAPConfig is the LDAP federation's non-secret settings. The bind password is
+// read from the store by the activity and never appears here.
 type LDAPConfig struct {
-	Host         string
-	Port         int
-	BaseDN       string
-	BindDN       string
-	BindPassword string
+	Host   string
+	Port   int
+	BaseDN string
+	BindDN string
 }
 
 // Input is what the wizard supplies for the identity step.
@@ -69,9 +81,7 @@ type Input struct {
 	LDAP       *LDAPConfig // nil means Keycloak-local users only
 }
 
-// Result describes what the step did. RealmCreated tells compensation whether
-// the realm is this run's to delete. It is set even when the step returns an
-// error, so a partial run can still be cleaned up.
+// Result describes what the step did. It holds no secret values.
 type Result struct {
 	Realm          string
 	Issuer         string
@@ -96,29 +106,45 @@ var (
 	dnPattern = regexp.MustCompile(`^[A-Za-z0-9=,. _-]{1,512}$`)
 )
 
+// IdentityPath is the store path for one tenant's identity secrets. It is
+// derived from the validated tenant code, never supplied by a caller.
+func IdentityPath(tenantCode string) (string, error) {
+	if !provisioning.ValidTenantCode(tenantCode) {
+		return "", fmt.Errorf("tenant code %q is not valid", tenantCode)
+	}
+	return "tenants/" + tenantCode + "/identity", nil
+}
+
 // ConfigureTenantIdentity creates the tenant's realm, its platform client,
-// the optional LDAP federation, and the secrets, then records the issuer.
+// the optional LDAP federation, and the client secret, then records the issuer.
 //
-// Validation happens before any Keycloak call. The returned Result reports
-// what was created so the caller can compensate after a failure.
+// Validation and the LDAP bind password read happen before anything is created,
+// so a bad input or a missing secret changes nothing in Keycloak.
 func (a *Activities) ConfigureTenantIdentity(ctx context.Context, in Input) (Result, error) {
 	if a.Keycloak == nil || a.Secrets == nil || a.Issuers == nil {
 		return Result{}, nonRetryable(errTypeIdentityConfig, errors.New("tenant identity is not configured"))
 	}
-	if !provisioning.ValidTenantCode(in.TenantCode) {
-		return Result{}, nonRetryable(errTypeIdentityInput, fmt.Errorf("tenant code %q is not valid", in.TenantCode))
+	identityPath, err := IdentityPath(in.TenantCode)
+	if err != nil {
+		return Result{}, nonRetryable(errTypeIdentityInput, err)
 	}
 	issuer, err := issuerURL(a.PublicBaseURL, in.TenantCode)
 	if err != nil {
 		return Result{}, nonRetryable(errTypeIdentityConfig, err)
 	}
+
+	var bindPassword string
 	if in.LDAP != nil {
 		if err := validateLDAP(*in.LDAP); err != nil {
 			return Result{}, nonRetryable(errTypeIdentityInput, err)
 		}
+		bindPassword, err = a.readBindPassword(ctx, identityPath)
+		if err != nil {
+			return Result{}, err
+		}
 	}
 
-	res := Result{Realm: in.TenantCode, Issuer: issuer, SecretPath: "tenants/" + in.TenantCode + "/identity"}
+	res := Result{Realm: in.TenantCode, Issuer: issuer, SecretPath: identityPath}
 
 	if err := a.Keycloak.CreateRealm(ctx, in.TenantCode); err != nil {
 		if errors.Is(err, ErrRealmExists) {
@@ -134,16 +160,15 @@ func (a *Activities) ConfigureTenantIdentity(ctx context.Context, in Input) (Res
 	}
 	res.ClientCreated = true
 
-	values := map[string]string{"client_secret": clientSecret}
 	if in.LDAP != nil {
-		if err := a.Keycloak.AddLDAPFederation(ctx, in.TenantCode, *in.LDAP); err != nil {
+		if err := a.Keycloak.AddLDAPFederation(ctx, in.TenantCode, *in.LDAP, bindPassword); err != nil {
 			return res, fmt.Errorf("add LDAP federation: %w", err)
 		}
-		values["ldap_bind_password"] = in.LDAP.BindPassword
 	}
 
-	if err := a.Secrets.PutMap(ctx, res.SecretPath, values); err != nil {
-		return res, fmt.Errorf("store identity secrets: %w", err)
+	// The client secret is written to the store here and returned to no caller.
+	if err := a.Secrets.PutMap(ctx, identityPath, map[string]string{ClientSecretKey: clientSecret}); err != nil {
+		return res, errors.New("store identity secrets: the secret store rejected the write")
 	}
 	res.SecretsWritten = true
 
@@ -163,6 +188,18 @@ func (a *Activities) RollbackConfigureTenantIdentity(ctx context.Context, tenant
 		return nonRetryable(errTypeIdentityInput, fmt.Errorf("tenant code %q is not valid", tenantCode))
 	}
 	return a.Keycloak.DeleteRealm(ctx, tenantCode)
+}
+
+func (a *Activities) readBindPassword(ctx context.Context, identityPath string) (string, error) {
+	values, err := a.Secrets.GetMap(ctx, identityPath)
+	if err != nil {
+		return "", errors.New("read LDAP bind password: the secret store could not be read")
+	}
+	pw := values[LDAPBindPasswordKey]
+	if pw == "" || len(pw) > maxBindPasswordLen {
+		return "", nonRetryable(errTypeIdentityInput, fmt.Errorf("LDAP bind password must be present and at most %d characters", maxBindPasswordLen))
+	}
+	return pw, nil
 }
 
 func issuerURL(base, tenantCode string) (string, error) {
@@ -191,9 +228,6 @@ func validateLDAP(c LDAPConfig) error {
 	}
 	if !dnPattern.MatchString(c.BindDN) {
 		return errors.New("LDAP bind DN is not valid")
-	}
-	if c.BindPassword == "" || len(c.BindPassword) > 256 {
-		return errors.New("LDAP bind password must be 1 to 256 characters")
 	}
 	return nil
 }
