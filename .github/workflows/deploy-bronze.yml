@@ -1,0 +1,123 @@
+name: Deploy Bronze Sink
+
+# Builds and deploys the Kafka Connect Iceberg bronze sink to the remote host.
+#
+# Deployment is idempotent: register uses PUT (update-or-create) so a re-run after
+# partial failure does not 409. The worker must be healthy before registration is
+# attempted.
+#
+# Secrets required (GitHub repo Settings → Secrets → Actions):
+#   REMOTE_SSH_HOST       e.g. 100.84.50.65
+#   REMOTE_SSH_USER       deploy (not root)
+#   REMOTE_SSH_PRIVATE_KEY  private key for the deploy user
+#   GHCR_TOKEN            token with packages:write (provided by GITHUB_TOKEN for GHCR)
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force image rebuild even if digest matches'
+        required: false
+        default: 'false'
+        type: boolean
+
+  push:
+    branches: [main]
+    paths:
+      - 'backend/Dockerfile.kafka-connect-iceberg'
+      - 'backend/docker-entrypoint-iceberg.sh'
+      - 'docker-compose.remote.yml'
+      - 'infrastructure/iceberg-bronze-sink.json'
+      - '.github/workflows/deploy-bronze.yml'
+      - 'scripts/deploy-bronze.sh'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository }}/kafka-connect-iceberg
+
+jobs:
+  deploy-bronze:
+    name: deploy-bronze
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # 1. Build and publish the kafka-connect-iceberg image to GHCR.
+      #    Digest-pinned so "which image is running" is always answerable.
+      # -----------------------------------------------------------------------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Keycloak CA for build-time truststore import
+        run: |
+          # Fetch Keycloak TLS cert at build time so the CA is baked into the image.
+          # This is the same cert the JVM will trust at runtime.
+          mkdir -p certs
+          openssl s_client -connect ${{ secrets.REMOTE_SSH_HOST }}:8443 </dev/null 2>/dev/null | \
+            openssl x509 -outform PEM -out certs/keycloak-ca.crt
+          echo "Keycloak CA extracted ($(wc -l < certs/keycloak-ca.crt) lines)"
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./backend/Dockerfile.kafka-connect-iceberg
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:bronze-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Record published digest
+        run: |
+          echo "Published ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}"
+          echo "digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+
+      # -----------------------------------------------------------------------
+      # 2. Deploy to remote — SSH as the deploy user (not root), run the script.
+      # -----------------------------------------------------------------------
+      - name: Start ssh-agent and add key
+        uses: webfactory/ssh-agent@v0.8.1
+        with:
+          ssh-private-key: ${{ secrets.REMOTE_SSH_PRIVATE_KEY }}
+
+      - name: Add remote to known_hosts
+        run: |
+          ssh-keyscan -p ${{ secrets.REMOTE_SSH_PORT || '22' }} ${{ secrets.REMOTE_SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Run bronze deploy script on remote
+        env:
+          REMOTE_SSH_HOST: ${{ secrets.REMOTE_SSH_HOST }}
+          REMOTE_SSH_USER: ${{ secrets.REMOTE_SSH_USER || 'deploy' }}
+          REMOTE_SSH_PORT: ${{ secrets.REMOTE_SSH_PORT || '22' }}
+          REMOTE_SSH_PATH: ${{ secrets.REMOTE_SSH_PATH || '/mnt/uisce' }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          chmod +x scripts/deploy-bronze.sh
+          ./scripts/deploy-bronze.sh \
+            "$REMOTE_SSH_HOST" \
+            "$REMOTE_SSH_USER" \
+            "$REMOTE_SSH_PATH" \
+            "$REMOTE_SSH_PORT" \
+            "$IMAGE_DIGEST"
+
+      - name: Report deployed image
+        run: |
+          echo "## Deployed"
+          echo "Image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}"
+          echo "Connector: iceberg-bronze-sink on http://${{ secrets.REMOTE_SSH_HOST }}:8084"
