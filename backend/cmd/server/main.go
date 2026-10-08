@@ -22,6 +22,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/trading"
 	temporalclientlib "github.com/hondyman/uisce/libs/temporal-client"
 	"github.com/jmoiron/sqlx"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	sdkclient "go.temporal.io/sdk/client"
 )
@@ -47,6 +48,8 @@ func withPublicSearchPath(dsn string) string {
 }
 
 func main() {
+	_ = godotenv.Load(".env", "backend/.env")
+
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" || dbURL == "<VALUE_TO_BE_PROVIDED>" {
 		dbURL = os.Getenv("POSTGRES_DSN")
