@@ -145,3 +145,33 @@ PROPERTIES (
     "enable_persistent_index"  = "true",
     "compression"              = "zstd"
 );
+
+-- ---------------------------------------------------------------------------
+-- SOURCE-SIDE REQUIREMENT (Postgres, not StarRocks)
+-- ---------------------------------------------------------------------------
+-- This file creates the DESTINATION tables. It cannot set anything on the Postgres
+-- source, and there is one property of the source that silently breaks the path this
+-- file exists to serve.
+--
+-- Every source table feeding these destinations needs REPLICA IDENTITY FULL:
+--
+--     ALTER TABLE orm.order REPLICA IDENTITY FULL;
+--
+-- Because routing dispatches each row by the tenant_id carried on the event, and a
+-- DELETE under the default replica identity carries no tenant_id at all -- the logical
+-- decoding plugin sends only the key columns and Debezium zero-fills the rest, so
+-- before.tenant_id arrives as "". The loader then correctly refuses to guess a
+-- destination, the delete dead-letters as ERR_TENANT_UNAVAILABLE_ON_DELETE, and the
+-- row stays here forever with no counterpart in Postgres. Inserts and updates are
+-- unaffected, so nothing looks broken until a delete is quietly missed.
+--
+-- Applied and kept current by
+--     backend/db/migrations/20261226_001_cdc_replica_identity_from_publication.up.sql
+-- which derives the set from the Debezium publication rather than a hardcoded list, and
+-- by
+--     backend/db/tenant_migrations/orm/0002_replica_identity_full.up.sql
+-- for a tenant's own Postgres database.
+--
+-- If a source table is added to a publication or to a tenant schema, that coverage
+-- picks it up on the next migration run. Do not add a table to any capture list without
+-- it.
