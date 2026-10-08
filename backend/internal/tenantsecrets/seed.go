@@ -70,7 +70,10 @@ func (a *Activities) SeedInstanceSecrets(ctx context.Context, in Input) (Result,
 		return Result{}, nonRetryable(errTypeSecretsInput, err)
 	}
 
-	path := Path(in.TenantCode, in.Environment)
+	path, err := Path(in.TenantCode, in.Environment)
+	if err != nil {
+		return Result{}, nonRetryable(errTypeSecretsInput, err)
+	}
 	values := map[string]string{
 		"database_url":  in.DatabaseURL,
 		"database_name": in.DatabaseName,
@@ -82,9 +85,18 @@ func (a *Activities) SeedInstanceSecrets(ctx context.Context, in Input) (Result,
 	return Result{Path: path, Keys: []string{"database_url", "database_name"}}, nil
 }
 
-// Path returns the secret path for one tenant instance.
-func Path(tenantCode, environment string) string {
-	return "tenants/" + tenantCode + "/" + environment
+// Path returns the secret path for one tenant instance. It validates both
+// components itself, so no caller can build a path from unchecked input: the
+// tenant code must pass the tenant-code rule (which excludes "/", "." and
+// empty values), and the environment must be one of the enum values.
+func Path(tenantCode, environment string) (string, error) {
+	if !provisioning.ValidTenantCode(tenantCode) {
+		return "", fmt.Errorf("tenant code %q is not valid", tenantCode)
+	}
+	if !environments[environment] {
+		return "", fmt.Errorf("environment %q is not one of dev, uat, prod", environment)
+	}
+	return "tenants/" + tenantCode + "/" + environment, nil
 }
 
 func validateDatabaseURL(raw string) error {
