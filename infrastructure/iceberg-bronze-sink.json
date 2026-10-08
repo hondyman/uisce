@@ -1,0 +1,42 @@
+{
+  "name": "iceberg-bronze-sink",
+  "config": {
+    "connector.class": "io.tabular.iceberg.connect.IcebergSinkConnector",
+
+    "tasks.max": "2",
+
+    "topics.regex": "orm_oms\\.orm\\.(order|execution|placement|order_allocation|execution_allocation)",
+
+    "iceberg.tables": "orm.order,orm.execution,orm.placement,orm.order_allocation,orm.execution_allocation",
+
+    "iceberg.tables.default-id-columns": "id",
+
+    "iceberg.tables.cdc-field": "op",
+
+    "iceberg.tables.upsert-mode-enabled": "false",
+
+    "iceberg.commit.interval": "60000",
+
+    "iceberg.catalog.type": "rest",
+    "iceberg.catalog.uri": "${ICEBERG_CATALOG_URI}",
+    "iceberg.catalog.credential": "${env:LAKEHOUSE_CLIENT_ID}:${env:LAKEHOUSE_CLIENT_SECRET}",
+    "iceberg.catalog.oauth2-server-uri": "https://100.84.50.65:8443/realms/uisce/protocol/openid-connect/token",
+    "iceberg.catalog.scope": "catalog",
+    "iceberg.catalog.warehouse": "${ICEBERG_CATALOG_WAREHOUSE}",
+
+    "iceberg.catalog.s3.endpoint": "${ICEBERG_CATALOG_S3_ENDPOINT}",
+    "iceberg.catalog.s3.access-key-id": "${env:ICEBERG_CATALOG_S3_ACCESS_KEY_ID}",
+    "iceberg.catalog.s3.secret-access-key": "${env:ICEBERG_CATALOG_S3_SECRET_ACCESS_KEY}",
+    "iceberg.catalog.s3.staging-dir": "/tmp/iceberg-staging",
+    "iceberg.catalog.s3.path-style-access": "true",
+
+    "iceberg.control.topic": "control-iceberg-bronze",
+    "iceberg.control.group-id": "iceberg-bronze-coord",
+
+    "iceberg.table.auto-create": "true",
+
+    "iceberg.write.format.default": "parquet",
+
+    "iceberg.kafka.bootstrap.servers": "uisce-redpanda:9092"
+  }
+}
