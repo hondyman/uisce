@@ -122,10 +122,14 @@ func (a *Activities) StartPlatform(ctx context.Context, in Input) (Result, error
 		passed = append(passed, CheckIdentity)
 	}
 
+	instancePath, err := tenantsecrets.Path(in.TenantCode, in.Environment)
+	if err != nil {
+		return Result{}, nonRetryable(errTypePlatformInput, err)
+	}
 	secretsOK := true
 	for _, p := range []string{
 		"tenants/" + in.TenantCode + "/identity",
-		tenantsecrets.Path(in.TenantCode, in.Environment),
+		instancePath,
 	} {
 		ok, err := a.Secrets.Exists(ctx, p)
 		if err != nil || !ok {
