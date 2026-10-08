@@ -57,18 +57,14 @@ func (f *fakeSecrets) Exists(_ context.Context, path string) (bool, error) {
 }
 
 type fakeStore struct {
-	rec        *recorder
-	persistErr error
-	markErr    error
+	rec     *recorder
+	markErr error
+	gotEP   Endpoints
 }
 
-func (f *fakeStore) PersistEndpoints(_ context.Context, _ string, _ Endpoints) error {
-	f.rec.events = append(f.rec.events, "persist")
-	return f.persistErr
-}
-
-func (f *fakeStore) MarkRunning(_ context.Context, _ string) error {
+func (f *fakeStore) MarkRunning(_ context.Context, _ string, ep Endpoints) error {
 	f.rec.events = append(f.rec.events, "running")
+	f.gotEP = ep
 	return f.markErr
 }
 
@@ -115,7 +111,7 @@ func TestStartPlatformSuccessOrdering(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartPlatform: %v", err)
 	}
-	wantEvents := []string{"db", "identity", "secrets", "secrets", "persist", "running"}
+	wantEvents := []string{"db", "identity", "secrets", "secrets", "running"}
 	if !reflect.DeepEqual(h.rec.events, wantEvents) {
 		t.Fatalf("events = %v, want %v", h.rec.events, wantEvents)
 	}
@@ -187,20 +183,14 @@ func TestFailedChecksNameEveryFailureAndStopBeforePersist(t *testing.T) {
 	}
 }
 
-func TestPersistFailureLeavesInstanceNotRunning(t *testing.T) {
+func TestMarkRunningReceivesEndpointsInTheSameWrite(t *testing.T) {
 	h := newHarness()
-	h.st.persistErr = errors.New("write failed for tenant acme")
-	_, err := h.activities().StartPlatform(context.Background(), validInput())
-	if err == nil {
-		t.Fatal("persist failure not reported")
+	in := validInput()
+	if _, err := h.activities().StartPlatform(context.Background(), in); err != nil {
+		t.Fatalf("StartPlatform: %v", err)
 	}
-	if strings.Contains(err.Error(), "acme") {
-		t.Fatalf("persist error echoed tenant detail: %v", err)
-	}
-	for _, e := range h.rec.events {
-		if e == "running" {
-			t.Fatal("marked running after a failed persist")
-		}
+	if h.st.gotEP != in.Endpoints {
+		t.Fatalf("endpoints written = %+v, want %+v", h.st.gotEP, in.Endpoints)
 	}
 }
 

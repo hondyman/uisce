@@ -1,11 +1,11 @@
 // Package tenantplatform starts a tenant instance in v1 scope: it runs three
-// health checks, persists the endpoints the provisioning saga used, and marks
-// the instance running. Data-platform bring-up (Lakekeeper, StarRocks,
-// Debezium) is not part of this step.
+// health checks, then marks the instance running and records the endpoints the
+// provisioning saga used, in one write. Data-platform bring-up (Lakekeeper,
+// StarRocks, Debezium) is not part of this step.
 //
-// Success ordering: all checks pass, then persist the endpoints, then mark the
-// instance running. A failed check or a failed persist leaves the instance in
-// "provisioning".
+// Success ordering: all checks pass, then one guarded write marks the instance
+// running with its endpoints. A failed check or a failed write leaves the
+// instance in "provisioning".
 package tenantplatform
 
 import (
@@ -81,10 +81,11 @@ type SecretsProbe interface {
 	Exists(ctx context.Context, path string) (bool, error)
 }
 
-// InstanceStore persists the endpoints and then marks the instance running.
+// InstanceStore marks an instance running and records its endpoints in one
+// write. The write is a guarded transition: it applies only while the instance
+// is still provisioning. A retry after success is not an error; see the store.
 type InstanceStore interface {
-	PersistEndpoints(ctx context.Context, instanceID string, ep Endpoints) error
-	MarkRunning(ctx context.Context, instanceID string) error
+	MarkRunning(ctx context.Context, instanceID string, ep Endpoints) error
 }
 
 // Activities holds the dependencies of StartPlatform.
@@ -100,9 +101,9 @@ type Result struct {
 	ChecksPassed []string
 }
 
-// StartPlatform validates the input, runs the three checks, then persists the
-// endpoints and marks the instance running. Every check runs even after one
-// fails, so the report names all of them.
+// StartPlatform validates the input, runs the three checks, then marks the
+// instance running with its endpoints. Every check runs even after one fails,
+// so the report names all of them.
 func (a *Activities) StartPlatform(ctx context.Context, in Input) (Result, error) {
 	if a.DB == nil || a.Identity == nil || a.Secrets == nil || a.Store == nil {
 		return Result{}, nonRetryable(errTypePlatformConfig, errors.New("platform start is not configured"))
@@ -152,10 +153,7 @@ func (a *Activities) StartPlatform(ctx context.Context, in Input) (Result, error
 			fmt.Errorf("instance %s failed health checks: %s", in.InstanceID, strings.Join(failed, ", ")))
 	}
 
-	if err := a.Store.PersistEndpoints(ctx, in.InstanceID, in.Endpoints); err != nil {
-		return Result{ChecksPassed: passed}, errors.New("persist endpoints: the store rejected the write")
-	}
-	if err := a.Store.MarkRunning(ctx, in.InstanceID); err != nil {
+	if err := a.Store.MarkRunning(ctx, in.InstanceID, in.Endpoints); err != nil {
 		return Result{ChecksPassed: passed}, errors.New("mark instance running: the store rejected the write")
 	}
 	return Result{ChecksPassed: passed}, nil
