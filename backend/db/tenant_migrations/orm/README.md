@@ -27,3 +27,13 @@ market data, and per-tenant copies would multiply storage by the tenant count to
 hold identical bytes. See `ormmove.ExcludedTables` for how to change that.
 
 Applied files are never edited. Add `0002_*.up.sql`.
+
+- `0002_replica_identity_full.up.sql` sets REPLICA IDENTITY FULL on every table in
+  the tenant's `orm` schema. It is a schema property, not an operational tweak: under
+  the default identity a CDC `DELETE` carries no `tenant_id`, so per-tenant routing
+  cannot dispatch it and every delete in every tenant database dead-letters while
+  inserts and updates work perfectly. Applied there from the start, the failure cannot
+  occur; applied later as a fix, it has already left undeletable rows behind. It runs
+  over the whole schema rather than reading a publication, because a tenant database
+  has no `orm_cdc_publication` of its own and depending on connector configuration
+  that does not exist there would make it a no-op exactly when it matters.
