@@ -6,8 +6,18 @@ name: Deploy Bronze Sink
 # partial failure does not 409. The worker must be healthy before registration is
 # attempted.
 #
+# Prerequisites (one-time, Tailscale admin console):
+#   1. Create an OAuth client (Settings → OAuth clients) with scope to create
+#      ephemeral auth keys. Note the client ID and secret.
+#   2. Create a tag (e.g. tag:ci) and add it to your ACL policy granting
+#      tag:ci → 100.84.50.65:22 (TCP only, nothing else).
+#   3. Add the OAuth client ID and secret as GitHub Actions secrets:
+#      TS_OAUTH_CLIENT_ID, TS_OAUTH_SECRET
+#
 # Secrets required (GitHub repo Settings → Secrets → Actions):
-#   REMOTE_SSH_HOST       e.g. 100.84.50.65
+#   TS_OAUTH_CLIENT_ID    Tailscale OAuth client ID (for runner to join tailnet)
+#   TS_OAUTH_SECRET       Tailscale OAuth client secret
+#   REMOTE_SSH_HOST       e.g. 100.84.50.65 (Tailscale IP of deploy host)
 #   REMOTE_SSH_USER       deploy (not root)
 #   REMOTE_SSH_PRIVATE_KEY  private key for the deploy user
 #   GHCR_TOKEN            token with packages:write (provided by GITHUB_TOKEN for GHCR)
@@ -80,7 +90,20 @@ jobs:
           echo "digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
-      # 2. Deploy to remote — SSH as the deploy user (not root), run the script.
+      # 2. Join the tailnet ephemerally — runner gets a short-lived Tailscale
+      #    identity for the duration of this job. The ACL must grant this tag
+      #    (tag:ci) TCP/22 access to REMOTE_SSH_HOST.
+      # -----------------------------------------------------------------------
+      - name: Join tailnet
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      # -----------------------------------------------------------------------
+      # 3. Deploy to remote — SSH as the deploy user (not root), run the script.
+      #    The runner is now on the tailnet and can reach REMOTE_SSH_HOST.
       # -----------------------------------------------------------------------
       - name: Start ssh-agent and add key
         uses: webfactory/ssh-agent@v0.10.0
