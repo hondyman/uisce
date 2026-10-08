@@ -5,8 +5,20 @@ export function initSession(): void {
   // In development mode, seed a valid development admin user & token if no session exists.
   if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
     const token = localStorage.getItem('auth_token');
-    if (!token || token.split('.').length !== 3) {
-      const devToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3OTE0Mjk5ODYsImlhdCI6MTc5MTQyNjM4Niwicm9sZXMiOlsiZ2xvYmFsX2FkbWluIiwiY29yZV9hZG1pbiIsImRldmVsb3BlciIsInBsYXRmb3JtX29wZXJhdG9yIl0sInN1YiI6ImFkbWluLXVzZXIiLCJ0ZW5hbnRfaWQiOiI5OWU5OWU5OS05OWU5LTQ5ZTktODllOS05OWU5OWU5OWU5OTkiLCJ0ZW5hbnRfaWRzIjpbIjk5ZTk5ZTk5LTk5ZTktNDllOS04OWU5LTk5ZTk5ZTk5ZTk5OSJdLCJ1c2VyX2lkIjoiYWRtaW4tdXNlciJ9.Pr-3sDgWxFvVnhkBua4sRlF8rzhkqhEVcLTJUd89hek';
+    let isExpired = false;
+    if (token && token.split('.').length === 3) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        if (payload.exp && payload.exp * 1000 < Date.now() + 60000) {
+          isExpired = true;
+        }
+      } catch (_) {
+        isExpired = true;
+      }
+    }
+
+    if (!token || token.split('.').length !== 3 || isExpired) {
+      const devToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbi11c2VyIiwidXNlcl9pZCI6ImFkbWluLXVzZXIiLCJyb2xlcyI6WyJnbG9iYWxfYWRtaW4iLCJjb3JlX2FkbWluIiwiZGV2ZWxvcGVyIiwicGxhdGZvcm1fb3BlcmF0b3IiXSwidGVuYW50X2lkIjoiOTllOTllOTktOTllOS00OWU5LTg5ZTktOTllOTllOTllOTk5IiwidGVuYW50X2lkcyI6WyI5OWU5OWU5OS05OWU5LTQ5ZTktODllOS05OWU5OWU5OWU5OTkiXSwiaWF0IjoxNzkxNDI3OTYyLCJleHAiOjIxMDY3ODc5NjJ9.d2LpahW43DF-VJsaj0U8RkP1gdOJoJpEpl0uSPGDYYA';
       const devUser = {
         id: 'admin-user',
         email: 'admin@example.com',
