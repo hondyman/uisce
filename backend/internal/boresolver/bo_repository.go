@@ -247,6 +247,25 @@ func (r *PostgresBORepository) resolveCatalogPhysicalColumn(fieldID, drivingTabl
 	return "", ""
 }
 
+// resolveBOUUID resolves a BO ID or technical key (e.g. "order", "oms.account", UUID) to its business_objects.id UUID string.
+func (r *PostgresBORepository) resolveBOUUID(boIDOrKey string) (string, error) {
+	trimmed := strings.TrimSpace(boIDOrKey)
+	if trimmed == "" {
+		return "", fmt.Errorf("business object id or key is required")
+	}
+	var id string
+	err := r.DB.Get(&id, `
+		SELECT id::text FROM public.business_objects
+		WHERE id::text = $1 OR bo_key = $1 OR technical_name = $1 OR name = $1
+		ORDER BY (tenant_id = public.uisce_gold_copy_tenant_id()) ASC
+		LIMIT 1
+	`, trimmed)
+	if err != nil {
+		return "", fmt.Errorf("business object '%s' not found: %w", trimmed, err)
+	}
+	return id, nil
+}
+
 // BOBelongsToTenant reports whether boID is a business object owned by
 // tenantID. This is the real security check querybuilder's
 // decodeAndAuthorize needs before executing a query scoped to that BO -
@@ -256,10 +275,17 @@ func (r *PostgresBORepository) resolveCatalogPhysicalColumn(fieldID, drivingTabl
 // 403'd on every request that populated Context.BindingID the way every
 // frontend caller actually does.
 func (r *PostgresBORepository) BOBelongsToTenant(boID, tenantID string) (bool, error) {
+	resolvedID, err := r.resolveBOUUID(boID)
+	if err != nil {
+		return false, fmt.Errorf("failed to verify BO tenant ownership: %w", err)
+	}
 	var exists bool
-	err := r.DB.Get(&exists, `
-		SELECT EXISTS(SELECT 1 FROM public.business_objects WHERE id = $1::uuid AND tenant_id = $2::uuid)
-	`, boID, tenantID)
+	err = r.DB.Get(&exists, `
+		SELECT EXISTS(
+			SELECT 1 FROM public.business_objects 
+			WHERE id = $1::uuid AND (tenant_id = $2::uuid OR tenant_id = public.uisce_gold_copy_tenant_id())
+		)
+	`, resolvedID, tenantID)
 	if err != nil {
 		return false, fmt.Errorf("failed to verify BO tenant ownership: %w", err)
 	}
@@ -268,10 +294,14 @@ func (r *PostgresBORepository) BOBelongsToTenant(boID, tenantID string) (bool, e
 
 // GetBODefinition fetches the BO definition from the database
 func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, error) {
-	if def, err := r.getBODefinitionFromSemanticFields(boID); err == nil && def != nil {
+	resolvedID, err := r.resolveBOUUID(boID)
+	if err != nil {
+		return nil, err
+	}
+	if def, err := r.getBODefinitionFromSemanticFields(resolvedID); err == nil && def != nil {
 		return def, nil
 	}
-	return r.getBODefinitionLegacy(boID)
+	return r.getBODefinitionLegacy(resolvedID)
 }
 
 // getBODefinitionFromSemanticFields loads fields from business_object_fields
@@ -280,8 +310,12 @@ func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, erro
 // an error - when the BO has no business_object_fields rows, so callers fall
 // through to the legacy path.
 func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*BODefinition, error) {
+	resolvedID, err := r.resolveBOUUID(boID)
+	if err != nil {
+		return nil, err
+	}
 	var fields []semanticField
-	err := r.DB.Select(&fields, `
+	err = r.DB.Select(&fields, `
 		SELECT f.id, f.field_name, COALESCE(f.technical_name, '') AS technical_name,
 		       COALESCE(f.display_name, f.field_name) AS display_name,
 		       COALESCE(f.data_type, '') AS data_type,
@@ -292,7 +326,7 @@ func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*
 		LEFT JOIN catalog_node cn ON cn.id::text = f.term_node_id::text
 		WHERE f.bo_id = $1::uuid
 		ORDER BY f.display_order, f.field_name
-	`, boID)
+	`, resolvedID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch business_object_fields: %w", err)
 	}
@@ -308,8 +342,8 @@ func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*
 	}
 	if err := r.DB.Get(&res, `
 		SELECT id, tenant_id::text AS tenant_id, bo_key, driver_table_name
-		FROM public.business_objects WHERE id = $1
-	`, boID); err != nil {
+		FROM public.business_objects WHERE id = $1::uuid
+	`, resolvedID); err != nil {
 		return nil, fmt.Errorf("failed to fetch BO metadata: %w", err)
 	}
 
@@ -549,6 +583,10 @@ func (r *PostgresBORepository) getBODefinitionLegacy(boID string) (*BODefinition
 // for every BO today - business_object_binding has zero rows in this
 // environment; see the backfill note in the SQL generator plan).
 func (r *PostgresBORepository) GetBusinessObjectBinding(boID, bindingID string) (*BOBinding, error) {
+	resolvedID, err := r.resolveBOUUID(boID)
+	if err != nil {
+		return nil, err
+	}
 	var binding BOBinding
 	bindingQuery := `
 		SELECT b.bo_binding_id::text AS binding_id, COALESCE(upper(pb.dialect_name), '') AS dialect_name
@@ -558,8 +596,8 @@ func (r *PostgresBORepository) GetBusinessObjectBinding(boID, bindingID string) 
 		ORDER BY b.is_default DESC
 		LIMIT 1
 	`
-	if err := r.DB.Get(&binding, bindingQuery, boID, bindingID); err == nil {
-		binding.BOID = boID
+	if err := r.DB.Get(&binding, bindingQuery, resolvedID, bindingID); err == nil {
+		binding.BOID = resolvedID
 	}
 
 	var res struct {
@@ -569,11 +607,11 @@ func (r *PostgresBORepository) GetBusinessObjectBinding(boID, bindingID string) 
 	}
 	if err := r.DB.Get(&res, `
 		SELECT id, bo_key, driver_table_name FROM public.business_objects WHERE id = $1::uuid LIMIT 1
-	`, boID); err != nil {
+	`, resolvedID); err != nil {
 		return nil, fmt.Errorf("failed to resolve binding for BO %s: %w", boID, err)
 	}
 
-	binding.BOID = boID
+	binding.BOID = resolvedID
 	binding.DrivingTable = res.BOKey
 	if res.DriverTableName != nil && *res.DriverTableName != "" {
 		binding.DrivingTable = *res.DriverTableName
@@ -596,6 +634,10 @@ func (r *PostgresBORepository) GetBusinessObjectBinding(boID, bindingID string) 
 // consumer-nav widget bound to a BO rendered "has no resolved fields to
 // display" regardless of how complete its actual field bindings were.
 func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTermView, error) {
+	resolvedID, err := r.resolveBOUUID(boID)
+	if err != nil {
+		return nil, err
+	}
 	// nil (not "") when unset: $2::uuid on an empty string fails to bind
 	// regardless of short-circuiting, since parameter type coercion happens
 	// at bind time, before the OR in the ON clause is ever evaluated.
@@ -625,7 +667,7 @@ func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTer
 		  AND COALESCE(fb.binding_status, 'RESOLVED') = 'RESOLVED'
 		ORDER BY f.display_order, f.field_name
 	`
-	rows, err := r.DB.Queryx(query, boID, bindingIDParam)
+	rows, err := r.DB.Queryx(query, resolvedID, bindingIDParam)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load terms for BO %s: %w", boID, err)
 	}
