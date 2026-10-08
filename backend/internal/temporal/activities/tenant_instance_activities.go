@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"bytes"
 	"os/exec"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/dscreds"
 	"github.com/hondyman/uisce/backend/internal/migrations"
@@ -239,7 +242,7 @@ func (a *TenantProvisioningActivities) RollbackCreateTenantDatabase(ctx context.
 	}
 	defer dbConn.Close()
 
-	_, err = dbConn.ExecContext(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", databaseName))
+	_, err = dbConn.ExecContext(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{databaseName}.Sanitize())
 	if err != nil {
 		a.Logger.Errorf("Failed to rollback database %s: %v", databaseName, err)
 		return err
@@ -248,6 +251,13 @@ func (a *TenantProvisioningActivities) RollbackCreateTenantDatabase(ctx context.
 }
 
 func (a *TenantProvisioningActivities) CloneSchemaFromGoldCopy(ctx context.Context, input provisioning.CloneSchemaInput) error {
+	// Both names reach pg_dump/psql arguments, so they must be safe identifiers.
+	if !pgIdent.MatchString(input.SourceDatabase) {
+		return nonRetryable(errTypeTenantDBInput, fmt.Errorf("source database %q is not a safe identifier", input.SourceDatabase))
+	}
+	if !pgIdent.MatchString(input.TargetDatabase) {
+		return nonRetryable(errTypeTenantDBInput, fmt.Errorf("target database %q is not a safe identifier", input.TargetDatabase))
+	}
 	a.Logger.Infof("Cloning schema from %s to %s", input.SourceDatabase, input.TargetDatabase)
 
 	dbHost := os.Getenv("DB_HOST")
@@ -286,6 +296,7 @@ func (a *TenantProvisioningActivities) CloneSchemaFromGoldCopy(ctx context.Conte
 		"-U", dbUser,
 		"-d", input.TargetDatabase,
 		"--quiet",
+		"-v", "ON_ERROR_STOP=1",
 	)
 	pipeCmd.Env = append(os.Environ(),
 		fmt.Sprintf("PGPASSWORD=%s", dbPass),
@@ -297,10 +308,8 @@ func (a *TenantProvisioningActivities) CloneSchemaFromGoldCopy(ctx context.Conte
 	}
 	pipeCmd.Stdin = stdoutPipe
 
-	stderrPipe, err := pipeCmd.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("failed to get stderr pipe: %w", err)
-	}
+	var psqlStderr bytes.Buffer
+	pipeCmd.Stderr = &psqlStderr
 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start pg_dump: %w", err)
@@ -310,15 +319,14 @@ func (a *TenantProvisioningActivities) CloneSchemaFromGoldCopy(ctx context.Conte
 		return fmt.Errorf("failed to start psql: %w", err)
 	}
 
-	err = pipeCmd.Wait()
-	if err != nil {
-		stderrBytes := make([]byte, 4096)
-		stderrPipe.Read(stderrBytes)
-		return fmt.Errorf("schema clone failed: %w (stderr: %s)", err, string(stderrBytes))
+	// Wait on both processes before returning so neither is left running.
+	psqlErr := pipeCmd.Wait()
+	dumpErr := cmd.Wait()
+	if psqlErr != nil {
+		return fmt.Errorf("schema clone failed: %w (stderr: %s)", psqlErr, strings.TrimSpace(psqlStderr.String()))
 	}
-
-	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("pg_dump failed: %w", err)
+	if dumpErr != nil {
+		return fmt.Errorf("pg_dump failed: %w", dumpErr)
 	}
 
 	a.Logger.Infof("Successfully cloned schema from %s to %s", input.SourceDatabase, input.TargetDatabase)
