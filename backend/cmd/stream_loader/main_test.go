@@ -16,6 +16,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testRoute mirrors what the router hands the flush path in single-destination mode,
+// so the existing batching tests exercise the same call shape as production.
+func testRoute(cfg Config) TenantRoute {
+	return TenantRoute{
+		TenantID:   cfg.AssignedTenantID,
+		TenantName: cfg.AssignedTenantID,
+		Database:   cfg.StarRocksDB,
+		User:       cfg.StarRocksUser,
+		Password:   cfg.StarRocksPassword,
+		KeyColumns: cfg.PrimaryKeys,
+	}
+}
+
+func testBatch(cfg Config, ops []pendingOp) *tenantBatch {
+	return &tenantBatch{route: testRoute(cfg), ops: ops}
+}
+
+func newTestGatekeeper(cfg Config) *StreamingGatekeeper {
+	return &StreamingGatekeeper{
+		cfg:     cfg,
+		metrics: &GatekeeperMetrics{},
+		pool:    newQueryDBPool(maxTenantDBHandles),
+		floor:   newOffsetFloor(),
+	}
+}
+
 func TestDeriveBusinessObject(t *testing.T) {
 	tests := []struct {
 		table    string
@@ -254,15 +280,15 @@ func TestWriteBatchCoalescesLastOperationWins(t *testing.T) {
 			PrimaryKeys:    []string{"id"},
 		},
 		metrics: &GatekeeperMetrics{},
+		pool:    newQueryDBPool(maxTenantDBHandles),
+		floor:   newOffsetFloor(),
 	}
 
-	b := &batch{
-		ops: []pendingOp{
-			// deleted, then created: the upsert must win.
-			{key: "k2", isDelete: true},
-			{key: "k2", row: json.RawMessage(`{"id":"k2","v":2}`)},
-		},
-	}
+	b := testBatch(gk.cfg, []pendingOp{
+		// deleted, then created: the upsert must win.
+		{key: "k2", isDelete: true},
+		{key: "k2", row: json.RawMessage(`{"id":"k2","v":2}`)},
+	})
 
 	require.NoError(t, gk.writeBatch(context.Background(), b))
 
@@ -293,15 +319,15 @@ func TestWriteBatchDeleteWinsOverEarlierUpsert(t *testing.T) {
 			PrimaryKeys:    []string{"id"},
 		},
 		metrics: &GatekeeperMetrics{},
+		pool:    newQueryDBPool(maxTenantDBHandles),
+		floor:   newOffsetFloor(),
 	}
 
 	// created then deleted in one batch: the row must not be loaded at all.
-	b := &batch{
-		ops: []pendingOp{
-			{key: "k1", row: json.RawMessage(`{"id":"k1","v":1}`)},
-			{key: "k1", isDelete: true},
-		},
-	}
+	b := testBatch(gk.cfg, []pendingOp{
+		{key: "k1", row: json.RawMessage(`{"id":"k1","v":1}`)},
+		{key: "k1", isDelete: true},
+	})
 
 	// With no query DSN the delete cannot be applied, and the error must name the
 	// delete path — proving the earlier upsert was suppressed rather than loaded.
@@ -349,7 +375,8 @@ func TestStreamLoadBatchTreatsDuplicateLabelAsSuccess(t *testing.T) {
 	defer ts.Close()
 
 	cfg := Config{StarRocksHTTP: ts.URL, StarRocksDB: "oms", StarRocksTable: "orm_order"}
-	rejected, err := streamLoadBatch(context.Background(), cfg, []json.RawMessage{json.RawMessage(`{"id":"1"}`)}, "lbl-1")
+	rejected, err := streamLoadBatch(context.Background(), cfg, testRoute(cfg),
+		[]json.RawMessage{json.RawMessage(`{"id":"1"}`)}, "lbl-1")
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), rejected)
 }
@@ -365,7 +392,7 @@ func TestStreamLoadBatchSurfacesFilteredRows(t *testing.T) {
 	defer ts.Close()
 
 	cfg := Config{StarRocksHTTP: ts.URL, StarRocksDB: "oms", StarRocksTable: "orm_order"}
-	rejected, err := streamLoadBatch(context.Background(), cfg,
+	rejected, err := streamLoadBatch(context.Background(), cfg, testRoute(cfg),
 		[]json.RawMessage{json.RawMessage(`{"id":"1"}`), json.RawMessage(`{"id":"2"}`), json.RawMessage(`{"id":"3"}`)}, "lbl-2")
 	require.NoError(t, err, "a filtered row is not a transport failure")
 	assert.Equal(t, int64(1), rejected)
@@ -387,9 +414,11 @@ func TestWriteBatchRecordsFilteredRows(t *testing.T) {
 			PrimaryKeys:    []string{"id"},
 		},
 		metrics: &GatekeeperMetrics{},
+		pool:    newQueryDBPool(maxTenantDBHandles),
+		floor:   newOffsetFloor(),
 	}
 
-	b := &batch{ops: []pendingOp{{key: "k1", row: json.RawMessage(`{"id":"k1"}`)}}}
+	b := testBatch(gk.cfg, []pendingOp{{key: "k1", row: json.RawMessage(`{"id":"k1"}`)}})
 	require.NoError(t, gk.writeBatch(context.Background(), b))
 
 	assert.Equal(t, int64(1), gk.metrics.RowsRejected.Load(),
@@ -453,6 +482,8 @@ func TestLoadRowsBisectsToIsolateBadRow(t *testing.T) {
 			StrictMode:     true,
 		},
 		metrics:   &GatekeeperMetrics{},
+		pool:      newQueryDBPool(maxTenantDBHandles),
+		floor:     newOffsetFloor(),
 		dlqWriter: nil,
 	}
 
@@ -463,7 +494,7 @@ func TestLoadRowsBisectsToIsolateBadRow(t *testing.T) {
 		json.RawMessage(`{"id":"g3","target_qty":"3.5"}`),
 	}
 
-	rejected, err := gk.loadRows(context.Background(), rows, "lbl")
+	rejected, err := gk.loadRows(context.Background(), gk.cfg, testRoute(gk.cfg), rows, "lbl")
 	require.NoError(t, err, "a single bad row must not fail the batch")
 	assert.Equal(t, int64(1), rejected)
 	assert.ElementsMatch(t, []string{"g1", "g2", "g3"}, loaded,
@@ -488,9 +519,11 @@ func TestLoadRowsDoesNotBisectTransportErrors(t *testing.T) {
 			PrimaryKeys: []string{"id"}, StrictMode: true,
 		},
 		metrics: &GatekeeperMetrics{},
+		pool:    newQueryDBPool(maxTenantDBHandles),
+		floor:   newOffsetFloor(),
 	}
 	rows := []json.RawMessage{json.RawMessage(`{"id":"a"}`), json.RawMessage(`{"id":"b"}`)}
-	_, err := gk.loadRows(context.Background(), rows, "lbl")
+	_, err := gk.loadRows(context.Background(), gk.cfg, testRoute(gk.cfg), rows, "lbl")
 	assert.Error(t, err)
 	assert.Equal(t, int64(0), gk.metrics.RowsRejected.Load())
 }
@@ -502,7 +535,8 @@ func TestStreamLoadBatchSurfacesRejectedLoad(t *testing.T) {
 	defer ts.Close()
 
 	cfg := Config{StarRocksHTTP: ts.URL, StarRocksDB: "oms", StarRocksTable: "orm_order"}
-	_, err := streamLoadBatch(context.Background(), cfg, []json.RawMessage{json.RawMessage(`{"id":"1"}`)}, "lbl-1")
+	_, err := streamLoadBatch(context.Background(), cfg, testRoute(cfg),
+		[]json.RawMessage{json.RawMessage(`{"id":"1"}`)}, "lbl-1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "too many filtered rows")
 }
@@ -524,6 +558,8 @@ func TestGatekeeperStats(t *testing.T) {
 			ValidationEnabled: true,
 		},
 		metrics: &GatekeeperMetrics{},
+		pool:    newQueryDBPool(maxTenantDBHandles),
+		floor:   newOffsetFloor(),
 	}
 
 	gk.metrics.TotalConsumed.Add(10)

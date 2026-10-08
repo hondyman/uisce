@@ -38,7 +38,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -81,17 +80,40 @@ type Config struct {
 	// verified 3.3.22 with a DECIMAL fed "NOT_A_NUMBER". loadRows bisects a rejected
 	// batch so one bad row cannot block the rest.
 	StrictMode bool
+	// TenantRoutesDir points at the per-tenant credential files written by
+	// scripts/provision_starrocks_tenants.sh. When it is set and contains routes, the
+	// loader routes every event to its own tenant's StarRocks database and principal
+	// instead of the single shared destination. Empty keeps the single-destination
+	// behaviour, which is still correct for a genuinely single-tenant deployment.
+	TenantRoutesDir string
+	// SourceDatabase records which Postgres database the connector is capturing. It
+	// is metadata, not a routing key: alpha is one shared database discriminated by
+	// the tenant_id column, so a single replication slot serves every tenant. If
+	// per-tenant Postgres databases are ever provisioned, the discriminator moves to
+	// this value and the slot topology becomes one slot per tenant database.
+	SourceDatabase string
 }
 
 type GatekeeperMetrics struct {
 	TotalConsumed         atomic.Int64
 	TotalLoaded           atomic.Int64
 	SkippedTombstones     atomic.Int64
+	SkippedHeartbeats     atomic.Int64
+	SkippedSchemaChanges  atomic.Int64
+	SkippedUnknown        atomic.Int64
 	TenantMismatches      atomic.Int64
+	TenantUnattributed    atomic.Int64
+	TenantUnknown         atomic.Int64
+	RowsRouted            atomic.Int64
+	LoadsPerFlush         atomic.Int64
+	Flushes               atomic.Int64
+	FatalLoads            atomic.Int64
 	RuleViolationsBlocked atomic.Int64
 	RuleViolationsWarned  atomic.Int64
 	StreamLoadErrors      atomic.Int64
 	DLQEmitted            atomic.Int64
+	DLQUnavailable        atomic.Int64
+	TopologyTripwireFired atomic.Int64
 	TotalDeletes          atomic.Int64
 	DeleteErrors          atomic.Int64
 	BatchesFlushed        atomic.Int64
@@ -103,26 +125,43 @@ type GatekeeperMetrics struct {
 }
 
 type GatekeeperStats struct {
-	TotalConsumed         int64      `json:"total_consumed"`
-	TotalLoaded           int64      `json:"total_loaded"`
-	SkippedTombstones     int64      `json:"skipped_tombstones"`
-	TenantMismatches      int64      `json:"tenant_mismatches"`
-	RuleViolationsBlocked int64      `json:"rule_violations_blocked"`
-	RuleViolationsWarned  int64      `json:"rule_violations_warned"`
-	StreamLoadErrors      int64      `json:"stream_load_errors"`
-	DLQEmitted            int64      `json:"dlq_emitted"`
-	TotalDeletes          int64      `json:"total_deletes"`
-	DeleteErrors          int64      `json:"delete_errors"`
-	BatchesFlushed        int64      `json:"batches_flushed"`
-	RowsIn                int64      `json:"rows_in"`
-	RowsLoaded            int64      `json:"rows_loaded"`
-	RowsRejected          int64      `json:"rows_rejected_by_starrocks"`
-	UptimeSeconds         float64    `json:"uptime_seconds"`
-	LastEventTime         *time.Time `json:"last_event_time,omitempty"`
-	Topic                 string     `json:"topic"`
-	StarRocksTable        string     `json:"starrocks_table"`
-	AssignedTenantID      string     `json:"assigned_tenant_id,omitempty"`
-	ValidationEnabled     bool       `json:"validation_enabled"`
+	TotalConsumed         int64 `json:"total_consumed"`
+	TotalLoaded           int64 `json:"total_loaded"`
+	SkippedTombstones     int64 `json:"skipped_tombstones"`
+	SkippedHeartbeats     int64 `json:"skipped_heartbeats"`
+	SkippedSchemaChanges  int64 `json:"skipped_schema_changes"`
+	SkippedUnknown        int64 `json:"skipped_unknown"`
+	TenantMismatches      int64 `json:"tenant_mismatches"`
+	TenantUnattributed    int64 `json:"tenant_unattributed"`
+	TenantUnknown         int64 `json:"tenant_unknown_route"`
+	RowsRouted            int64 `json:"rows_routed"`
+	LoadsPerFlush         int64 `json:"loads_per_flush_last"`
+	Flushes               int64 `json:"flushes"`
+	FatalLoads            int64 `json:"fatal_loads"`
+	RuleViolationsBlocked int64 `json:"rule_violations_blocked"`
+	RuleViolationsWarned  int64 `json:"rule_violations_warned"`
+	StreamLoadErrors      int64 `json:"stream_load_errors"`
+	DLQEmitted            int64 `json:"dlq_emitted"`
+	DLQUnavailable        int64 `json:"dlq_unavailable"`
+	TopologyTripwireFired int64 `json:"topology_tripwire_fired"`
+	// OffsetFloorHoldSeconds is how long each topic-partition has been unable to
+	// commit because some tenant's rows have not settled. A growing value means a
+	// tenant is failing, and is otherwise indistinguishable from a hung consumer.
+	OffsetFloorHoldSeconds map[string]float64 `json:"offset_floor_hold_seconds"`
+	TotalDeletes           int64              `json:"total_deletes"`
+	DeleteErrors           int64              `json:"delete_errors"`
+	BatchesFlushed         int64              `json:"batches_flushed"`
+	RowsIn                 int64              `json:"rows_in"`
+	RowsLoaded             int64              `json:"rows_loaded"`
+	RowsRejected           int64              `json:"rows_rejected_by_starrocks"`
+	UptimeSeconds          float64            `json:"uptime_seconds"`
+	LastEventTime          *time.Time         `json:"last_event_time,omitempty"`
+	Topic                  string             `json:"topic"`
+	StarRocksTable         string             `json:"starrocks_table"`
+	AssignedTenantID       string             `json:"assigned_tenant_id,omitempty"`
+	ValidationEnabled      bool               `json:"validation_enabled"`
+	TenantRoutingEnabled   bool               `json:"tenant_routing_enabled"`
+	TenantRoutesKnown      int                `json:"tenant_routes_known"`
 }
 
 type debeziumEnvelope struct {
@@ -164,10 +203,22 @@ type StreamingGatekeeper struct {
 	cfg        Config
 	metrics    *GatekeeperMetrics
 	sqlxDB     *sqlx.DB
-	queryDB    *sql.DB
 	ruleEngine *analytics.EmbeddedEngine
 	dlqWriter  *kafka.Writer
-	mu         sync.RWMutex
+
+	// pool holds the MySQL-protocol handles used for keyed DELETEs. Under tenant
+	// routing each tenant's deletes must run as that tenant's own principal -- a single
+	// shared handle would either cross tenant boundaries or be denied -- so it is keyed
+	// by DSN and bounded, because one handle per tenant is one FE session per tenant.
+	pool *queryDBPool
+
+	// router resolves each event's tenant to a StarRocks database and principal. Nil
+	// (or empty) means single-destination mode.
+	router *routerCache
+
+	// floor stops an offset commit from stepping over a tenant whose rows have not
+	// landed yet. Required once a flush window can settle per tenant.
+	floor *offsetFloor
 }
 
 func loadConfig() Config {
@@ -254,6 +305,11 @@ func loadConfig() Config {
 	if v := os.Getenv("STREAM_LOAD_STRICT_MODE"); v != "" {
 		cfg.StrictMode = !strings.EqualFold(v, "false")
 	}
+	cfg.TenantRoutesDir = os.Getenv("STREAM_LOAD_TENANT_ROUTES_DIR")
+	cfg.SourceDatabase = os.Getenv("CDC_SOURCE_DB")
+	if cfg.SourceDatabase == "" {
+		cfg.SourceDatabase = "alpha"
+	}
 	return cfg
 }
 
@@ -331,9 +387,37 @@ func main() {
 		sqlxDB:     db,
 		ruleEngine: ruleEngine,
 		dlqWriter:  dlqWriter,
+		pool:       newQueryDBPool(maxTenantDBHandles),
+		floor:      newOffsetFloor(),
+	}
+
+	// Per-tenant routing is opt-in by directory. A loader pointed at a populated
+	// credential directory refuses to start on any malformed route rather than
+	// silently falling back to the shared database -- a fallback here would put
+	// every tenant's rows in one place, which is the failure this work exists to
+	// prevent.
+	if cfg.TenantRoutesDir != "" {
+		routes, err := LoadTenantRoutes(cfg.TenantRoutesDir)
+		if err != nil {
+			log.Fatalf("Tenant routing is configured but unusable: %v", err)
+		}
+		if len(routes) == 0 {
+			log.Fatalf("STREAM_LOAD_TENANT_ROUTES_DIR=%s contains no usable tenant routes; "+
+				"refusing to start rather than writing to the shared database %s",
+				cfg.TenantRoutesDir, cfg.StarRocksDB)
+		}
+		gk.router = &routerCache{router: NewTenantRouter(routes, cfg.SourceDatabase)}
+		log.Printf("Tenant routing enabled: %d provisioned routes from %s (source database %q)",
+			gk.router.get().Len(), cfg.TenantRoutesDir, cfg.SourceDatabase)
 	}
 
 	go gk.startHTTPServer()
+
+	// The topology tripwire watches for the condition that invalidates this loader's
+	// tenant_id discriminator. Cheap, slow, and deliberately not an outage alarm.
+	if gk.sqlxDB != nil {
+		go runTopologyTripwire(ctx, sqlBindingCounter{db: gk.sqlxDB}, cfg, metrics)
+	}
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -351,11 +435,12 @@ func (gk *StreamingGatekeeper) startHTTPServer() {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":             "UP",
-			"topic":              gk.cfg.Topic,
-			"starrocks_table":    gk.cfg.StarRocksTable,
-			"assigned_tenant_id": gk.cfg.AssignedTenantID,
-			"validation_enabled": gk.cfg.ValidationEnabled,
+			"status":                 "UP",
+			"topic":                  gk.cfg.Topic,
+			"starrocks_table":        gk.cfg.StarRocksTable,
+			"assigned_tenant_id":     gk.cfg.AssignedTenantID,
+			"validation_enabled":     gk.cfg.ValidationEnabled,
+			"tenant_routing_enabled": gk.router.get() != nil && gk.router.get().Enabled(),
 		})
 	})
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
@@ -382,27 +467,48 @@ func (gk *StreamingGatekeeper) GetStats() GatekeeperStats {
 		lastTime = &t
 	}
 
+	var routingEnabled bool
+	var routesKnown int
+	if r := gk.router.get(); r != nil {
+		routingEnabled = r.Enabled()
+		routesKnown = r.Len()
+	}
+
 	return GatekeeperStats{
-		TotalConsumed:         gk.metrics.TotalConsumed.Load(),
-		TotalLoaded:           gk.metrics.TotalLoaded.Load(),
-		SkippedTombstones:     gk.metrics.SkippedTombstones.Load(),
-		TenantMismatches:      gk.metrics.TenantMismatches.Load(),
-		RuleViolationsBlocked: gk.metrics.RuleViolationsBlocked.Load(),
-		RuleViolationsWarned:  gk.metrics.RuleViolationsWarned.Load(),
-		StreamLoadErrors:      gk.metrics.StreamLoadErrors.Load(),
-		DLQEmitted:            gk.metrics.DLQEmitted.Load(),
-		TotalDeletes:          gk.metrics.TotalDeletes.Load(),
-		DeleteErrors:          gk.metrics.DeleteErrors.Load(),
-		BatchesFlushed:        gk.metrics.BatchesFlushed.Load(),
-		RowsIn:                gk.metrics.RowsIn.Load(),
-		RowsLoaded:            gk.metrics.RowsLoaded.Load(),
-		RowsRejected:          gk.metrics.RowsRejected.Load(),
-		UptimeSeconds:         time.Since(gk.metrics.StartTime).Seconds(),
-		LastEventTime:         lastTime,
-		Topic:                 gk.cfg.Topic,
-		StarRocksTable:        gk.cfg.StarRocksTable,
-		AssignedTenantID:      gk.cfg.AssignedTenantID,
-		ValidationEnabled:     gk.cfg.ValidationEnabled,
+		TotalConsumed:          gk.metrics.TotalConsumed.Load(),
+		TotalLoaded:            gk.metrics.TotalLoaded.Load(),
+		SkippedTombstones:      gk.metrics.SkippedTombstones.Load(),
+		SkippedHeartbeats:      gk.metrics.SkippedHeartbeats.Load(),
+		SkippedSchemaChanges:   gk.metrics.SkippedSchemaChanges.Load(),
+		SkippedUnknown:         gk.metrics.SkippedUnknown.Load(),
+		TenantMismatches:       gk.metrics.TenantMismatches.Load(),
+		TenantUnattributed:     gk.metrics.TenantUnattributed.Load(),
+		TenantUnknown:          gk.metrics.TenantUnknown.Load(),
+		RowsRouted:             gk.metrics.RowsRouted.Load(),
+		LoadsPerFlush:          gk.metrics.LoadsPerFlush.Load(),
+		Flushes:                gk.metrics.Flushes.Load(),
+		FatalLoads:             gk.metrics.FatalLoads.Load(),
+		RuleViolationsBlocked:  gk.metrics.RuleViolationsBlocked.Load(),
+		RuleViolationsWarned:   gk.metrics.RuleViolationsWarned.Load(),
+		StreamLoadErrors:       gk.metrics.StreamLoadErrors.Load(),
+		DLQEmitted:             gk.metrics.DLQEmitted.Load(),
+		DLQUnavailable:         gk.metrics.DLQUnavailable.Load(),
+		TopologyTripwireFired:  gk.metrics.TopologyTripwireFired.Load(),
+		OffsetFloorHoldSeconds: gk.floor.holds(),
+		TotalDeletes:           gk.metrics.TotalDeletes.Load(),
+		DeleteErrors:           gk.metrics.DeleteErrors.Load(),
+		BatchesFlushed:         gk.metrics.BatchesFlushed.Load(),
+		RowsIn:                 gk.metrics.RowsIn.Load(),
+		RowsLoaded:             gk.metrics.RowsLoaded.Load(),
+		RowsRejected:           gk.metrics.RowsRejected.Load(),
+		UptimeSeconds:          time.Since(gk.metrics.StartTime).Seconds(),
+		LastEventTime:          lastTime,
+		Topic:                  gk.cfg.Topic,
+		StarRocksTable:         gk.cfg.StarRocksTable,
+		AssignedTenantID:       gk.cfg.AssignedTenantID,
+		ValidationEnabled:      gk.cfg.ValidationEnabled,
+		TenantRoutingEnabled:   routingEnabled,
+		TenantRoutesKnown:      routesKnown,
 	}
 }
 
@@ -417,13 +523,6 @@ type pendingOp struct {
 	row      json.RawMessage
 	isDelete bool
 }
-
-type batch struct {
-	ops      []pendingOp
-	messages []kafka.Message
-}
-
-func (b *batch) empty() bool { return len(b.ops) == 0 }
 
 // sanitizeLabel renders a Kafka topic/offset range as a StarRocks stream-load label.
 // StarRocks validates labels against ^[-\w]{1,128}$ — letters, digits, underscore and
@@ -458,41 +557,53 @@ func (gk *StreamingGatekeeper) runLoop(ctx context.Context) {
 	defer r.Close()
 
 	log.Printf("Listening for CDC events on topic %s -> %s.%s", gk.cfg.Topic, gk.cfg.StarRocksDB, gk.cfg.StarRocksTable)
+	if gk.router.get() != nil {
+		log.Printf("  routing: per-tenant databases under %s (no fallback destination exists)", gk.cfg.StarRocksDB)
+	}
 
 	ticker := time.NewTicker(gk.cfg.FlushInterval)
 	defer ticker.Stop()
 
-	b := &batch{}
+	sets := newBatchSet(gk.cfg.Topic)
 
-	// flush writes the accumulated batch and, only on success, commits its offsets.
-	// It retries internally so a transient StarRocks error does not advance the batch.
-	// A detached context is used because the final drain runs after ctx is cancelled.
+	// flush writes every destination in the window and, only on success, commits the
+	// offsets it covered. A detached context is used because the final drain runs
+	// after ctx is cancelled.
+	//
+	// Destinations are independent: a tenant whose database was never provisioned
+	// must not stop the tenants that are working. Each is resolved to its own
+	// outcome, and only an outcome that can still succeed is retried.
+	//
+	// Offsets are committed per partition up to the lowest unsettled offset, never
+	// past it. Several tenants share one partition, and kafka-go commits the highest
+	// offset it is handed, so committing a healthy tenant's rows would otherwise step
+	// straight over a neighbour's unlanded rows and lose them.
 	flush := func(reason string) {
-		if b.empty() {
+		if sets.empty() {
 			return
 		}
 		// The batch must survive a cancelled parent context, or a graceful shutdown
 		// would discard the rows it is holding.
-		wctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		wctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		for attempt := 1; ; attempt++ {
-			err := gk.writeBatch(wctx, b)
-			if err == nil {
-				gk.metrics.BatchesFlushed.Add(1)
-				if cerr := r.CommitMessages(wctx, b.messages...); cerr != nil {
-					log.Printf("Failed to commit messages: %v", cerr)
-				}
-				b = &batch{}
-				return
-			}
-			log.Printf("Batch flush failed (%s, attempt %d, %d ops): %v", reason, attempt, len(b.ops), err)
-			gk.metrics.StreamLoadErrors.Add(1)
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(backoff(attempt)):
+
+		gk.metrics.LoadsPerFlush.Store(int64(len(sets.order)))
+		gk.metrics.Flushes.Add(1)
+
+		settled := make([]kafka.Message, 0, 64)
+		for _, dest := range sets.batches() {
+			if gk.flushDestination(wctx, dest, reason) {
+				settled = append(settled, dest.messages...)
+			} else {
+				gk.floor.block(dest.messages)
 			}
 		}
+		if commit := gk.floor.safe(settled); len(commit) > 0 {
+			if cerr := r.CommitMessages(wctx, commit...); cerr != nil {
+				log.Printf("Failed to commit messages: %v", cerr)
+			}
+		}
+		sets = newBatchSet(gk.cfg.Topic)
 	}
 
 	// Consumption runs on its own goroutine. FetchMessage blocks for as long as the
@@ -536,15 +647,19 @@ func (gk *StreamingGatekeeper) runLoop(ctx context.Context) {
 			gk.metrics.TotalConsumed.Add(1)
 			gk.metrics.lastEventUnixNano.Store(time.Now().UnixNano())
 
-			if !gk.handleMessage(ctx, b, m) {
-				// Rejected/tombstoned: needs no StarRocks write, so commit it now.
-				if cerr := r.CommitMessages(ctx, m); cerr != nil {
-					log.Printf("Failed to commit message: %v", cerr)
+			if !gk.handleMessage(ctx, sets, m) {
+				// Rejected/tombstoned/skipped: needs no StarRocks write, so commit it
+				// now -- unless a neighbouring tenant's rows at a lower offset are
+				// still replayable, in which case committing would step over them.
+				if !gk.floor.blocked(m) {
+					if cerr := r.CommitMessages(ctx, m); cerr != nil {
+						log.Printf("Failed to commit message: %v", cerr)
+					}
 				}
 				continue
 			}
 
-			if len(b.ops) >= gk.cfg.MaxRows {
+			if sets.pending() >= gk.cfg.MaxRows {
 				flush("full")
 			}
 		}
@@ -562,23 +677,41 @@ func backoff(attempt int) time.Duration {
 	return d
 }
 
-// handleMessage returns true when the message contributed an op to the batch (and so
-// must not be committed yet). It returns false when the message was consumed and
-// discarded, which the caller commits immediately.
-func (gk *StreamingGatekeeper) handleMessage(ctx context.Context, b *batch, m kafka.Message) bool {
+// handleMessage returns true when the message contributed an op to some tenant's
+// batch (and so must not be committed yet). It returns false when the message was
+// consumed and discarded -- skipped, DLQ'd, or loaded immediately -- which the
+// caller commits right away.
+//
+// The order of the two gates below is load-bearing. Classification runs first
+// because heartbeats, schema changes and tombstones carry no tenant_id, and reading
+// tenant_id first would put the first heartbeat after every quiet period into the
+// DLQ. Routing runs next, and a data event with no usable tenant_id is a hard
+// failure rather than a default destination.
+func (gk *StreamingGatekeeper) handleMessage(ctx context.Context, sets *batchSet, m kafka.Message) bool {
 	ev, err := decodeRecord(m.Value)
 	if err != nil {
+		// Undecodable frames are not evidence of a misroute, so they are counted and
+		// skipped rather than DLQ'd.
+		gk.metrics.SkippedUnknown.Add(1)
 		log.Printf("Error decoding Debezium event: %v", err)
 		return false
 	}
-	if ev.tombstone {
+
+	switch c := classify(ev, m.Value); c {
+	case classData:
+		// the only class that is routed
+	case classHeartbeat:
+		gk.metrics.SkippedHeartbeats.Add(1)
+		return false
+	case classSchemaChange:
+		gk.metrics.SkippedSchemaChanges.Add(1)
+		return false
+	case classTombstone:
 		gk.metrics.SkippedTombstones.Add(1)
 		return false
-	}
-	if ev.row == nil && !ev.isDelete {
-		// Nothing carried (e.g. an op with neither before nor after). Drop it rather
-		// than commit it into an unbounded retry loop.
-		gk.metrics.SkippedTombstones.Add(1)
+	default:
+		gk.metrics.SkippedUnknown.Add(1)
+		log.Printf("Skipping unrecognised Debezium envelope on %s offset %d", m.Topic, m.Offset)
 		return false
 	}
 
@@ -586,6 +719,11 @@ func (gk *StreamingGatekeeper) handleMessage(ctx context.Context, b *batch, m ka
 	src := ev.after
 	if ev.isDelete {
 		src = ev.before
+	}
+
+	route, ok := gk.route(ctx, src, m)
+	if !ok {
+		return false
 	}
 
 	// Layer 2: Assert Tenant Identity
@@ -623,20 +761,70 @@ func (gk *StreamingGatekeeper) handleMessage(ctx context.Context, b *batch, m ka
 		}
 	}
 
-	key, ok := primaryKeyOf(gk.cfg.PrimaryKeys, src)
+	destCfg := route.ConfigFor(gk.cfg)
+	key, ok := primaryKeyOf(destCfg.PrimaryKeys, src)
 	if !ok {
 		// Without a key we can neither upsert (ambiguous) nor delete (no predicate).
 		// Send it to the DLQ rather than writing a row we can never update or remove.
-		gk.metrics.DLQEmitted.Add(1)
-		log.Printf("[DLQ] %s event has no usable primary key %v", ev.op, gk.cfg.PrimaryKeys)
-		gk.emitDLQ(ctx, "ERR_MISSING_PRIMARY_KEY", fmt.Sprintf("no value for primary key %v", gk.cfg.PrimaryKeys), src, m.Value)
+		log.Printf("[DLQ] %s event has no usable primary key %v (tenant %s -> %s)",
+			ev.op, destCfg.PrimaryKeys, route.TenantID, route.Target(gk.cfg.StarRocksTable))
+		gk.emitDLQ(ctx, "ERR_MISSING_PRIMARY_KEY", fmt.Sprintf("no value for primary key %v", destCfg.PrimaryKeys), src, m.Value)
 		return false
 	}
 
-	b.ops = append(b.ops, pendingOp{key: key, row: ev.row, isDelete: ev.isDelete})
-	b.messages = append(b.messages, m)
+	dest := sets.get(route)
+	dest.ops = append(dest.ops, pendingOp{key: key, row: ev.row, isDelete: ev.isDelete})
+	dest.messages = append(dest.messages, m)
 	gk.metrics.RowsIn.Add(1)
+	if gk.router.get() != nil {
+		gk.metrics.RowsRouted.Add(1)
+	}
 	return true
+}
+
+// route resolves the destination for a data event. It returns false when the event
+// has already been handled (DLQ'd) and the caller must not batch it.
+//
+// Fail-closed by construction: there is no default database, because a fallback
+// destination is precisely the silent cross-tenant leak this work removes. A tenant
+// with no route is DLQ'd whether it was never provisioned (provisioning lag) or was
+// deliberately deprovisioned while its events were still in flight -- the same
+// outcome either way, so history is preserved and the signal stays visible.
+func (gk *StreamingGatekeeper) route(ctx context.Context, src map[string]interface{}, m kafka.Message) (TenantRoute, bool) {
+	router := gk.router.get()
+	if router == nil || !router.Enabled() {
+		// Single-destination mode: the configured database is the only destination,
+		// and AssignedTenantID (when set) is the only identity assertion.
+		return TenantRoute{
+			TenantID:   gk.cfg.AssignedTenantID,
+			Database:   gk.cfg.StarRocksDB,
+			User:       gk.cfg.StarRocksUser,
+			Password:   gk.cfg.StarRocksPassword,
+			KeyColumns: gk.cfg.PrimaryKeys,
+		}, true
+	}
+
+	tenantID := extractTenantID(src)
+	if tenantID == "" {
+		gk.metrics.TenantUnattributed.Add(1)
+		log.Printf("[DLQ] data event on %s offset %d has no tenant_id; failing closed rather than "+
+			"guessing a destination", m.Topic, m.Offset)
+		gk.emitDLQ(ctx, "ERR_TENANT_UNATTRIBUTED",
+			"data event carries no tenant_id; no default database exists", src, m.Value)
+		return TenantRoute{}, false
+	}
+
+	route, err := router.Route(tenantID)
+	if err != nil {
+		gk.metrics.TenantUnknown.Add(1)
+		log.Printf("[DLQ] no StarRocks route for tenant %s (topic %s offset %d): %v",
+			tenantID, m.Topic, m.Offset, err)
+		gk.emitDLQ(ctx, "ERR_TENANT_UNKNOWN_ROUTE",
+			fmt.Sprintf("tenant %s has no provisioned StarRocks database; either provisioning has not run for it or it was deprovisioned while events were in flight", tenantID),
+			src, m.Value)
+		return TenantRoute{}, false
+	}
+	return route, true
 }
 
 func primaryKeyOf(keys []string, row map[string]interface{}) (string, bool) {
@@ -654,14 +842,118 @@ func primaryKeyOf(keys []string, row map[string]interface{}) (string, bool) {
 	return strings.Join(parts, "\x1f"), true
 }
 
+// flushDestination writes one tenant's pending work and reports whether that
+// destination is settled, meaning its offsets may be committed.
+//
+// The settle decision is the point of this function. A destination is settled when
+// the rows are known to be in StarRocks -- or known never to arrive, having gone to
+// the DLQ. Only two cases leave it unsettled: a retryable transport failure, and the
+// flush window running out while retries were still in flight. Those rows must be
+// replayed, so the caller holds their offsets back.
+//
+// Everything else settles on purpose. A cross-database denial will never succeed on
+// retry, so replaying it forever would stall the partition while producing no new
+// information; the rows go to the DLQ with the tenant and target attached, which is
+// where a human resolves it.
+func (gk *StreamingGatekeeper) flushDestination(ctx context.Context, dest *tenantBatch, reason string) bool {
+	route := dest.route
+	target := route.Target(gk.cfg.StarRocksTable)
+
+	if dest.empty() {
+		return true
+	}
+
+	for attempt := 1; ; attempt++ {
+		err := gk.writeBatch(ctx, dest)
+		if err == nil {
+			gk.metrics.BatchesFlushed.Add(1)
+			return true
+		}
+
+		// A fatal load can never succeed as addressed: the tenant's grants do not
+		// cover this database, or the database does not exist. DLQ the rows with the
+		// tenant and target attached, commit, and move on -- retrying would either
+		// hammer the FE or stall every other tenant behind this one.
+		if le, fatal := FatalLoadError(err); fatal {
+			gk.metrics.FatalLoads.Add(1)
+			gk.metrics.StreamLoadErrors.Add(1)
+			log.Printf("[DLQ] tenant %s -> %s: %v (reason %s, %d ops)",
+				route.TenantID, target, le.err, le.outcome, len(dest.ops))
+			if derr := gk.emitDLQ(ctx, fatalReason(le.outcome), le.err.Error(),
+				map[string]interface{}{
+					"tenant_id":    route.TenantID,
+					"target_db":    route.Database,
+					"target_table": gk.cfg.StarRocksTable,
+					"http_status":  le.status,
+					"row_count":    len(dest.ops),
+					"routing":      gk.router.get() != nil,
+					"source_db":    gk.cfg.SourceDatabase,
+				}, nil); derr != nil {
+				// The dead-letter is the only durable record of these rows. If it did not
+				// land, the batch is not terminal and its offsets must hold the floor.
+				log.Printf("[DLQ] tenant %s -> %s: dead-letter not acknowledged, holding offsets: %v",
+					route.TenantID, target, derr)
+				return false
+			}
+			return true
+		}
+
+		log.Printf("Batch flush failed (%s, tenant %s -> %s, attempt %d, %d ops): %v",
+			reason, route.TenantID, target, attempt, len(dest.ops), err)
+		gk.metrics.StreamLoadErrors.Add(1)
+		if attempt >= maxFlushAttempts {
+			// Give up holding the offsets back: the next window will replay these rows
+			// under a fresh label, and the DLQ records what was lost rather than
+			// letting the topic back up indefinitely.
+			log.Printf("[DLQ] tenant %s -> %s: giving up after %d attempts, %d ops replayed later: %v",
+				route.TenantID, target, attempt, len(dest.ops), err)
+			if derr := gk.emitDLQ(ctx, "ERR_STARROCKS_UNREACHABLE", err.Error(),
+				map[string]interface{}{
+					"tenant_id":    route.TenantID,
+					"target_db":    route.Database,
+					"target_table": gk.cfg.StarRocksTable,
+					"attempts":     attempt,
+					"row_count":    len(dest.ops),
+				}, nil); derr != nil {
+				// The dead-letter is the only durable record of these rows. If it did not
+				// land, the batch is not terminal and its offsets must hold the floor.
+				log.Printf("[DLQ] tenant %s -> %s: dead-letter not acknowledged, holding offsets: %v",
+					route.TenantID, target, derr)
+				return false
+			}
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			// Shutdown, or the flush window's own deadline. The caller must not commit
+			// these offsets: the rows have to be replayed, not lost.
+			return false
+		case <-time.After(backoff(attempt)):
+		}
+	}
+}
+
+// maxFlushAttempts bounds retries of one destination within one flush window. Three
+// attempts with exponential backoff covers a transient FE restart without turning a
+// 30-second window into a 30-minute stall.
+const maxFlushAttempts = 3
+
+// fatalReason names the DLQ cause so an alert distinguishes "routing bug" from
+// "credential expired" from "provisioning lag" without re-deriving the response.
+func fatalReason(o loadOutcome) string {
+	if o == outcomeFatal {
+		return "ERR_STARROCKS_DESTINATION_REJECTED"
+	}
+	return "ERR_STARROCKS_UNREACHABLE"
+}
+
 // writeBatch performs one stream load for the upserts and one DELETE for the deletes.
 // Upserts run first so that a batch containing both an update and a later delete of
 // the same key ends in the deleted state.
-func (gk *StreamingGatekeeper) writeBatch(ctx context.Context, b *batch) error {
+func (gk *StreamingGatekeeper) writeBatch(ctx context.Context, b *tenantBatch) error {
+	destCfg := b.route.ConfigFor(gk.cfg)
+
 	// Coalesce by key, last operation wins.
-	type resolved struct {
-		op pendingOp
-	}
 	order := []string{}
 	byKey := map[string]pendingOp{}
 	for _, o := range b.ops {
@@ -683,9 +975,10 @@ func (gk *StreamingGatekeeper) writeBatch(ctx context.Context, b *batch) error {
 	}
 
 	// The label is derived from the offset range so a retry of the same batch is
-	// rejected by StarRocks as a duplicate instead of loading the rows twice.
-	// A batch with no messages can only be constructed by a test; fall back to a
-	// content-derived label rather than panicking.
+	// rejected by StarRocks as a duplicate instead of loading the rows twice. StarRocks
+	// scopes labels per database, so the same label is safe across tenants, but keeping
+	// the offsets in means a re-processed batch after a rebalance stays idempotent at
+	// each destination rather than by accident.
 	label := sanitizeLabel(gk.cfg.Topic)
 	if len(b.messages) > 0 {
 		label = fmt.Sprintf("%s_%d_%d", label, b.messages[0].Offset, b.messages[len(b.messages)-1].Offset)
@@ -694,9 +987,10 @@ func (gk *StreamingGatekeeper) writeBatch(ctx context.Context, b *batch) error {
 	}
 
 	if len(upserts) > 0 {
-		rejected, err := gk.loadRows(ctx, upserts, label)
+		rejected, err := gk.loadRows(ctx, destCfg, b.route, upserts, label)
 		if err != nil {
-			return fmt.Errorf("stream load %d rows: %w", len(upserts), err)
+			return fmt.Errorf("stream load %d rows to %s: %w",
+				len(upserts), b.route.Target(gk.cfg.StarRocksTable), err)
 		}
 		gk.metrics.TotalLoaded.Add(int64(len(upserts)))
 		gk.metrics.RowsLoaded.Add(int64(len(upserts)))
@@ -706,8 +1000,9 @@ func (gk *StreamingGatekeeper) writeBatch(ctx context.Context, b *batch) error {
 	}
 
 	if len(deleteKeys) > 0 {
-		if err := gk.deleteRows(ctx, gk.cfg.PrimaryKeys, deleteKeys); err != nil {
-			return fmt.Errorf("delete %d rows: %w", len(deleteKeys), err)
+		if err := gk.deleteRows(ctx, destCfg, destCfg.PrimaryKeys, deleteKeys); err != nil {
+			return fmt.Errorf("delete %d rows from %s: %w",
+				len(deleteKeys), b.route.Target(gk.cfg.StarRocksTable), err)
 		}
 		gk.metrics.TotalDeletes.Add(int64(len(deleteKeys)))
 	}
@@ -715,25 +1010,34 @@ func (gk *StreamingGatekeeper) writeBatch(ctx context.Context, b *batch) error {
 }
 
 // deleteRows issues the keyed DELETE over the MySQL protocol. The connection is
-// opened lazily so a loader with no deletes never pays for it.
-func (gk *StreamingGatekeeper) deleteRows(ctx context.Context, keyCols []string, keys []string) error {
-	q, ok := deleteSQL(gk.cfg, keyCols, keys)
+// opened lazily per destination DSN so a loader with no deletes never pays for it,
+// and so each tenant's deletes run as that tenant's own principal.
+func (gk *StreamingGatekeeper) deleteRows(ctx context.Context, cfg Config, keyCols []string, keys []string) error {
+	q, ok := deleteSQL(cfg, keyCols, keys)
 	if !ok {
 		return nil
 	}
-	if gk.queryDB == nil {
-		if gk.cfg.QueryDSN == "" {
-			return errors.New("no StarRocks query DSN is configured, cannot apply deletes")
-		}
-		db, err := sql.Open("mysql", gk.cfg.QueryDSN)
-		if err != nil {
-			return err
-		}
-		db.SetMaxOpenConns(2)
-		db.SetConnMaxLifetime(5 * time.Minute)
-		gk.queryDB = db
+	if cfg.QueryDSN == "" {
+		return errors.New("no StarRocks query DSN is configured, cannot apply deletes")
 	}
-	if _, err := gk.queryDB.ExecContext(ctx, q); err != nil {
+
+	// The pool is bounded: one handle per tenant would otherwise be one MySQL session
+	// per tenant on the FE, and the projected tenant count is in the hundreds.
+	db, release, err := gk.pool.acquire(cfg.QueryDSN, func(dsn string) (*sql.DB, error) {
+		opened, err := sql.Open("mysql", dsn)
+		if err != nil {
+			return nil, err
+		}
+		opened.SetMaxOpenConns(2)
+		opened.SetConnMaxLifetime(5 * time.Minute)
+		return opened, nil
+	})
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	if _, err := db.ExecContext(ctx, q); err != nil {
 		return err
 	}
 	return nil
@@ -748,15 +1052,15 @@ func (gk *StreamingGatekeeper) deleteRows(ctx context.Context, keyCols []string,
 // stored NULL, a Success status and zero filtered rows. Only strict_mode surfaces
 // it ("too many filtered rows"), so it is the default.
 //
-// Bisection costs log2(n) extra requests and only on the failure path. A single row
-// that still fails is the bad one: it goes to the DLQ and is counted, never silently
-// NULLed.
-func (gk *StreamingGatekeeper) loadRows(ctx context.Context, rows []json.RawMessage, label string) (int64, error) {
-	rejected, err := streamLoadBatch(ctx, gk.cfg, rows, label)
+// Bisection is applied only to row rejections. An authorisation failure or a
+// missing destination is not a bad row, and splitting the batch would turn one
+// clear error into log2(n) identical ones.
+func (gk *StreamingGatekeeper) loadRows(ctx context.Context, destCfg Config, route TenantRoute, rows []json.RawMessage, label string) (int64, error) {
+	rejected, err := streamLoadBatch(ctx, destCfg, route, rows, label)
 	if err == nil {
 		return rejected, nil
 	}
-	if !gk.cfg.StrictMode || !isFilterFailure(err) {
+	if !gk.cfg.StrictMode || OutcomeOf(err) != outcomeRowRejected {
 		return 0, err
 	}
 	if len(rows) == 1 {
@@ -766,14 +1070,14 @@ func (gk *StreamingGatekeeper) loadRows(ctx context.Context, rows []json.RawMess
 		_ = json.Unmarshal(rows[0], &row)
 		gk.emitDLQ(ctx, "ERR_STARROCKS_REJECTED",
 			fmt.Sprintf("StarRocks could not store this row: %v", err), row, rows[0])
-		log.Printf("[DATA-LOSS] row %s could not be stored in %s.%s: %v",
-			gk.cfg.StarRocksDB+"."+gk.cfg.StarRocksTable, gk.cfg.StarRocksDB, gk.cfg.StarRocksTable, err)
+		log.Printf("[DATA-LOSS] row for tenant %s could not be stored in %s: %v",
+			route.TenantID, route.Target(gk.cfg.StarRocksTable), err)
 		return 1, nil
 	}
 
 	mid := len(rows) / 2
-	left, lerr := gk.loadRows(ctx, rows[:mid], label+"_a")
-	right, rerr := gk.loadRows(ctx, rows[mid:], label+"_b")
+	left, lerr := gk.loadRows(ctx, destCfg, route, rows[:mid], label+"_a")
+	right, rerr := gk.loadRows(ctx, destCfg, route, rows[mid:], label+"_b")
 	if lerr != nil {
 		return left, lerr
 	}
@@ -781,16 +1085,6 @@ func (gk *StreamingGatekeeper) loadRows(ctx context.Context, rows []json.RawMess
 		return right, rerr
 	}
 	return left + right, nil
-}
-
-// isFilterFailure distinguishes "StarRocks refused these rows" from a transport or
-// authorisation problem, which must fail the batch rather than be bisected.
-func isFilterFailure(err error) bool {
-	if err == nil {
-		return false
-	}
-	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "filtered") || strings.Contains(s, "too many")
 }
 
 func extractTenantID(m map[string]interface{}) string {
@@ -805,7 +1099,19 @@ func extractTenantID(m map[string]interface{}) string {
 	return ""
 }
 
-func (gk *StreamingGatekeeper) emitDLQ(ctx context.Context, reason, detail string, payload map[string]interface{}, raw json.RawMessage) {
+// emitDLQ publishes a dead-letter record and reports whether it was actually
+// acknowledged by the broker.
+//
+// The return value is load-bearing, not decoration. A dead-letter is what makes a
+// failed batch terminal: the rows are in neither StarRocks nor the DLQ, and the only
+// remaining copy is in Kafka. If the DLQ write itself fails, the batch is NOT
+// terminal and its offsets must stay uncommitted -- otherwise the failure path of the
+// safety mechanism reintroduces exactly the loss the offset floor exists to prevent.
+//
+// A nil writer means no DLQ is configured at all. That is a deployment choice, not a
+// transient fault, so it is counted once and does not stall the stream; a configured
+// writer that fails is a different thing and does hold the floor.
+func (gk *StreamingGatekeeper) emitDLQ(ctx context.Context, reason, detail string, payload map[string]interface{}, raw json.RawMessage) error {
 	gk.metrics.DLQEmitted.Add(1)
 	dlqMsg := DLQMessage{
 		OriginalTopic: gk.cfg.Topic,
@@ -819,18 +1125,21 @@ func (gk *StreamingGatekeeper) emitDLQ(ctx context.Context, reason, detail strin
 	data, err := json.Marshal(dlqMsg)
 	if err != nil {
 		log.Printf("Failed to serialize DLQ message: %v", err)
-		return
+		return fmt.Errorf("serialize DLQ message: %w", err)
 	}
 
-	if gk.dlqWriter != nil {
-		err = gk.dlqWriter.WriteMessages(ctx, kafka.Message{
-			Key:   []byte(extractTenantID(payload)),
-			Value: data,
-		})
-		if err != nil {
-			log.Printf("Failed to write message to DLQ topic %s: %v", gk.cfg.DLQTopic, err)
-		}
+	if gk.dlqWriter == nil {
+		gk.metrics.DLQUnavailable.Add(1)
+		return nil
 	}
+	if err = gk.dlqWriter.WriteMessages(ctx, kafka.Message{
+		Key:   []byte(extractTenantID(payload)),
+		Value: data,
+	}); err != nil {
+		log.Printf("Failed to write message to DLQ topic %s: %v", gk.cfg.DLQTopic, err)
+		return fmt.Errorf("write to DLQ topic %s: %w", gk.cfg.DLQTopic, err)
+	}
+	return nil
 }
 
 func (gk *StreamingGatekeeper) persistViolations(ctx context.Context, tenantID, boKey string, evalResult *analytics.RecordEvaluation, blocked bool) {
@@ -1138,6 +1447,13 @@ type starRocksResponse struct {
 	NumberLoadedRows   int64  `json:"NumberLoadedRows"`
 	NumberFilteredRows int64  `json:"NumberFilteredRows"`
 	NumberErrorRows    int64  `json:"NumberErrorRows"`
+
+	// Database and Table are not in the reply: a cross-database denial answers 401
+	// with no body at all, so the destination has to come from the request. They are
+	// attached at the call site so an alert can name the database that refused the
+	// write without the operator re-deriving which tenant it belonged to.
+	Database string `json:"-"`
+	Table    string `json:"-"`
 }
 
 // rejected reports rows StarRocks refused to store, which become NULL columns.
@@ -1168,7 +1484,11 @@ func (gk *StreamingGatekeeper) httpClient() *http.Client {
 // It returns the number of rows StarRocks refused to store. Those rows are
 // written with NULL in any column it could not convert, so the caller must
 // surface the count rather than treating Status=Success as a clean load.
-func streamLoadBatch(ctx context.Context, cfg Config, rows []json.RawMessage, label string) (int64, error) {
+//
+// Failures are returned as a *loadError carrying the taxonomy outcome, because
+// "retry", "bisect" and "dead-letter" are three different answers to the same
+// HTTP response and the caller must not have to infer which it got from a string.
+func streamLoadBatch(ctx context.Context, cfg Config, route TenantRoute, rows []json.RawMessage, label string) (int64, error) {
 	body := make([]byte, 0, len(rows)*128)
 	body = append(body, '[')
 	for i, r := range rows {
@@ -1182,7 +1502,8 @@ func streamLoadBatch(ctx context.Context, cfg Config, rows []json.RawMessage, la
 	url := fmt.Sprintf("%s/api/%s/%s/_stream_load", cfg.StarRocksHTTP, cfg.StarRocksDB, cfg.StarRocksTable)
 	req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewReader(body))
 	if err != nil {
-		return 0, err
+		return 0, &loadError{outcome: outcomeTransport, target: cfg.StarRocksDB + "." + cfg.StarRocksTable,
+			tenant: route.TenantID, err: err}
 	}
 	req.SetBasicAuth(cfg.StarRocksUser, cfg.StarRocksPassword)
 	req.Header.Set("Expect", "100-continue")
@@ -1191,10 +1512,9 @@ func streamLoadBatch(ctx context.Context, cfg Config, rows []json.RawMessage, la
 	req.Header.Set("strip_outer_array", "true")
 	req.Header.Set("label", label)
 	// strict_mode makes StarRocks reject the whole load rather than filtering the
-	// rows it cannot convert. It is off by default because one bad row would then
-	// block an entire batch; the filtered-row count below catches the same
-	// corruption without stalling the stream. Operators who prefer fail-loud can
-	// set STREAM_LOAD_STRICT_MODE=true.
+	// rows it cannot convert. Off by default would mean one bad row silently becomes
+	// a row of NULLs with a Success status and no filtered-row count; the loader
+	// opts out only when an operator sets STREAM_LOAD_STRICT_MODE=false.
 	if cfg.StrictMode {
 		req.Header.Set("strict_mode", "true")
 	}
@@ -1204,26 +1524,32 @@ func streamLoadBatch(ctx context.Context, cfg Config, rows []json.RawMessage, la
 
 	resp, err := clientFor(cfg).Do(req)
 	if err != nil {
-		return 0, err
+		// No response at all: connection refused, timeout, DNS. Always retryable,
+		// because nothing was decided.
+		return 0, &loadError{outcome: outcomeTransport, target: cfg.StarRocksDB + "." + cfg.StarRocksTable,
+			tenant: route.TenantID, err: err}
 	}
 	defer resp.Body.Close()
 
 	var out starRocksResponse
 	_ = json.NewDecoder(resp.Body).Decode(&out)
-	switch {
-	case out.Status == "Success":
-		return out.rejected(), nil
-	case out.Status == "Label Already Exists":
-		// A previous attempt with this label already applied these rows.
-		return 0, nil
-	case out.Status == "Publish Timeout":
-		// StarRocks committed but the FE lost the reply; the label makes a retry safe.
-		return 0, nil
-	case resp.StatusCode != http.StatusOK:
-		return 0, fmt.Errorf("bad status %s: %s", resp.Status, out.Msg)
-	default:
-		return 0, fmt.Errorf("stream load rejected: %s (%s)", out.Status, out.Msg)
+	out.Database = cfg.StarRocksDB
+	out.Table = cfg.StarRocksTable
+
+	outcome, cerr := classifyResponse(resp.StatusCode, out)
+	if outcome != outcomeOK {
+		return 0, &loadError{
+			outcome: outcome,
+			status:  resp.StatusCode,
+			resp:    out,
+			target:  cfg.StarRocksDB + "." + cfg.StarRocksTable,
+			tenant:  route.TenantID,
+			err:     cerr,
+		}
 	}
+	// A Success that filtered rows is still a partial loss, and the count is the only
+	// evidence of it -- see the starRocksResponse doc comment.
+	return out.rejected(), nil
 }
 
 // deleteSQL builds one keyed DELETE for the whole batch. StarRocks 3.3 removed the
