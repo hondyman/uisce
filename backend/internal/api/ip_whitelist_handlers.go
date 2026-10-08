@@ -302,11 +302,11 @@ func (h *IpWhitelistAPIHandlers) addIpWhitelist(w http.ResponseWriter, r *http.R
 				JOIN tenant_ip_whitelist_entries e ON e.id = a.whitelist_id
 				WHERE e.ip_address = $1
 			`, existing)
-if err != nil {
-		log.Printf("[ERROR] getIpWhitelist query failed: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+			if err != nil {
+				log.Printf("[ERROR] getIpWhitelist query failed: %v", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			defer rows2.Close()
 			var tenantIds []string
 			for rows2.Next() {
