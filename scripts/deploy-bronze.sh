@@ -29,7 +29,7 @@ IMAGE_DIGEST=${5:?Usage: $0 <host> <user> <path> <port> <image_digest>}
 
 SSH_OPTS="-o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $PORT"
 REGISTRY="ghcr.io"
-REPO="${{ github.repository }}"  # set by GitHub Actions env; passed literally in the workflow
+REPO=${6:?Usage: $0 <host> <user> <path> <port> <image_digest> <repo>}  # e.g. "hondyman/uisce"
 IMAGE="${REGISTRY}/${REPO}/kafka-connect-iceberg"
 
 echo "==> Deploying bronze sink to ${USER}@${HOST}:${PATH_ARG}"
