@@ -60,11 +60,14 @@ type Input struct {
 	Endpoints   Endpoints
 }
 
-// DatabaseProbe connects to the database and runs SELECT 1. The v1 credential
-// is the admin credential. That proves reachability, not that tenant app
-// credentials work.
+// DatabaseProbe connects to the instance database and runs SELECT 1.
+//
+// It is given the instance path, not connection details. The implementation
+// reads database_url at that path, which SeedInstanceSecrets wrote from the
+// same endpoint the saga provisioned. The credential is therefore the seeded
+// tenant credential, and the URL never leaves the probe.
 type DatabaseProbe interface {
-	Ping(ctx context.Context, host string, port int, database string) error
+	Ping(ctx context.Context, instancePath string) error
 }
 
 // IdentityProbe checks the realm's discovery document. It must confirm the
@@ -108,9 +111,14 @@ func (a *Activities) StartPlatform(ctx context.Context, in Input) (Result, error
 		return Result{}, nonRetryable(errTypePlatformInput, err)
 	}
 
+	instancePath, err := tenantsecrets.Path(in.TenantCode, in.Environment)
+	if err != nil {
+		return Result{}, nonRetryable(errTypePlatformInput, err)
+	}
+
 	var passed, failed []string
 
-	if err := a.DB.Ping(ctx, in.Endpoints.PostgresHost, in.Endpoints.PostgresPort, in.Endpoints.DatabaseName); err != nil {
+	if err := a.DB.Ping(ctx, instancePath); err != nil {
 		failed = append(failed, CheckDatabase)
 	} else {
 		passed = append(passed, CheckDatabase)
@@ -122,10 +130,6 @@ func (a *Activities) StartPlatform(ctx context.Context, in Input) (Result, error
 		passed = append(passed, CheckIdentity)
 	}
 
-	instancePath, err := tenantsecrets.Path(in.TenantCode, in.Environment)
-	if err != nil {
-		return Result{}, nonRetryable(errTypePlatformInput, err)
-	}
 	secretsOK := true
 	for _, p := range []string{
 		"tenants/" + in.TenantCode + "/identity",

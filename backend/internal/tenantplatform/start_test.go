@@ -23,14 +23,12 @@ type recorder struct {
 type fakeDB struct {
 	rec  *recorder
 	err  error
-	host string
-	port int
-	db   string
+	path string
 }
 
-func (f *fakeDB) Ping(_ context.Context, host string, port int, database string) error {
+func (f *fakeDB) Ping(_ context.Context, instancePath string) error {
 	f.rec.events = append(f.rec.events, "db")
-	f.host, f.port, f.db = host, port, database
+	f.path = instancePath
 	return f.err
 }
 
@@ -126,18 +124,32 @@ func TestStartPlatformSuccessOrdering(t *testing.T) {
 	}
 }
 
-func TestDatabaseCheckUsesSagaEndpointExactly(t *testing.T) {
+func TestDatabaseCheckAndSecretsCheckShareOnePath(t *testing.T) {
 	h := newHarness()
 	in := validInput()
 	if _, err := h.activities().StartPlatform(context.Background(), in); err != nil {
 		t.Fatalf("StartPlatform: %v", err)
 	}
-	if h.db.host != in.Endpoints.PostgresHost || h.db.port != in.Endpoints.PostgresPort || h.db.db != in.Endpoints.DatabaseName {
-		t.Fatalf("DB probe used %s:%d/%s, want the saga endpoint", h.db.host, h.db.port, h.db.db)
+	// The database probe reads database_url at the instance path. The secrets
+	// check must assert that same path, so the two checks cannot drift.
+	if h.db.path != "tenants/acme/dev" {
+		t.Fatalf("DB probe path = %q, want tenants/acme/dev", h.db.path)
+	}
+	if !contains(h.sec.seen, h.db.path) {
+		t.Fatalf("secrets check did not assert the DB probe's path: %v", h.sec.seen)
 	}
 	if h.id.got != in.Endpoints.Issuer {
 		t.Fatalf("identity probe checked %q", h.id.got)
 	}
+}
+
+func contains(xs []string, x string) bool {
+	for _, v := range xs {
+		if v == x {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSecretsCheckAssertsLayoutPathsOnly(t *testing.T) {
