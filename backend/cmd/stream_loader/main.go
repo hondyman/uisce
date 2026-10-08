@@ -27,8 +27,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -41,6 +43,7 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/jmoiron/sqlx"
@@ -69,6 +72,10 @@ type Config struct {
 	// MaxRows / FlushInterval bound one stream load.
 	MaxRows       int
 	FlushInterval time.Duration
+	// QueryDSN is a MySQL-protocol connection used for keyed DELETEs. StarRocks 3.3
+	// no longer implements the HTTP SQL endpoint (/api/query returns 501), so a
+	// DELETE cannot be issued through _stream_load.
+	QueryDSN string
 }
 
 type GatekeeperMetrics struct {
@@ -150,6 +157,7 @@ type StreamingGatekeeper struct {
 	cfg        Config
 	metrics    *GatekeeperMetrics
 	sqlxDB     *sqlx.DB
+	queryDB    *sql.DB
 	ruleEngine *analytics.EmbeddedEngine
 	dlqWriter  *kafka.Writer
 	mu         sync.RWMutex
@@ -229,7 +237,23 @@ func loadConfig() Config {
 			cfg.FlushInterval = d
 		}
 	}
+	cfg.QueryDSN = os.Getenv("STARROCKS_QUERY_DSN")
+	if cfg.QueryDSN == "" {
+		if host := hostOf(cfg.StarRocksHTTP); host != "" {
+			cfg.QueryDSN = fmt.Sprintf("%s:%s@tcp(%s:9030)/%s", cfg.StarRocksUser, cfg.StarRocksPassword, host, cfg.StarRocksDB)
+		}
+	}
 	return cfg
+}
+
+// hostOf extracts the hostname from an http(s) URL so the query port can be derived
+// from the same host the stream load already targets.
+func hostOf(raw string) string {
+	s := strings.TrimPrefix(strings.TrimPrefix(raw, "https://"), "http://")
+	if i := strings.IndexAny(s, "/:"); i >= 0 {
+		s = s[:i]
+	}
+	return s
 }
 
 func parsePositiveInt(s string) int {
@@ -430,75 +454,86 @@ func (gk *StreamingGatekeeper) runLoop(ctx context.Context) {
 
 	// flush writes the accumulated batch and, only on success, commits its offsets.
 	// It retries internally so a transient StarRocks error does not advance the batch.
-	flush := func(reason string) error {
+	// A detached context is used because the final drain runs after ctx is cancelled.
+	flush := func(reason string) {
 		if b.empty() {
-			return nil
+			return
 		}
+		// The batch must survive a cancelled parent context, or a graceful shutdown
+		// would discard the rows it is holding.
+		wctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
 		for attempt := 1; ; attempt++ {
-			err := gk.writeBatch(ctx, b)
+			err := gk.writeBatch(wctx, b)
 			if err == nil {
 				gk.metrics.BatchesFlushed.Add(1)
-				if cerr := r.CommitMessages(ctx, b.messages...); cerr != nil {
+				if cerr := r.CommitMessages(wctx, b.messages...); cerr != nil {
 					log.Printf("Failed to commit messages: %v", cerr)
 				}
 				b = &batch{}
-				return nil
+				return
 			}
 			log.Printf("Batch flush failed (%s, attempt %d, %d ops): %v", reason, attempt, len(b.ops), err)
 			gk.metrics.StreamLoadErrors.Add(1)
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return
 			case <-time.After(backoff(attempt)):
 			}
 		}
 	}
 
+	// Consumption runs on its own goroutine. FetchMessage blocks for as long as the
+	// topic is quiet, so polling a flush ticker at the top of the reading loop would
+	// leave a batch unflushed indefinitely on a low-traffic topic.
+	messages := make(chan kafka.Message, 4096)
+	go func() {
+		defer close(messages)
+		for {
+			m, err := r.FetchMessage(ctx)
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				log.Printf("Error fetching message: %v", err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			select {
+			case messages <- m:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
-			// Drain what we have so a restart does not replay a batch we already hold.
-			if cerr := flush("shutdown"); cerr != nil {
-				log.Printf("Final flush failed: %v", cerr)
-			}
+			flush("shutdown")
 			return
 
 		case <-ticker.C:
-			if err := flush("interval"); err != nil {
+			flush("interval")
+
+		case m, ok := <-messages:
+			if !ok {
+				flush("shutdown")
 				return
 			}
+			gk.metrics.TotalConsumed.Add(1)
+			gk.metrics.lastEventUnixNano.Store(time.Now().UnixNano())
 
-		default:
-		}
-
-		// Bounded wait so the ticker is serviced even on a quiet topic.
-		m, err := r.FetchMessage(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
-				if ferr := flush("shutdown"); ferr != nil {
-					log.Printf("Final flush failed: %v", ferr)
+			if !gk.handleMessage(ctx, b, m) {
+				// Rejected/tombstoned: needs no StarRocks write, so commit it now.
+				if cerr := r.CommitMessages(ctx, m); cerr != nil {
+					log.Printf("Failed to commit message: %v", cerr)
 				}
-				return
+				continue
 			}
-			log.Printf("Error fetching message: %v", err)
-			time.Sleep(1 * time.Second)
-			continue
-		}
 
-		gk.metrics.TotalConsumed.Add(1)
-		gk.metrics.lastEventUnixNano.Store(time.Now().UnixNano())
-
-		if !gk.handleMessage(ctx, b, m) {
-			// Rejected/tombstoned: it needs no StarRocks write, so commit it now.
-			if cerr := r.CommitMessages(ctx, m); cerr != nil {
-				log.Printf("Failed to commit message: %v", cerr)
-			}
-			continue
-		}
-
-		if len(b.ops) >= gk.cfg.MaxRows {
-			if err := flush("full"); err != nil {
-				return
+			if len(b.ops) >= gk.cfg.MaxRows {
+				flush("full")
 			}
 		}
 	}
@@ -655,10 +690,35 @@ func (gk *StreamingGatekeeper) writeBatch(ctx context.Context, b *batch) error {
 	}
 
 	if len(deleteKeys) > 0 {
-		if err := deleteBatch(ctx, gk.cfg, gk.cfg.PrimaryKeys, deleteKeys, label+"_del"); err != nil {
+		if err := gk.deleteRows(ctx, gk.cfg.PrimaryKeys, deleteKeys); err != nil {
 			return fmt.Errorf("delete %d rows: %w", len(deleteKeys), err)
 		}
 		gk.metrics.TotalDeletes.Add(int64(len(deleteKeys)))
+	}
+	return nil
+}
+
+// deleteRows issues the keyed DELETE over the MySQL protocol. The connection is
+// opened lazily so a loader with no deletes never pays for it.
+func (gk *StreamingGatekeeper) deleteRows(ctx context.Context, keyCols []string, keys []string) error {
+	q, ok := deleteSQL(gk.cfg, keyCols, keys)
+	if !ok {
+		return nil
+	}
+	if gk.queryDB == nil {
+		if gk.cfg.QueryDSN == "" {
+			return errors.New("no StarRocks query DSN is configured, cannot apply deletes")
+		}
+		db, err := sql.Open("mysql", gk.cfg.QueryDSN)
+		if err != nil {
+			return err
+		}
+		db.SetMaxOpenConns(2)
+		db.SetConnMaxLifetime(5 * time.Minute)
+		gk.queryDB = db
+	}
+	if _, err := gk.queryDB.ExecContext(ctx, q); err != nil {
+		return err
 	}
 	return nil
 }
@@ -1064,17 +1124,15 @@ func streamLoadBatch(ctx context.Context, cfg Config, rows []json.RawMessage, la
 	}
 }
 
-// deleteBatch removes rows by primary key. StarRocks has no per-row delete in the
-// load API, so this is one statement for the whole batch.
-func deleteBatch(ctx context.Context, cfg Config, keyCols []string, keys []string, label string) error {
-	if len(keys) == 0 {
-		return nil
-	}
+// deleteSQL builds one keyed DELETE for the whole batch. StarRocks 3.3 removed the
+// HTTP SQL endpoint, so this is issued over the MySQL protocol instead.
+func deleteSQL(cfg Config, keyCols []string, keys []string) (string, bool) {
 	var clauses []string
 	for _, k := range keys {
 		parts := strings.Split(k, "\x1f")
 		if len(parts) != len(keyCols) {
-			// Defensive: a malformed key must not become a partial predicate.
+			// A key that does not match the configured key columns must never become
+			// a partial predicate, which would delete more than intended.
 			continue
 		}
 		conds := make([]string, 0, len(parts))
@@ -1084,36 +1142,10 @@ func deleteBatch(ctx context.Context, cfg Config, keyCols []string, keys []strin
 		clauses = append(clauses, "("+strings.Join(conds, " AND ")+")")
 	}
 	if len(clauses) == 0 {
-		return nil
+		return "", false
 	}
-
-	q := fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE %s", cfg.StarRocksDB, cfg.StarRocksTable, strings.Join(clauses, " OR "))
-	url := fmt.Sprintf("%s/api/query/default/%s", cfg.StarRocksHTTP, cfg.StarRocksDB)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(q))
-	if err != nil {
-		return err
-	}
-	req.SetBasicAuth(cfg.StarRocksUser, cfg.StarRocksPassword)
-	req.Header.Set("Content-Type", "text/plain")
-	// The statement is generated from a validated key column list and quoted values,
-	// but the label still makes the whole DELETE replay-safe.
-	req.Header.Set("label", sanitizeLabel(label))
-
-	resp, err := clientFor(cfg).Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	var out starRocksResponse
-	_ = json.NewDecoder(resp.Body).Decode(&out)
-	if out.Status == "Label Already Exists" {
-		return nil
-	}
-	if resp.StatusCode != http.StatusOK || (out.Status != "" && out.Status != "Success") {
-		return fmt.Errorf("delete rejected: status=%s msg=%s", resp.Status, out.Msg)
-	}
-	return nil
+	return fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE %s",
+		cfg.StarRocksDB, cfg.StarRocksTable, strings.Join(clauses, " OR ")), true
 }
 
 // quoteLiteral renders a primary-key value as a SQL string literal using the SQL
