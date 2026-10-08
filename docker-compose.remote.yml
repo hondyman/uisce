@@ -759,7 +759,8 @@ services:
       STARROCKS_HTTP: http://starrocks-fe:8030
       STARROCKS_USER: root
       STARROCKS_PASSWORD: ""
-      STARROCKS_DB: oms
+      STARROCKS_DB: ""
+      STREAM_LOAD_TENANT_ROUTES_DIR: /etc/uisce/sr-tenants
       STARROCKS_TABLE: orm_execution
     networks:
       - remote-net
@@ -780,7 +781,8 @@ services:
       STARROCKS_HTTP: http://starrocks-fe:8030
       STARROCKS_USER: root
       STARROCKS_PASSWORD: ""
-      STARROCKS_DB: oms
+      STARROCKS_DB: ""
+      STREAM_LOAD_TENANT_ROUTES_DIR: /etc/uisce/sr-tenants
       STARROCKS_TABLE: orm_order
     networks:
       - remote-net
@@ -801,7 +803,8 @@ services:
       STARROCKS_HTTP: http://starrocks-fe:8030
       STARROCKS_USER: root
       STARROCKS_PASSWORD: ""
-      STARROCKS_DB: oms
+      STARROCKS_DB: ""
+      STREAM_LOAD_TENANT_ROUTES_DIR: /etc/uisce/sr-tenants
       STARROCKS_TABLE: orm_placement
     networks:
       - remote-net
@@ -822,7 +825,8 @@ services:
       STARROCKS_HTTP: http://starrocks-fe:8030
       STARROCKS_USER: root
       STARROCKS_PASSWORD: ""
-      STARROCKS_DB: oms
+      STARROCKS_DB: ""
+      STREAM_LOAD_TENANT_ROUTES_DIR: /etc/uisce/sr-tenants
       STARROCKS_TABLE: orm_order_allocation
     networks:
       - remote-net
@@ -843,7 +847,8 @@ services:
       STARROCKS_HTTP: http://starrocks-fe:8030
       STARROCKS_USER: root
       STARROCKS_PASSWORD: ""
-      STARROCKS_DB: oms
+      STARROCKS_DB: ""
+      STREAM_LOAD_TENANT_ROUTES_DIR: /etc/uisce/sr-tenants
       STARROCKS_TABLE: orm_execution_allocation
     networks:
       - remote-net

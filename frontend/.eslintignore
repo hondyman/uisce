@@ -1,5 +1,0 @@
-# Ignore broken or intentionally noisy test files from automated linting
-# Ignore broken or intentionally noisy test files from automated linting
-src/components/semantic-mapper/__tests__/ReportingServerUI.tsx
-
-# Add any other test fixtures you want to skip temporarily

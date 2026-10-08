@@ -1,5 +1,0 @@
-envs:
-    dev:
-        url: http://localhost:8080
-    prod:
-        url: https://api.yourorg.com
