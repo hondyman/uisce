@@ -4,7 +4,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { ComponentDefinition, CorePageDefinition } from '../../../types/pageStudio';
 import { getDomainComponent, listDomainComponents } from '../../../studio-core/components/registry';
 import type { CellSpec, ColumnDef, ConditionNode, TextSpec } from './appModel';
-import type { AppWidgetType, CanvasProps, ChatProps, DataGridProps, DomainComponentProps, FormWidgetProps, KeyValueProps, TimelineProps } from './AppWidgets';
+import type { AppWidgetType, CanvasProps, ChatProps, CodeEditorProps, DataGridProps, DomainComponentProps, FormWidgetProps, KeyValueProps, TimelineProps, TreeViewProps } from './AppWidgets';
 import { FieldsEditor } from './fieldsEditor';
 import {
   CanvasCategoriesEditor, CaptionEditor, ChipSpecEditor, ColorMapEditor, OptionListEditor, PaletteGroupsEditor, RowButtonsEditor,
@@ -199,8 +199,8 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
     ...prev, components: { ...prev.components, [component.id]: { ...prev.components[component.id], ...next } },
   }));
   const setProps = (patch: Record<string, unknown>) => update({ props: { ...props, ...patch } });
-  // Row paths for per-row editors: a grid's or a timeline's query.
-  const gridQuery = type === 'DataGrid' || type === 'Timeline' ? (props.query as string | undefined) : undefined;
+  // Row paths for per-row editors: a grid's, timeline's, or tree's query.
+  const gridQuery = type === 'DataGrid' || type === 'Timeline' || type === 'TreeView' ? (props.query as string | undefined) : undefined;
   const paths = scopePaths(draft);
   const rowPaths = scopePaths(draft, gridQuery);
   const vars = (draft.app?.variables ?? []).map((v) => ({ value: v.name, label: v.name }));
@@ -608,6 +608,71 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
               ))}
             </Section>
           )}
+        </>
+      );
+      break;
+    }
+    case 'TreeView': {
+      const p = props as unknown as TreeViewProps;
+      body = (
+        <>
+          <Section title="Tree Data">
+            <SelectField label="Query" value={p.query} options={queries} allowEmpty="From a binding" onChange={(v) => setProps({ query: v || undefined })} />
+            {p.query
+              ? <TextField size="small" label="Rows path (optional)" value={p.rowsPath ?? ''} onChange={(e) => setProps({ rowsPath: e.target.value || undefined })} />
+              : <BindingField label="Nodes (array)" value={p.items} onChange={(v) => setProps({ items: v })} paths={paths} />}
+            <TextField size="small" label="ID field (default: id)" value={p.idField ?? ''} onChange={(e) => setProps({ idField: e.target.value || undefined })} />
+            <TextField size="small" label="Children field (default: children)" value={p.childrenField ?? ''} onChange={(e) => setProps({ childrenField: e.target.value || undefined })} />
+            {text('emptyText', 'When empty')}
+            <TextField size="small" type="number" label="Max height (px)" value={p.maxHeight ?? ''} onChange={(e) => setProps({ maxHeight: e.target.value ? Number(e.target.value) : undefined })} />
+          </Section>
+          <Section title="Node Label ({{row}})">
+            <TextSpecField label="Label template" value={p.label} onChange={(v) => setProps({ label: v })} paths={rowPaths} />
+          </Section>
+          <Section title="Selection & Actions">
+            <SelectField label="Save selected to variable" value={p.selectedVariable} options={vars} allowEmpty="None" onChange={(v) => setProps({ selectedVariable: v || undefined })} />
+            <SwitchField label="Store full node object" value={p.selectFullNode ?? false} onChange={(v) => setProps({ selectFullNode: v })} />
+            {actions('onNodeSelect', 'On select ({{selectedId}}, {{selectedNode}})', ['selectedId', 'selectedNode'])}
+          </Section>
+        </>
+      );
+      break;
+    }
+    case 'CodeEditor': {
+      const p = props as unknown as CodeEditorProps;
+      body = (
+        <>
+          <Section title="Editor Settings">
+            <SelectField label="Variable" value={p.variable} options={vars} onChange={(v) => setProps({ variable: v })} />
+            <SelectField
+              label="Language"
+              value={p.language || 'sql'}
+              options={[
+                { value: 'sql', label: 'SQL' },
+                { value: 'json', label: 'JSON' },
+                { value: 'yaml', label: 'YAML' },
+                { value: 'javascript', label: 'JavaScript' },
+                { value: 'typescript', label: 'TypeScript' },
+                { value: 'python', label: 'Python' },
+              ]}
+              onChange={(v) => setProps({ language: v })}
+            />
+            <SelectField
+              label="Theme"
+              value={p.theme || 'vs-dark'}
+              options={[
+                { value: 'vs-dark', label: 'Dark (vs-dark)' },
+                { value: 'light', label: 'Light' },
+              ]}
+              onChange={(v) => setProps({ theme: v })}
+            />
+            <TextField size="small" type="number" label="Height (px)" value={p.height ?? 300} onChange={(e) => setProps({ height: e.target.value ? Number(e.target.value) : undefined })} />
+            <SwitchField label="Read only" value={p.readOnly ?? false} onChange={(v) => setProps({ readOnly: v })} />
+            <BindingField label="Initial value (binding)" value={p.initFrom} onChange={(v) => setProps({ initFrom: v || undefined })} paths={paths} />
+          </Section>
+          <Section title="Events">
+            {actions('onChange', 'On change ({{code}})', ['code'])}
+          </Section>
         </>
       );
       break;

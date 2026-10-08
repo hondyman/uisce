@@ -9,6 +9,11 @@ export interface NavigationMenuNode {
   targetPageKey?: string | null;
   displayOrder: number;
   requiredEntitlement: string;
+  /** ABAC capability key gating the node (e.g. menu:platform). */
+  requiredCapability?: string | null;
+  /** Interim: opens a not-yet-redesigned coded screen until it is rebuilt in Page Designer. */
+  targetRoute?: string | null;
+  hidden?: boolean;
   children?: NavigationMenuNode[];
   /** From the gold copy: every tenant has it, read-only outside the gold copy. */
   inherited?: boolean;
@@ -46,3 +51,13 @@ export const NavigationMenuApi = {
 };
 
 export default NavigationMenuApi;
+
+/** App URL path (may hold :params) -> the Page Designer page that serves it. */
+export interface RouteAlias {
+  path: string;
+  pageKey: string;
+}
+
+export const RouteAliasApi = {
+  list: (): Promise<RouteAlias[]> => apiClient<RouteAlias[]>('/route-aliases'),
+};

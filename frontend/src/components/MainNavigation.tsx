@@ -75,6 +75,9 @@ import { useOrganizationEntitlement } from '../contexts/useOrganizationEntitleme
 import useBlockableNavigate from './RouteBlocker/useBlockableNavigate';
 import { useAuth } from '../contexts/AuthContext';
 import { MenuCardsPage, MenuCardItem } from './ui/MenuCardsPage';
+import { useRouteAliases } from '../hooks/useRouteAliases';
+import { useMenuTree } from '../hooks/useMenuTree';
+import { mapDesignerTreeToCategories } from './navigationTree';
 import { ViewModule as ViewModuleIcon, Menu as MenuListIcon } from '@mui/icons-material';
 import ScopeBadge from './ScopeBadge';
 import TenantSwitcher from './TenantSwitcher';
@@ -109,7 +112,7 @@ export interface NavigationItem {
   requiredEntitlement?: string;
 }
 
-interface NavigationMenu {
+export interface NavigationMenu {
   label: string;
   icon: React.ReactNode;
   items: NavigationItem[];
@@ -121,7 +124,8 @@ interface NavigationMenu {
 
 export interface CategoryConfig {
   label: string;
-  key: 'tenants' | 'catalog' | 'weave' | 'workflow' | 'intelligence' | 'entity';
+  /** The Menu Designer root node key. */
+  key: string;
   icon: React.ReactNode;
   defaultPath: string; // Navigate here when category is selected
   color: {
@@ -137,320 +141,8 @@ export interface CategoryConfig {
   requiredEntitlement?: string;
 }
 
-const categoryConfigs: CategoryConfig[] = [
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PLATFORM - Organization, security, and system administration
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'Platform',
-    key: 'tenants',
-    icon: <SettingsIcon />,
-    defaultPath: '/fabric/tenants',
-    requiredCapability: 'menu:platform',
-    color: {
-      primary: '#607D8B',
-      light: '#ECEFF1',
-      dark: '#455A64',
-      background: 'rgba(96, 125, 139, 0.06)'
-    },
-    menus: [
-      {
-        label: 'Organization',
-        icon: <BusinessIcon />,
-        requiredCapability: 'menu:organization',
-        items: [
-          { label: 'Manage Resources', path: '/tenants', icon: <CorporateFareIcon />, description: 'Manage current tenant resources' },
-          { label: 'Entitlement Management', path: '/admin/entitlements', icon: <ExtensionIcon />, description: 'Tenant profiles and component entitlements', requiredCapability: 'menu:entitlements' },
-          { label: 'Users', path: '/admin/rbac/users', icon: <PersonAddIcon />, description: 'User management' },
-          { label: 'Teams', path: '/admin/rbac/teams', icon: <GroupsIcon />, description: 'Team structure' },
-          { label: 'User Roles', path: '/admin/rbac/user-roles', icon: <AccountCircleIcon />, description: 'User role assignments' },
-          { label: 'User Tenants', path: '/admin/rbac/user-tenants', icon: <SupervisorAccountIcon />, description: 'User tenant assignments' },
-        ]
-      },
-      {
-        label: 'Security',
-        icon: <SecurityIcon />,
-        requiredCapability: 'menu:security',
-        items: [
-          { label: 'Access Rules', path: '/security/access-rules', icon: <LockIcon />, description: 'Row & column security' },
-          { label: 'Roles & Permissions', path: '/admin/rbac/roles', icon: <ShieldIcon />, description: 'RBAC management' },
-          { label: 'Delegations', path: '/admin/rbac/delegations', icon: <SupervisorAccountIcon />, description: 'Approval delegations' },
-          { label: 'Field Permissions', path: '/admin/rbac/field-permissions', icon: <LockOpenIcon />, description: 'Field-level security' },
-          { label: 'IP Whitelist', path: '/fabric/ip-whitelist', icon: <SecurityIcon />, description: 'Network access rules' },
-          { label: 'Secrets', path: '/secrets/config', icon: <LockIcon />, description: 'Secrets management' },
-          { label: 'JIT Requests', path: '/jit-request', icon: <LockOpenIcon />, description: 'Just-in-time access' },
-          { label: 'Access Explanation', path: '/access-explanation', icon: <SecurityIcon />, description: 'Access debug explain' },
-        ]
-      },
-      {
-        label: 'System',
-        icon: <SystemUpdateAltIcon />,
-        requiredCapability: 'menu:system',
-        items: [
-
-          { label: 'Audit Log', path: '/audit', icon: <TimelineIcon />, description: 'Immutable audit log, explorer & platform audit records' },
-          { label: 'Fabric Settings', path: '/fabric/settings', icon: <SettingsIcon />, description: 'Platform settings' },
-          { label: 'Message Catalog', path: '/admin/message-catalog', icon: <TranslateIcon />, description: 'Error & message text, all languages' },
-          { label: 'LLM Config', path: '/admin/llm', icon: <AutoFixHighIcon />, description: 'AI model configuration' },
-          { label: 'Seeding', path: '/admin/seeding', icon: <SystemUpdateAltIcon />, description: 'Rule seeding' },
-          { label: 'Temporal Ops', path: '/admin/temporal-ops', icon: <PlayCircleOutlineIcon />, description: 'Workflow engine' },
-          { label: 'Tenant Lakehouse', path: '/system/lakehouse', icon: <StorageIcon />, description: "Each tenant's Iceberg warehouse and audit retention" },
-          { label: 'Lakehouse status', path: '/system/lakehouse-status', icon: <MonitorHeartIcon />, description: 'Read-only: cluster health, resource groups, and per-tenant wiring', badge: { label: 'New', color: 'success' } },
-          { label: 'Menu Designer', path: '/menu-designer', icon: <AccountTreeIcon />, description: 'Configure tenant navigation menus' },
-        ]
-      }
-    ]
-  },
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // CATALOG - Data discovery, glossary, and lineage
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'Catalog',
-    key: 'catalog',
-    icon: <CategoryIcon />,
-    defaultPath: '/core/glossary',
-    color: {
-      primary: '#2196F3',
-      light: '#E3F2FD',
-      dark: '#1976D2',
-      background: 'rgba(33, 150, 243, 0.08)'
-    },
-    menus: [
-      {
-        label: 'Glossary',
-        icon: <CategoryIcon />,
-        items: [
-          { label: 'Business Terms', path: '/core/business-terms', icon: <BusinessIcon />, description: 'Business taxonomy & glossary terms' },
-          { label: 'Semantic Terms', path: '/core/glossary', icon: <AIIcon />, description: 'Semantic terms & physical column mappings' },
-          { label: 'Datasource Explorer', path: '/schema-explorer', icon: <StorageIcon />, description: 'Database tables & columns' },
-          { label: 'Abbreviations', path: '/core/abbreviations', icon: <CategoryIcon />, description: 'Standard abbreviations' },
-          { label: 'Data Domains', path: '/core/domains', icon: <CategoryIcon />, description: 'Domain ownership' },
-          { label: 'API Inventory', path: '/catalog/api-inventory', icon: <ApiIcon />, description: 'API Services, Endpoints & Fields' },
-        ]
-      },
-      {
-        label: 'Config',
-        icon: <StorageIcon />,
-        items: [
-          { label: 'Semantic Mapper', path: '/core/semantic-mapper', icon: <AutoFixHighIcon />, description: 'Intelligent graph & semantic mapper' },
-          { label: 'Node Types', path: '/catalog/node-types', icon: <SchemaIcon />, description: 'Metadata structures' },
-          { label: 'Edge Types', path: '/catalog/edge-types', icon: <AccountTreeIcon />, description: 'Relationship types' },
-          { label: 'AI Term Suggestions', path: '/catalog/ai-suggestions', icon: <AutoFixHighIcon />, description: 'Suggested terms' },
-          { label: 'Bundle Explorer', path: '/bundle-explorer', icon: <SchemaIcon />, description: 'Explore semantic bundles' },
-        ]
-      }
-    ]
-  },
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // BUILD - Semantic layer development
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'Build',
-    key: 'weave',
-    icon: <BuildIcon />,
-    defaultPath: '/business-objects',
-    color: {
-      primary: '#9C27B0',
-      light: '#F3E5F5',
-      dark: '#7B1FA2',
-      background: 'rgba(156, 39, 176, 0.08)'
-    },
-    menus: [
-      {
-        label: 'Models',
-        icon: <BuildIcon />,
-        items: [
-          { label: 'Business Objects', path: '/business-objects', icon: <BusinessIcon />, description: 'Core entities' },
-          { label: 'Cubes', path: '/build/cubes', icon: <ViewModuleIcon />, description: 'Aggregation contracts — dims, metrics, grains, impact', badge: { label: 'New', color: 'success' } },
-          { label: 'Views Catalog', path: '/views', icon: <AssessmentIcon />, description: 'Semantic views' },
-          { label: 'Bundles', path: '/fabric/bundles', icon: <CategoryIcon />, description: 'Curated bundles', badge: { label: 'AI', color: 'info' } },
-        ]
-      },
-      {
-        label: 'Data',
-        icon: <AccountTreeIcon />,
-        items: [
-          { label: 'Data Pipelines', path: '/data/pipelines', icon: <AccountTreeIcon />, description: 'Load files and business objects visually', badge: { label: 'New', color: 'success' } },
-          { label: 'Staging Bindings', path: '/data/staging-bindings', icon: <AccountTreeIcon />, description: 'Map vendor staging tables to business objects; approvals', badge: { label: 'New', color: 'success' } },
-          { label: 'Mastering', path: '/data/mastering', icon: <AccountTreeIcon />, description: 'Golden records, provenance, runs, exceptions and match review', badge: { label: 'New', color: 'success' } },
-          { label: 'Manage Custom Fields', path: '/catalog/custom-fields', icon: <SchemaIcon />, description: 'Define custom_attributes and map semantic terms' },
-        ]
-      },
-      {
-        label: 'Rules',
-        icon: <CheckCircleIcon />,
-        items: [
-          { label: 'Validation Rules', path: '/core/validation-rules', icon: <CheckCircleIcon />, description: 'Data validations' },
-          { label: 'Calculated Fields', path: '/core/calculated-fields', icon: <QueryStatsIcon />, description: 'Field calculations' },
-          { label: 'Calculations Library', path: '/fabric/calculations', icon: <QueryStatsIcon />, description: 'Core calculation logic' },
-        ]
-      },
-      {
-        label: 'Quality',
-        icon: <CheckCircleIcon />,
-        items: [
-          { label: 'Flow Builder', path: '/core/flow-builder', icon: <TimelineIcon />, description: 'Visual pipeline builder', badge: { label: 'New', color: 'success' } },
-          { label: 'Run Validations', path: '/core/validation', icon: <CheckCircleIcon />, description: 'Execute validations' },
-        ]
-      },
-      {
-        label: 'Pages & APIs',
-        icon: <BuildIcon />,
-        items: [
-          { label: 'Page Designer', path: '/page-studio', icon: <BuildIcon />, description: 'Build CRUD pages against a Business Object' },
-          { label: 'Menu Designer', path: '/menu-designer', icon: <AccountTreeIcon />, description: 'Arrange pages into the portal menu' },
-          { label: 'API Designer', path: '/api-studio', icon: <ApiIcon />, description: 'Visual API builder', badge: { label: 'New', color: 'success' } },
-          { label: 'API Catalog', path: '/api-catalog', icon: <ApiIcon />, description: 'Published APIs' },
-        ]
-      }
-    ]
-  },
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // OPERATIONS - Scheduling, orchestration, and process management
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'Operations',
-    key: 'workflow',
-    icon: <PlayCircleOutlineIcon />,
-    defaultPath: '/automation/schedules',
-    color: {
-      primary: '#00695C',
-      light: '#E0F2F1',
-      dark: '#004D40',
-      background: 'rgba(0, 105, 92, 0.06)'
-    },
-    menus: [
-      {
-        label: 'Scheduler',
-        icon: <TimelineIcon />,
-        items: [
-          { label: 'Schedules', path: '/automation/schedules', icon: <EventRepeatIcon />, description: 'Platform scheduler — schedules, run history, business calendars (former Scheduler Intelligence)' },
-        ]
-      },
-      {
-        label: 'Workflows',
-        icon: <AccountTreeIcon />,
-        items: [
-          { label: 'BP Console', path: '/bp-console', icon: <SpeedIcon />, description: 'Orchestration monitor', badge: { label: 'Live', color: 'success' } },
-          { label: 'Instance Explorer', path: '/bp-console/instances', icon: <TimelineIcon />, description: 'Debug workflows' },
-          { label: 'Work Queues', path: '/bp-console/queues', icon: <AssessmentIcon />, description: 'Queue management' },
-          { label: 'Process Catalog', path: '/core/process-catalog', icon: <SchemaIcon />, description: 'Process definitions' },
-          { label: 'Process Designer', path: '/client-portal/workflow-studio', icon: <AccountTreeIcon />, description: 'Visual workflow builder' },
-          { label: 'Workflow Designer (Legacy)', path: '/core/workflow-designer', icon: <TimelineIcon />, description: 'Classic workflow designer' },
-        ]
-      },
-      {
-        label: 'Governance',
-        icon: <PolicyIcon />,
-        items: [
-          { label: 'ChangeSets', path: '/governance/changesets', icon: <PolicyIcon />, description: 'Change management', badge: { label: 'New', color: 'success' } },
-          { label: 'Compliance', path: '/governance/compliance', icon: <SecurityIcon />, description: 'Risk dashboard', badge: { label: 'New', color: 'primary' } },
-          { label: 'Approvals', path: '/core/approval-workflows', icon: <CheckCircleIcon />, description: 'Approval workflows' },
-          { label: 'Approval Inbox', path: '/core/approval-inbox', icon: <CheckCircleIcon />, description: 'Inbox for approvals' },
-          { label: 'SLA Dashboard', path: '/core/sla-dashboard', icon: <TimelineIcon />, description: 'Monitor SLA logic' },
-          { label: 'Notifications', path: '/core/notifications', icon: <NotificationsIcon />, description: 'Notification center' },
-          { label: 'Notification Templates', path: '/core/notifications/templates', icon: <NotificationsIcon />, description: 'Message templates' },
-          { label: 'Notification Prefs', path: '/core/notifications/preferences', icon: <SettingsIcon />, description: 'User preferences' },
-          { label: 'Business Rules', path: '/client-portal/rules-editor', icon: <PolicyIcon />, description: 'Business rule authoring' },
-        ]
-      }
-    ]
-  },
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // INTELLIGENCE - AI, optimization, and observability (NEW)
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'Intelligence',
-    key: 'intelligence' as any,
-    icon: <AutoFixHighIcon />,
-    defaultPath: '/intelligence',
-    color: {
-      primary: '#673AB7',
-      light: '#EDE7F6',
-      dark: '#512DA8',
-      background: 'rgba(103, 58, 183, 0.08)'
-    },
-    menus: [
-      {
-        label: 'Optimization',
-        icon: <SpeedIcon />,
-        items: [
-          { label: 'Dashboard', path: '/intelligence', icon: <SpeedIcon />, description: 'AI optimization hub', badge: { label: 'New', color: 'success' } },
-          { label: 'ASO Center', path: '/optimization', icon: <SpeedIcon />, description: 'Query optimization' },
-          { label: 'Index Advisor', path: '/intelligence/index-advisor', icon: <StorageIcon />, description: 'AI index recommendations', badge: { label: 'AI', color: 'info' } },
-          { label: 'Storage Tiering', path: '/intelligence/storage', icon: <LayersIcon />, description: 'Intelligent tiering' },
-          { label: 'Preaggregations', path: '/fabric/preaggregations', icon: <SpeedIcon />, description: 'Fabric preaggregations' },
-        ]
-      },
-      {
-        label: 'Observability',
-        icon: <QueryStatsIcon />,
-        items: [
-          { label: 'Metrics Dashboard', path: '/observability', icon: <QueryStatsIcon />, description: 'Platform metrics' },
-          { label: 'SLO Dashboard', path: '/observability/slos', icon: <AssessmentIcon />, description: 'SLO tracking' },
-          { label: 'Data Quality', path: '/intelligence/data-quality', icon: <CheckCircleIcon />, description: 'Quality monitoring', badge: { label: 'New', color: 'success' } },
-        ]
-      },
-      {
-        label: 'AI Copilot',
-        icon: <AutoFixHighIcon />,
-        items: [
-          { label: 'Natural Language', path: '/nlq', icon: <AutoFixHighIcon />, description: 'Ask questions', badge: { label: 'AI', color: 'info' } },
-          { label: 'Global Intelligence', path: '/global-intelligence', icon: <AIIcon />, description: 'Cross-platform AI assistant', badge: { label: 'New', color: 'success' } },
-          { label: 'Scenario Analysis', path: '/analytics/scenario-analysis', icon: <TimelineIcon />, description: 'What-if scenarios' },
-        ]
-      }
-    ]
-  },
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // CONSUME - Reporting, analytics, and dashboards
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'Consume',
-    key: 'entity',
-    icon: <AssessmentIcon />,
-    defaultPath: '/reports/library',
-    color: {
-      primary: '#FF9800',
-      light: '#FFF3E0',
-      dark: '#F57C00',
-      background: 'rgba(255, 152, 0, 0.08)'
-    },
-    menus: [
-      {
-        label: 'Reports',
-        icon: <AssessmentIcon />,
-        items: [
-          { label: 'Report Library', path: '/reports/library', icon: <AssessmentIcon />, description: 'Saved reports' },
-          { label: 'Report Builder', path: '/reports/builder', icon: <BuildIcon />, description: 'Create reports' },
-          { label: 'Query Builder', path: '/reports/queries', icon: <StorageIcon />, description: 'Build and run saved queries' },
-          { label: 'Semantic Models', path: '/reports/models', icon: <CategoryIcon />, description: 'Data models' },
-        ]
-      },
-      {
-        label: 'Analytics',
-        icon: <TimelineIcon />,
-        items: [
-        ]
-      },
-      {
-        label: 'Dashboards',
-        icon: <AssessmentIcon />,
-        items: [
-          { label: 'Advisor Dashboard', path: '/analytics/advisor-dashboard', icon: <SupervisorAccountIcon />, description: 'Advisor view' },
-          { label: 'Portfolio Master', path: '/analytics/portfolio-master', icon: <PortfolioIcon />, description: 'Gold copy & performance' },
-          { label: 'Security Master', path: '/data/mastering?entity=security', icon: <AssessmentIcon />, description: 'Instrument MDM: golden securities in the mastering console' },
-          { label: 'Fabric Dashboard', path: '/fabric/dashboard', icon: <AssessmentIcon />, description: 'General dashboard view' },
-        ]
-      }
-    ]
-  }
-];
+// Menu content is not defined here: it is read from the Menu Designer tree (navigation_menu_nodes)
+// and mapped by mapDesignerTreeToCategories (see navigationTree.ts).
 
 /**
  * Filter navigation config against the backend capability map.  The frontend
@@ -581,23 +273,29 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   // Platform operators (global admins) bypass the capability gate so they can
   // always navigate to admin sections; per-route access is still gated by
   // canAccess() inside the dropdown renderer.
+  const { aliases: routeAliases } = useRouteAliases();
+  const menuTree = useMenuTree();
+  const designerCategories = useMemo(
+    () => mapDesignerTreeToCategories(menuTree, routeAliases),
+    [menuTree, routeAliases],
+  );
   const baseCategoryConfigs = useMemo(
     () =>
       filterNavigationByCapabilities(
-        categoryConfigs,
+        designerCategories,
         capabilities,
         isPlatformOperator,
         organizationAccess,
         resolvedProfile,
       ),
-    [capabilities, isPlatformOperator, organizationAccess, resolvedProfile],
+    [designerCategories, capabilities, isPlatformOperator, organizationAccess, resolvedProfile],
   );
 
   const filteredCategoryConfigs = baseCategoryConfigs;
 
   const [categoryMenuAnchorEl, setCategoryMenuAnchorEl] = useState<null | HTMLElement>(null);
   // Default to Tenants category on initial load
-  const [selectedCategory, setSelectedCategory] = useState<'tenants' | 'catalog' | 'weave' | 'workflow' | 'intelligence' | 'entity' | null>('tenants');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   // Nav Mode preference: 'dropdown' or 'cards'
   const [navMode, setNavMode] = useState<'dropdown' | 'cards'>(() => {
     return (localStorage.getItem('app-nav-mode-preference') as 'dropdown' | 'cards') || 'dropdown';
@@ -621,7 +319,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   const currentCategory = selectedCategory ? filteredCategoryConfigs.find(c => c.key === selectedCategory) : null;
 
   // Handle category selection from dropdown - navigate to default page
-  const handleCategorySelect = (categoryKey: 'tenants' | 'catalog' | 'weave' | 'workflow' | 'intelligence' | 'entity') => {
+  const handleCategorySelect = (categoryKey: string) => {
     setSelectedCategory(categoryKey);
     setCategoryMenuAnchorEl(null);
 
@@ -635,6 +333,10 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   // If the currently selected category is filtered out by capabilities,
   // fall back to the first available category so the top nav never blanks.
   useEffect(() => {
+    if (!selectedCategory && filteredCategoryConfigs.length > 0) {
+      setSelectedCategory(filteredCategoryConfigs[0].key);
+      return;
+    }
     if (
       selectedCategory &&
       filteredCategoryConfigs.length > 0 &&

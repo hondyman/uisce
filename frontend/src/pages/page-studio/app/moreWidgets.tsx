@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Alert, Box, Button, LinearProgress, List, ListItemButton, Paper, Stack, Typography } from '@mui/material';
+import Editor from '@monaco-editor/react';
 import { CatalogErrorAlert } from '../../../features/message-catalog/parts';
 import type { Action, Binding, CellSpec, ChipColor, ConditionNode, FormFieldSpec, TextSpec } from './appModel';
 import { getPath, resolve, text, type Scope } from './bindings';
@@ -197,3 +198,150 @@ export function FormWidget({ p, scope }: { p: FormWidgetProps; scope: Scope }) {
     </Stack>
   );
 }
+
+// --- TreeView -------------------------------------------------------------------
+
+export interface TreeViewProps {
+  /** Items from a query (rows at rowsPath) or from a binding. */
+  query?: string;
+  rowsPath?: string;
+  items?: Binding;
+  /** Property on each node providing its unique identifier (default: "id" or "nodeKey"). */
+  idField?: string;
+  /** Property or template for the node's label (default: "{{row.label}}" or "{{row.name}}"). */
+  label?: TextSpec;
+  /** Property containing child nodes array (default: "children"). */
+  childrenField?: string;
+  /** Variable to store selected node or node id. */
+  selectedVariable?: string;
+  /** If true, stores the entire selected node object instead of just its id. */
+  selectFullNode?: boolean;
+  onNodeSelect?: Action[];
+  emptyText?: TextSpec;
+  maxHeight?: number;
+}
+
+export function TreeViewWidget({ p, scope }: { p: TreeViewProps; scope: Scope }) {
+  const { setVariable, runActions } = useAppRuntime();
+  const q = p.query ? (getPath(scope, `queries.${p.query}`) as QueryState | undefined) : undefined;
+  const raw = p.query ? (p.rowsPath ? getPath(q?.data, p.rowsPath) : q?.data) : resolve(p.items, scope);
+  const rootNodes = Array.isArray(raw) ? raw : [];
+
+  const idKey = p.idField || 'id';
+  const childKey = p.childrenField || 'children';
+  const selectedVal = p.selectedVariable ? (getPath(scope, `vars.${p.selectedVariable}`) as unknown) : undefined;
+  const selectedItemId = typeof selectedVal === 'object' && selectedVal !== null
+    ? String(getPath(selectedVal, idKey) ?? '')
+    : (selectedVal ? String(selectedVal) : null);
+
+  const renderNode = (node: Record<string, unknown>, index: number) => {
+    const rawId = getPath(node, idKey) ?? getPath(node, 'nodeKey') ?? getPath(node, 'key') ?? index;
+    const itemId = String(rawId);
+    const nodeScope: Scope = { ...scope, row: node, node };
+    const labelStr = p.label ? text(p.label, nodeScope) : String(getPath(node, 'label') ?? getPath(node, 'name') ?? itemId);
+    const children = getPath(node, childKey);
+    const childArr = Array.isArray(children) ? (children as Record<string, unknown>[]) : [];
+
+    return (
+      <Box
+        key={itemId}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (p.selectedVariable) {
+            setVariable(p.selectedVariable, p.selectFullNode ? node : itemId);
+          }
+          if (p.onNodeSelect?.length) {
+            void runActions(p.onNodeSelect, { ...nodeScope, selectedId: itemId, selectedNode: node });
+          }
+        }}
+        sx={{
+          py: 0.5,
+          px: 1,
+          borderRadius: 1,
+          cursor: 'pointer',
+          bgcolor: selectedItemId === itemId ? 'action.selected' : 'transparent',
+          '&:hover': { bgcolor: 'action.hover' },
+        }}
+      >
+        <Typography variant="body2" fontWeight={selectedItemId === itemId ? 600 : 400}>
+          {labelStr}
+        </Typography>
+        {childArr.length > 0 && (
+          <Box sx={{ pl: 2, borderLeft: '1px solid', borderColor: 'divider', mt: 0.5 }}>
+            {childArr.map((child, i) => renderNode(child, i))}
+          </Box>
+        )}
+      </Box>
+    );
+  };
+
+  return (
+    <Paper variant="outlined" sx={{ p: 1, maxHeight: p.maxHeight ?? 400, overflowY: 'auto' }}>
+      {q?.isLoading && <LinearProgress sx={{ mb: 1 }} />}
+      {!!q?.error && <CatalogErrorAlert error={q.error} />}
+      {rootNodes.length === 0 && !q?.isLoading && (
+        <Typography variant="body2" color="text.secondary" sx={{ p: 2, textAlign: 'center' }}>
+          {text(p.emptyText ?? 'studioApp.empty', scope)}
+        </Typography>
+      )}
+      <Box>{rootNodes.map((node, i) => renderNode(node as Record<string, unknown>, i))}</Box>
+    </Paper>
+  );
+}
+
+// --- CodeEditor -----------------------------------------------------------------
+
+export interface CodeEditorProps {
+  /** Page variable holding the code string. */
+  variable?: string;
+  /** Language syntax (e.g. 'sql', 'json', 'yaml', 'typescript', 'python'). Default: 'sql'. */
+  language?: string;
+  /** Editor height (number in px or CSS string). Default: 300. */
+  height?: number | string;
+  /** Editor theme ('vs-dark' | 'light'). Default: 'vs-dark'. */
+  theme?: string;
+  /** Whether editor is read-only. */
+  readOnly?: boolean;
+  /** Initial code from a binding if variable is unseeded. */
+  initFrom?: Binding;
+  onChange?: Action[];
+}
+
+export function CodeEditorWidget({ p, scope }: { p: CodeEditorProps; scope: Scope }) {
+  const { setVariable, runActions } = useAppRuntime();
+  const val = p.variable ? (getPath(scope, `vars.${p.variable}`) as unknown) : undefined;
+  const initial = p.initFrom !== undefined ? resolve(p.initFrom, scope) : undefined;
+  const codeValue = typeof val === 'string' ? val : (typeof initial === 'string' ? initial : '');
+
+  const handleChange = (newValue: string | undefined) => {
+    const textVal = newValue ?? '';
+    if (p.variable) {
+      setVariable(p.variable, textVal);
+    }
+    if (p.onChange?.length) {
+      void runActions(p.onChange, { ...scope, code: textVal });
+    }
+  };
+
+  return (
+    <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1 }}>
+      <Editor
+        height={p.height ?? 300}
+        language={p.language || 'sql'}
+        theme={p.theme || 'vs-dark'}
+        value={codeValue}
+        onChange={handleChange}
+        options={{
+          readOnly: !!p.readOnly,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          fontSize: 13,
+          tabSize: 2,
+          automaticLayout: true,
+        }}
+      />
+    </Paper>
+  );
+}
+
+

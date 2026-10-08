@@ -29,6 +29,7 @@ import {
     GridOn as GridIcon,
     Campaign as AlertIcon,
     Extension as DomainIcon,
+    Code as CodeIcon,
 } from '@mui/icons-material';
 
 /**
@@ -88,6 +89,8 @@ const COMPONENT_TYPES: WidgetDefinition[] = [
     { type: 'TextBlock', icon: <TextBlockIcon />, group: 'App' },
     { type: 'Canvas', icon: <CanvasIcon />, group: 'App' },
     { type: 'Chat', icon: <ChatIcon />, group: 'App' },
+    { type: 'TreeView', icon: <CanvasIcon />, group: 'App' },
+    { type: 'CodeEditor', icon: <CodeIcon />, group: 'App' },
     // Report Studio only — band types. Not shown in Page Studio's palette
     // (filtered below) and not rendered by PageComponentRenderer; they
     // become live once Phase 3 builds ReportCanvas/ReportBandDesigner.

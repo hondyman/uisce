@@ -16,15 +16,15 @@ import { evaluateCondition, useCondition } from './conditions';
 import { useAppRuntime, type QueryState } from './AppRuntime';
 import { Cell } from './cells';
 import { PageIcon } from './icons';
-import { FormWidget, KeyValue, Timeline } from './moreWidgets';
+import { CodeEditorWidget, FormWidget, KeyValue, Timeline, TreeViewWidget } from './moreWidgets';
 import { Canvas, DEFAULT_CANVAS_PROPS } from './canvas';
 import { Chat, DEFAULT_CHAT_PROPS } from './chat';
-export type { FormWidgetProps, KeyValueProps, TimelineProps } from './moreWidgets';
+export type { CodeEditorProps, FormWidgetProps, KeyValueProps, TimelineProps, TreeViewProps } from './moreWidgets';
 export type { CanvasProps } from './canvas';
 export type { ChatProps } from './chat';
 
 /** Component types rendered by this module (the page application widgets). */
-export const APP_WIDGET_TYPES = ['PageHeader', 'VariableSelect', 'SearchInput', 'ActionButton', 'DataGrid', 'AlertBanner', 'DomainComponent', 'KeyValue', 'Timeline', 'Form', 'TextBlock', 'Canvas', 'Chat', 'FacetFilter', 'ProgressBar'] as const;
+export const APP_WIDGET_TYPES = ['PageHeader', 'VariableSelect', 'SearchInput', 'ActionButton', 'DataGrid', 'AlertBanner', 'DomainComponent', 'KeyValue', 'Timeline', 'Form', 'TextBlock', 'Canvas', 'Chat', 'FacetFilter', 'ProgressBar', 'TreeView', 'CodeEditor'] as const;
 export type AppWidgetType = typeof APP_WIDGET_TYPES[number];
 export const isAppWidget = (type: string): type is AppWidgetType => (APP_WIDGET_TYPES as readonly string[]).includes(type);
 
@@ -45,6 +45,8 @@ export const APP_WIDGET_DEFAULTS: Record<AppWidgetType, Record<string, unknown>>
   Chat: DEFAULT_CHAT_PROPS as unknown as Record<string, unknown>,
   FacetFilter: { variable: '', label: 'Filter', allLabel: 'All', options: [] },
   ProgressBar: { variable: '', label: 'Processing...', showSignal: true },
+  TreeView: { query: '', label: '{{row.label}}', idField: 'id', childrenField: 'children', onNodeSelect: [] },
+  CodeEditor: { variable: 'code', language: 'sql', height: 300, theme: 'vs-dark', readOnly: false },
 };
 
 // --- Props per widget (component.props) ------------------------------------
@@ -852,6 +854,8 @@ export function AppWidget({ component }: { component: ComponentDefinition }) {
     case 'Chat': return <Chat p={p} scope={scope} />;
     case 'FacetFilter': return <FacetFilter p={p} scope={scope} />;
     case 'ProgressBar': return <ProgressBarWidget p={p} scope={scope} />;
+    case 'TreeView': return <TreeViewWidget p={p} scope={scope} />;
+    case 'CodeEditor': return <CodeEditorWidget p={p} scope={scope} />;
     default: return null;
   }
 }

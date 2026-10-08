@@ -17,7 +17,7 @@ import CatalogList from '../../components/common/CatalogList';
 import CoreCompareDialog from './CoreCompareDialog';
 import PlaceOnMenuDialog from './PlaceOnMenuDialog';
 import MenuOpenIcon from '@mui/icons-material/MenuOpen';
-import { routesForSlug } from './studioRoutes';
+import { useRouteAliases } from '../../hooks/useRouteAliases';
 import { PageStudioApi } from '../../api/pageStudio';
 import type { CorePageDefinition } from '../../types/pageStudio';
 import { useTenant } from '../../contexts/TenantContext';
@@ -46,6 +46,7 @@ const flattenMenuNodes = (nodes: NavigationMenuNode[], depth = 0): { node: Navig
 const PageStudioListPage: React.FC = () => {
   const navigate = useNavigate();
   const { tenant } = useTenant();
+  const { aliases: routeAliases } = useRouteAliases();
   const [pages, setPages] = useState<CorePageDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -387,7 +388,7 @@ const PageStudioListPage: React.FC = () => {
               </Tooltip>
             ))}
             {!(page.menuPlacements?.length) && <Chip size="small" variant="outlined" label="Not on the menu" />}
-            {routesForSlug(page.slug).map((r) => (
+            {routeAliases.filter((a) => a.pageKey === page.slug).map((a) => a.path).map((r) => (
               <Tooltip key={r} title="Served at this app route">
                 <Chip size="small" variant="outlined" label={r} sx={{ fontFamily: 'monospace' }} />
               </Tooltip>
