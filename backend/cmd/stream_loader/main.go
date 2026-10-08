@@ -75,6 +75,12 @@ type Config struct {
 	// no longer implements the HTTP SQL endpoint (/api/query returns 501), so a
 	// DELETE cannot be issued through _stream_load.
 	QueryDSN string
+	// QueryHost is the MySQL-protocol endpoint this loader dials for keyed DELETEs.
+	// It is deliberately NOT taken from the tenant credential files: those are written
+	// by the provisioning script on whatever host its admin client runs, which embeds
+	// 127.0.0.1 -- correct there, and a connection-refused loop inside a container.
+	// See TenantRoute.DSNForHost.
+	QueryHost string
 	// StrictMode is on by default. Without it StarRocks silently writes NULL into any
 	// column it cannot convert and still reports Success with zero filtered rows --
 	// verified 3.3.22 with a DECIMAL fed "NOT_A_NUMBER". loadRows bisects a rejected
@@ -95,56 +101,62 @@ type Config struct {
 }
 
 type GatekeeperMetrics struct {
-	TotalConsumed         atomic.Int64
-	TotalLoaded           atomic.Int64
-	SkippedTombstones     atomic.Int64
-	SkippedHeartbeats     atomic.Int64
-	SkippedSchemaChanges  atomic.Int64
-	SkippedUnknown        atomic.Int64
-	TenantMismatches      atomic.Int64
-	TenantUnattributed    atomic.Int64
-	TenantUnknown         atomic.Int64
-	RowsRouted            atomic.Int64
-	LoadsPerFlush         atomic.Int64
-	Flushes               atomic.Int64
-	FatalLoads            atomic.Int64
-	RuleViolationsBlocked atomic.Int64
-	RuleViolationsWarned  atomic.Int64
-	StreamLoadErrors      atomic.Int64
-	DLQEmitted            atomic.Int64
-	DLQUnavailable        atomic.Int64
-	TopologyTripwireFired atomic.Int64
-	TripwireQueryErrors   atomic.Int64
-	TotalDeletes          atomic.Int64
-	DeleteErrors          atomic.Int64
-	BatchesFlushed        atomic.Int64
-	RowsIn                atomic.Int64
-	RowsLoaded            atomic.Int64
-	RowsRejected          atomic.Int64
-	StartTime             time.Time
-	lastEventUnixNano     atomic.Int64
+	TotalConsumed        atomic.Int64
+	TotalLoaded          atomic.Int64
+	SkippedTombstones    atomic.Int64
+	SkippedHeartbeats    atomic.Int64
+	SkippedSchemaChanges atomic.Int64
+	SkippedUnknown       atomic.Int64
+	TenantMismatches     atomic.Int64
+	TenantUnattributed   atomic.Int64
+	// TenantUnavailableOnDelete counts deletes dead-lettered because the source
+	// table's replica identity does not carry the row, so the tenant is unknowable.
+	// Kept separate from TenantUnattributed because the two have different fixes:
+	// this one is REPLICA IDENTITY FULL in Postgres, not a loader or data problem.
+	TenantUnavailableOnDelete atomic.Int64
+	TenantUnknown             atomic.Int64
+	RowsRouted                atomic.Int64
+	LoadsPerFlush             atomic.Int64
+	Flushes                   atomic.Int64
+	FatalLoads                atomic.Int64
+	RuleViolationsBlocked     atomic.Int64
+	RuleViolationsWarned      atomic.Int64
+	StreamLoadErrors          atomic.Int64
+	DLQEmitted                atomic.Int64
+	DLQUnavailable            atomic.Int64
+	TopologyTripwireFired     atomic.Int64
+	TripwireQueryErrors       atomic.Int64
+	TotalDeletes              atomic.Int64
+	DeleteErrors              atomic.Int64
+	BatchesFlushed            atomic.Int64
+	RowsIn                    atomic.Int64
+	RowsLoaded                atomic.Int64
+	RowsRejected              atomic.Int64
+	StartTime                 time.Time
+	lastEventUnixNano         atomic.Int64
 }
 
 type GatekeeperStats struct {
-	TotalConsumed         int64 `json:"total_consumed"`
-	TotalLoaded           int64 `json:"total_loaded"`
-	SkippedTombstones     int64 `json:"skipped_tombstones"`
-	SkippedHeartbeats     int64 `json:"skipped_heartbeats"`
-	SkippedSchemaChanges  int64 `json:"skipped_schema_changes"`
-	SkippedUnknown        int64 `json:"skipped_unknown"`
-	TenantMismatches      int64 `json:"tenant_mismatches"`
-	TenantUnattributed    int64 `json:"tenant_unattributed"`
-	TenantUnknown         int64 `json:"tenant_unknown_route"`
-	RowsRouted            int64 `json:"rows_routed"`
-	LoadsPerFlush         int64 `json:"loads_per_flush_last"`
-	Flushes               int64 `json:"flushes"`
-	FatalLoads            int64 `json:"fatal_loads"`
-	RuleViolationsBlocked int64 `json:"rule_violations_blocked"`
-	RuleViolationsWarned  int64 `json:"rule_violations_warned"`
-	StreamLoadErrors      int64 `json:"stream_load_errors"`
-	DLQEmitted            int64 `json:"dlq_emitted"`
-	DLQUnavailable        int64 `json:"dlq_unavailable"`
-	TopologyTripwireFired int64 `json:"topology_tripwire_fired"`
+	TotalConsumed             int64 `json:"total_consumed"`
+	TotalLoaded               int64 `json:"total_loaded"`
+	SkippedTombstones         int64 `json:"skipped_tombstones"`
+	SkippedHeartbeats         int64 `json:"skipped_heartbeats"`
+	SkippedSchemaChanges      int64 `json:"skipped_schema_changes"`
+	SkippedUnknown            int64 `json:"skipped_unknown"`
+	TenantMismatches          int64 `json:"tenant_mismatches"`
+	TenantUnattributed        int64 `json:"tenant_unattributed"`
+	TenantUnavailableOnDelete int64 `json:"tenant_unavailable_on_delete"`
+	TenantUnknown             int64 `json:"tenant_unknown_route"`
+	RowsRouted                int64 `json:"rows_routed"`
+	LoadsPerFlush             int64 `json:"loads_per_flush_last"`
+	Flushes                   int64 `json:"flushes"`
+	FatalLoads                int64 `json:"fatal_loads"`
+	RuleViolationsBlocked     int64 `json:"rule_violations_blocked"`
+	RuleViolationsWarned      int64 `json:"rule_violations_warned"`
+	StreamLoadErrors          int64 `json:"stream_load_errors"`
+	DLQEmitted                int64 `json:"dlq_emitted"`
+	DLQUnavailable            int64 `json:"dlq_unavailable"`
+	TopologyTripwireFired     int64 `json:"topology_tripwire_fired"`
 	// OffsetFloorHoldSeconds is how long each topic-partition has been unable to
 	// commit because some tenant's rows have not settled. A growing value means a
 	// tenant is failing, and is otherwise indistinguishable from a hung consumer.
@@ -359,6 +371,15 @@ func loadConfig() Config {
 		}
 	}
 	cfg.QueryDSN = os.Getenv("STARROCKS_QUERY_DSN")
+	// The MySQL-protocol host is the loader's own network position, not something the
+	// credential files can know: those are written by the provisioning script wherever
+	// its admin client runs, which is normally the host rather than this container.
+	// Defaulting to the host already proven to serve stream loads keeps the endpoint
+	// consistent with the one thing already known to work.
+	cfg.QueryHost = os.Getenv("STARROCKS_QUERY_HOST")
+	if cfg.QueryHost == "" {
+		cfg.QueryHost = hostOf(cfg.StarRocksHTTP)
+	}
 	if cfg.QueryDSN == "" {
 		if host := hostOf(cfg.StarRocksHTTP); host != "" {
 			cfg.QueryDSN = fmt.Sprintf("%s:%s@tcp(%s:9030)/%s", cfg.StarRocksUser, cfg.StarRocksPassword, host, cfg.StarRocksDB)
@@ -475,7 +496,7 @@ func main() {
 	// every tenant's rows in one place, which is the failure this work exists to
 	// prevent.
 	if cfg.TenantRoutesDir != "" {
-		routes, err := LoadTenantRoutes(cfg.TenantRoutesDir)
+		routes, err := LoadTenantRoutes(cfg.TenantRoutesDir, cfg.QueryHost)
 		if err != nil {
 			log.Fatalf("Tenant routing is configured but unusable: %v", err)
 		}
@@ -558,40 +579,41 @@ func (gk *StreamingGatekeeper) GetStats() GatekeeperStats {
 	}
 
 	return GatekeeperStats{
-		TotalConsumed:          gk.metrics.TotalConsumed.Load(),
-		TotalLoaded:            gk.metrics.TotalLoaded.Load(),
-		SkippedTombstones:      gk.metrics.SkippedTombstones.Load(),
-		SkippedHeartbeats:      gk.metrics.SkippedHeartbeats.Load(),
-		SkippedSchemaChanges:   gk.metrics.SkippedSchemaChanges.Load(),
-		SkippedUnknown:         gk.metrics.SkippedUnknown.Load(),
-		TenantMismatches:       gk.metrics.TenantMismatches.Load(),
-		TenantUnattributed:     gk.metrics.TenantUnattributed.Load(),
-		TenantUnknown:          gk.metrics.TenantUnknown.Load(),
-		RowsRouted:             gk.metrics.RowsRouted.Load(),
-		LoadsPerFlush:          gk.metrics.LoadsPerFlush.Load(),
-		Flushes:                gk.metrics.Flushes.Load(),
-		FatalLoads:             gk.metrics.FatalLoads.Load(),
-		RuleViolationsBlocked:  gk.metrics.RuleViolationsBlocked.Load(),
-		RuleViolationsWarned:   gk.metrics.RuleViolationsWarned.Load(),
-		StreamLoadErrors:       gk.metrics.StreamLoadErrors.Load(),
-		DLQEmitted:             gk.metrics.DLQEmitted.Load(),
-		DLQUnavailable:         gk.metrics.DLQUnavailable.Load(),
-		TopologyTripwireFired:  gk.metrics.TopologyTripwireFired.Load(),
-		OffsetFloorHoldSeconds: gk.floor.holds(),
-		TotalDeletes:           gk.metrics.TotalDeletes.Load(),
-		DeleteErrors:           gk.metrics.DeleteErrors.Load(),
-		BatchesFlushed:         gk.metrics.BatchesFlushed.Load(),
-		RowsIn:                 gk.metrics.RowsIn.Load(),
-		RowsLoaded:             gk.metrics.RowsLoaded.Load(),
-		RowsRejected:           gk.metrics.RowsRejected.Load(),
-		UptimeSeconds:          time.Since(gk.metrics.StartTime).Seconds(),
-		LastEventTime:          lastTime,
-		Topic:                  gk.cfg.Topic,
-		StarRocksTable:         gk.cfg.StarRocksTable,
-		AssignedTenantID:       gk.cfg.AssignedTenantID,
-		ValidationEnabled:      gk.cfg.ValidationEnabled,
-		TenantRoutingEnabled:   routingEnabled,
-		TenantRoutesKnown:      routesKnown,
+		TotalConsumed:             gk.metrics.TotalConsumed.Load(),
+		TotalLoaded:               gk.metrics.TotalLoaded.Load(),
+		SkippedTombstones:         gk.metrics.SkippedTombstones.Load(),
+		SkippedHeartbeats:         gk.metrics.SkippedHeartbeats.Load(),
+		SkippedSchemaChanges:      gk.metrics.SkippedSchemaChanges.Load(),
+		SkippedUnknown:            gk.metrics.SkippedUnknown.Load(),
+		TenantMismatches:          gk.metrics.TenantMismatches.Load(),
+		TenantUnattributed:        gk.metrics.TenantUnattributed.Load(),
+		TenantUnavailableOnDelete: gk.metrics.TenantUnavailableOnDelete.Load(),
+		TenantUnknown:             gk.metrics.TenantUnknown.Load(),
+		RowsRouted:                gk.metrics.RowsRouted.Load(),
+		LoadsPerFlush:             gk.metrics.LoadsPerFlush.Load(),
+		Flushes:                   gk.metrics.Flushes.Load(),
+		FatalLoads:                gk.metrics.FatalLoads.Load(),
+		RuleViolationsBlocked:     gk.metrics.RuleViolationsBlocked.Load(),
+		RuleViolationsWarned:      gk.metrics.RuleViolationsWarned.Load(),
+		StreamLoadErrors:          gk.metrics.StreamLoadErrors.Load(),
+		DLQEmitted:                gk.metrics.DLQEmitted.Load(),
+		DLQUnavailable:            gk.metrics.DLQUnavailable.Load(),
+		TopologyTripwireFired:     gk.metrics.TopologyTripwireFired.Load(),
+		OffsetFloorHoldSeconds:    gk.floor.holds(),
+		TotalDeletes:              gk.metrics.TotalDeletes.Load(),
+		DeleteErrors:              gk.metrics.DeleteErrors.Load(),
+		BatchesFlushed:            gk.metrics.BatchesFlushed.Load(),
+		RowsIn:                    gk.metrics.RowsIn.Load(),
+		RowsLoaded:                gk.metrics.RowsLoaded.Load(),
+		RowsRejected:              gk.metrics.RowsRejected.Load(),
+		UptimeSeconds:             time.Since(gk.metrics.StartTime).Seconds(),
+		LastEventTime:             lastTime,
+		Topic:                     gk.cfg.Topic,
+		StarRocksTable:            gk.cfg.StarRocksTable,
+		AssignedTenantID:          gk.cfg.AssignedTenantID,
+		ValidationEnabled:         gk.cfg.ValidationEnabled,
+		TenantRoutingEnabled:      routingEnabled,
+		TenantRoutesKnown:         routesKnown,
 	}
 }
 
@@ -809,7 +831,7 @@ func (gk *StreamingGatekeeper) handleMessage(ctx context.Context, sets *batchSet
 		src = ev.before
 	}
 
-	route, ok := gk.route(ctx, src, m)
+	route, ok := gk.route(ctx, src, m, ev.isDelete)
 	if !ok {
 		return false
 	}
@@ -878,7 +900,7 @@ func (gk *StreamingGatekeeper) handleMessage(ctx context.Context, sets *batchSet
 // with no route is DLQ'd whether it was never provisioned (provisioning lag) or was
 // deliberately deprovisioned while its events were still in flight -- the same
 // outcome either way, so history is preserved and the signal stays visible.
-func (gk *StreamingGatekeeper) route(ctx context.Context, src map[string]interface{}, m kafka.Message) (TenantRoute, bool) {
+func (gk *StreamingGatekeeper) route(ctx context.Context, src map[string]interface{}, m kafka.Message, isDelete bool) (TenantRoute, bool) {
 	router := gk.router.get()
 	if router == nil || !router.Enabled() {
 		// Single-destination mode: the configured database is the only destination,
@@ -893,12 +915,20 @@ func (gk *StreamingGatekeeper) route(ctx context.Context, src map[string]interfa
 	}
 
 	tenantID := extractTenantID(src)
-	if tenantID == "" {
+	if err := attributionError(src, isDelete); err != nil {
+		reason := "ERR_TENANT_UNATTRIBUTED"
+		detail := "data event carries no tenant_id; no default database exists"
 		gk.metrics.TenantUnattributed.Add(1)
-		log.Printf("[DLQ] data event on %s offset %d has no tenant_id; failing closed rather than "+
-			"guessing a destination", m.Topic, m.Offset)
-		gk.emitDLQ(ctx, "ERR_TENANT_UNATTRIBUTED",
-			"data event carries no tenant_id; no default database exists", src, originOf(m.Topic, m), m.Value)
+		if errors.Is(err, ErrTenantUnavailableOnDelete) {
+			reason = "ERR_TENANT_UNAVAILABLE_ON_DELETE"
+			detail = "delete event carries no usable tenant_id because the source table's " +
+				"replica identity does not send the row; the row cannot be removed from any " +
+				"tenant database. Fix with REPLICA IDENTITY FULL on the CDC-captured tables."
+			gk.metrics.TenantUnavailableOnDelete.Add(1)
+		}
+		log.Printf("[DLQ] data event on %s offset %d cannot be attributed (%v); failing closed "+
+			"rather than guessing a destination", m.Topic, m.Offset, err)
+		gk.emitDLQ(ctx, reason, detail, src, originOf(m.Topic, m), m.Value)
 		return TenantRoute{}, false
 	}
 
