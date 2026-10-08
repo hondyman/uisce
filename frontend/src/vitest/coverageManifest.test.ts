@@ -60,7 +60,7 @@ const WIDEN_TARGET = 157; // 164 prior; −7 Track D orphan components/pagestudi
  *                   identity + shape guard for the fixture extensions)
  */
 const RUNNING_FILE_BASELINE = 115; // 122 prior; −7 Track D orphan components/pagestudio vitests
-const EXECUTED_TEST_BASELINE = 679; // 709 prior; −30 it/test in orphan pagestudio vitests (Track D)
+const EXECUTED_TEST_BASELINE = 726; // measured with `vitest run --coverage --reporter=json` on this branch (726 executed, 724 passed, 2 load-flaky parity fails). Was 679 on main, which had drifted; +1 from splitting the structuredEditors golden-drawer test into two it() cases
 
 function globFiles(roots: string[], patterns: string[]): string[] {
   const out: string[] = [];
@@ -138,7 +138,7 @@ describe('test suite inclusion counter', () => {
   it('executed test count matches the baseline (bump per wave)', () => {
     // Includes this file's own 4 assertions. Bump on every wave that adds/removes
     // assertions; the comment names the wave.
-    expect(EXECUTED_TEST_BASELINE).toBe(679);
+    expect(EXECUTED_TEST_BASELINE).toBe(726);
   });
 
   it('widened target is larger than the current run, so widening has work to do', () => {
