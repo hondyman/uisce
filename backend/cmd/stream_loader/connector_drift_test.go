@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -230,6 +231,92 @@ func TestTombstonesRemainDisabled(t *testing.T) {
 	assert.Equal(t, "false", cfg["tombstones.on.delete"],
 		"tombstones carry no row; the loader classifies and skips them, and enabling "+
 			"them changes the event stream for a reason nothing here depends on")
+}
+
+// loaderServiceTables is the inverse input: every table that has a running stream
+// loader, derived from CDC_TOPIC in compose rather than from table.include.list.
+func loaderServiceTables(t *testing.T) []string {
+	t.Helper()
+	compose := readRepoFile(t, "docker-compose.remote.yml")
+	prefix := topicPrefix(t)
+
+	re := regexp.MustCompile(`CDC_TOPIC:\s*` + regexp.QuoteMeta(prefix) + `\.(\S+)`)
+	matches := re.FindAllStringSubmatch(compose, -1)
+	require.NotEmpty(t, matches, "no CDC_TOPIC entries found for prefix %q", prefix)
+
+	var out []string
+	for _, m := range matches {
+		out = append(out, strings.TrimSpace(m[1]))
+	}
+	return out
+}
+
+// The captured -> consumed direction is covered above. This is the other one, and it
+// is the shape of the original three-week bug: a table configured *everywhere except*
+// the capture list.
+//
+// `order` had a loader service, a destination in 002 and a REPLICA IDENTITY
+// migration, and was absent from table.include.list. Every forward check passed. The
+// loader consumed a topic nothing produced, so the table simply never received a row
+// -- and because the loader is silent when idle rather than loud when starved, that
+// looked exactly like "no orders today".
+//
+// So: anything wired to a loader must also be captured. The capture list is the only
+// entry point to the pipeline, and a consumer pointed at a topic that is never
+// produced is a pipeline that will not say so.
+func TestEveryLoaderServiceTableIsActuallyCaptured(t *testing.T) {
+	captured := map[string]bool{}
+	for _, table := range capturedTables(t) {
+		captured[table] = true
+	}
+
+	for _, table := range loaderServiceTables(t) {
+		if table == heartbeatTable {
+			continue
+		}
+		assert.True(t, captured[table],
+			"%s has a stream-loader service consuming %s.%s, but it is missing from "+
+				"table.include.list -- the loader is watching a topic nothing produces, so "+
+				"the table silently never receives a row",
+			table, topicPrefix(t), table)
+	}
+}
+
+// The same inverse question for destinations: a table created in the canonical DDL
+// that nothing captures is provisioned into every tenant database and never written
+// to. Under provisioning that is pure cost paid N times, and it is also a second
+// surface that looks like a live table.
+func TestEveryDestinationTableIsCapturedOrDeliberatelyExempt(t *testing.T) {
+	ddl := readRepoFile(t, filepath.Join("migrations", "starrocks", "002_cdc_orm_tables.sql"))
+
+	re := regexp.MustCompile(`CREATE TABLE IF NOT EXISTS oms\.([a-z_]+)`)
+	dests := re.FindAllStringSubmatch(ddl, -1)
+	require.NotEmpty(t, dests, "no destination tables parsed from the canonical DDL")
+
+	captured := map[string]bool{}
+	for _, table := range capturedTables(t) {
+		captured[destinationTable(table)] = true
+	}
+
+	// Tables the DDL creates for reasons other than CDC may legitimately exist
+	// without being captured. Today there are none; the exemption is an explicit,
+	// reviewable list rather than a comment, so adding one is a deliberate act.
+	exempt := map[string]string{}
+
+	for _, m := range dests {
+		dest := m[1]
+		if captured[dest] {
+			continue
+		}
+		if reason, ok := exempt[dest]; ok {
+			t.Logf("destination %s is not captured (%s)", dest, reason)
+			continue
+		}
+		assert.Fail(t, "uncaptured destination table",
+			"oms.%s is created by 002_cdc_orm_tables.sql and therefore provisioned into "+
+				"every tenant database, but no captured table maps to it. Either capture the "+
+				"source table or add %q to the exempt map with the reason.", dest, dest)
+	}
 }
 
 func readRepoFile(t *testing.T, rel string) string {
