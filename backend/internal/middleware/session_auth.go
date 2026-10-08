@@ -3,6 +3,7 @@ package middleware
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -71,21 +72,10 @@ func SessionAuthMiddleware(cfg SessionAuthConfig) func(http.Handler) http.Handle
 
 			// IP Whitelist Check
 			if tenantID.Valid {
-				var whitelist []string
-				rows, err := cfg.DB.Query("SELECT e.ip_address FROM tenant_ip_whitelist_entries e JOIN tenant_ip_whitelist_assignments a ON a.whitelist_id = e.id WHERE a.tenant_id = $1", tenantID.String)
+				whitelist, err := loadTenantAllowlist(cfg.DB, tenantID.String)
 				if err != nil {
-					http.Error(w, "Failed to query IP whitelist", http.StatusInternalServerError)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
-				}
-				defer rows.Close()
-
-				for rows.Next() {
-					var ipAddress string
-					if err := rows.Scan(&ipAddress); err != nil {
-						http.Error(w, "Failed to scan IP whitelist", http.StatusInternalServerError)
-						return
-					}
-					whitelist = append(whitelist, ipAddress)
 				}
 
 				if len(whitelist) > 0 {
@@ -159,4 +149,26 @@ func SessionAuthMiddleware(cfg SessionAuthConfig) func(http.Handler) http.Handle
 // GetRequestContextFromStd attempts to get request context previously attached by gin/chi wrapper; returns nil if unavailable.
 func GetRequestContextFromStd(r *http.Request) *requestcontext.RequestContext {
 	return requestcontext.GetRequestContext(r.Context())
+}
+
+// loadTenantAllowlist returns the addresses enforced for one tenant. Only entries
+// with an assignment to that tenant are returned. An entry with no assignment is
+// never enforced, and neither is an entry assigned only to another tenant. The
+// characterization test in session_auth_allowlist_test.go pins this behavior.
+func loadTenantAllowlist(db *sql.DB, tenantID string) ([]string, error) {
+	rows, err := db.Query("SELECT e.ip_address FROM tenant_ip_whitelist_entries e JOIN tenant_ip_whitelist_assignments a ON a.whitelist_id = e.id WHERE a.tenant_id = $1", tenantID)
+	if err != nil {
+		return nil, errors.New("Failed to query IP whitelist")
+	}
+	defer rows.Close()
+
+	var whitelist []string
+	for rows.Next() {
+		var ipAddress string
+		if err := rows.Scan(&ipAddress); err != nil {
+			return nil, errors.New("Failed to scan IP whitelist")
+		}
+		whitelist = append(whitelist, ipAddress)
+	}
+	return whitelist, nil
 }
