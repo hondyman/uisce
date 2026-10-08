@@ -256,7 +256,7 @@ func (r *PostgresBORepository) resolveBOUUID(boIDOrKey string) (string, error) {
 	var id string
 	err := r.DB.Get(&id, `
 		SELECT id::text FROM public.business_objects
-		WHERE id::text = $1 OR bo_key = $1 OR technical_name = $1 OR name = $1
+		WHERE id::text = $1 OR bo_key = $1 OR bo_name = $1
 		ORDER BY (tenant_id = public.uisce_gold_copy_tenant_id()) ASC
 		LIMIT 1
 	`, trimmed)
@@ -316,16 +316,16 @@ func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*
 	}
 	var fields []semanticField
 	err = r.DB.Select(&fields, `
-		SELECT f.id, f.field_name, COALESCE(f.technical_name, '') AS technical_name,
-		       COALESCE(f.display_name, f.field_name) AS display_name,
-		       COALESCE(f.data_type, '') AS data_type,
+		SELECT f.id, f.field_name, COALESCE(f.field_name, '') AS technical_name,
+		       COALESCE(f.field_name, '') AS display_name,
+		       COALESCE(cn.properties->>'data_type', 'string') AS data_type,
 		       f.term_node_id::text,
 		       COALESCE(cn.properties->>'term_type', '') AS term_type,
 		       COALESCE(cn.properties->>'sensitivity_tag', '') AS sensitivity_tag
 		FROM public.business_object_fields f
 		LEFT JOIN catalog_node cn ON cn.id::text = f.term_node_id::text
 		WHERE f.bo_id = $1::uuid
-		ORDER BY f.display_order, f.field_name
+		ORDER BY f.field_name
 	`, resolvedID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch business_object_fields: %w", err)
@@ -648,11 +648,11 @@ func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTer
 	query := `
 		SELECT
 			COALESCE(f.term_node_id::text, f.id::text) AS term_node_id,
-			COALESCE(f.technical_name, f.field_name) AS term_key,
-			COALESCE(f.display_name, f.field_name) AS term_name,
-			COALESCE(f.display_name, f.field_name) AS display_name,
-			COALESCE(f.description, '') AS description,
-			COALESCE(f.data_type, 'string') AS data_type,
+			COALESCE(f.field_name, '') AS term_key,
+			COALESCE(cn.node_name, f.field_name) AS term_name,
+			COALESCE(cn.node_name, f.field_name) AS display_name,
+			COALESCE(cn.description, '') AS description,
+			COALESCE(cn.properties->>'data_type', 'string') AS data_type,
 			COALESCE(f.field_role, 'DIMENSION') AS role,
 			COALESCE(fb.binding_status, 'RESOLVED') AS binding_status,
 			COALESCE(cn.properties->>'term_type', '') AS term_type
@@ -665,7 +665,7 @@ func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTer
 			ON cn.id::text = f.term_node_id::text
 		WHERE f.bo_id = $1::uuid
 		  AND COALESCE(fb.binding_status, 'RESOLVED') = 'RESOLVED'
-		ORDER BY f.display_order, f.field_name
+		ORDER BY f.field_name
 	`
 	rows, err := r.DB.Queryx(query, resolvedID, bindingIDParam)
 	if err != nil {
