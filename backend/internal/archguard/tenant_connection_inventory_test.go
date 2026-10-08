@@ -72,8 +72,8 @@ var openerInventory = map[string]opener{
 	"cmd/verify/verify_engagement_notifications.go":              {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/verify_calc_measure/main.go":                            {Kind: kindTool, Max: 2, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/verify_collection_aggregation/main.go":                  {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
-	"cmd/compliance-seed/main.go":                               {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
-	"cmd/crd-bakeoff-demo/main.go":                              {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
+	"cmd/compliance-seed/main.go":                                {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
+	"cmd/crd-bakeoff-demo/main.go":                               {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/verify_compliance_domain/main.go":                       {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/verify_mdm_e2e/main.go":                                 {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
 	"cmd/verify_oms_validations/main.go":                         {Kind: kindTool, Max: 1, Reason: "a one-off command-line tool (seed, verify, demo, fix, migrate): not served, opens the database it is pointed at"},
@@ -115,7 +115,8 @@ var openerInventory = map[string]opener{
 	// (ADR-030, ADR-043), so its entry is gone rather than reclassified: kindTenantDB is
 	// reserved for internal/tenantdb/, and an entry for a file that opens no connection would
 	// only be an exemption nobody reads.
-	"internal/tenantdb/tenantdb.go":  {Kind: kindTenantDB, Max: 1, Reason: "the router: the only package allowed to open a tenant database for data access"},
-	"migrations/cmd/migrate.go":      {Kind: kindTool, Max: 1, Reason: "migration command for alpha"},
-	"services/uma-rebalance/main.go": {Kind: kindControlPlane, Max: 1, Reason: "standalone service that opens DATABASE_URL"},
+	"internal/tenantdb/tenantdb.go":     {Kind: kindTenantDB, Max: 1, Reason: "the router: the only package allowed to open a tenant database for data access"},
+	"internal/tenantdbcreds/pgadmin.go": {Kind: kindProvisioning, Max: 1, Reason: "platform-admin connection to one region's Postgres, using the region's admin secret at platform/postgres/<region>/admin, to create a tenant's login role and grant it CONNECT on its database; the single owner of tenant role credentials (the saga must not create roles)"},
+	"migrations/cmd/migrate.go":         {Kind: kindTool, Max: 1, Reason: "migration command for alpha"},
+	"services/uma-rebalance/main.go":    {Kind: kindControlPlane, Max: 1, Reason: "standalone service that opens DATABASE_URL"},
 }
