@@ -122,3 +122,27 @@ func TestTenantWithNoEntriesGetsAnEmptyList(t *testing.T) {
 		t.Fatalf("expected no restriction, got %v", got)
 	}
 }
+
+// A failed load must surface as an error, never as an empty list. The middleware
+// answers an error with 500 and stops, so the request is refused rather than
+// served without the tenant's restrictions. This pins that fail-closed path: a
+// database outage must not strip a restricted tenant's allowlist.
+func TestLoadFailureIsAnErrorNotAnEmptyAllowlist(t *testing.T) {
+	db := allowlistTestDB(t)
+	tenant := seedAllowlistTenant(t, db)
+	addEntry(t, db, tenant, "203.0.113.60/32", true, tenant)
+	if err := db.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	got, err := loadTenantAllowlist(db, tenant)
+	if err == nil {
+		t.Fatalf("load on a closed database returned %v with no error; a restricted tenant would be allowed through", got)
+	}
+	if err.Error() != "Failed to query IP whitelist" {
+		t.Fatalf("error text = %q, the middleware's 500 body depends on it", err.Error())
+	}
+	if got != nil {
+		t.Fatalf("returned a partial list with the error: %v", got)
+	}
+}
