@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -33,6 +34,7 @@ import (
 	"sync"
 	"time"
 
+	mysqldriver "github.com/go-sql-driver/mysql"
 	kafka "github.com/segmentio/kafka-go"
 )
 
@@ -120,6 +122,21 @@ var ErrNoTenantRoute = errors.New("no StarRocks route provisioned for tenant")
 // exactly the silent-misrouting failure this work exists to prevent.
 var ErrTenantUnattributed = errors.New("data event carries no tenant_id")
 
+// ErrTenantUnavailableOnDelete is returned when a DELETE carries a tenant field
+// whose value is Debezium's schema zero value rather than a tenant.
+//
+// This is a distinct condition from ErrTenantUnattributed and conflating them costs
+// hours of dead-end debugging. Under Postgres' default replica identity the logical
+// decoding plugin sends only the table's key columns in `before`, and Debezium fills
+// every other field with its schema default -- so before.tenant_id arrives as "" and
+// before.created_at as the epoch. The tenant genuinely is not knowable from that
+// event; the source table simply is not configured to carry it.
+//
+// The fix belongs in Postgres, not here: REPLICA IDENTITY FULL on the captured
+// tables (backend/db/migrations/20261224_001_cdc_replica_identity_full.up.sql). The
+// loader's job is to name the condition so the DLQ says which of the two it is.
+var ErrTenantUnavailableOnDelete = errors.New("tenant_id unavailable on delete event: replica identity does not carry the row")
+
 func NewTenantRouter(routes []TenantRoute, sourceDB string) *TenantRouter {
 	m := make(map[string]TenantRoute, len(routes))
 	for _, r := range routes {
@@ -132,7 +149,10 @@ func NewTenantRouter(routes []TenantRoute, sourceDB string) *TenantRouter {
 // scripts/provision_starrocks_tenants.sh. A missing or unreadable directory is
 // not an error here: the caller decides whether per-tenant routing is enabled,
 // because a single-tenant deployment may legitimately have none.
-func LoadTenantRoutes(dir string) ([]TenantRoute, error) {
+//
+// queryHost overrides the network endpoint in each file's DSN. See
+// TenantRoute.DSNForHost for why the file cannot be trusted on that point.
+func LoadTenantRoutes(dir string, queryHost string) ([]TenantRoute, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -155,10 +175,103 @@ func LoadTenantRoutes(dir string) ([]TenantRoute, error) {
 			// route missing its database would send rows to the wrong place.
 			continue
 		}
+		r.DSN = r.DSNForHost(queryHost)
 		out = append(out, r)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].TenantID < out[j].TenantID })
 	return out, nil
+}
+
+// DSNForHost returns this route's DSN with the network endpoint pointed at host,
+// keeping the port already present.
+//
+// The credential file is written by the provisioning script, which runs wherever the
+// StarRocks admin client runs -- typically on the host, where the FE is reachable at
+// 127.0.0.1. The loader runs somewhere else: in a container on a compose network,
+// where 127.0.0.1 is the container's own loopback and nothing answers on 9030. So
+// the host baked into the file is correct for the writer and wrong for the reader,
+// and it is wrong in the one way that produces no useful error: every keyed DELETE
+// retries to "connection refused" and dead-letters.
+//
+// Identity (user, password, database) stays authoritative in the file, because that
+// is what the provisioning script exists to manage. Only the endpoint is the loader's
+// own business, and it already knows a working one -- the host it successfully
+// stream-loads to over STARROCKS_HTTP.
+//
+// A DSN that cannot be rewritten is returned unchanged: a broken DSN is better than
+// one silently reshaped into something else, and the resulting connection error names
+// the DSN rather than hiding it.
+func (r TenantRoute) DSNForHost(host string) string {
+	if host == "" || r.DSN == "" {
+		return r.DSN
+	}
+	rewritten, port, ok := rewriteDSNAddr(r.DSN, host)
+	if !ok {
+		return r.DSN
+	}
+	// Verify the rewrite rather than trusting it. The credential and database are
+	// what the provisioning script manages; a host swap that quietly dropped one of
+	// them would turn a connection error into a wrong-destination write, which is
+	// worse than the bug being fixed.
+	before, err1 := mysqldriver.ParseDSN(r.DSN)
+	after, err2 := mysqldriver.ParseDSN(rewritten)
+	if err1 != nil || err2 != nil ||
+		before.User != after.User || before.Passwd != after.Passwd ||
+		before.DBName != after.DBName || !sameDSNParams(before.Params, after.Params) {
+		return r.DSN
+	}
+	if after.Addr != net.JoinHostPort(host, port) {
+		return r.DSN
+	}
+	return rewritten
+}
+
+// sameDSNParams compares two driver parameter maps. Config.Params is a map, so it
+// cannot be compared with ==, and a nil map must count as equal to an empty one --
+// a DSN with no query string parses to nil, not to an empty map.
+func sameDSNParams(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// rewriteDSNAddr replaces only the network address inside the DSN's @tcp(...) clause,
+// keeping the port that was already there.
+//
+// Only the address is touched. The driver ships no DSN formatter in v1.8.1, so the
+// alternative was to reassemble the whole string from a parsed Config -- which would
+// mean re-serialising credentials this function has no business touching. A targeted
+// rewrite keeps every other byte of the file's authority intact, and DSNForHost
+// re-parses the result to prove it.
+func rewriteDSNAddr(dsn, host string) (out string, port string, ok bool) {
+	const marker = "@tcp("
+	i := strings.Index(dsn, marker)
+	if i < 0 {
+		return dsn, "", false
+	}
+	start := i + len(marker)
+	end := strings.Index(dsn[start:], ")")
+	if end < 0 {
+		return dsn, "", false
+	}
+	end += start
+	addr := dsn[start:end]
+	if h, p, err := net.SplitHostPort(addr); err == nil {
+		addr = h
+		port = p
+	} else {
+		port = "9030"
+	}
+	if port == "" {
+		port = "9030"
+	}
+	return dsn[:start] + net.JoinHostPort(host, port) + dsn[end:], port, true
 }
 
 // normalizeTenantID accepts the forms a tenant id arrives in: with hyphens (the
@@ -255,6 +368,56 @@ func classify(ev decodedEvent, raw []byte) eventClass {
 }
 
 // ---- flush outcome taxonomy ----
+
+// rawTenantField reports the tenant field exactly as it appears on the envelope,
+// keeping "absent", "null" and "empty string" apart. extractTenantID collapses all
+// three to "", and the difference is the whole point: only an empty string can be a
+// Debezium zero-fill, because tenant_id is a uuid and Postgres cannot hold one.
+func rawTenantField(m map[string]interface{}) (value string, present bool, isNull bool) {
+	if m == nil {
+		return "", false, false
+	}
+	for _, k := range []string{"tenant_id", "tenantId", "TenantID"} {
+		v, ok := m[k]
+		if !ok {
+			continue
+		}
+		if v == nil {
+			return "", true, true
+		}
+		return fmt.Sprintf("%v", v), true, false
+	}
+	return "", false, false
+}
+
+// attributionError explains why a data event cannot be assigned a destination, or
+// returns nil when it can. Both failure modes fail closed -- neither ever guesses a
+// database -- but they have different causes and different fixes, and the DLQ record
+// has to say which.
+//
+//	tenant field absent, or null            -> ErrTenantUnattributed
+//	tenant field empty on an insert/update  -> ErrTenantUnattributed
+//	tenant field empty on a delete           -> ErrTenantUnavailableOnDelete
+//
+// The fourth case is not a data problem. tenant_id is a uuid, so an empty string is
+// not a value Postgres can hold: it is Debezium's zero-fill for a field the replica
+// identity did not send. Reporting it as "no tenant_id" sends the operator looking at
+// the loader and the data when the cause is one ALTER TABLE in Postgres.
+//
+// A null tenant on a delete stays in the first case. That is a genuine NULL the
+// database is holding, not a zero-fill -- the envelope can tell them apart, so the
+// loader does.
+func attributionError(src map[string]interface{}, isDelete bool) error {
+	value, present, isNull := rawTenantField(src)
+	if value != "" {
+		return nil
+	}
+	if isDelete && present && !isNull {
+		return fmt.Errorf("%w (before.tenant_id=%q; run REPLICA IDENTITY FULL on the captured tables)",
+			ErrTenantUnavailableOnDelete, value)
+	}
+	return ErrTenantUnattributed
+}
 
 type loadOutcome int
 

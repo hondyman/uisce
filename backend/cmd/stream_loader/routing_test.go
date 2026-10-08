@@ -92,7 +92,7 @@ func TestLoadTenantRoutes(t *testing.T) {
 	write("broken.json", `{not json`)
 	write("notes.txt", `ignored`)
 
-	routes, err := LoadTenantRoutes(dir)
+	routes, err := LoadTenantRoutes(dir, "")
 	require.NoError(t, err)
 	require.Len(t, routes, 2)
 	assert.Equal(t, tenantB, routes[0].TenantID, "routes are sorted so startup logging is stable")
@@ -102,7 +102,7 @@ func TestLoadTenantRoutes(t *testing.T) {
 func TestLoadTenantRoutesMissingDirectoryIsNotAnError(t *testing.T) {
 	// A single-tenant deployment legitimately has no credential directory; whether
 	// that is fatal is the caller's decision, not the loader's.
-	routes, err := LoadTenantRoutes(filepath.Join(t.TempDir(), "absent"))
+	routes, err := LoadTenantRoutes(filepath.Join(t.TempDir(), "absent"), "")
 	require.NoError(t, err)
 	assert.Empty(t, routes)
 }
@@ -178,7 +178,7 @@ func TestHandleMessageSkipsHeartbeatInsteadOfDLQing(t *testing.T) {
 func TestRouteFailsClosedOnMissingTenantID(t *testing.T) {
 	gk := routingGatekeeper(t, Config{Topic: "t", StarRocksTable: "orm_order", PrimaryKeys: []string{"id"}})
 
-	_, ok := gk.route(context.Background(), map[string]interface{}{"id": "1"}, kafka.Message{})
+	_, ok := gk.route(context.Background(), map[string]interface{}{"id": "1"}, kafka.Message{}, false)
 	assert.False(t, ok, "a data event with no tenant must not be batched")
 	assert.Equal(t, int64(1), gk.metrics.TenantUnattributed.Load())
 	assert.Equal(t, int64(1), gk.metrics.DLQEmitted.Load())
@@ -189,7 +189,7 @@ func TestRouteFailsClosedOnUnknownTenant(t *testing.T) {
 	// still in flight. Same outcome for both: history preserved, signal preserved.
 	gk := routingGatekeeper(t, Config{Topic: "t", StarRocksTable: "orm_order", PrimaryKeys: []string{"id"}})
 
-	_, ok := gk.route(context.Background(), map[string]interface{}{"id": "1", "tenant_id": tenantB + "x"}, kafka.Message{})
+	_, ok := gk.route(context.Background(), map[string]interface{}{"id": "1", "tenant_id": tenantB + "x"}, kafka.Message{}, false)
 	assert.False(t, ok)
 	assert.Equal(t, int64(1), gk.metrics.TenantUnknown.Load())
 }
@@ -199,7 +199,7 @@ func TestRouteResolvesPerTenantDatabase(t *testing.T) {
 		StarRocksHTTP: "http://starrocks-fe:8030", StarRocksDB: "oms",
 		StarRocksUser: "root", StarRocksPassword: "rootpw", PrimaryKeys: []string{"id"}})
 
-	route, ok := gk.route(context.Background(), map[string]interface{}{"id": "1", "tenant_id": tenantB}, kafka.Message{})
+	route, ok := gk.route(context.Background(), map[string]interface{}{"id": "1", "tenant_id": tenantB}, kafka.Message{}, false)
 	require.True(t, ok)
 	assert.Equal(t, "tenant_88e88e88", route.Database)
 	assert.Equal(t, "t_globex", route.User)
@@ -216,7 +216,7 @@ func TestRouteSingleDestinationWhenRoutingDisabled(t *testing.T) {
 	gk := newTestGatekeeper(Config{Topic: "t", StarRocksDB: "oms", StarRocksUser: "root",
 		StarRocksTable: "orm_order", PrimaryKeys: []string{"id"}})
 
-	route, ok := gk.route(context.Background(), map[string]interface{}{"id": "1"}, kafka.Message{})
+	route, ok := gk.route(context.Background(), map[string]interface{}{"id": "1"}, kafka.Message{}, false)
 	require.True(t, ok)
 	assert.Equal(t, "oms", route.Database, "an unconfigured deployment keeps its single destination")
 }
