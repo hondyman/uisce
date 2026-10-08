@@ -120,6 +120,11 @@ describe('generated columns and row detail, on the golden record drawer', () => 
     expect(screen.getByLabelText('Row field holding each column\'s value')).toHaveProperty('value', dyn.valuePath);
     fireEvent.change(screen.getByLabelText('Min width (px)'), { target: { value: '200' } });
     expect(props().dynamicColumns).toEqual({ ...dyn, minWidth: 200 });
+  }, 30000);
+
+  it('turning generated columns off drops them', async () => {
+    const bp = masteringConsoleBlueprint();
+    render(<Inspector bp={bp} id="gd_matrix" />);
     fireEvent.click(screen.getByRole('switch', { name: 'Generate columns from data' }));
     expect(props().dynamicColumns).toBeUndefined();
   }, 30000);
