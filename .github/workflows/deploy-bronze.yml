@@ -105,7 +105,7 @@ jobs:
           REMOTE_SSH_HOST: ${{ secrets.REMOTE_SSH_HOST }}
           REMOTE_SSH_USER: ${{ secrets.REMOTE_SSH_USER || 'deploy' }}
           REMOTE_SSH_PORT: ${{ secrets.REMOTE_SSH_PORT || '22' }}
-          REMOTE_SSH_PATH: ${{ secrets.REMOTE_SSH_PATH || '~/uisce' }}
+          REMOTE_SSH_PATH: ${{ secrets.REMOTE_SSH_PATH || '/mnt/uisce' }}
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           chmod +x scripts/deploy-bronze.sh

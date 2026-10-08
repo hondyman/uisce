@@ -17,7 +17,7 @@
 # The one-time privileged step (run by a human, once):
 #   sudo useradd -m -s /bin/bash deploy
 #   sudo usermod -aG docker deploy
-#   chown -R deploy:deploy /path/to/repo
+#   sudo mkdir -p /mnt/uisce && sudo chown -R deploy:deploy /mnt/uisce
 
 set -euo pipefail
 
@@ -48,18 +48,23 @@ REPO='{{REPO}}'
 IMAGE="${REGISTRY}/${REPO}/kafka-connect-iceberg"
 CA_CERT_SRC="/tmp/keycloak-ca.crt"
 CA_CERT_DST="/etc/kafka-connect-iceberg/certs/keycloak-ca.crt"
+GITHUB_REPO="https://github.com/hondyman/uisce.git"
 
-echo "==> Deploying to ${USER}@${HOST}:${PATH_ARG}"
+echo "==> Deploying bronze sink to ${USER}@${HOST}:${PATH_ARG}"
 
-# 1. Navigate to repo and sync to origin/main
-cd "$PATH_ARG"
-if [ ! -d .git ]; then
-  echo "ERROR: no git repo at $PATH_ARG"
-  exit 1
+# 1. Ensure repo exists at target path — clone if missing
+if [ ! -d "$PATH_ARG/.git" ]; then
+  echo "==> No git repo found at $PATH_ARG — cloning fresh"
+  mkdir -p "$(dirname "$PATH_ARG")"
+  git clone "$GITHUB_REPO" "$PATH_ARG"
+else
+  echo "==> Git repo found — fetching latest origin/main"
+  cd "$PATH_ARG"
+  git fetch origin --prune
+  git reset --hard origin/main
 fi
-echo "==> Fetching latest origin/main"
-git fetch origin --prune
-git reset --hard origin/main
+
+cd "$PATH_ARG"
 
 # 2. Extract Keycloak CA into bind-mount directory (no sudo needed — deploy owns this)
 echo "==> Fetching Keycloak CA from ${HOST}:8443"
