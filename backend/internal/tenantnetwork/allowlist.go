@@ -25,9 +25,10 @@ const (
 )
 
 // AllowlistStore replaces one tenant's allowlist. Implementations must write
-// an assignment for every entry, scoped to the tenant. Entries with no
-// assignment count as global in the admin API, so a write without an
-// assignment would open the list to every tenant.
+// an assignment for every entry, scoped to the tenant. Request-time enforcement
+// (middleware/session_auth.go) reads only assigned entries, so an entry written
+// without an assignment is silently ignored: the tenant gets no protection from
+// it. Always write the assignment.
 //
 // The replacement must be atomic: a failure leaves the previous list in place.
 type AllowlistStore interface {

@@ -141,7 +141,9 @@ func (h *IpWhitelistAPIHandlers) listAllIpWhitelist(w http.ResponseWriter, r *ht
 			v := label.String
 			lblPtr = &v
 		}
-		// AllTenants means "enforced globally"; in this schema it's represented as no assignment rows
+		// AllTenants is a label only. An entry with no assignment rows is NOT enforced:
+		// request-time checks (middleware/session_auth.go) join through assignments, so an
+		// unassigned entry neither restricts nor allows any tenant.
 		out = append(out, item{IpAddress: ip, Label: lblPtr, TenantIds: []string(tids), AllTenants: assignmentCount == 0})
 	}
 
@@ -181,7 +183,8 @@ func (h *IpWhitelistAPIHandlers) getIpWhitelist(w http.ResponseWriter, r *http.R
 	log.Printf("[DEBUG] getIpWhitelist called for tenant: %s", tenantId)
 
 	whitelist := []map[string]interface{}{}
-	// Return entries assigned to this tenant, plus any entries with no assignments (global/unassigned)
+	// Return entries assigned to this tenant, plus unassigned entries. Unassigned entries are
+	// listed here but are not enforced (see middleware/session_auth.go).
 	rows, err := h.DB.QueryContext(r.Context(), `
 		SELECT e.ip_address, e.label,
 			   COALESCE(array_agg(a.tenant_id::text) FILTER (WHERE a.tenant_id IS NOT NULL), ARRAY[]::text[]) as tenant_ids,
@@ -236,7 +239,7 @@ func (h *IpWhitelistAPIHandlers) addIpWhitelist(w http.ResponseWriter, r *http.R
 		IpAddress  string   `json:"ipAddress"`
 		Label      *string  `json:"label,omitempty"`
 		TenantIds  []string `json:"tenantIds,omitempty"`  // optional extra tenants to assign
-		AllTenants bool     `json:"allTenants,omitempty"` // when true, treat as global (no assignments)
+		AllTenants bool     `json:"allTenants,omitempty"` // when true, create no assignment rows; the entry is then NOT enforced
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -299,11 +302,11 @@ func (h *IpWhitelistAPIHandlers) addIpWhitelist(w http.ResponseWriter, r *http.R
 				JOIN tenant_ip_whitelist_entries e ON e.id = a.whitelist_id
 				WHERE e.ip_address = $1
 			`, existing)
-if err != nil {
-		log.Printf("[ERROR] getIpWhitelist query failed: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+			if err != nil {
+				log.Printf("[ERROR] getIpWhitelist query failed: %v", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			defer rows2.Close()
 			var tenantIds []string
 			for rows2.Next() {
