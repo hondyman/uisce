@@ -1,0 +1,9 @@
+# Local development only. Points at services on this machine. Not loaded by
+# any workflow yet; ResolveRegion is not wired into provisioning.
+regions:
+  us-east-1:
+    postgres_host: 127.0.0.1
+    postgres_port: 5432
+    lakekeeper_url: http://127.0.0.1:8181
+    starrocks_fe_host: 127.0.0.1
+    debezium_connect_url: http://127.0.0.1:8083
