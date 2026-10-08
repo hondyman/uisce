@@ -15,6 +15,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="$HERE/provision_starrocks_tenants.sh"
+DDL="${DDL:-$HERE/../migrations/starrocks/002_cdc_orm_tables.sql}"
 WORK="$(mktemp -d)"
 # Cleanup is best-effort: some sandboxes route rm through a trash helper that refuses
 # paths outside the workspace, and a noisy failure here would mask the real result.
@@ -135,6 +136,79 @@ has "lists tenant B" "$B"
 SR_TENANT_DIR="$WORK/absent"
 run_drift
 rc_is "absent store fails" 1 "$rc"
+
+echo
+echo "== DDL prefix rewrite =="
+# ---- DDL prefix rewrite ----
+# The rewrite is what turns one canonical table definition into a tenant's copy, and
+# it is the part of this script with the most ways to be subtly wrong. The bug that
+# shipped: rewriting oms.orm_order also matched the PREFIX of oms.orm_order_allocation,
+# emitting `tenant_x`.`orm_order`_allocation, which StarRocks rejects as an unknown
+# catalog. A dry run never executes the rewritten DDL, so nothing caught it until a
+# real provisioning pass against a live cluster.
+rewrite_ddl() {
+  local t="$1" db="$2"
+  sed -e "s/oms\.${t}\([^A-Za-z0-9_]\)/\`${db}\`.\`${t}\`\1/g" \
+      -e "s/^CREATE DATABASE IF NOT EXISTS oms;//" "$DDL"
+}
+
+if [ -n "${DDL:-}" ] && [ -f "$DDL" ]; then
+  # has/hasnt assert against $out, so the haystack is assigned rather than passed.
+  DBT=tenant_deadbeef
+  for t in orm_order orm_execution orm_placement orm_order_allocation orm_execution_allocation; do
+    out=$(rewrite_ddl "$t" "$DBT")
+    has "rewrite $t targets its own table" "\`${DBT}\`.\`${t}\`"
+  done
+
+  # The boundary case, which is the one that actually broke.
+  out=$(rewrite_ddl orm_order "$DBT")
+  hasnt "orm_order leaves orm_order_allocation alone" "\`${DBT}\`.\`orm_order\`_allocation"
+  out=$(rewrite_ddl orm_execution "$DBT")
+  hasnt "orm_execution leaves orm_execution_allocation alone" "\`${DBT}\`.\`orm_execution\`_allocation"
+else
+  echo "skip: DDL not found (set DDL=migrations/starrocks/002_cdc_orm_tables.sql)"
+fi
+
+# ---- existence checks ----
+# These decide whether provisioning re-runs the DDL, and they are quietly load-bearing:
+# a check that always answers "missing" is not a failure, it is a script that re-executes
+# every statement on every run and reports errors nobody can explain. Both bugs found on
+# the first live run were of exactly this shape.
+
+mysql() {
+  # Record the SQL, and answer whatever the case under test needs.
+  printf '%s\n' "$*" >> "$MYSQL_LOG"
+  case "$*" in
+    *information_schema.tables*) printf '%s\n' "${FAKE_TABLE_COUNT:-1}" ;;
+    *information_schema.schemata*) printf '%s\n' "${FAKE_DB_COUNT:-1}" ;;
+    *) printf '\n' ;;
+  esac
+}
+
+MYSQL_LOG="$WORK/mysql.sql"
+: > "$MYSQL_LOG"
+FAKE_TABLE_COUNT=1 FAKE_DB_COUNT=1
+
+if exists tbl tenant_abc.orm_order; then ok "exists tbl finds an existing table"; else bad "exists tbl missed an existing table"; fi
+if exists db tenant_abc; then ok "exists db finds an existing database"; else bad "exists db missed an existing database"; fi
+
+# The qualifier that StarRocks rejects. A check using it never answers truthfully.
+if grep -q "information_schema\.tables" "$MYSQL_LOG" && grep -q '\.information_schema' "$MYSQL_LOG"; then
+  bad "exists tbl qualifies information_schema as a per-database schema; StarRocks answers Unknown catalog"
+else
+  ok "exists tbl does not qualify information_schema"
+fi
+if grep -q "table_schema=" "$MYSQL_LOG"; then
+  ok "exists tbl names the database by table_schema"
+else
+  bad "exists tbl does not use table_schema="
+fi
+
+# A count of zero must mean "absent" and a count above zero "present".
+FAKE_TABLE_COUNT=0
+if exists tbl tenant_abc.orm_order; then bad "exists tbl reported a table that is not there"; else ok "exists tbl reports absent when the count is 0"; fi
+
+if exists widget something; then bad "exists accepted an unknown kind"; else ok "exists rejects an unknown kind"; fi
 
 echo
 if [ "$fail" = 0 ]; then
