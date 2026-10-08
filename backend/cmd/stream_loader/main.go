@@ -114,6 +114,7 @@ type GatekeeperMetrics struct {
 	DLQEmitted            atomic.Int64
 	DLQUnavailable        atomic.Int64
 	TopologyTripwireFired atomic.Int64
+	TripwireQueryErrors   atomic.Int64
 	TotalDeletes          atomic.Int64
 	DeleteErrors          atomic.Int64
 	BatchesFlushed        atomic.Int64
@@ -199,12 +200,20 @@ type DLQMessage struct {
 	RawEvent      json.RawMessage        `json:"raw_event,omitempty"`
 }
 
+// dlqPublisher is the slice of *kafka.Writer the loader needs. It exists so the
+// dead-letter path can be exercised without a broker, which matters because a
+// dead-letter write that fails is the difference between "this row is recorded
+// somewhere" and "this row has vanished".
+type dlqPublisher interface {
+	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
+}
+
 type StreamingGatekeeper struct {
 	cfg        Config
 	metrics    *GatekeeperMetrics
 	sqlxDB     *sqlx.DB
 	ruleEngine *analytics.EmbeddedEngine
-	dlqWriter  *kafka.Writer
+	dlqWriter  dlqPublisher
 
 	// pool holds the MySQL-protocol handles used for keyed DELETEs. Under tenant
 	// routing each tenant's deletes must run as that tenant's own principal -- a single
@@ -371,6 +380,21 @@ func main() {
 				log.Printf("Embedded Rule Evaluation Engine active for tenant=%s, BO=%s", cfg.AssignedTenantID, cfg.BusinessObject)
 			}
 		}
+	}
+
+	// The DLQ is mandatory, and that is checked here rather than discovered mid-stream.
+	//
+	// A row that terminally fails -- a cross-database denial, a destination that does
+	// not exist -- is settled by being recorded somewhere. With no DLQ there is nowhere
+	// to record it, so the only honest choices are to hold the offsets (freezing the
+	// partition) or advance them (losing the row). Refusing to start turns a deployment
+	// mistake into a loud failure at deploy time, which is the cheap moment to find it.
+	if cfg.DLQTopic == "" {
+		log.Fatalf("DLQ_TOPIC is required: this loader dead-letters terminally-failed rows, " +
+			"and without a DLQ those rows would exist in neither StarRocks nor any record")
+	}
+	if cfg.KafkaBrokers == "" {
+		log.Fatalf("KAFKA_BROKERS is required to publish the DLQ")
 	}
 
 	dlqWriter := &kafka.Writer{
@@ -601,6 +625,11 @@ func (gk *StreamingGatekeeper) runLoop(ctx context.Context) {
 		if commit := gk.floor.safe(settled); len(commit) > 0 {
 			if cerr := r.CommitMessages(wctx, commit...); cerr != nil {
 				log.Printf("Failed to commit messages: %v", cerr)
+			} else {
+				// Commits moved, so any partition we just committed past is no longer
+				// stalled. Clearing here is what lets a recovered partition stop alerting
+				// instead of reporting its old stall age forever.
+				gk.floor.release(commit)
 			}
 		}
 		sets = newBatchSet(gk.cfg.Topic)
@@ -1129,8 +1158,13 @@ func (gk *StreamingGatekeeper) emitDLQ(ctx context.Context, reason, detail strin
 	}
 
 	if gk.dlqWriter == nil {
+		// A terminal outcome with nowhere to record it is not terminal. Returning nil
+		// here would let the caller commit offsets for a row that exists in neither
+		// StarRocks nor any dead-letter record -- the only path in this loader where a
+		// row can vanish without a trace. main() refuses to start without a DLQ, so
+		// reaching this is a programming error, and the safe response is to fail.
 		gk.metrics.DLQUnavailable.Add(1)
-		return nil
+		return errors.New("no DLQ publisher configured: a dead-letter cannot be recorded")
 	}
 	if err = gk.dlqWriter.WriteMessages(ctx, kafka.Message{
 		Key:   []byte(extractTenantID(payload)),

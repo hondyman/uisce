@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
 	"sync"
 )
 
@@ -11,10 +13,25 @@ import (
 // Routing introduced one handle per destination DSN, which means one per tenant. Left
 // unbounded that is a latent outage rather than a slow degradation: every handle is a
 // MySQL-protocol session on the FE, and the projected tenant count is in the hundreds,
-// so a burst of active tenants would take the FE's connection memory with it. Eight
-// covers the realistic window (the flush loop walks destinations serially and each
-// delete is a single statement) while putting a hard ceiling on the FE's exposure.
+// so a burst of active tenants would take the FE's connection memory with it.
+//
+// FE budget, checked rather than assumed: starrocks-fe has no qe_max_connection in
+// fe.conf, so the StarRocks default applies (1024 per FE). Eight handles across the
+// five loader replicas is ~40 sessions, a low single-digit percentage of that, on top
+// of the keyed-DELETE traffic itself. The cap protects the loader from itself and is
+// also comfortably inside the FE's headroom -- but if the FE is ever tuned DOWN, this
+// constant is the first thing to revisit.
+//
+// Exhaustion is a LOAD condition and is deliberately surfaced as retryable, never as a
+// dead-letter. errPoolExhausted is a plain error, so OutcomeOf classifies it as
+// outcomeTransport: the flush loop retries with backoff like any other transient
+// failure. Dead-lettering a row because the pool was momentarily busy would route a
+// load problem into the permanent-loss path, which is the opposite of what it is.
 const maxTenantDBHandles = 8
+
+// errPoolExhausted is returned when every handle is in use and the cap is reached.
+// Transient by construction: the caller retries, and the rows are unaffected.
+var errPoolExhausted = errors.New("starrocks handle pool exhausted (all handles in use)")
 
 // queryDBPool is a bounded, least-recently-used pool of StarRocks query handles keyed
 // by DSN.
@@ -59,6 +76,13 @@ func (p *queryDBPool) acquire(dsn string, open func(string) (*sql.DB, error)) (*
 		return h.db, p.releaser(dsn), nil
 	}
 
+	// At the cap with everything in flight, refuse rather than open a ninth session.
+	// The caller retries (see errPoolExhausted); opening anyway would just move the
+	// exhaustion onto the FE, which is the party with no headroom to spare.
+	if len(p.handles) >= p.max && !p.hasIdleLocked() {
+		return nil, func() {}, fmt.Errorf("%w (cap %d)", errPoolExhausted, p.max)
+	}
+
 	db, err := open(dsn)
 	if err != nil {
 		return nil, func() {}, err
@@ -97,9 +121,18 @@ func (p *queryDBPool) touch(dsn string) {
 	p.order = append(p.order, dsn)
 }
 
+// hasIdleLocked reports whether any handle is free to be evicted.
+func (p *queryDBPool) hasIdleLocked() bool {
+	for _, h := range p.handles {
+		if h.refs == 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // evictIdleLocked closes least-recently-used idle handles until the pool is within its
-// cap. A handle nobody has used yet is closed immediately, since eviction right after
-// opening is the only point where the cap is actually meaningful.
+// cap.
 func (p *queryDBPool) evictIdleLocked() {
 	for len(p.order) > p.max {
 		victim := ""
@@ -111,7 +144,9 @@ func (p *queryDBPool) evictIdleLocked() {
 			}
 		}
 		if victimIdx < 0 {
-			// Everything is in use. Let it exceed the cap this once.
+			// Everything is in use and acquire() has already refused to exceed the
+			// cap, so this is unreachable in practice. Leave it alone rather than close
+			// a connection somebody is using.
 			return
 		}
 		p.order = append(p.order[:victimIdx], p.order[victimIdx+1:]...)

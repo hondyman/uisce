@@ -72,6 +72,8 @@ type tripwireVerdict struct {
 	// reason explains a firing, or says why the check could not conclude. Empty when
 	// there is simply nothing to report.
 	reason string
+	// queryFailed marks an inconclusive check: the registry could not be read.
+	queryFailed bool
 }
 
 // checkTopologyTripwire asks whether the control plane has begun declaring per-tenant
@@ -83,7 +85,7 @@ type tripwireVerdict struct {
 // silent failures this work set out to remove.
 func checkTopologyTripwire(ctx context.Context, counter bindingCounter, cfg Config) tripwireVerdict {
 	if counter == nil {
-		return tripwireVerdict{reason: "no control-plane connection; tripwire cannot run"}
+		return tripwireVerdict{reason: "no control-plane connection; tripwire cannot run", queryFailed: true}
 	}
 	// Without per-tenant routing enabled there is no discriminator in play at all, so
 	// the registry's contents say nothing about this process.
@@ -93,7 +95,7 @@ func checkTopologyTripwire(ctx context.Context, counter bindingCounter, cfg Conf
 
 	n, err := counter.CountBindings(ctx)
 	if err != nil {
-		return tripwireVerdict{reason: fmt.Sprintf("cannot read %s: %v", topologyTripwireTable, err)}
+		return tripwireVerdict{reason: fmt.Sprintf("cannot read %s: %v", topologyTripwireTable, err), queryFailed: true}
 	}
 	if n == 0 {
 		return tripwireVerdict{bindings: 0}
@@ -127,6 +129,12 @@ func reportTopologyTripwire(ctx context.Context, counter bindingCounter, cfg Con
 	if v.fired {
 		metrics.TopologyTripwireFired.Add(1)
 		log.Printf("[ALERT][TOPOLOGY] %s", v.reason)
+	}
+	if v.queryFailed {
+		// Not the tripwire's alarm to raise -- a transient control-plane outage is not
+		// a topology change -- but extended unavailability still deserves a counter,
+		// otherwise nobody notices the check has quietly stopped running.
+		metrics.TripwireQueryErrors.Add(1)
 	}
 	return v
 }

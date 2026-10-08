@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
@@ -513,4 +514,52 @@ func TestUnsettledDestinationHoldsOnlyItsOwnOffsets(t *testing.T) {
 	assert.Empty(t, gk.floor.safe(healthy.messages),
 		"the healthy tenant shares partition 0 with the stuck one; committing it would skip offset 4")
 	assert.Equal(t, int64(1), gk.metrics.BatchesFlushed.Load())
+}
+
+// ---- hold-clock semantics ----
+
+func TestFloorStallClockResetsWhenTheFloorMoves(t *testing.T) {
+	// A never-resetting clock reports one continuous hold across a stall, a recovery
+	// and a fresh stall: recovery becomes invisible and triage points at a cause that
+	// predates the real one.
+	f := newOffsetFloor()
+	msg := func(off int64) kafka.Message {
+		return kafka.Message{Topic: "t", Partition: 0, Offset: off}
+	}
+
+	f.block([]kafka.Message{msg(5)})
+	first := f.holds()["t-0"]
+	assert.GreaterOrEqual(t, first, 0.0)
+
+	// The same partition blocks LOWER: the floor moved, so commits stopped making
+	// progress again and the stall clock must restart.
+	f.block([]kafka.Message{msg(3)})
+	second := f.holds()["t-0"]
+	assert.LessOrEqual(t, second, first, "a moved floor restarts the stall clock")
+	assert.Less(t, second, 1.0, "the reset clock is fresh, not a continuation")
+}
+
+func TestFloorStallClockKeepsRunningWhenTheSameOffsetStaysBlocked(t *testing.T) {
+	// Re-blocking the same offset means commits are stuck where they already were. This
+	// is a stall that has NOT recovered, and the clock must keep counting.
+	f := newOffsetFloor()
+	msg := kafka.Message{Topic: "t", Partition: 0, Offset: 5}
+
+	f.block([]kafka.Message{msg})
+	time.Sleep(20 * time.Millisecond)
+	f.block([]kafka.Message{msg})
+
+	assert.GreaterOrEqual(t, f.holds()["t-0"], 0.015,
+		"an unresolved stall must keep ageing, otherwise a stuck tenant looks healthy")
+}
+
+func TestFloorClearsOnRecovery(t *testing.T) {
+	// Without this, a partition that stalled once and recovered would keep reporting its
+	// old stall age forever and the alert would never clear.
+	f := newOffsetFloor()
+	f.block([]kafka.Message{{Topic: "t", Partition: 0, Offset: 5}})
+	require.Contains(t, f.holds(), "t-0")
+
+	f.release([]kafka.Message{{Topic: "t", Partition: 0, Offset: 5}})
+	assert.Empty(t, f.holds(), "committing past the floor clears the stall")
 }

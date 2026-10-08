@@ -458,12 +458,21 @@ type offsetFloor struct {
 	byPart map[string]map[int]floorMark
 }
 
-// floorMark is where a partition is stuck and since when. The timestamp is what
-// turns "commits are blocked" into a number an operator can alert on: without it a
-// tenant mid-retry is indistinguishable from a hung consumer.
+// floorMark is where a partition is stuck, and when commits last stopped making
+// progress there.
+//
+// lastAdvance resets whenever the floor MOVES, which is what makes it the paging
+// metric: it answers "when did commits stop progressing" rather than "when did the
+// current row arrive". A never-resetting clock reports one continuous hold spanning a
+// stall, a recovery and a fresh stall -- recovery becomes invisible, so the alert never
+// clears, and triage points at a cause that predates the real one.
+//
+// Re-blocking the SAME offset deliberately does not reset it: commits are stuck exactly
+// where they already were, so that stall has not recovered and the clock must keep
+// running.
 type floorMark struct {
-	offset int64
-	since  time.Time
+	offset      int64
+	lastAdvance time.Time
 }
 
 func newOffsetFloor() *offsetFloor {
@@ -486,20 +495,44 @@ func (f *offsetFloor) block(msgs []kafka.Message) {
 			parts = map[int]floorMark{}
 			f.byPart[m.Topic] = parts
 		}
-		// Lowering keeps the original timestamp: the partition has been blocked since
-		// the FIRST unsettled offset, which is the number an operator needs.
+		// Only a genuine MOVE of the floor restarts the stall clock. Re-blocking the
+		// same offset means commits are still stuck where they already were, so the
+		// clock must keep running -- that is a stall that has not recovered.
 		if cur, ok := parts[m.Partition]; !ok || m.Offset < cur.offset {
-			parts[m.Partition] = floorMark{offset: m.Offset, since: now}
+			parts[m.Partition] = floorMark{offset: m.Offset, lastAdvance: now}
 		}
 	}
 }
 
-// holds reports, per topic-partition, how long commits have been blocked.
-//
-// The block timestamp is deliberately never cleared. The consumer cannot advance
-// past a stalled partition anyway, so "clearing" it would only hide the very stall
-// this metric exists to expose; when the rows do land the loader restarts its own
-// bookkeeping and the map starts empty.
+// release clears the stall for any partition whose blocked offset has now been
+// committed past. Without it a partition that stalled, recovered and was never
+// re-stalled would keep reporting its old stall age forever, and the alert would
+// never clear.
+func (f *offsetFloor) release(committed []kafka.Message) {
+	if f == nil {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, m := range committed {
+		parts := f.byPart[m.Topic]
+		if parts == nil {
+			continue
+		}
+		// The blocked offset is not committable while it is blocked, so its appearance
+		// in a committed set IS its resolution.
+		if mark, ok := parts[m.Partition]; ok && m.Offset >= mark.offset {
+			delete(parts, m.Partition)
+		}
+		if len(parts) == 0 {
+			delete(f.byPart, m.Topic)
+		}
+	}
+}
+
+// holds reports, per topic-partition, how long commits have made no progress: the
+// paging metric. It resets when the floor moves and clears when the partition commits
+// past it, so a recovered partition stops alerting.
 func (f *offsetFloor) holds() map[string]float64 {
 	if f == nil {
 		return nil
@@ -513,7 +546,7 @@ func (f *offsetFloor) holds() map[string]float64 {
 	out := make(map[string]float64, len(f.byPart))
 	for topic, parts := range f.byPart {
 		for part, mark := range parts {
-			out[fmt.Sprintf("%s-%d", topic, part)] = now.Sub(mark.since).Seconds()
+			out[fmt.Sprintf("%s-%d", topic, part)] = now.Sub(mark.lastAdvance).Seconds()
 		}
 	}
 	return out

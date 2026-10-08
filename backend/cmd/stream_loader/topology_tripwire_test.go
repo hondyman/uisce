@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
@@ -100,29 +99,41 @@ func TestReportTripwireCountsTheFiring(t *testing.T) {
 
 // ---- DLQ acknowledgement gating ----
 
-func TestEmitDLQReportsSuccessWithoutAWriter(t *testing.T) {
-	// No DLQ configured at all is a deployment choice, not a transient fault: it is
-	// counted so it is visible, but it does not stall the stream forever.
-	gk := newTestGatekeeper(Config{Topic: "t"})
-	require.NoError(t, gk.emitDLQ(context.Background(), "ERR_X", "detail", nil, nil))
+// recordingDLQ accepts every dead-letter, which is what a healthy DLQ topic looks
+// like from the loader's side.
+type recordingDLQ struct{ n int }
 
+func (d *recordingDLQ) WriteMessages(_ context.Context, _ ...kafka.Message) error {
+	d.n++
+	return nil
+}
+
+// failingDLQ models a DLQ topic that is briefly unavailable.
+type failingDLQ struct{}
+
+func (failingDLQ) WriteMessages(context.Context, ...kafka.Message) error {
+	return errors.New("dlq unreachable")
+}
+
+func TestEmitDLQFailsWhenNoPublisherIsConfigured(t *testing.T) {
+	// Returning success here would be the only path in this loader where a row can
+	// vanish without a trace: terminally failed, never recorded, offset committed.
+	gk := newTestGatekeeper(Config{Topic: "t", DLQTopic: "dlq"})
+	gk.dlqWriter = nil
+
+	err := gk.emitDLQ(context.Background(), "ERR_X", "detail", nil, nil)
+	require.Error(t, err, "an unrecordable dead-letter must never be reported as success")
+	assert.Contains(t, err.Error(), "no DLQ publisher")
 	assert.Equal(t, int64(1), gk.metrics.DLQUnavailable.Load())
-	assert.Equal(t, int64(1), gk.metrics.DLQEmitted.Load())
 }
 
 func TestEmitDLQReportsFailureWhenTheBrokerIsUnreachable(t *testing.T) {
 	gk := newTestGatekeeper(Config{Topic: "t", DLQTopic: "dlq"})
-	gk.dlqWriter = &kafka.Writer{
-		Addr:         kafka.TCP("127.0.0.1:1"),
-		Topic:        "dlq",
-		WriteTimeout: 100 * time.Millisecond,
-		MaxAttempts:  1,
-	}
-	defer gk.dlqWriter.Close()
+	gk.dlqWriter = failingDLQ{}
 
 	err := gk.emitDLQ(context.Background(), "ERR_X", "detail", nil, nil)
 	require.Error(t, err, "an unacknowledged dead-letter must be reported, not swallowed")
-	assert.Contains(t, err.Error(), "dlq")
+	assert.Contains(t, err.Error(), "dlq unreachable")
 }
 
 func TestFatalLoadIsUnsettledWhenTheDeadLetterCannotBeWritten(t *testing.T) {
@@ -139,13 +150,7 @@ func TestFatalLoadIsUnsettledWhenTheDeadLetterCannotBeWritten(t *testing.T) {
 		Topic: "orm_oms.orm.order", StarRocksHTTP: ts.URL, StarRocksDB: "oms",
 		StarRocksTable: "orm_order", PrimaryKeys: []string{"id"}, StrictMode: true,
 	})
-	gk.dlqWriter = &kafka.Writer{
-		Addr:         kafka.TCP("127.0.0.1:1"),
-		Topic:        "dlq",
-		WriteTimeout: 100 * time.Millisecond,
-		MaxAttempts:  1,
-	}
-	defer gk.dlqWriter.Close()
+	gk.dlqWriter = failingDLQ{}
 
 	dest := &tenantBatch{
 		route: TenantRoute{TenantID: tenantA, Database: "tenant_99e99e99", KeyColumns: []string{"id"}},

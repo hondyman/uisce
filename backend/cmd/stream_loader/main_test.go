@@ -33,12 +33,16 @@ func testBatch(cfg Config, ops []pendingOp) *tenantBatch {
 	return &tenantBatch{route: testRoute(cfg), ops: ops}
 }
 
+// newTestGatekeeper builds a gatekeeper with a working dead-letter, because the DLQ is
+// mandatory in production and a test that asserts "settled" is asserting that the
+// dead-letter was recorded.
 func newTestGatekeeper(cfg Config) *StreamingGatekeeper {
 	return &StreamingGatekeeper{
-		cfg:     cfg,
-		metrics: &GatekeeperMetrics{},
-		pool:    newQueryDBPool(maxTenantDBHandles),
-		floor:   newOffsetFloor(),
+		cfg:       cfg,
+		metrics:   &GatekeeperMetrics{},
+		pool:      newQueryDBPool(maxTenantDBHandles),
+		floor:     newOffsetFloor(),
+		dlqWriter: &recordingDLQ{},
 	}
 }
 

@@ -106,10 +106,10 @@ func TestPoolEvictsLeastRecentlyUsed(t *testing.T) {
 	assert.False(t, evicted, "the least recently used handle is the one that goes")
 }
 
-func TestPoolNeverClosesAHandleInUse(t *testing.T) {
-	// Evicting a handle another destination is mid-statement on would surface as an
-	// intermittent "connection is already closed" on a healthy tenant. The pool
-	// overflows instead.
+func TestPoolRefusesAtCapacityRatherThanClosingAHandleInUse(t *testing.T) {
+	// Exhaustion is a load condition. It must refuse -- not open a ninth session, and
+	// never close a connection another destination is mid-statement on -- and it must
+	// surface as RETRYABLE so the row is never dead-lettered because the pool was busy.
 	p := newQueryDBPool(1)
 	defer p.close()
 
@@ -120,12 +120,33 @@ func TestPoolNeverClosesAHandleInUse(t *testing.T) {
 	defer release()
 
 	_, releaseB, err := p.acquire("other", open)
-	require.NoError(t, err)
-	defer releaseB()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errPoolExhausted)
+	assert.Equal(t, 1, p.len(), "the cap is a real bound, not a suggestion")
 
-	assert.Equal(t, 2, p.len(), "the cap yields to correctness when everything is in flight")
-	require.NotNil(t, held)
-	assert.NoError(t, held.PingContext(context.Background()))
+	// The refusal must classify as transient, or a momentarily busy pool would push
+	// rows into the permanent-loss path.
+	assert.True(t, OutcomeOf(err).retryable(), "pool exhaustion must be retryable, never a dead-letter")
+	assert.NoError(t, held.PingContext(context.Background()), "the in-use handle is untouched")
+	releaseB()
+}
+
+func TestPoolReusesCapacityRatherThanLeakingIt(t *testing.T) {
+	// At the cap, an IDLE handle is evicted for a new destination -- capacity is reused,
+	// not leaked -- while an existing DSN is always served without eviction.
+	p := newQueryDBPool(1)
+	defer p.close()
+	open := func(string) (*sql.DB, error) { return fakeDB(t), nil }
+
+	_, release, err := p.acquire("a", open)
+	require.NoError(t, err)
+	release() // idle, so evictable
+
+	_, release2, err := p.acquire("b", open)
+	require.NoError(t, err, "an idle handle at the cap is evicted, not refused")
+	release2()
+
+	assert.Equal(t, 1, p.len(), "the cap holds no matter how many tenants cycle through")
 }
 
 func TestPoolReleaseIsIdempotent(t *testing.T) {
