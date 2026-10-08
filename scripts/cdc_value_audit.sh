@@ -35,6 +35,46 @@ fi
 
 echo "auditing StarRocks database: ${SR_DB}${TENANT_ID:+ (tenant ${TENANT_ID})}"
 
+# ---- key-set (phantom) check -------------------------------------------------
+#
+# The value comparison above cannot see a row that exists on one side only. That gap
+# is not theoretical: an unattributable delete leaves a row in StarRocks that has no
+# counterpart in Postgres forever, and it audits as "present" on every column.
+#
+# So compare the key sets separately and count both directions. The number that must
+# stay zero is PHANTOM -- a StarRocks key with no Postgres row. `missing` is the
+# opposite (a Postgres row never landed) and is a backfill or routing failure.
+#
+# It is reported rather than treated as a hard failure because the two sides are
+# legitimately mid-flight during a backfill, and a script that goes red for a
+# transient reason teaches people to ignore it.
+phantom_total=0
+
+keys_check() {
+  local pgtbl="$1" srtbl="$2" label="$3"
+  printf "select id::text from %s%s;\n" "$pgtbl" "$PG_WHERE" > /tmp/_kpg.sql
+  printf "select id from %s;\n" "$srtbl" > /tmp/_ksr.sql
+
+  PGPASSWORD=postgres psql -h 127.0.0.1 -p 5432 -U postgres -d alpha \
+    -tAF'|' -q -f /tmp/_kpg.sql 2>/dev/null \
+    | sed 's/[[:space:]]*$//' | LC_ALL=C sort -u > /tmp/_kpg.txt
+  docker exec -i starrocks-fe mysql -h 127.0.0.1 -P 9030 -u root -N < /tmp/_ksr.sql 2>/dev/null \
+    | tr '\t' '|' | sed 's/[[:space:]]*$//' | LC_ALL=C sort -u > /tmp/_ksr.txt
+
+  local phantom missing
+  phantom=$(comm -13 /tmp/_kpg.txt /tmp/_ksr.txt | grep -c . || true)
+  missing=$(comm -23 /tmp/_kpg.txt /tmp/_ksr.txt | grep -c . || true)
+  phantom_total=$(( phantom_total + phantom ))
+
+  if [ "$phantom" -eq 0 ] && [ "$missing" -eq 0 ]; then
+    printf 'KEYS  %-42s ok\n' "$label"
+  else
+    printf 'KEYS  %-42s phantom=%s missing=%s\n' "$label" "$phantom" "$missing"
+    comm -13 /tmp/_kpg.txt /tmp/_ksr.txt | head -3 | sed 's/^/        phantom: /'
+    comm -23 /tmp/_kpg.txt /tmp/_ksr.txt | head -3 | sed 's/^/        missing: /'
+  fi
+}
+
 run() {
   local label="$1"
   PGPASSWORD=postgres psql -h 127.0.0.1 -p 5432 -U postgres -d alpha \
@@ -87,9 +127,24 @@ for c in alloc_exec_qty alloc_exec_price; do
 done
 
 echo
+echo "-- key sets (phantoms must be 0) --"
+keys_check "$O_PG" "$O_SR" "order"
+keys_check "$E_PG" "$E_SR" "execution"
+keys_check "$P_PG" "$P_SR" "placement"
+keys_check "$A_PG" "$A_SR" "order_allocation"
+keys_check "$X_PG" "$X_SR" "execution_allocation"
+
+echo
+if [ "$phantom_total" -ne 0 ]; then
+  # A phantom is a hard failure even when every value matched: it is a row the
+  # warehouse will keep forever that the source of truth has deleted, and it is
+  # invisible to every other line in this script.
+  fail=1
+fi
+
 if [ "$fail" -eq 0 ]; then
-  echo "RESULT: ${SR_DB} matches byte-for-byte on all 15 numeric columns"
+  echo "RESULT: ${SR_DB} matches byte-for-byte on all 15 numeric columns, 0 phantom keys"
 else
-  echo "RESULT: differences found in ${SR_DB} (see DIFF lines above)"
+  echo "RESULT: differences found in ${SR_DB} (see DIFF / KEYS lines above)"
 fi
 exit $fail
