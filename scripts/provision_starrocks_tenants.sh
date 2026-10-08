@@ -125,7 +125,11 @@ exists() {
   fi
   case "$kind" in
     db) result=$(sr "SELECT count(*) FROM information_schema.schemata WHERE schema_name='${name}'") ;;
-    tbl) result=$(sr "SELECT count(*) FROM \`${name%%.*}\`.information_schema.tables WHERE table_name='${name##*.}'") ;;
+    # information_schema is a system catalog, not a per-database schema, so it cannot
+    # be qualified as `<db>.information_schema.tables` -- StarRocks answers "Unknown
+    # catalog" and the check silently reports every table as missing, re-piping the
+    # whole DDL on every run. The database is named by a column instead.
+    tbl) result=$(sr "SELECT count(*) FROM information_schema.tables WHERE table_schema='${name%%.*}' AND table_name='${name##*.}'") ;;
     *) return 1 ;;
   esac
   [ "$result" -gt 0 ] 2>/dev/null
@@ -190,7 +194,11 @@ main() {
       fi
       # Column definitions are supplied by the caller via TENANT_DDL_FILE.
       : "${TENANT_DDL_FILE:?set TENANT_DDL_FILE to migrations/starrocks/002_cdc_orm_tables.sql}"
-      sed -e "s/oms\.${t}/\`${db}\`.\`${t}\`/g" -e "s/^CREATE DATABASE IF NOT EXISTS oms;//" \
+      # The trailing \([^A-Za-z0-9_]\) is a word boundary and is load-bearing. Without
+      # it, rewriting oms.orm_order also matches the PREFIX of oms.orm_order_allocation
+      # and produces `tenant_x`.`orm_order`_allocation -- which StarRocks rejects as
+      # "Unknown catalog". The same applies to orm_execution / orm_execution_allocation.
+      sed -e "s/oms\.${t}\([^A-Za-z0-9_]\)/\`${db}\`.\`${t}\`\1/g" -e "s/^CREATE DATABASE IF NOT EXISTS oms;//" \
         "$TENANT_DDL_FILE" \
         | mysql -h "$SR_HOST" -P "$SR_PORT" -u "$SR_USER" ${SR_PASSWORD:+-p"$SR_PASSWORD"}
     done
