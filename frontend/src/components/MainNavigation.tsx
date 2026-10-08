@@ -330,14 +330,35 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
     }
   };
 
-  // If the currently selected category is filtered out by capabilities,
-  // fall back to the first available category so the top nav never blanks.
+  // Keep selectedCategory in sync with the current URL route if a category owns it
   useEffect(() => {
-    if (!selectedCategory && filteredCategoryConfigs.length > 0) {
-      setSelectedCategory(filteredCategoryConfigs[0].key);
+    const currentPath = stripLocale(location.pathname);
+    if (!currentPath || currentPath === '/') {
+      if (!selectedCategory && filteredCategoryConfigs.length > 0) {
+        setSelectedCategory(filteredCategoryConfigs[0].key);
+      }
       return;
     }
-    if (
+
+    // Check if any category contains the current route or prefix
+    const matchingCat = filteredCategoryConfigs.find((c) =>
+      c.menus.some((m) =>
+        m.items.some((i) => {
+          if (i.path === currentPath) return true;
+          // Sub-routes like /build/cubes/new matching /build/cubes
+          if (i.path !== '/' && currentPath.startsWith(i.path)) return true;
+          return false;
+        })
+      )
+    );
+
+    if (matchingCat) {
+      if (selectedCategory !== matchingCat.key) {
+        setSelectedCategory(matchingCat.key);
+      }
+    } else if (!selectedCategory && filteredCategoryConfigs.length > 0) {
+      setSelectedCategory(filteredCategoryConfigs[0].key);
+    } else if (
       selectedCategory &&
       filteredCategoryConfigs.length > 0 &&
       !filteredCategoryConfigs.some((c) => c.key === selectedCategory)
@@ -348,7 +369,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
         navigate(fallback.defaultPath);
       }
     }
-  }, [filteredCategoryConfigs, selectedCategory, navigate]);
+  }, [location.pathname, filteredCategoryConfigs, selectedCategory, navigate]);
 
   // Handle opening menu from top nav
   const handleMenuOpen = (menuLabel: string) => {
