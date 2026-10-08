@@ -70,10 +70,10 @@ type SecretStore interface {
 	GetMap(ctx context.Context, key string) (map[string]string, error)
 }
 
-// IssuerStore records the realm's issuer URL on the tenant. SetIssuer must be
-// an upsert: a retry writes the same value again.
+// IssuerStore records the realm's issuer URL on the tenant, keyed by tenant
+// UUID. SetIssuer must be an upsert: a retry writes the same value again.
 type IssuerStore interface {
-	SetIssuer(ctx context.Context, tenantCode, issuer string) error
+	SetIssuer(ctx context.Context, tenantID, issuer string) error
 }
 
 // LDAPConfig is the LDAP federation's non-secret settings. The bind password is
@@ -195,7 +195,7 @@ func (a *Activities) ConfigureTenantIdentity(ctx context.Context, in Input) (Res
 	}
 	res.SecretsWritten = true
 
-	if err := a.Issuers.SetIssuer(ctx, in.TenantCode, issuer); err != nil {
+	if err := a.Issuers.SetIssuer(ctx, in.TenantID, issuer); err != nil {
 		return res, fmt.Errorf("record issuer: %w", err)
 	}
 	return res, nil
