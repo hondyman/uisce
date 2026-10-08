@@ -76,6 +76,11 @@ type Config struct {
 	// no longer implements the HTTP SQL endpoint (/api/query returns 501), so a
 	// DELETE cannot be issued through _stream_load.
 	QueryDSN string
+	// StrictMode is on by default. Without it StarRocks silently writes NULL into any
+	// column it cannot convert and still reports Success with zero filtered rows --
+	// verified 3.3.22 with a DECIMAL fed "NOT_A_NUMBER". loadRows bisects a rejected
+	// batch so one bad row cannot block the rest.
+	StrictMode bool
 }
 
 type GatekeeperMetrics struct {
@@ -92,6 +97,7 @@ type GatekeeperMetrics struct {
 	BatchesFlushed        atomic.Int64
 	RowsIn                atomic.Int64
 	RowsLoaded            atomic.Int64
+	RowsRejected          atomic.Int64
 	StartTime             time.Time
 	lastEventUnixNano     atomic.Int64
 }
@@ -110,6 +116,7 @@ type GatekeeperStats struct {
 	BatchesFlushed        int64      `json:"batches_flushed"`
 	RowsIn                int64      `json:"rows_in"`
 	RowsLoaded            int64      `json:"rows_loaded"`
+	RowsRejected          int64      `json:"rows_rejected_by_starrocks"`
 	UptimeSeconds         float64    `json:"uptime_seconds"`
 	LastEventTime         *time.Time `json:"last_event_time,omitempty"`
 	Topic                 string     `json:"topic"`
@@ -242,6 +249,10 @@ func loadConfig() Config {
 		if host := hostOf(cfg.StarRocksHTTP); host != "" {
 			cfg.QueryDSN = fmt.Sprintf("%s:%s@tcp(%s:9030)/%s", cfg.StarRocksUser, cfg.StarRocksPassword, host, cfg.StarRocksDB)
 		}
+	}
+	cfg.StrictMode = true
+	if v := os.Getenv("STREAM_LOAD_STRICT_MODE"); v != "" {
+		cfg.StrictMode = !strings.EqualFold(v, "false")
 	}
 	return cfg
 }
@@ -385,6 +396,7 @@ func (gk *StreamingGatekeeper) GetStats() GatekeeperStats {
 		BatchesFlushed:        gk.metrics.BatchesFlushed.Load(),
 		RowsIn:                gk.metrics.RowsIn.Load(),
 		RowsLoaded:            gk.metrics.RowsLoaded.Load(),
+		RowsRejected:          gk.metrics.RowsRejected.Load(),
 		UptimeSeconds:         time.Since(gk.metrics.StartTime).Seconds(),
 		LastEventTime:         lastTime,
 		Topic:                 gk.cfg.Topic,
@@ -682,11 +694,15 @@ func (gk *StreamingGatekeeper) writeBatch(ctx context.Context, b *batch) error {
 	}
 
 	if len(upserts) > 0 {
-		if err := streamLoadBatch(ctx, gk.cfg, upserts, label); err != nil {
+		rejected, err := gk.loadRows(ctx, upserts, label)
+		if err != nil {
 			return fmt.Errorf("stream load %d rows: %w", len(upserts), err)
 		}
 		gk.metrics.TotalLoaded.Add(int64(len(upserts)))
 		gk.metrics.RowsLoaded.Add(int64(len(upserts)))
+		if rejected > 0 {
+			gk.metrics.RowsRejected.Add(rejected)
+		}
 	}
 
 	if len(deleteKeys) > 0 {
@@ -721,6 +737,60 @@ func (gk *StreamingGatekeeper) deleteRows(ctx context.Context, keyCols []string,
 		return err
 	}
 	return nil
+}
+
+// loadRows loads a batch under strict_mode and, if StarRocks rejects it, bisects to
+// isolate the offending rows instead of letting one bad row block the whole batch.
+//
+// This matters because the failure is silent without strict mode: StarRocks writes
+// NULL into any column it cannot convert and still answers Status=Success with
+// NumberFilteredRows=0. Verified 3.3.22 — a DECIMAL fed "NOT_A_NUMBER" produced a
+// stored NULL, a Success status and zero filtered rows. Only strict_mode surfaces
+// it ("too many filtered rows"), so it is the default.
+//
+// Bisection costs log2(n) extra requests and only on the failure path. A single row
+// that still fails is the bad one: it goes to the DLQ and is counted, never silently
+// NULLed.
+func (gk *StreamingGatekeeper) loadRows(ctx context.Context, rows []json.RawMessage, label string) (int64, error) {
+	rejected, err := streamLoadBatch(ctx, gk.cfg, rows, label)
+	if err == nil {
+		return rejected, nil
+	}
+	if !gk.cfg.StrictMode || !isFilterFailure(err) {
+		return 0, err
+	}
+	if len(rows) == 1 {
+		// Counted by the caller from the returned total; incrementing here too would
+		// double-count every rejected row.
+		var row map[string]interface{}
+		_ = json.Unmarshal(rows[0], &row)
+		gk.emitDLQ(ctx, "ERR_STARROCKS_REJECTED",
+			fmt.Sprintf("StarRocks could not store this row: %v", err), row, rows[0])
+		log.Printf("[DATA-LOSS] row %s could not be stored in %s.%s: %v",
+			gk.cfg.StarRocksDB+"."+gk.cfg.StarRocksTable, gk.cfg.StarRocksDB, gk.cfg.StarRocksTable, err)
+		return 1, nil
+	}
+
+	mid := len(rows) / 2
+	left, lerr := gk.loadRows(ctx, rows[:mid], label+"_a")
+	right, rerr := gk.loadRows(ctx, rows[mid:], label+"_b")
+	if lerr != nil {
+		return left, lerr
+	}
+	if rerr != nil {
+		return right, rerr
+	}
+	return left + right, nil
+}
+
+// isFilterFailure distinguishes "StarRocks refused these rows" from a transport or
+// authorisation problem, which must fail the batch rather than be bisected.
+func isFilterFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "filtered") || strings.Contains(s, "too many")
 }
 
 func extractTenantID(m map[string]interface{}) string {
@@ -1056,9 +1126,29 @@ func decodeDebeziumDecimal(b64, scaleStr string) (string, error) {
 // starRocksResponse is the subset of the stream-load reply we act on. A load can
 // return HTTP 200 and still not have applied the rows ("Publish Timeout",
 // "Label Already Exists"), so the status must be read rather than assumed.
+//
+// The row counts matter too: StarRocks filters rows it cannot convert and still
+// answers Status=Success. Verified on 3.3.22 — a DECIMAL column fed the string
+// "NOT_A_NUMBER" loaded as NULL, with no error anywhere. The only signal is
+// NumberFilteredRows, which nothing reads unless we read it here.
 type starRocksResponse struct {
-	Status string `json:"Status"`
-	Msg    string `json:"Message"`
+	Status             string `json:"Status"`
+	Msg                string `json:"Message"`
+	NumberTotalRows    int64  `json:"NumberTotalRows"`
+	NumberLoadedRows   int64  `json:"NumberLoadedRows"`
+	NumberFilteredRows int64  `json:"NumberFilteredRows"`
+	NumberErrorRows    int64  `json:"NumberErrorRows"`
+}
+
+// rejected reports rows StarRocks refused to store, which become NULL columns.
+func (r starRocksResponse) rejected() int64 {
+	var v int64
+	for _, n := range []int64{r.NumberFilteredRows, r.NumberErrorRows} {
+		if n > v {
+			v = n
+		}
+	}
+	return v
 }
 
 func (gk *StreamingGatekeeper) httpClient() *http.Client {
@@ -1074,7 +1164,11 @@ func (gk *StreamingGatekeeper) httpClient() *http.Client {
 // streamLoadBatch sends every row as one JSON array in a single request. The `label`
 // makes the request idempotent: a retry carrying the same label is rejected as a
 // duplicate rather than loading the rows twice.
-func streamLoadBatch(ctx context.Context, cfg Config, rows []json.RawMessage, label string) error {
+//
+// It returns the number of rows StarRocks refused to store. Those rows are
+// written with NULL in any column it could not convert, so the caller must
+// surface the count rather than treating Status=Success as a clean load.
+func streamLoadBatch(ctx context.Context, cfg Config, rows []json.RawMessage, label string) (int64, error) {
 	body := make([]byte, 0, len(rows)*128)
 	body = append(body, '[')
 	for i, r := range rows {
@@ -1088,7 +1182,7 @@ func streamLoadBatch(ctx context.Context, cfg Config, rows []json.RawMessage, la
 	url := fmt.Sprintf("%s/api/%s/%s/_stream_load", cfg.StarRocksHTTP, cfg.StarRocksDB, cfg.StarRocksTable)
 	req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	req.SetBasicAuth(cfg.StarRocksUser, cfg.StarRocksPassword)
 	req.Header.Set("Expect", "100-continue")
@@ -1096,13 +1190,21 @@ func streamLoadBatch(ctx context.Context, cfg Config, rows []json.RawMessage, la
 	req.Header.Set("format", "json")
 	req.Header.Set("strip_outer_array", "true")
 	req.Header.Set("label", label)
+	// strict_mode makes StarRocks reject the whole load rather than filtering the
+	// rows it cannot convert. It is off by default because one bad row would then
+	// block an entire batch; the filtered-row count below catches the same
+	// corruption without stalling the stream. Operators who prefer fail-loud can
+	// set STREAM_LOAD_STRICT_MODE=true.
+	if cfg.StrictMode {
+		req.Header.Set("strict_mode", "true")
+	}
 	// These tables are PRIMARY KEY tables; the label is the idempotency key and the
 	// rows are keyed by the table's own key columns.
 	req.Header.Set("partial_update", "false")
 
 	resp, err := clientFor(cfg).Do(req)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer resp.Body.Close()
 
@@ -1110,17 +1212,17 @@ func streamLoadBatch(ctx context.Context, cfg Config, rows []json.RawMessage, la
 	_ = json.NewDecoder(resp.Body).Decode(&out)
 	switch {
 	case out.Status == "Success":
-		return nil
+		return out.rejected(), nil
 	case out.Status == "Label Already Exists":
 		// A previous attempt with this label already applied these rows.
-		return nil
+		return 0, nil
 	case out.Status == "Publish Timeout":
 		// StarRocks committed but the FE lost the reply; the label makes a retry safe.
-		return nil
+		return 0, nil
 	case resp.StatusCode != http.StatusOK:
-		return fmt.Errorf("bad status %s: %s", resp.Status, out.Msg)
+		return 0, fmt.Errorf("bad status %s: %s", resp.Status, out.Msg)
 	default:
-		return fmt.Errorf("stream load rejected: %s (%s)", out.Status, out.Msg)
+		return 0, fmt.Errorf("stream load rejected: %s (%s)", out.Status, out.Msg)
 	}
 }
 
