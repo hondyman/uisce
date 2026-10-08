@@ -258,9 +258,6 @@ func TestWriteBatchCoalescesLastOperationWins(t *testing.T) {
 
 	b := &batch{
 		ops: []pendingOp{
-			// created, then deleted: the delete must win.
-			{key: "k1", row: json.RawMessage(`{"id":"k1","v":1}`)},
-			{key: "k1", isDelete: true},
 			// deleted, then created: the upsert must win.
 			{key: "k2", isDelete: true},
 			{key: "k2", row: json.RawMessage(`{"id":"k2","v":2}`)},
@@ -269,22 +266,20 @@ func TestWriteBatchCoalescesLastOperationWins(t *testing.T) {
 
 	require.NoError(t, gk.writeBatch(context.Background(), b))
 
-	// Only k2 survives, as an upsert.
 	assert.JSONEq(t, `[{"id":"k2","v":2}]`, gotBody)
 	assert.NotEmpty(t, gotLabel, "every batch must carry a label so a retry is idempotent")
 	assert.Equal(t, int64(1), gk.metrics.TotalLoaded.Load())
-	assert.Equal(t, int64(1), gk.metrics.TotalDeletes.Load())
 }
 
-func TestWriteBatchSendsDeletesAsStatement(t *testing.T) {
-	var query string
+func TestWriteBatchDeleteWinsOverEarlierUpsert(t *testing.T) {
+	var gotBody string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/query/default/oms" {
-			b, _ := io.ReadAll(r.Body)
-			query = string(b)
+		if r.URL.Path != "/api/oms/orm_order/_stream_load" {
 			w.Write([]byte(`{"Status":"Success"}`))
 			return
 		}
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
 		w.Write([]byte(`{"Status":"Success"}`))
 	}))
 	defer ts.Close()
@@ -300,15 +295,49 @@ func TestWriteBatchSendsDeletesAsStatement(t *testing.T) {
 		metrics: &GatekeeperMetrics{},
 	}
 
-	b := &batch{ops: []pendingOp{
-		{key: "aaa", isDelete: true},
-		{key: "bbb", isDelete: true},
-	}}
-	require.NoError(t, gk.writeBatch(context.Background(), b))
+	// created then deleted in one batch: the row must not be loaded at all.
+	b := &batch{
+		ops: []pendingOp{
+			{key: "k1", row: json.RawMessage(`{"id":"k1","v":1}`)},
+			{key: "k1", isDelete: true},
+		},
+	}
 
-	assert.Contains(t, query, "DELETE FROM `oms`.`orm_order`")
-	assert.Contains(t, query, "`id` = 'aaa'")
-	assert.Contains(t, query, "`id` = 'bbb'")
+	// With no query DSN the delete cannot be applied, and the error must name the
+	// delete path — proving the earlier upsert was suppressed rather than loaded.
+	err := gk.writeBatch(context.Background(), b)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "delete 1 rows")
+	assert.Empty(t, gotBody, "a key deleted later in the batch must not be upserted")
+	assert.Equal(t, int64(0), gk.metrics.TotalLoaded.Load())
+}
+
+func TestDeleteSQL(t *testing.T) {
+	cfg := Config{StarRocksDB: "oms", StarRocksTable: "orm_order"}
+
+	q, ok := deleteSQL(cfg, []string{"id"}, []string{"aaa", "bbb"})
+	require.True(t, ok)
+	assert.Equal(t, "DELETE FROM `oms`.`orm_order` WHERE (`id` = 'aaa') OR (`id` = 'bbb')", q)
+
+	// A composite key must AND its columns, never collapse to one.
+	q, ok = deleteSQL(cfg, []string{"tenant_id", "id"}, []string{"t-1\x1fk-1"})
+	require.True(t, ok)
+	assert.Equal(t, "DELETE FROM `oms`.`orm_order` WHERE (`tenant_id` = 't-1' AND `id` = 'k-1')", q)
+
+	// A key that does not match the configured columns is dropped rather than
+	// producing a partial predicate that would over-delete.
+	_, ok = deleteSQL(cfg, []string{"id"}, []string{"a\x1fb"})
+	assert.False(t, ok)
+
+	_, ok = deleteSQL(cfg, []string{"id"}, nil)
+	assert.False(t, ok)
+}
+
+func TestHostOf(t *testing.T) {
+	assert.Equal(t, "starrocks-fe", hostOf("http://starrocks-fe:8030"))
+	assert.Equal(t, "100.84.50.65", hostOf("http://100.84.50.65:8030"))
+	assert.Equal(t, "starrocks-fe", hostOf("https://starrocks-fe/"))
+	assert.Equal(t, "", hostOf(""))
 }
 
 func TestStreamLoadBatchTreatsDuplicateLabelAsSuccess(t *testing.T) {
@@ -320,8 +349,150 @@ func TestStreamLoadBatchTreatsDuplicateLabelAsSuccess(t *testing.T) {
 	defer ts.Close()
 
 	cfg := Config{StarRocksHTTP: ts.URL, StarRocksDB: "oms", StarRocksTable: "orm_order"}
-	err := streamLoadBatch(context.Background(), cfg, []json.RawMessage{json.RawMessage(`{"id":"1"}`)}, "lbl-1")
-	assert.NoError(t, err)
+	rejected, err := streamLoadBatch(context.Background(), cfg, []json.RawMessage{json.RawMessage(`{"id":"1"}`)}, "lbl-1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), rejected)
+}
+
+func TestStreamLoadBatchSurfacesFilteredRows(t *testing.T) {
+	// StarRocks reports Status=Success even when it filtered a row it could not
+	// convert, writing NULL into that column. That is the only signal of the
+	// corruption, so it must be returned rather than discarded.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"Status":"Success","Message":"OK","NumberTotalRows":3,` +
+			`"NumberLoadedRows":2,"NumberFilteredRows":1,"NumberErrorRows":0}`))
+	}))
+	defer ts.Close()
+
+	cfg := Config{StarRocksHTTP: ts.URL, StarRocksDB: "oms", StarRocksTable: "orm_order"}
+	rejected, err := streamLoadBatch(context.Background(), cfg,
+		[]json.RawMessage{json.RawMessage(`{"id":"1"}`), json.RawMessage(`{"id":"2"}`), json.RawMessage(`{"id":"3"}`)}, "lbl-2")
+	require.NoError(t, err, "a filtered row is not a transport failure")
+	assert.Equal(t, int64(1), rejected)
+}
+
+func TestWriteBatchRecordsFilteredRows(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"Status":"Success","Message":"OK","NumberTotalRows":1,` +
+			`"NumberLoadedRows":0,"NumberFilteredRows":1,"NumberErrorRows":0}`))
+	}))
+	defer ts.Close()
+
+	gk := &StreamingGatekeeper{
+		cfg: Config{
+			StarRocksHTTP:  ts.URL,
+			StarRocksDB:    "oms",
+			StarRocksTable: "orm_order",
+			Topic:          "orm_oms.orm.order",
+			PrimaryKeys:    []string{"id"},
+		},
+		metrics: &GatekeeperMetrics{},
+	}
+
+	b := &batch{ops: []pendingOp{{key: "k1", row: json.RawMessage(`{"id":"k1"}`)}}}
+	require.NoError(t, gk.writeBatch(context.Background(), b))
+
+	assert.Equal(t, int64(1), gk.metrics.RowsRejected.Load(),
+		"a silently-NULLed row must be counted, not swallowed")
+	assert.Equal(t, int64(1), gk.GetStats().RowsRejected)
+}
+
+func TestStrictModeIsOnByDefault(t *testing.T) {
+	// strict_mode is the only thing that surfaces a silently-NULLed value, so the
+	// loader enables it unless an operator explicitly opts out.
+	t.Setenv("STARROCKS_HTTP", "http://starrocks-fe:8030")
+	t.Setenv("STREAM_LOAD_STRICT_MODE", "")
+	assert.True(t, loadConfig().StrictMode)
+
+	t.Setenv("STREAM_LOAD_STRICT_MODE", "false")
+	assert.False(t, loadConfig().StrictMode)
+
+	t.Setenv("STREAM_LOAD_STRICT_MODE", "true")
+	assert.True(t, loadConfig().StrictMode)
+}
+
+func TestLoadRowsBisectsToIsolateBadRow(t *testing.T) {
+	// One unconvertible row must not block the rest of the batch, and must never be
+	// stored as a silent NULL.
+	var loaded []string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var rows []map[string]interface{}
+		_ = json.Unmarshal(body, &rows)
+		bad := false
+		for _, row := range rows {
+			if s, _ := row["target_qty"].(string); s == "NOT_A_NUMBER" {
+				bad = true
+			}
+		}
+		if bad && len(rows) > 1 {
+			w.Write([]byte(`{"Status":"Fail","Message":"too many filtered rows"}`))
+			return
+		}
+		if bad {
+			w.Write([]byte(`{"Status":"Fail","Message":"too many filtered rows"}`))
+			return
+		}
+		for _, row := range rows {
+			if id, ok := row["id"].(string); ok {
+				loaded = append(loaded, id)
+			}
+		}
+		w.Write([]byte(`{"Status":"Success","Message":"OK","NumberFilteredRows":0}`))
+	}))
+	defer ts.Close()
+
+	gk := &StreamingGatekeeper{
+		cfg: Config{
+			StarRocksHTTP:  ts.URL,
+			StarRocksDB:    "oms",
+			StarRocksTable: "orm_order",
+			Topic:          "orm_oms.orm.order",
+			PrimaryKeys:    []string{"id"},
+			DLQTopic:       "dlq",
+			StrictMode:     true,
+		},
+		metrics:   &GatekeeperMetrics{},
+		dlqWriter: nil,
+	}
+
+	rows := []json.RawMessage{
+		json.RawMessage(`{"id":"g1","target_qty":"1.5"}`),
+		json.RawMessage(`{"id":"bad","target_qty":"NOT_A_NUMBER"}`),
+		json.RawMessage(`{"id":"g2","target_qty":"2.5"}`),
+		json.RawMessage(`{"id":"g3","target_qty":"3.5"}`),
+	}
+
+	rejected, err := gk.loadRows(context.Background(), rows, "lbl")
+	require.NoError(t, err, "a single bad row must not fail the batch")
+	assert.Equal(t, int64(1), rejected)
+	assert.ElementsMatch(t, []string{"g1", "g2", "g3"}, loaded,
+		"every good row must still land; only the bad one is dropped")
+	// loadRows reports the count; the caller is what increments the metric, so
+	// asserting it here would double-count.
+	assert.Equal(t, int64(0), gk.metrics.RowsRejected.Load())
+	assert.Equal(t, int64(1), gk.metrics.DLQEmitted.Load())
+}
+
+func TestLoadRowsDoesNotBisectTransportErrors(t *testing.T) {
+	// A connection failure must fail the batch outright -- bisecting would just
+	// multiply the requests and hide a real outage.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	gk := &StreamingGatekeeper{
+		cfg: Config{
+			StarRocksHTTP: ts.URL, StarRocksDB: "oms", StarRocksTable: "orm_order",
+			PrimaryKeys: []string{"id"}, StrictMode: true,
+		},
+		metrics: &GatekeeperMetrics{},
+	}
+	rows := []json.RawMessage{json.RawMessage(`{"id":"a"}`), json.RawMessage(`{"id":"b"}`)}
+	_, err := gk.loadRows(context.Background(), rows, "lbl")
+	assert.Error(t, err)
+	assert.Equal(t, int64(0), gk.metrics.RowsRejected.Load())
 }
 
 func TestStreamLoadBatchSurfacesRejectedLoad(t *testing.T) {
@@ -331,7 +502,7 @@ func TestStreamLoadBatchSurfacesRejectedLoad(t *testing.T) {
 	defer ts.Close()
 
 	cfg := Config{StarRocksHTTP: ts.URL, StarRocksDB: "oms", StarRocksTable: "orm_order"}
-	err := streamLoadBatch(context.Background(), cfg, []json.RawMessage{json.RawMessage(`{"id":"1"}`)}, "lbl-1")
+	_, err := streamLoadBatch(context.Background(), cfg, []json.RawMessage{json.RawMessage(`{"id":"1"}`)}, "lbl-1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "too many filtered rows")
 }
