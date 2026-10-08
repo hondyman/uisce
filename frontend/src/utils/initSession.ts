@@ -28,6 +28,27 @@ export function initSession(): void {
         localStorage.setItem('auth_expires_at', (Date.now() + 365 * 24 * 3600 * 1000).toString());
       } catch (_) {}
     }
+
+    // Clean up any stale/invalid placeholder scope entries from previous sessions
+    try {
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      
+      const storedDs = localStorage.getItem('selected_datasource');
+      if (storedDs) {
+        const parsed = JSON.parse(storedDs);
+        if (!parsed?.id || !UUID_REGEX.test(parsed.id) || parsed.id.startsWith('00000000') || parsed.id.startsWith('11111111')) {
+          localStorage.removeItem('selected_datasource');
+        }
+      }
+
+      const storedScope = localStorage.getItem('operating_scope');
+      if (storedScope) {
+        const parsed = JSON.parse(storedScope);
+        if (parsed?.datasourceId && (!UUID_REGEX.test(parsed.datasourceId) || parsed.datasourceId.startsWith('00000000') || parsed.datasourceId.startsWith('11111111'))) {
+          localStorage.removeItem('operating_scope');
+        }
+      }
+    } catch (_) {}
   }
 
   console.log('Session initialized');
