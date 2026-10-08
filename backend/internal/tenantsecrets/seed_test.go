@@ -84,6 +84,15 @@ func TestSeedInstanceSecretsRejectsBadInputBeforeStore(t *testing.T) {
 		{"database url wrong scheme", func(i *Input) { i.DatabaseURL = "mysql://u:p@h/db" }},
 		{"database url no host", func(i *Input) { i.DatabaseURL = "postgres:///db" }},
 		{"database url malformed", func(i *Input) { i.DatabaseURL = "postgres://u:p@h\n/db" }},
+		{"env traversal dotdot", func(i *Input) { i.Environment = ".." }},
+		{"env absolute path", func(i *Input) { i.Environment = "/dev" }},
+		{"env nested path", func(i *Input) { i.Environment = "dev/../prod" }},
+		{"env trailing slash", func(i *Input) { i.Environment = "dev/" }},
+		{"env null byte", func(i *Input) { i.Environment = "dev\x00" }},
+		{"env overlong", func(i *Input) { i.Environment = strings.Repeat("d", 200) }},
+		{"tenant code dotdot", func(i *Input) { i.TenantCode = ".." }},
+		{"tenant code with slash", func(i *Input) { i.TenantCode = "acme/prod" }},
+		{"tenant code leading slash", func(i *Input) { i.TenantCode = "/acme" }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -123,5 +132,24 @@ func TestSeedInstanceSecretsErrorsNeverEchoSecrets(t *testing.T) {
 func TestSeedInstanceSecretsWithoutStoreFailsClosed(t *testing.T) {
 	if _, err := (&Activities{}).SeedInstanceSecrets(context.Background(), validInput()); err == nil {
 		t.Fatal("ran without a secret store")
+	}
+}
+
+func TestPathRejectsTraversalAndAcceptsLayout(t *testing.T) {
+	bad := []struct{ code, env string }{
+		{"..", "dev"}, {"acme", ".."}, {"acme", "/dev"}, {"acme", "dev/x"},
+		{"acme/x", "dev"}, {"/acme", "dev"}, {"", "dev"}, {"acme", ""},
+		{"acme", strings.Repeat("d", 200)}, {"a" + strings.Repeat("b", 60), "dev"},
+	}
+	for _, tc := range bad {
+		if p, err := Path(tc.code, tc.env); err == nil {
+			t.Errorf("Path(%q, %q) = %q, want error", tc.code, tc.env, p)
+		}
+	}
+	for _, env := range []string{"dev", "uat", "prod"} {
+		p, err := Path("acme", env)
+		if err != nil || p != "tenants/acme/"+env {
+			t.Errorf("Path(acme, %s) = %q, %v", env, p, err)
+		}
 	}
 }
