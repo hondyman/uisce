@@ -2,112 +2,43 @@ import React from "react";
 import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import useBlockableNavigate from './components/RouteBlocker/useBlockableNavigate';
 import { useLocale } from "./i18n/useLocale";
-import { MicroBundleCatalogExample } from "./MicroBundleCatalogExample";
-import { JITRequestPanelExample } from "./JITRequestPanelExample";
-import { AccessExplanationExample } from "./AccessExplanationExample";
-import ConversationalQueryPage from "./pages/ConversationalQueryPage";
-import ManagementPage from "./features/fabric/pages/preaggregations/ManagementPage";
 import BundleExplorer from "./components/BundleExplorer";
-import CalculationsLibraryPage from "./features/fabric/pages/CalculationsLibraryPage";
 import ProtectedRoute from "./components/ProtectedRoute";
-import CalculatedFieldBuilderPage from "./pages/CalculatedFieldBuilderPage";
-import DashboardPage from "./features/fabric/pages/DashboardPage";
 import AuditLogsPage from "./features/fabric/pages/AuditLogsPage";
-import SettingsPage from "./features/fabric/pages/SettingsPage";
-import TenantsManagementPage from "./features/fabric/pages/TenantsManagementPage";
-import ViewsCatalogPage from "./features/views/pages/ViewsCatalogPage";
 import ViewDetailsPage from "./features/views/pages/ViewDetailsPage";
-import BundleListPage from "./pages/bundles/BundleListPage";
 import BundleEditor from "./pages/bundles/BundleEditor";
-import RoleListPage from "./pages/roles/RoleListPage";
-import RoleEditorPage from "./pages/roles/RoleEditorPage";
-import DomainsManagementPage from "./features/core/pages/DomainsManagementPage";
-import SemanticMapperPage from "./features/core/pages/SemanticMapperPage";
 import { TenantDetailPageV2 } from "./features/tenants/pages/TenantDetailPageV2";
-import { SemanticCatalogPage } from "./pages/SemanticCatalogPage";
 
-import GlossaryExplorer from "./features/glossary/GlossaryExplorer";
-import BusinessTermsExplorer from "./features/glossary/BusinessTermsExplorer";
-import ApiInventoryPage from "./features/catalog/pages/ApiInventoryPage";
 import { NodeTypeDetailPage } from "./pages/catalog/NodeTypeDetailPage";
 import { EdgeTypeDetailPage } from "./pages/catalog/EdgeTypeDetailPage";
-import { AIBusinessTermSuggestionsPage } from "./pages/catalog/AIBusinessTermSuggestionsPage";
 import { BusinessTermDetailPage } from "./pages/catalog/BusinessTermDetailPage";
-import EntityPickerPage from "./features/custom-attributes/pages/EntityPickerPage";
 import WorkbenchPage from "./features/custom-attributes/pages/WorkbenchPage";
 import CustomComponentPage from "./pages/CustomComponentPage";
-import AdvancedRuleBuilderPage from "./pages/AdvancedRuleBuilderPage";
 import SystemValidationsPage from "./pages/SystemValidationsPage";
-import UisceBuilder from "./features/uisce-builder/UisceBuilder";
-import { InvestmentValidationPage } from "./pages/InvestmentValidationPage";
-import ApprovalWorkflowDashboard from "./pages/ApprovalWorkflowDashboard";
-import { WorkflowDesignerPage } from "./features/workflow/pages/WorkflowDesignerPage";
-
-import { NotificationCenterPage } from "./features/workflow/pages/NotificationCenterPage";
-import { NotificationTemplateEditorPage } from "./features/workflow/pages/NotificationTemplateEditorPage";
-import { NotificationPreferencesPage } from "./features/workflow/pages/NotificationPreferencesPage";
-import { SLADashboardPage } from "./features/workflow/pages/SLADashboardPage";
-import { RegulatorDashboardPage } from "./features/workflow/pages/RegulatorDashboardPage";
-import { ProcessCatalogPage } from "./features/workflow/pages/ProcessCatalogPage";
 import { AuditExplorerPage } from "./features/workflow/pages/AuditExplorerPage";
-import AuditExplorer from "./components/audit/AuditExplorer";
-import TemporalOpsPage from "./features/admin/pages/TemporalOpsPage";
-const QueryLibrary = React.lazy(() => import("./features/query-builder/pages/QueryLibrary"));
+
 const SavedQueryEditor = React.lazy(() => import("./features/query-builder/pages/SavedQueryEditor"));
-// Cube-aware Query Builder — subject.kind='cube' preview path. Mounted under
-// /query-builder/cube/:cubeId so a cube row / designer row action can deep-link
-// straight into a cube-pinned saved-query editor. Untouched by the BO flow.
 const CubeQueryBuilder = React.lazy(() => import("./features/query-builder/pages/BusinessObjectQueryBuilder"));
 const SqlStudioPage = React.lazy(() => import("./pages/analytical/SqlStudioPage"));
 const SemanticCatalogDetailPage = React.lazy(() => import("./pages/analytical/SemanticCatalogDetailPage"));
 const PipelinesPage = React.lazy(() => import("./pages/analytical/PipelinesPage"));
 const ReportsPage = React.lazy(() => import("./pages/analytical/ReportsPage"));
-// Metrics Console imports
-const MetricsConsolePage = React.lazy(() => import("./pages/MetricsConsolePage"));
-const MetricDetailPage = React.lazy(() => import("./pages/MetricDetailPage"));
-const MetricCreatePage = React.lazy(() => import("./pages/MetricCreatePage"));
-const MetricEditPage = React.lazy(() => import("./pages/MetricEditPage"));
-const MetricCalcConsole = React.lazy(() => import("./pages/metrics/MetricCalcConsole"));
-const SemanticEnrichmentWizard = React.lazy(() => import("./pages/SemanticEnrichment/SemanticEnrichmentWizard"));
-const NLQPage = React.lazy(() => import("./pages/nlq/NLQPage"));
-const LLMConfigPage = React.lazy(() => import("./pages/admin/LLMConfigPage"));
 
 const Feed = React.lazy(() => import("./features/feed/components/Feed").then(m => ({ default: m.Feed })));
-const ApprovalInboxPage = React.lazy(() => import("./features/wealth/pages/ApprovalInboxPage").then(m => ({ default: m.ApprovalInboxPage })));
 const GenUIApprovalInboxPage = React.lazy(() => import("./features/workflow/pages/GenUIApprovalInboxPage").then(m => ({ default: m.GenUIApprovalInboxPage })));
 const GenUIProposalDemoPage = React.lazy(() => import("./features/workflow/pages/GenUIProposalDemoPage").then(m => ({ default: m.GenUIProposalDemoPage })));
 const GenUIChatPage = React.lazy(() => import("./pages/GenUIChatPage"));
 const FactorAnalysisPage = React.lazy(() => import("./features/analytics/pages/FactorAnalysisPage").then(m => ({ default: m.FactorAnalysisPage })));
-const AdvisorDashboard = React.lazy(() => import("./pages/AdvisorDashboard"));
-const DirectIndexingPage = React.lazy(() => import("./pages/investment/DirectIndexingPage"));
-const ValuesProfileEditor = React.lazy(() => import("./pages/investment/ValuesProfileEditor"));
 // Crypto Platform
-const CryptoDashboard = React.lazy(() => import("./features/crypto/CryptoDashboard"));
 const CryptoPortfolioCenter = React.lazy(() => import("./features/crypto/CryptoPortfolioCenter"));
 // Secrets Management
-const SecretsConfigPage = React.lazy(() => import("./features/secrets").then(m => ({ default: m.SecretsConfigPage })));
 const SecretsAuditPage = React.lazy(() => import("./features/secrets").then(m => ({ default: m.SecretsAuditPage })));
 const SecretsMonitoringPage = React.lazy(() => import("./features/secrets").then(m => ({ default: m.SecretsMonitoringPage })));
 // Reporting
-const WorldClassReportBuilder = React.lazy(() => import("./features/reporting/components/SelfServiceReportBuilder").then(m => ({ default: m.WorldClassReportBuilder })));
-
-// BP Framework Console
-const BPConsolePage = React.lazy(() => import("./features/bp-console/pages/BPConsolePage"));
-const ReportLibrary = React.lazy(() => import("./features/reporting/components/ReportLibrary").then(m => ({ default: m.ReportLibrary })));
 const ReportBuilderPage = React.lazy(() => import("./pages/ReportBuilderPage"));
-const DataExplorer = React.lazy(() => import('./components/reporting/DataExplorer').then(m => ({ default: m.DataExplorer })));
-const SemanticModelManager = React.lazy(() => import('./features/semantic/components/SemanticModelManager').then(m => ({ default: m.SemanticModelManager })));
 
-const EntityManagerPage = React.lazy(() => import("./features/admin/pages/EntityManagerPage"));
-const EntityDetailsPage = React.lazy(() => import("./pages/EntityDetailsPage"));
-const BusinessObjectsPage = React.lazy(() => import("./pages/BusinessObjectsPage"));
 const BusinessObjectDetailsPage = React.lazy(() => import("./pages/BusinessObjectDetailsPage"));
 const SemanticHealthDashboard = React.lazy(() => import("./pages/SemanticHealthDashboard"));
-const SchemaExplorerPage = React.lazy(() => import("./features/schema-explorer/pages/SchemaExplorer"));
-const PageRuntimeRenderer = React.lazy(() => import("./pages/PageRuntimeRenderer"));
-const WorkflowStudioPage = React.lazy(() => import("./pages/WorkflowStudioPage"));
-const BusinessRuleEditorPage = React.lazy(() => import("./pages/BusinessRuleEditorPage"));
-const SecurityRoutes = React.lazy(() => import("./features/security/routes").then(m => ({ default: m.SecurityRoutes })));
 
 // Self-Service Studio — Phase D (Security & Access Mesh spec PART 5)
 const ProfilesDashboard = React.lazy(() => import("./admin-v2").then(m => ({ default: m.ProfilesDashboard })));
@@ -115,15 +46,12 @@ const ProfileCustomizer = React.lazy(() => import("./admin-v2").then(m => ({ def
 const EntitlementMatrix = React.lazy(() => import("./admin-v2").then(m => ({ default: m.EntitlementMatrix })));
 
 // ASO Pages
-const OptimizationCenter = React.lazy(() => import("./pages/OptimizationCenter").then(m => ({ default: m.OptimizationCenter })));
 const ASOOptimizationDetail = React.lazy(() => import("./components/aso/ASOOptimizationDetail").then(m => ({ default: m.ASOOptimizationDetail })));
 
 // Profile-key → ProfileCustomizer route wrapper. Pulls the URL param
 // out of react-router so the component doesn't need its own router hook.
 const ProfileCustomizerRoute: React.FC = () => {
   const { profileKey } = useParams<{ profileKey: string }>();
-  // The system blueprint check happens server-side; we render the
-  // customizer read-only for system profiles by setting isSystem=true.
   return <ProfileCustomizer profileKey={profileKey || ""} isSystem={profileKey?.startsWith("platform_") || false} />;
 };
 
@@ -131,8 +59,6 @@ const EntitlementMatrixRoute: React.FC = () => {
   const { profileKey } = useParams<{ profileKey: string }>();
   return <EntitlementMatrix profileKey={profileKey || ""} isCustom={!profileKey?.startsWith("platform_")} />;
 };
-const ObservabilityDashboard = React.lazy(() => import("./pages/ObservabilityDashboard"));
-const SLODashboard = React.lazy(() => import("./pages/SLODashboard"));
 const ChangeReviewPage = React.lazy(() => import("./pages/ChangeReviewPage"));
 const IncidentPage = React.lazy(() => import("./pages/scheduler/IncidentPage"));
 const APIStudioPage = React.lazy(() => import('./pages/api-studio/APIStudioPage'));
@@ -141,7 +67,6 @@ const PageStudioDetailsPage = React.lazy(() => import('./pages/page-studio/PageS
 const MenuDesignerPage = React.lazy(() => import('./pages/menu-designer/MenuDesignerPage'));
 const StandaloneWindowWrapper = React.lazy(() => import('./components/desktop').then(m => ({ default: m.StandaloneWindowWrapper })));
 const UniversalWorkspaceHub = React.lazy(() => import('./components/docking/UniversalWorkspaceHub').then(m => ({ default: m.UniversalWorkspaceHub })));
-const RuntimePage = React.lazy(() => import('./pages/PageRuntimeRenderer'));
 
 // Code-split workstation components for standalone / detached popout routes
 const PageBrowser = React.lazy(() => import('./pages/PageBrowser'));
@@ -160,14 +85,6 @@ const SurveillanceFindingsQueue = React.lazy(() =>
 );
 const AIPortfolioRebalancer = React.lazy(() => import('./components/AIPortfolioRebalancer'));
 const ScenarioAnalysisPro = React.lazy(() => import('./components/ScenarioAnalysisPro'));
-
-// Intelligence & Governance (New)
-import IntelligenceDashboard from "./pages/intelligence/IntelligenceDashboard";
-import IndexAdvisorPage from "./pages/intelligence/IndexAdvisorPage";
-import StorageTieringPage from "./pages/intelligence/StorageTieringPage";
-import DataQualityMonitorPage from "./pages/intelligence/DataQualityMonitorPage";
-import GovernanceConsolePage from "./pages/governance/GovernanceConsolePage";
-import GlobalNLQueryPage from "./pages/GlobalNLQueryPage";
 
 import SimulationWorkspace from "./pages/simulation/SimulationWorkspace";
 import ScenarioDetail from "./pages/simulation/ScenarioDetail";
@@ -199,14 +116,6 @@ function ProtectedApp() {
 
   const handleBundleCancel = () => {
     void navigate(`/${locale}/fabric/bundles`);
-  };
-
-  const handleRoleSave = () => {
-    void navigate(`/${locale}/fabric/roles`);
-  };
-
-  const handleRoleCancel = () => {
-    void navigate(`/${locale}/fabric/roles`);
   };
 
   return (
