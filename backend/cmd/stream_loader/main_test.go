@@ -498,7 +498,7 @@ func TestLoadRowsBisectsToIsolateBadRow(t *testing.T) {
 		json.RawMessage(`{"id":"g3","target_qty":"3.5"}`),
 	}
 
-	rejected, err := gk.loadRows(context.Background(), gk.cfg, testRoute(gk.cfg), rows, "lbl")
+	rejected, err := gk.loadRows(context.Background(), gk.cfg, testRoute(gk.cfg), rows, "lbl", dlqOrigin{})
 	require.NoError(t, err, "a single bad row must not fail the batch")
 	assert.Equal(t, int64(1), rejected)
 	assert.ElementsMatch(t, []string{"g1", "g2", "g3"}, loaded,
@@ -527,7 +527,7 @@ func TestLoadRowsDoesNotBisectTransportErrors(t *testing.T) {
 		floor:   newOffsetFloor(),
 	}
 	rows := []json.RawMessage{json.RawMessage(`{"id":"a"}`), json.RawMessage(`{"id":"b"}`)}
-	_, err := gk.loadRows(context.Background(), gk.cfg, testRoute(gk.cfg), rows, "lbl")
+	_, err := gk.loadRows(context.Background(), gk.cfg, testRoute(gk.cfg), rows, "lbl", dlqOrigin{})
 	assert.Error(t, err)
 	assert.Equal(t, int64(0), gk.metrics.RowsRejected.Load())
 }

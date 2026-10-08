@@ -191,13 +191,67 @@ type valueSchema struct {
 	} `json:"fields"`
 }
 
+// DLQMessage is one dead-letter record.
+//
+// The Kafka position is what makes a dead letter REPLAYABLE rather than merely
+// recorded. Without topic, partition and offset a record is a parking lot: you know a
+// row was rejected and roughly why, but not which row, so re-running it is
+// archaeology rather than an operation.
+//
+// Two shapes, chosen so nothing is both lost and bloated:
+//   - a single rejected row carries its raw event inline, so it can be replayed
+//     without touching Kafka at all;
+//   - a whole batch that terminally failed carries the offset RANGE instead. The
+//     events are still in the topic and re-readable by offset, and inlining 2000 raw
+//     envelopes to say the same thing would make the DLQ unusable in an incident.
 type DLQMessage struct {
-	OriginalTopic string                 `json:"original_topic"`
-	Timestamp     time.Time              `json:"timestamp"`
-	Reason        string                 `json:"reason"`
-	Detail        string                 `json:"detail"`
-	Payload       map[string]interface{} `json:"payload"`
-	RawEvent      json.RawMessage        `json:"raw_event,omitempty"`
+	OriginalTopic      string                 `json:"original_topic"`
+	OriginalPartition  int                    `json:"original_partition"`
+	OriginalOffset     int64                  `json:"original_offset"`
+	OriginalOffsetLast int64                  `json:"original_offset_last"`
+	OffsetsKnown       bool                   `json:"offsets_known"`
+	Timestamp          time.Time              `json:"timestamp"`
+	Reason             string                 `json:"reason"`
+	Detail             string                 `json:"detail"`
+	Payload            map[string]interface{} `json:"payload"`
+	RawEvent           json.RawMessage        `json:"raw_event,omitempty"`
+}
+
+// dlqOrigin is where a dead-lettered record came from in the topic. Zero-valued means
+// the position is unknown, which is reported honestly rather than implied.
+type dlqOrigin struct {
+	Topic      string
+	Partition  int
+	Offset     int64
+	LastOffset int64
+	Known      bool
+}
+
+// originOf builds a single-message origin.
+func originOf(topic string, m kafka.Message) dlqOrigin {
+	return dlqOrigin{Topic: topic, Partition: m.Partition, Offset: m.Offset, LastOffset: m.Offset, Known: true}
+}
+
+// originRangeOf builds an origin covering a batch. When the batch spans partitions the
+// range is deliberately NOT collapsed into one -- a range that crosses a partition
+// boundary would replay the wrong rows -- so Known is false and the record says so.
+func originRangeOf(topic string, msgs []kafka.Message) dlqOrigin {
+	if len(msgs) == 0 {
+		return dlqOrigin{}
+	}
+	first, last := msgs[0], msgs[0]
+	for _, m := range msgs[1:] {
+		if m.Partition != first.Partition {
+			return dlqOrigin{Topic: topic, Partition: first.Partition, Offset: first.Offset, LastOffset: last.Offset}
+		}
+		if m.Offset < first.Offset {
+			first = m
+		}
+		if m.Offset > last.Offset {
+			last = m
+		}
+	}
+	return dlqOrigin{Topic: topic, Partition: first.Partition, Offset: first.Offset, LastOffset: last.Offset, Known: true}
 }
 
 // dlqPublisher is the slice of *kafka.Writer the loader needs. It exists so the
@@ -434,6 +488,11 @@ func main() {
 		log.Printf("Tenant routing enabled: %d provisioned routes from %s (source database %q)",
 			gk.router.get().Len(), cfg.TenantRoutesDir, cfg.SourceDatabase)
 	}
+
+	// Smoke the DLQ before taking traffic. Required at boot is not the same as usable:
+	// the topic can be configured and still be missing or unwritable, and finding that
+	// out during an incident is how a partition ends up stalled.
+	runDLQSmoke(ctx, cfg, dlqWriter)
 
 	go gk.startHTTPServer()
 
@@ -760,7 +819,7 @@ func (gk *StreamingGatekeeper) handleMessage(ctx context.Context, sets *batchSet
 	if gk.cfg.AssignedTenantID != "" && eventTenant != "" && eventTenant != gk.cfg.AssignedTenantID {
 		gk.metrics.TenantMismatches.Add(1)
 		log.Printf("[SECURITY] Tenant Mismatch rejected: event tenant=%s != assigned tenant=%s", eventTenant, gk.cfg.AssignedTenantID)
-		gk.emitDLQ(ctx, "ERR_TENANT_MISMATCH", fmt.Sprintf("Event tenant %s does not match assigned %s", eventTenant, gk.cfg.AssignedTenantID), src, m.Value)
+		gk.emitDLQ(ctx, "ERR_TENANT_MISMATCH", fmt.Sprintf("Event tenant %s does not match assigned %s", eventTenant, gk.cfg.AssignedTenantID), src, originOf(m.Topic, m), m.Value)
 		return false
 	}
 
@@ -781,7 +840,7 @@ func (gk *StreamingGatekeeper) handleMessage(ctx context.Context, sets *batchSet
 				gk.metrics.RuleViolationsBlocked.Add(1)
 				log.Printf("[BLOCK] Validation Rule violation blocked stream load on %s: %d violations", boKey, len(evalResult.Violations))
 				gk.persistViolations(ctx, tenantForEval, boKey, evalResult, true)
-				gk.emitDLQ(ctx, "ERR_RULE_BLOCK_VIOLATION", fmt.Sprintf("Rule violations: %d blocking rules failed", len(evalResult.Violations)), ev.after, m.Value)
+				gk.emitDLQ(ctx, "ERR_RULE_BLOCK_VIOLATION", fmt.Sprintf("Rule violations: %d blocking rules failed", len(evalResult.Violations)), ev.after, originOf(m.Topic, m), m.Value)
 				return false
 			} else if len(evalResult.Violations) > 0 {
 				gk.metrics.RuleViolationsWarned.Add(1)
@@ -797,7 +856,7 @@ func (gk *StreamingGatekeeper) handleMessage(ctx context.Context, sets *batchSet
 		// Send it to the DLQ rather than writing a row we can never update or remove.
 		log.Printf("[DLQ] %s event has no usable primary key %v (tenant %s -> %s)",
 			ev.op, destCfg.PrimaryKeys, route.TenantID, route.Target(gk.cfg.StarRocksTable))
-		gk.emitDLQ(ctx, "ERR_MISSING_PRIMARY_KEY", fmt.Sprintf("no value for primary key %v", destCfg.PrimaryKeys), src, m.Value)
+		gk.emitDLQ(ctx, "ERR_MISSING_PRIMARY_KEY", fmt.Sprintf("no value for primary key %v", destCfg.PrimaryKeys), src, originOf(m.Topic, m), m.Value)
 		return false
 	}
 
@@ -839,7 +898,7 @@ func (gk *StreamingGatekeeper) route(ctx context.Context, src map[string]interfa
 		log.Printf("[DLQ] data event on %s offset %d has no tenant_id; failing closed rather than "+
 			"guessing a destination", m.Topic, m.Offset)
 		gk.emitDLQ(ctx, "ERR_TENANT_UNATTRIBUTED",
-			"data event carries no tenant_id; no default database exists", src, m.Value)
+			"data event carries no tenant_id; no default database exists", src, originOf(m.Topic, m), m.Value)
 		return TenantRoute{}, false
 	}
 
@@ -850,7 +909,7 @@ func (gk *StreamingGatekeeper) route(ctx context.Context, src map[string]interfa
 			tenantID, m.Topic, m.Offset, err)
 		gk.emitDLQ(ctx, "ERR_TENANT_UNKNOWN_ROUTE",
 			fmt.Sprintf("tenant %s has no provisioned StarRocks database; either provisioning has not run for it or it was deprovisioned while events were in flight", tenantID),
-			src, m.Value)
+			src, originOf(m.Topic, m), m.Value)
 		return TenantRoute{}, false
 	}
 	return route, true
@@ -917,7 +976,7 @@ func (gk *StreamingGatekeeper) flushDestination(ctx context.Context, dest *tenan
 					"row_count":    len(dest.ops),
 					"routing":      gk.router.get() != nil,
 					"source_db":    gk.cfg.SourceDatabase,
-				}, nil); derr != nil {
+				}, originRangeOf(gk.cfg.Topic, dest.messages), nil); derr != nil {
 				// The dead-letter is the only durable record of these rows. If it did not
 				// land, the batch is not terminal and its offsets must hold the floor.
 				log.Printf("[DLQ] tenant %s -> %s: dead-letter not acknowledged, holding offsets: %v",
@@ -943,7 +1002,7 @@ func (gk *StreamingGatekeeper) flushDestination(ctx context.Context, dest *tenan
 					"target_table": gk.cfg.StarRocksTable,
 					"attempts":     attempt,
 					"row_count":    len(dest.ops),
-				}, nil); derr != nil {
+				}, originRangeOf(gk.cfg.Topic, dest.messages), nil); derr != nil {
 				// The dead-letter is the only durable record of these rows. If it did not
 				// land, the batch is not terminal and its offsets must hold the floor.
 				log.Printf("[DLQ] tenant %s -> %s: dead-letter not acknowledged, holding offsets: %v",
@@ -1016,7 +1075,7 @@ func (gk *StreamingGatekeeper) writeBatch(ctx context.Context, b *tenantBatch) e
 	}
 
 	if len(upserts) > 0 {
-		rejected, err := gk.loadRows(ctx, destCfg, b.route, upserts, label)
+		rejected, err := gk.loadRows(ctx, destCfg, b.route, upserts, label, originRangeOf(gk.cfg.Topic, b.messages))
 		if err != nil {
 			return fmt.Errorf("stream load %d rows to %s: %w",
 				len(upserts), b.route.Target(gk.cfg.StarRocksTable), err)
@@ -1084,7 +1143,7 @@ func (gk *StreamingGatekeeper) deleteRows(ctx context.Context, cfg Config, keyCo
 // Bisection is applied only to row rejections. An authorisation failure or a
 // missing destination is not a bad row, and splitting the batch would turn one
 // clear error into log2(n) identical ones.
-func (gk *StreamingGatekeeper) loadRows(ctx context.Context, destCfg Config, route TenantRoute, rows []json.RawMessage, label string) (int64, error) {
+func (gk *StreamingGatekeeper) loadRows(ctx context.Context, destCfg Config, route TenantRoute, rows []json.RawMessage, label string, origin dlqOrigin) (int64, error) {
 	rejected, err := streamLoadBatch(ctx, destCfg, route, rows, label)
 	if err == nil {
 		return rejected, nil
@@ -1098,15 +1157,15 @@ func (gk *StreamingGatekeeper) loadRows(ctx context.Context, destCfg Config, rou
 		var row map[string]interface{}
 		_ = json.Unmarshal(rows[0], &row)
 		gk.emitDLQ(ctx, "ERR_STARROCKS_REJECTED",
-			fmt.Sprintf("StarRocks could not store this row: %v", err), row, rows[0])
+			fmt.Sprintf("StarRocks could not store this row: %v", err), row, origin, rows[0])
 		log.Printf("[DATA-LOSS] row for tenant %s could not be stored in %s: %v",
 			route.TenantID, route.Target(gk.cfg.StarRocksTable), err)
 		return 1, nil
 	}
 
 	mid := len(rows) / 2
-	left, lerr := gk.loadRows(ctx, destCfg, route, rows[:mid], label+"_a")
-	right, rerr := gk.loadRows(ctx, destCfg, route, rows[mid:], label+"_b")
+	left, lerr := gk.loadRows(ctx, destCfg, route, rows[:mid], label+"_a", origin)
+	right, rerr := gk.loadRows(ctx, destCfg, route, rows[mid:], label+"_b", origin)
 	if lerr != nil {
 		return left, lerr
 	}
@@ -1140,7 +1199,7 @@ func extractTenantID(m map[string]interface{}) string {
 // A nil writer means no DLQ is configured at all. That is a deployment choice, not a
 // transient fault, so it is counted once and does not stall the stream; a configured
 // writer that fails is a different thing and does hold the floor.
-func (gk *StreamingGatekeeper) emitDLQ(ctx context.Context, reason, detail string, payload map[string]interface{}, raw json.RawMessage) error {
+func (gk *StreamingGatekeeper) emitDLQ(ctx context.Context, reason, detail string, payload map[string]interface{}, origin dlqOrigin, raw json.RawMessage) error {
 	gk.metrics.DLQEmitted.Add(1)
 	dlqMsg := DLQMessage{
 		OriginalTopic: gk.cfg.Topic,
@@ -1150,6 +1209,15 @@ func (gk *StreamingGatekeeper) emitDLQ(ctx context.Context, reason, detail strin
 		Payload:       payload,
 		RawEvent:      raw,
 	}
+	// The record's own position comes from the message, not from configuration: the
+	// configured topic is the default, not a fact about this event.
+	if origin.Topic != "" {
+		dlqMsg.OriginalTopic = origin.Topic
+	}
+	dlqMsg.OriginalPartition = origin.Partition
+	dlqMsg.OriginalOffset = origin.Offset
+	dlqMsg.OriginalOffsetLast = origin.LastOffset
+	dlqMsg.OffsetsKnown = origin.Known
 
 	data, err := json.Marshal(dlqMsg)
 	if err != nil {

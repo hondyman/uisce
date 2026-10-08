@@ -100,11 +100,16 @@ func TestReportTripwireCountsTheFiring(t *testing.T) {
 // ---- DLQ acknowledgement gating ----
 
 // recordingDLQ accepts every dead-letter, which is what a healthy DLQ topic looks
-// like from the loader's side.
-type recordingDLQ struct{ n int }
+// like from the loader's side. It keeps the messages so tests can assert what a
+// dead-letter record actually contains -- the original bug was that nothing could.
+type recordingDLQ struct {
+	n    int
+	last []kafka.Message
+}
 
-func (d *recordingDLQ) WriteMessages(_ context.Context, _ ...kafka.Message) error {
+func (d *recordingDLQ) WriteMessages(_ context.Context, msgs ...kafka.Message) error {
 	d.n++
+	d.last = append(d.last, msgs...)
 	return nil
 }
 
@@ -121,7 +126,7 @@ func TestEmitDLQFailsWhenNoPublisherIsConfigured(t *testing.T) {
 	gk := newTestGatekeeper(Config{Topic: "t", DLQTopic: "dlq"})
 	gk.dlqWriter = nil
 
-	err := gk.emitDLQ(context.Background(), "ERR_X", "detail", nil, nil)
+	err := gk.emitDLQ(context.Background(), "ERR_X", "detail", nil, dlqOrigin{}, nil)
 	require.Error(t, err, "an unrecordable dead-letter must never be reported as success")
 	assert.Contains(t, err.Error(), "no DLQ publisher")
 	assert.Equal(t, int64(1), gk.metrics.DLQUnavailable.Load())
@@ -131,7 +136,7 @@ func TestEmitDLQReportsFailureWhenTheBrokerIsUnreachable(t *testing.T) {
 	gk := newTestGatekeeper(Config{Topic: "t", DLQTopic: "dlq"})
 	gk.dlqWriter = failingDLQ{}
 
-	err := gk.emitDLQ(context.Background(), "ERR_X", "detail", nil, nil)
+	err := gk.emitDLQ(context.Background(), "ERR_X", "detail", nil, dlqOrigin{}, nil)
 	require.Error(t, err, "an unacknowledged dead-letter must be reported, not swallowed")
 	assert.Contains(t, err.Error(), "dlq unreachable")
 }
