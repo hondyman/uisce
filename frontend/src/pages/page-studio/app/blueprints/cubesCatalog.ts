@@ -4,7 +4,7 @@ import type { Action, ColumnDef, ConditionNode } from '../appModel';
 /**
  * Cubes catalog (slug cubes-catalog): list/filter by scope, open designer,
  * deploy/refresh via cubes.* operations, Impact drawer (A3). Served at
- * /build/cubes via STUDIO_ROUTES (PR5).
+ * /build/cubes via route_aliases (PR5).
  */
 
 const op = (

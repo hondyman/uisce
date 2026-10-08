@@ -9,7 +9,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
+	"github.com/hondyman/uisce/backend/internal/compliance/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,14 +19,10 @@ func TestWarmTierPruner_ColdWatermarkGatingAnd395DayRetention(t *testing.T) {
 		srHost = "100.84.50.65"
 	}
 
-	homeDir, _ := os.UserHomeDir()
-	dsn := fmt.Sprintf("postgres://postgres:postgres@100.84.50.65:5432/alpha?sslmode=verify-full&sslrootcert=%s/.uisce/certs/ca.crt&sslcert=%s/.uisce/certs/postgres-client.crt&sslkey=%s/.uisce/certs/postgres-client.key", homeDir, homeDir, homeDir)
-	pgDB, err := sql.Open("postgres", dsn)
-	if err != nil {
-		t.Skipf("Postgres alpha not reachable: %v", err)
+	pgDB := testutil.GetEphemeralTestDB(t)
+	if pgDB == nil {
 		return
 	}
-	defer pgDB.Close()
 
 	srMySQLDSN := fmt.Sprintf("root:@tcp(%s:9030)/oms", srHost)
 	srDB, err := sql.Open("mysql", srMySQLDSN)

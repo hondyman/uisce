@@ -22,6 +22,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/trading"
 	temporalclientlib "github.com/hondyman/uisce/libs/temporal-client"
 	"github.com/jmoiron/sqlx"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	sdkclient "go.temporal.io/sdk/client"
 )
@@ -33,14 +34,22 @@ import (
 // table names like `tenants` silently resolve to that other schema's
 // same-named-but-differently-shaped tables instead of public.tenants.
 func withPublicSearchPath(dsn string) string {
-	sep := "&"
-	if !strings.Contains(dsn, "?") {
-		sep = "?"
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		sep := "&"
+		if !strings.Contains(dsn, "?") {
+			sep = "?"
+		}
+		return dsn + sep + "options=" + url.QueryEscape("-c search_path=public")
 	}
-	return dsn + sep + "options=" + url.QueryEscape("-c search_path=public")
+	if !strings.Contains(dsn, "search_path") {
+		return dsn + " search_path=public"
+	}
+	return dsn
 }
 
 func main() {
+	_ = godotenv.Load(".env", "backend/.env")
+
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" || dbURL == "<VALUE_TO_BE_PROVIDED>" {
 		dbURL = os.Getenv("POSTGRES_DSN")
@@ -71,6 +80,10 @@ func main() {
 
 	if err := db.Ping(); err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := api.AssertSafeDatabaseRole(context.Background(), db); err != nil {
+		log.Fatalf("FATAL: database role assertion failed: %v", err)
 	}
 
 	log.Println("Connected to database successfully")

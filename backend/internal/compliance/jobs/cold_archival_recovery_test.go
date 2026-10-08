@@ -2,7 +2,6 @@ package jobs
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net"
 	"os"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
 	"github.com/hondyman/uisce/backend/internal/compliance/cold"
+	"github.com/hondyman/uisce/backend/internal/compliance/testutil"
 )
 
 func TestColdArchivalWorker_MultiBatchContiguityAndQuarantineRecovery(t *testing.T) {
@@ -30,17 +30,8 @@ func TestColdArchivalWorker_MultiBatchContiguityAndQuarantineRecovery(t *testing
 	}
 	conn.Close()
 
-	homeDir, _ := os.UserHomeDir()
-	dsn := fmt.Sprintf("postgres://postgres:postgres@100.84.50.65:5432/alpha?sslmode=verify-full&sslrootcert=%s/.uisce/certs/ca.crt&sslcert=%s/.uisce/certs/postgres-client.crt&sslkey=%s/.uisce/certs/postgres-client.key", homeDir, homeDir, homeDir)
-	pgDB, err := sql.Open("postgres", dsn)
-	if err != nil {
-		t.Skipf("Postgres alpha not reachable: %v", err)
-		return
-	}
-	defer pgDB.Close()
-
-	if err := pgDB.Ping(); err != nil {
-		t.Skipf("Postgres alpha ping failed: %v", err)
+	pgDB := testutil.GetEphemeralTestDB(t)
+	if pgDB == nil {
 		return
 	}
 
@@ -242,11 +233,10 @@ func TestColdArchivalWorker_CrashBeforeManifestCommit_RecoveryResumeAndCLIVerifi
 	}
 	conn.Close()
 
-	homeDir, _ := os.UserHomeDir()
-	dsn := fmt.Sprintf("postgres://postgres:postgres@100.84.50.65:5432/alpha?sslmode=verify-full&sslrootcert=%s/.uisce/certs/ca.crt&sslcert=%s/.uisce/certs/postgres-client.crt&sslkey=%s/.uisce/certs/postgres-client.key", homeDir, homeDir, homeDir)
-	pgDB, err := sql.Open("postgres", dsn)
-	require.NoError(t, err)
-	defer pgDB.Close()
+	pgDB := testutil.GetEphemeralTestDB(t)
+	if pgDB == nil {
+		return
+	}
 
 	s3Client, err := cold.NewS3StorageClient(cold.S3Config{
 		Endpoint:        s3Endpoint,

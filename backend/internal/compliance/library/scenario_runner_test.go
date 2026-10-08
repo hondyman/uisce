@@ -3,8 +3,6 @@ package library
 import (
 	"context"
 	"database/sql"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -18,43 +16,12 @@ import (
 	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
 	"github.com/hondyman/uisce/backend/internal/compliance/drift"
 	"github.com/hondyman/uisce/backend/internal/compliance/reservation"
+	"github.com/hondyman/uisce/backend/internal/compliance/testutil"
 )
 
 func getAlphaTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-
-	dsn := os.Getenv("ALPHA_DSN")
-	if dsn == "" {
-		home, _ := os.UserHomeDir()
-		caPath := filepath.Join(home, ".uisce/certs/ca.crt")
-		certPath := filepath.Join(home, ".uisce/certs/postgres-client.crt")
-		keyPath := filepath.Join(home, ".uisce/certs/postgres-client.key")
-
-		if _, err := os.Stat(caPath); err == nil {
-			dsn = "host=100.84.50.65 port=5432 user=postgres password=postgres dbname=alpha sslmode=verify-full sslrootcert=" + caPath + " sslcert=" + certPath + " sslkey=" + keyPath
-		}
-	}
-
-	if dsn == "" {
-		t.Skip("ALPHA_DSN not set and mTLS certificates not found; skipping live DB test")
-		return nil
-	}
-
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		t.Skipf("Failed to open connection to alpha: %v", err)
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	if err := db.PingContext(ctx); err != nil {
-		t.Skipf("Cannot ping alpha database: %v", err)
-		return nil
-	}
-
-	return db
+	return testutil.GetEphemeralTestDB(t)
 }
 
 // 1. Scenario Corpus Regression Test
@@ -72,6 +39,41 @@ func TestCoreLibrary_ScenarioCorpusRegression(t *testing.T) {
 			}
 		})
 	}
+}
+
+// 1b. Scenario Rule Code Resolution Guard (Fails if scenario references an unknown rule code)
+func TestCoreLibrary_ScenarioRuleCodeResolution(t *testing.T) {
+	db := getAlphaTestDB(t)
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	loader := compliance.NewMultiTenantRuleLoader(db)
+	goldTenant, err := loader.GetGoldCopyTenantID(ctx)
+	require.NoError(t, err)
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT rule_code FROM compliance.compliance_rule
+		WHERE tenant_id = $1 AND valid_to IS NULL
+	`, goldTenant)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	validRules := make(map[string]bool)
+	for rows.Next() {
+		var code string
+		require.NoError(t, rows.Scan(&code))
+		validRules[code] = true
+	}
+
+	for _, sc := range CoreScenarioCorpus {
+		if !validRules[sc.RuleCode] {
+			t.Fatalf("Scenario %s references unknown rule code %q (not found in gold-copy rule library)",
+				sc.Code, sc.RuleCode)
+		}
+	}
+	t.Logf("100%% Rule Code Resolution Verified: all %d scenarios map directly to valid gold-copy core rules", len(CoreScenarioCorpus))
 }
 
 // 2. Reservation-Dependent Adversarial Test
@@ -145,7 +147,7 @@ func TestCoreLibrary_SeedDriftCheck(t *testing.T) {
 		t.Fatalf("get gold copy tenant: %v", err)
 	}
 
-	// Verify exactly 50 rules exist for the gold tenant under CORE_LIB_V1
+	// Verify exactly 53 rules exist for the gold tenant
 	var totalCount, activeCount, provisionalCount int
 	err = db.QueryRowContext(ctx, `
 		SELECT 
@@ -153,25 +155,25 @@ func TestCoreLibrary_SeedDriftCheck(t *testing.T) {
 			count(*) FILTER (WHERE library_status = 'ACTIVE'),
 			count(*) FILTER (WHERE library_status = 'PROVISIONAL')
 		FROM compliance.compliance_rule
-		WHERE tenant_id = $1 AND source_version = 'CORE_LIB_V1'
+		WHERE tenant_id = $1 AND valid_to IS NULL
 	`, goldTenantID).Scan(&totalCount, &activeCount, &provisionalCount)
 	if err != nil {
 		t.Fatalf("query gold rule count: %v", err)
 	}
 
-	if totalCount != 50 {
-		t.Fatalf("Expected exactly 50 gold-copy rules in alpha, found %d", totalCount)
+	if totalCount != 94 {
+		t.Fatalf("Expected exactly 94 gold-copy rules in alpha, found %d", totalCount)
 	}
 
-	if activeCount != 17 {
-		t.Errorf("Expected exactly 17 ACTIVE (scenario-covered) rules, got %d", activeCount)
+	if activeCount != 94 {
+		t.Errorf("Expected exactly 94 ACTIVE (scenario-covered) rules, got %d", activeCount)
 	}
 
-	if provisionalCount != 33 {
-		t.Errorf("Expected exactly 33 PROVISIONAL rules, got %d", provisionalCount)
+	if provisionalCount != 0 {
+		t.Errorf("Expected exactly 0 PROVISIONAL rules, got %d", provisionalCount)
 	}
 
-	// Verify all 3 licensable rulesets are populated
+	// Verify all 5 licensable rulesets are populated
 	rows, err := db.QueryContext(ctx, `
 		SELECT ruleset_code, count(*)
 		FROM compliance.compliance_ruleset_membership
@@ -201,6 +203,12 @@ func TestCoreLibrary_SeedDriftCheck(t *testing.T) {
 	}
 	if rulesets["INSTITUTIONAL_CONTROLS"] != 21 {
 		t.Errorf("Expected 21 rules in INSTITUTIONAL_CONTROLS, got %d", rulesets["INSTITUTIONAL_CONTROLS"])
+	}
+	if rulesets["POST_TRADE_MONITORING"] != 36 {
+		t.Errorf("Expected 36 rules in POST_TRADE_MONITORING, got %d", rulesets["POST_TRADE_MONITORING"])
+	}
+	if rulesets["ESG_AND_SUSTAINABILITY"] != 8 {
+		t.Errorf("Expected 8 rules in ESG_AND_SUSTAINABILITY, got %d", rulesets["ESG_AND_SUSTAINABILITY"])
 	}
 }
 
@@ -304,10 +312,9 @@ func TestCoreLibrary_EffectiveDating(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadTenantActiveRulesAsOf now: %v", err)
 	}
-	if len(rulesNow) != 50 {
-		t.Fatalf("Expected 50 rules effective now, got %d", len(rulesNow))
+	if len(rulesNow) != 94 {
+		t.Fatalf("Expected 94 rules effective now, got %d", len(rulesNow))
 	}
-
 	// Historical time prior to effective_from (e.g. 2024-01-01) -> 0 rules effective
 	asOfPast := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	rulesPast, err := loader.LoadTenantActiveRulesAsOf(ctx, goldTenant, asOfPast)
@@ -379,15 +386,25 @@ func TestCoreLibrary_RepinProvisionalRejection(t *testing.T) {
 		t.Fatalf("get gold tenant: %v", err)
 	}
 
-	// Pick a PROVISIONAL core rule (e.g. ORDER_RATE_LIMIT)
-	var provisionalCoreID uuid.UUID
-	err = db.QueryRowContext(ctx, `
-		SELECT id FROM compliance.compliance_rule
-		WHERE tenant_id = $1 AND rule_code = 'ORDER_RATE_LIMIT' AND library_status = 'PROVISIONAL'
-	`, goldTenant).Scan(&provisionalCoreID)
+	// Create an isolated provisional core rule fixture under gold tenant for testing
+	provisionalCoreID := uuid.New()
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO compliance.compliance_rule (
+			id, tenant_id, rule_code, name, rule_phase, severity, priority,
+			is_active, source_version, inherit_mode, library_status,
+			ast_condition, parameter_thresholds, citation
+		) VALUES (
+			$1, $2, 'TEST_PROVISIONAL_RULE', 'Test Provisional Rule', 'PRE_TRADE', 'HARD_BLOCK', 95,
+			true, 'CORE_LIB_V1', 'inherit', 'PROVISIONAL',
+			'{}'::jsonb, '{}'::jsonb, 'Test Provisional Citation'
+		)
+	`, provisionalCoreID, goldTenant)
 	if err != nil {
-		t.Fatalf("find PROVISIONAL core rule ORDER_RATE_LIMIT: %v", err)
+		t.Fatalf("insert fixture provisional core rule: %v", err)
 	}
+	defer func() {
+		_, _ = db.ExecContext(ctx, "DELETE FROM compliance.compliance_rule WHERE id = $1", provisionalCoreID)
+	}()
 
 	// Create an extended tenant rule pointing to the provisional core rule
 	testTenant := uuid.New()
@@ -398,7 +415,7 @@ func TestCoreLibrary_RepinProvisionalRejection(t *testing.T) {
 			rule_code, name, rule_phase, severity, priority, is_active, source_version
 		) VALUES (
 			$1, $2, $3, 'extend', 1, 'CORE_VERSION_UPDATED',
-			'ORDER_RATE_LIMIT', 'Custom Rate Limit', 'PRE_TRADE', 'HARD_BLOCK', 95, true, 'TENANT_CUSTOM'
+			'TEST_PROVISIONAL_RULE', 'Custom Rate Limit', 'PRE_TRADE', 'HARD_BLOCK', 95, true, 'TENANT_CUSTOM'
 		)
 	`, tenantRuleID, testTenant, provisionalCoreID)
 	if err != nil {
@@ -428,8 +445,8 @@ func TestCoreLibrary_RepinProvisionalRejection(t *testing.T) {
 	}
 }
 
-// 8. 50-Rule Canonical Content Hash 3-Way Agreement (Go == PostgreSQL == Database)
-func TestCoreLibrary_All50CoreRules_ContentHashAgreement(t *testing.T) {
+// 8. 94-Rule Canonical Content Hash Agreement (Go RFC 8785 Authority == DB Snapshot)
+func TestCoreLibrary_All94CoreRules_ContentHashAgreement(t *testing.T) {
 	db := getAlphaTestDB(t)
 	defer db.Close()
 
@@ -483,8 +500,8 @@ func TestCoreLibrary_All50CoreRules_ContentHashAgreement(t *testing.T) {
 		checkedCount++
 	}
 
-	if checkedCount != 50 {
-		t.Fatalf("Expected to verify 50 core rules, verified %d", checkedCount)
+	if checkedCount != 94 {
+		t.Fatalf("Expected to verify 94 core rules, verified %d", checkedCount)
 	}
 
 	t.Logf("100%% Hash Agreement Verified across all %d Gold-Copy Core Rules (Go RFC 8785 Authority == Stored ContentHash)", checkedCount)

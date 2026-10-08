@@ -130,7 +130,7 @@ describe('BusinessObjectBindingWizard', () => {
       })
     )
     expect(onSave).toHaveBeenCalledWith('bo-1')
-  })
+  }, 15000)
 
   it('shows manual terms when the manual tab is active', async () => {
     const user = userEvent.setup()

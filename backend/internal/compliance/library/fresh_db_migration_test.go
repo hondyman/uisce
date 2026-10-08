@@ -150,7 +150,7 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 	_, err = freshDB.ExecContext(ctx, prereqSQL)
 	require.NoError(t, err)
 
-	// 5. Apply migrations 001 -> 009 UP in order
+	// 5. Apply migrations 001 -> 017 UP in order
 	upMigrations := []string{
 		"20261218_001_compliance_engine_core_tables.up.sql",
 		"20261218_002_governance_audit_and_privileges.up.sql",
@@ -161,6 +161,16 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 		"20261218_007_regulatory_change_workflow.up.sql",
 		"20261219_008_trigger_refactor_and_draft_guard.up.sql",
 		"20261220_009_compliance_surveillance_findings.up.sql",
+		"20261221_010_post_trade_pilot_schema.up.sql",
+		"20261222_011_phase1_counterparty_and_group_schema.up.sql",
+		"20261223_012_phase1_tranche2_rules_and_pack.up.sql",
+		"20261224_013_phase2_tranche1_taxonomy_rules.up.sql",
+		"20261224_014_provenance_least_privilege_and_audit.up.sql",
+		"20261224_015_phase2_tranche2_rules_and_pack.up.sql",
+		"20261224_016_phase2_tranche2_rule_corrections.up.sql",
+		"20261224_017_phase2_tranche3_waci_and_sfdr_rules.up.sql",
+		"20261224_018_phase7_entity_graph_and_rule_families.up.sql",
+		"20261224_019_phase7_tranche2_and_class_b_lists.up.sql",
 	}
 
 	for _, migFile := range upMigrations {
@@ -176,22 +186,22 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 	var ruleCount int
 	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM compliance.compliance_rule").Scan(&ruleCount)
 	require.NoError(t, err)
-	require.Equal(t, 50, ruleCount, "Fresh database migration must yield exactly 50 core rules")
+	require.Equal(t, 94, ruleCount, "Fresh database migration must yield exactly 94 core rules")
 
 	var versionCount int
 	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM compliance.compliance_rule_version").Scan(&versionCount)
 	require.NoError(t, err)
-	require.Equal(t, 50, versionCount, "Fresh database migration must yield exactly 50 rule version snapshots")
+	require.Equal(t, 94, versionCount, "Fresh database migration must yield exactly 94 rule version snapshots")
 
 	var rulesetCount int
 	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(DISTINCT ruleset_code) FROM compliance.compliance_ruleset_membership").Scan(&rulesetCount)
 	require.NoError(t, err)
-	require.Equal(t, 3, rulesetCount, "Must seed 3 standard licensable rulesets")
+	require.Equal(t, 5, rulesetCount, "Must seed 5 standard licensable rulesets")
 
 	var membershipCount int
 	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM compliance.compliance_ruleset_membership").Scan(&membershipCount)
 	require.NoError(t, err)
-	require.Equal(t, 50, membershipCount, "All 50 rules must be mapped to ruleset memberships")
+	require.Equal(t, 94, membershipCount, "Core rules mapped to ruleset memberships (50 pre-trade + 44 post-trade)")
 
 	var regCaseTableCount int
 	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'compliance' AND table_name IN ('regulatory_change_case', 'regulatory_case_event', 'compliance_notification', 'regulatory_draft_rule')").Scan(&regCaseTableCount)
@@ -203,8 +213,18 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, survTableCount, "Migration 009 surveillance tables must exist")
 
-	t.Logf("Fresh DB Integrity Assertions Passed: Rules=%d, Versions=%d, Rulesets=%d, Memberships=%d, RegTables=%d, SurvTables=%d",
-		ruleCount, versionCount, rulesetCount, membershipCount, regCaseTableCount, survTableCount)
+	var postTradeTableCount int
+	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'compliance' AND table_name IN ('compliance_portfolio_snapshot', 'compliance_finding')").Scan(&postTradeTableCount)
+	require.NoError(t, err)
+	require.Equal(t, 2, postTradeTableCount, "Migration 010 post-trade tables must exist")
+
+	var relTableCount int
+	err = freshDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'master' AND table_name = 'entity_relationship_snapshot'").Scan(&relTableCount)
+	require.NoError(t, err)
+	require.Equal(t, 1, relTableCount, "Migration 011 entity relationship table must exist")
+
+	t.Logf("Fresh DB Integrity Assertions Passed: Rules=%d, Versions=%d, Rulesets=%d, Memberships=%d, RegTables=%d, SurvTables=%d, PostTradeTables=%d, RelTables=%d",
+		ruleCount, versionCount, rulesetCount, membershipCount, regCaseTableCount, survTableCount, postTradeTableCount, relTableCount)
 
 	// 7. Test Structural Mutation Guard Trigger
 	var sampleRuleID string
@@ -267,8 +287,18 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 
 	t.Logf("Surveillance Finding State Machine & Append-Only Event Guard verified!")
 
-	// 9. Rollback Cycle: 009 -> 001 DOWN
+	// 9. Rollback Cycle: 019 -> 001 DOWN
 	downMigrations := []string{
+		"20261224_019_phase7_tranche2_and_class_b_lists.down.sql",
+		"20261224_018_phase7_entity_graph_and_rule_families.down.sql",
+		"20261224_017_phase2_tranche3_waci_and_sfdr_rules.down.sql",
+		"20261224_016_phase2_tranche2_rule_corrections.down.sql",
+		"20261224_015_phase2_tranche2_rules_and_pack.down.sql",
+		"20261224_014_provenance_least_privilege_and_audit.down.sql",
+		"20261224_013_phase2_tranche1_taxonomy_rules.down.sql",
+		"20261223_012_phase1_tranche2_rules_and_pack.down.sql",
+		"20261222_011_phase1_counterparty_and_group_schema.down.sql",
+		"20261221_010_post_trade_pilot_schema.down.sql",
 		"20261220_009_compliance_surveillance_findings.down.sql",
 		"20261219_008_trigger_refactor_and_draft_guard.down.sql",
 		"20261218_007_regulatory_change_workflow.down.sql",
@@ -289,5 +319,5 @@ func TestCoreLibrary_FreshDatabaseMigrationChain(t *testing.T) {
 		t.Logf("Migration %s DOWN executed cleanly", migFile)
 	}
 
-	t.Logf("FRESH DATABASE MIGRATION CHAIN & ROLLBACK CYCLE 001 <-> 009 FULLY VERIFIED!")
+	t.Logf("FRESH DATABASE MIGRATION CHAIN & ROLLBACK CYCLE 001 <-> 019 FULLY VERIFIED!")
 }

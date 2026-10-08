@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hondyman/uisce/backend/internal/compliance/canonical"
+	"github.com/hondyman/uisce/backend/internal/compliance/testutil"
 )
 
 func TestWarmTierLoader_EndToEndBatchSyncAndIdempotency(t *testing.T) {
@@ -30,17 +31,8 @@ func TestWarmTierLoader_EndToEndBatchSyncAndIdempotency(t *testing.T) {
 	}
 	conn.Close()
 
-	homeDir, _ := os.UserHomeDir()
-	dsn := fmt.Sprintf("postgres://postgres:postgres@100.84.50.65:5432/alpha?sslmode=verify-full&sslrootcert=%s/.uisce/certs/ca.crt&sslcert=%s/.uisce/certs/postgres-client.crt&sslkey=%s/.uisce/certs/postgres-client.key", homeDir, homeDir, homeDir)
-	pgDB, err := sql.Open("postgres", dsn)
-	if err != nil {
-		t.Skipf("Postgres alpha not reachable: %v", err)
-		return
-	}
-	defer pgDB.Close()
-
-	if err := pgDB.Ping(); err != nil {
-		t.Skipf("Postgres alpha ping failed: %v", err)
+	pgDB := testutil.GetEphemeralTestDB(t)
+	if pgDB == nil {
 		return
 	}
 

@@ -17,16 +17,23 @@ import (
 // navigation tree (navigation_menu_nodes). Children is populated only by
 // the tree-shaped list endpoint; flat reads/writes omit it.
 type NavigationMenuNode struct {
-	ID                  uuid.UUID             `json:"id" db:"id"`
-	TenantID            uuid.UUID             `json:"-" db:"tenant_id"`
-	ParentID            *uuid.UUID            `json:"parentId,omitempty" db:"parent_id"`
-	NodeKey             string                `json:"nodeKey" db:"node_key"`
-	Label               string                `json:"label" db:"label"`
-	Icon                *string               `json:"icon,omitempty" db:"icon"`
-	TargetPageKey       *string               `json:"targetPageKey,omitempty" db:"target_page_key"`
-	DisplayOrder        int                   `json:"displayOrder" db:"display_order"`
-	RequiredEntitlement string                `json:"requiredEntitlement" db:"required_entitlement"`
-	Children            []*NavigationMenuNode `json:"children,omitempty" db:"-"`
+	ID                  uuid.UUID  `json:"id" db:"id"`
+	TenantID            uuid.UUID  `json:"-" db:"tenant_id"`
+	ParentID            *uuid.UUID `json:"parentId,omitempty" db:"parent_id"`
+	NodeKey             string     `json:"nodeKey" db:"node_key"`
+	Label               string     `json:"label" db:"label"`
+	Icon                *string    `json:"icon,omitempty" db:"icon"`
+	TargetPageKey       *string    `json:"targetPageKey,omitempty" db:"target_page_key"`
+	DisplayOrder        int        `json:"displayOrder" db:"display_order"`
+	RequiredEntitlement string     `json:"requiredEntitlement" db:"required_entitlement"`
+	// RequiredCapability is an ABAC capability key (e.g. menu:platform) gating the node.
+	RequiredCapability *string `json:"requiredCapability,omitempty" db:"required_capability"`
+	// TargetRoute opens a not-yet-redesigned coded screen; interim, cleared once the
+	// screen is rebuilt in Page Designer and the node points at a page key instead.
+	TargetRoute *string `json:"targetRoute,omitempty" db:"target_route"`
+	// Hidden nodes stay in the tree for Menu Designer but are not shown in the nav.
+	Hidden   bool                  `json:"hidden,omitempty" db:"hidden"`
+	Children []*NavigationMenuNode `json:"children,omitempty" db:"-"`
 	// Inherited: a gold-copy node seen from another tenant - shown, never
 	// editable there. A tenant may add its own nodes under it.
 	Inherited bool `json:"inherited,omitempty" db:"-"`
@@ -39,7 +46,8 @@ func loadMenuNodes(ctx context.Context, db *sqlx.DB, tenantID uuid.UUID) ([]Navi
 	gold := goldcopy.ResolveTenantID(ctx, db)
 	var flat []NavigationMenuNode
 	err := db.SelectContext(ctx, &flat, `
-		SELECT id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement
+		SELECT id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement,
+		       required_capability, target_route, hidden
 		FROM navigation_menu_nodes
 		WHERE (tenant_id = $1 OR tenant_id = $2)
 		  AND (target_page_key IS NULL OR target_page_key NOT IN (
@@ -146,6 +154,7 @@ func NewNavigationMenuHandler(db *sqlx.DB) *NavigationMenuHandler {
 }
 
 func (h *NavigationMenuHandler) RegisterRoutes(r chi.Router) {
+	r.Get("/route-aliases", h.listRouteAliases)
 	r.Route("/navigation-menu", func(r chi.Router) {
 		r.Get("/", h.listTree)
 		r.Post("/", h.create)
@@ -181,6 +190,8 @@ type navMenuUpsertRequest struct {
 	TargetPageKey       *string    `json:"targetPageKey"`
 	DisplayOrder        int        `json:"displayOrder"`
 	RequiredEntitlement string     `json:"requiredEntitlement"`
+	RequiredCapability  *string    `json:"requiredCapability"`
+	Hidden              bool       `json:"hidden"`
 }
 
 func (h *NavigationMenuHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -209,10 +220,10 @@ func (h *NavigationMenuHandler) create(w http.ResponseWriter, r *http.Request) {
 	id := uuid.New()
 	var node NavigationMenuNode
 	err := h.db.GetContext(r.Context(), &node, `
-		INSERT INTO navigation_menu_nodes (id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		RETURNING id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement
-	`, id, tenantID, req.ParentID, req.NodeKey, req.Label, req.Icon, req.TargetPageKey, req.DisplayOrder, req.RequiredEntitlement)
+		INSERT INTO navigation_menu_nodes (id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement, required_capability, hidden)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement, required_capability, hidden
+	`, id, tenantID, req.ParentID, req.NodeKey, req.Label, req.Icon, req.TargetPageKey, req.DisplayOrder, req.RequiredEntitlement, req.RequiredCapability, req.Hidden)
 	if err != nil {
 		if isUniqueViolation(err) {
 			http.Error(w, "a menu node with this key already exists", http.StatusConflict)
@@ -263,10 +274,10 @@ func (h *NavigationMenuHandler) update(w http.ResponseWriter, r *http.Request) {
 	err = h.db.GetContext(r.Context(), &node, `
 		UPDATE navigation_menu_nodes
 		SET parent_id = $1, node_key = $2, label = $3, icon = $4, target_page_key = $5,
-		    display_order = $6, required_entitlement = $7
-		WHERE id = $8 AND tenant_id = $9
-		RETURNING id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement
-	`, req.ParentID, req.NodeKey, req.Label, req.Icon, req.TargetPageKey, req.DisplayOrder, req.RequiredEntitlement, id, tenantID)
+		    display_order = $6, required_entitlement = $7, required_capability = $8, hidden = $9
+		WHERE id = $10 AND tenant_id = $11
+		RETURNING id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement, required_capability, hidden
+	`, req.ParentID, req.NodeKey, req.Label, req.Icon, req.TargetPageKey, req.DisplayOrder, req.RequiredEntitlement, req.RequiredCapability, req.Hidden, id, tenantID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "menu node not found", http.StatusNotFound)
@@ -306,4 +317,34 @@ func (h *NavigationMenuHandler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// RouteAlias maps an app URL path (may contain :params) to the Page Designer
+// page that serves it. Replaces the formerly hardcoded STUDIO_ROUTES map.
+type RouteAlias struct {
+	Path    string `json:"path" db:"path"`
+	PageKey string `json:"pageKey" db:"page_key"`
+}
+
+// listRouteAliases returns the gold copy's aliases plus the tenant's own; a
+// tenant alias overrides a gold-copy alias for the same path.
+func (h *NavigationMenuHandler) listRouteAliases(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
+	gold := goldcopy.ResolveTenantID(r.Context(), h.db)
+	out := []RouteAlias{}
+	err := h.db.SelectContext(r.Context(), &out, `
+		SELECT DISTINCT ON (path) path, page_key
+		FROM route_aliases
+		WHERE tenant_id = $1 OR tenant_id = $2
+		ORDER BY path, (tenant_id = $1) DESC
+	`, tenantID, gold)
+	if err != nil {
+		http.Error(w, "failed to list route aliases: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }

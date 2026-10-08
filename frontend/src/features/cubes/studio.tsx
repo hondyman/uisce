@@ -2,7 +2,7 @@ import React from 'react';
 import { Alert, Box } from '@mui/material';
 import { registerOperations, type OperationDef } from '../../studio-core/operations/registry';
 import { registerDomainComponents } from '../../studio-core/components/registry';
-import { listBusinessObjects } from '../../studio-core/binding/businessObjectApi';
+import { listBusinessObjects, fetchBOTerms } from '../../studio-core/binding/businessObjectApi';
 import type { BusinessObjectOption } from '../../studio-core/binding/businessObjectApi';
 import {
   createCube,
@@ -295,8 +295,34 @@ const operations: OperationDef[] = [
     rowsPath: 'rows',
     rowFields: [{ name: 'id' }, { name: 'name' }, { name: 'boId' }],
     run: async (p) => {
-      const metrics = await listCubeMetrics(typeof p.boId === 'string' ? p.boId : undefined);
+      const boId = typeof p.boId === 'string' ? p.boId.trim() : '';
+      if (!boId) return { rows: [], metrics: [] };
+      const metrics = await listCubeMetrics(boId);
       return { rows: metrics, metrics };
+    },
+  },
+  {
+    id: 'cubes.dimensions',
+    domain: DOMAIN,
+    kind: 'query',
+    label: 'Cube dimension options',
+    description: 'Semantic terms / dimensions available for a Business Object.',
+    params: [{ name: 'boId', type: 'string' }, { name: 'bindingId', type: 'string' }],
+    rowsPath: 'rows',
+    rowFields: [
+      { name: 'termNodeId' },
+      { name: 'termKey' },
+      { name: 'termName' },
+      { name: 'displayName' },
+      { name: 'dataType' },
+      { name: 'role' },
+    ],
+    run: async (p) => {
+      const boId = typeof p.boId === 'string' ? p.boId.trim() : '';
+      if (!boId) return { rows: [], terms: [] };
+      const bindingId = typeof p.bindingId === 'string' ? p.bindingId : '';
+      const terms = await fetchBOTerms(boId, bindingId);
+      return { rows: terms, terms };
     },
   },
   {

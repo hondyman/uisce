@@ -1,4 +1,4 @@
-import { getRequiredTenantScope, hasTenantScope, readCachedSelection, whenTenantScopeReady } from './tenantScope';
+import { getRequiredTenantScope, hasTenantScope, isValidUUID, readCachedSelection, whenTenantScopeReady } from './tenantScope';
 import resolveApiUrl from './resolveApiUrl';
 import { getSelectedRegion } from '../lib/region';
 import { acceptLanguage, CatalogError, parseCatalogError } from './catalogError';
@@ -38,11 +38,11 @@ export async function apiClient<T = Response>(input: RequestInfo | URL, init?: R
 
         try {
             const { tenant, datasource } = readCachedSelection();
-            if (tenant?.id && !headers.has('X-Tenant-ID')) {
+            if (tenant?.id && isValidUUID(tenant.id) && !headers.has('X-Tenant-ID')) {
                 headers.set('X-Tenant-ID', tenant.id);
             }
             const datasourceId = datasource?.id || datasource?.alpha_tenant_instance_id;
-            if (datasourceId && !headers.has('X-Tenant-Datasource-ID')) {
+            if (datasourceId && isValidUUID(datasourceId) && !headers.has('X-Tenant-Datasource-ID')) {
                 headers.set('X-Tenant-Datasource-ID', datasourceId);
             }
         } catch (_) {}

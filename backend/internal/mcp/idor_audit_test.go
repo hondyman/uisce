@@ -60,6 +60,9 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		mock.ExpectExec("app\\.tenant_id").
 			WithArgs(tenant.String()).
 			WillReturnResult(sqlmock.NewResult(0, 0))
+		mock.ExpectExec("app\\.current_tenant").
+			WithArgs(tenant.String()).
+			WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectExec("uisce\\.gold_tenant").
 			WithArgs(goldID.String()).
 			WillReturnResult(sqlmock.NewResult(0, 0))

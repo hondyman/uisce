@@ -57,6 +57,7 @@ type BusinessObjectField struct {
 // BusinessObject represents an entity (client, account, etc.)
 type BusinessObject struct {
 	ID          string                `json:"id"`
+	Key         string                `json:"key"`
 	Name        string                `json:"name"`
 	DisplayName string                `json:"display_name"`
 	Description string                `json:"description,omitempty"`
@@ -275,12 +276,13 @@ func (h *BPDesignerHandlers) GetWorkflowEvents(w http.ResponseWriter, r *http.Re
 // GET /api/business-objects
 func (h *BPDesignerHandlers) GetBusinessObjects(w http.ResponseWriter, r *http.Request) {
 	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
+	tenantID := ""
+	if claims != nil {
+		tenantID = claims.TenantID
 	}
-	tenantID := claims.TenantID
-	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
+	if tenantID == "" {
+		tenantID = r.Header.Get("X-Tenant-ID")
+	}
 
 	if tenantID == "" {
 		w.Header().Set("Content-Type", "application/json")
@@ -290,14 +292,12 @@ func (h *BPDesignerHandlers) GetBusinessObjects(w http.ResponseWriter, r *http.R
 	}
 
 	query := `
-		SELECT id, bo_key, bo_name, COALESCE(description, ''), created_at, updated_at
+		SELECT DISTINCT ON (bo_key) id, bo_key, bo_name, COALESCE(description, ''), created_at, updated_at
 		FROM business_objects
-		WHERE tenant_id = $1
+		WHERE (tenant_id = $1::uuid OR tenant_id IN (SELECT id FROM public.tenants WHERE gold_copy = true))
+		ORDER BY bo_key, (tenant_id = $1::uuid) DESC
 	`
 	args := []interface{}{tenantID}
-	_ = datasourceID
-
-	query += " ORDER BY bo_name"
 
 	rows, err := h.DB.QueryContext(r.Context(), query, args...)
 	if err != nil {
@@ -317,6 +317,7 @@ func (h *BPDesignerHandlers) GetBusinessObjects(w http.ResponseWriter, r *http.R
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
+		bo.Key = bo.Name
 
 		// Load fields from business_object_fields (the table actually FK'd to business_objects.id)
 		fieldRows, err := h.DB.QueryContext(r.Context(), `
@@ -348,6 +349,12 @@ func (h *BPDesignerHandlers) GetBusinessObjects(w http.ResponseWriter, r *http.R
 
 		bo.Fields = fields
 		objects = append(objects, bo)
+	}
+
+	if r.URL.Query().Get("format") == "array" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(objects)
+		return
 	}
 
 	// Convert array to map with IDs as keys (frontend expects object, not array)

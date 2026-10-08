@@ -198,7 +198,7 @@ function cubeDesignerPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
 
   // --- dimensions --------------------------------------------------------------
   w('dims_help', 'TextBlock', {
-    text: 'Ordered dimension surface. Each axis must appear in at least one grain.',
+    text: 'Ordered dimension surface. Each axis must appear in at least one grain. Choose terms from the selected Business Object.',
     color: 'text.secondary',
   });
   w('dims_form', 'Form', {
@@ -209,7 +209,19 @@ function cubeDesignerPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
         kind: 'rows',
         label: 'Dimensions',
         addLabel: 'Add dimension',
-        rowFields: [{ name: 'termNodeId', kind: 'text', label: 'Term node id' }],
+        rowFields: [
+          {
+            name: 'termNodeId',
+            kind: 'select',
+            label: 'Dimension Term',
+            optionsFrom: {
+              query: 'dimensions',
+              rowsPath: 'rows',
+              valueField: 'termNodeId',
+              labelField: 'displayName',
+            },
+          },
+        ],
       },
     ] satisfies FormFieldSpec[],
     onChange: dirty,
@@ -217,7 +229,7 @@ function cubeDesignerPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
 
   // --- metrics -----------------------------------------------------------------
   w('metrics_help', 'TextBlock', {
-    text: 'Governed metrics only (metric_definition). Options follow the selected BO.',
+    text: 'Governed metrics only (metric_definition). Options follow the selected Business Object.',
     color: 'text.secondary',
   });
   w('metrics_form', 'Form', {
@@ -226,8 +238,13 @@ function cubeDesignerPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
       {
         name: 'metricIds',
         kind: 'chips',
-        label: 'Metric ids',
-        optionsFrom: { query: 'metrics', rowsPath: 'rows', valueField: 'id', labelField: 'name' },
+        label: 'Governed Metrics',
+        optionsFrom: {
+          query: 'metrics',
+          rowsPath: 'rows',
+          valueField: 'id',
+          labelField: 'name',
+        },
       },
     ] satisfies FormFieldSpec[],
     onChange: dirty,
@@ -474,6 +491,12 @@ function cubeDesignerPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'upda
       queries: [
         { id: 'load', operation: 'cubes.editorStart', params: { id: ID } },
         { id: 'bos', operation: 'cubes.businessObjects', params: {} },
+        {
+          id: 'dimensions',
+          operation: 'cubes.dimensions',
+          params: { boId: '{{vars.draft.boId}}' },
+          keepPrevious: true,
+        },
         {
           id: 'metrics',
           operation: 'cubes.metrics',

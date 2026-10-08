@@ -36,8 +36,17 @@ const PLACEHOLDER_SCOPE_IDS = new Set([
   '11111111-1111-1111-1111-111111111111',
 ]);
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidUUID(id: string | null | undefined): boolean {
+  if (!id) return false;
+  return UUID_REGEX.test(id.trim());
+}
+
 export function isPlaceholderScopeId(id: string | null | undefined): boolean {
-  return !!id && PLACEHOLDER_SCOPE_IDS.has(id.trim());
+  if (!id) return true;
+  const trimmed = id.trim();
+  return PLACEHOLDER_SCOPE_IDS.has(trimmed) || !isValidUUID(trimmed);
 }
 
 /** A cached selection that is a placeholder is dropped (and forgotten). */

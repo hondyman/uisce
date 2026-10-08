@@ -2,19 +2,35 @@
 // (the standard Kafka Connect JSON envelope: {"schema":...,"payload":{
 // "before":..,"after":..,"op":..,"ts_ms":..}}) and acts as the Streaming Gatekeeper:
 //
-// 1. Decodes Debezium decimal & payload fields
-// 2. Asserts Layer 2 Tenant Identity (assigned tenant vs event.tenant_id)
-// 3. Evaluates in-line active Validation Rules (RuleSnapshot / EmbeddedEngine)
-// 4. Routes blocked/invalid records to Dead Letter Queue (DLQ topic + violation table)
-// 5. Stream-loads verified records into StarRocks via HTTP stream load API
-// 6. Exposes real-time HTTP metrics and health monitoring (/health, /metrics, /stats)
+//  1. Decodes the Debezium envelope, including schema-driven normalisation of
+//     logical types (Decimal, Date, Timestamp/ZonedTimestamp, Json)
+//  2. Asserts Layer 2 Tenant Identity (assigned tenant vs event.tenant_id)
+//  3. Evaluates in-line active Validation Rules (RuleSnapshot / EmbeddedEngine)
+//  4. Routes blocked/invalid records to Dead Letter Queue (DLQ topic + violation table)
+//  5. Batches verified records and stream-loads them into StarRocks over HTTP
+//  6. Turns op=d events into deletes against the target PRIMARY KEY table
+//  7. Exposes real-time HTTP metrics and health monitoring (/health, /metrics, /stats)
+//
+// # Batching and delivery semantics
+//
+// Rows are accumulated and flushed when either MAX_ROWS is reached or FLUSH_INTERVAL
+// elapses, whichever comes first. Every flush carries a `label` derived from the
+// topic/partition/offset range it covers, so a retry of the same batch is a no-op
+// in StarRocks ("Label Already Exists") rather than a duplicate write. Offsets are
+// committed only after the load is accepted, so an unacknowledged batch replays on
+// restart.
+//
+// The target tables must be PRIMARY KEY tables: op=c/op=r/op=u upsert, op=d deletes
+// by key. DELETE is a first-class operation here, not a dropped event.
 package main
 
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -27,6 +43,7 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/jmoiron/sqlx"
@@ -48,6 +65,22 @@ type Config struct {
 	ValidationEnabled bool
 	DatabaseDSN       string
 	MetricsPort       string
+
+	// PrimaryKeys are the columns forming the target table's key. They drive both
+	// the op=d delete predicate and the CREATE TABLE DDL.
+	PrimaryKeys []string
+	// MaxRows / FlushInterval bound one stream load.
+	MaxRows       int
+	FlushInterval time.Duration
+	// QueryDSN is a MySQL-protocol connection used for keyed DELETEs. StarRocks 3.3
+	// no longer implements the HTTP SQL endpoint (/api/query returns 501), so a
+	// DELETE cannot be issued through _stream_load.
+	QueryDSN string
+	// StrictMode is on by default. Without it StarRocks silently writes NULL into any
+	// column it cannot convert and still reports Success with zero filtered rows --
+	// verified 3.3.22 with a DECIMAL fed "NOT_A_NUMBER". loadRows bisects a rejected
+	// batch so one bad row cannot block the rest.
+	StrictMode bool
 }
 
 type GatekeeperMetrics struct {
@@ -59,25 +92,37 @@ type GatekeeperMetrics struct {
 	RuleViolationsWarned  atomic.Int64
 	StreamLoadErrors      atomic.Int64
 	DLQEmitted            atomic.Int64
+	TotalDeletes          atomic.Int64
+	DeleteErrors          atomic.Int64
+	BatchesFlushed        atomic.Int64
+	RowsIn                atomic.Int64
+	RowsLoaded            atomic.Int64
+	RowsRejected          atomic.Int64
 	StartTime             time.Time
 	lastEventUnixNano     atomic.Int64
 }
 
 type GatekeeperStats struct {
-	TotalConsumed         int64     `json:"total_consumed"`
-	TotalLoaded           int64     `json:"total_loaded"`
-	SkippedTombstones     int64     `json:"skipped_tombstones"`
-	TenantMismatches      int64     `json:"tenant_mismatches"`
-	RuleViolationsBlocked int64     `json:"rule_violations_blocked"`
-	RuleViolationsWarned  int64     `json:"rule_violations_warned"`
-	StreamLoadErrors      int64     `json:"stream_load_errors"`
-	DLQEmitted            int64     `json:"dlq_emitted"`
-	UptimeSeconds         float64   `json:"uptime_seconds"`
+	TotalConsumed         int64      `json:"total_consumed"`
+	TotalLoaded           int64      `json:"total_loaded"`
+	SkippedTombstones     int64      `json:"skipped_tombstones"`
+	TenantMismatches      int64      `json:"tenant_mismatches"`
+	RuleViolationsBlocked int64      `json:"rule_violations_blocked"`
+	RuleViolationsWarned  int64      `json:"rule_violations_warned"`
+	StreamLoadErrors      int64      `json:"stream_load_errors"`
+	DLQEmitted            int64      `json:"dlq_emitted"`
+	TotalDeletes          int64      `json:"total_deletes"`
+	DeleteErrors          int64      `json:"delete_errors"`
+	BatchesFlushed        int64      `json:"batches_flushed"`
+	RowsIn                int64      `json:"rows_in"`
+	RowsLoaded            int64      `json:"rows_loaded"`
+	RowsRejected          int64      `json:"rows_rejected_by_starrocks"`
+	UptimeSeconds         float64    `json:"uptime_seconds"`
 	LastEventTime         *time.Time `json:"last_event_time,omitempty"`
-	Topic                 string    `json:"topic"`
-	StarRocksTable        string    `json:"starrocks_table"`
-	AssignedTenantID      string    `json:"assigned_tenant_id,omitempty"`
-	ValidationEnabled     bool      `json:"validation_enabled"`
+	Topic                 string     `json:"topic"`
+	StarRocksTable        string     `json:"starrocks_table"`
+	AssignedTenantID      string     `json:"assigned_tenant_id,omitempty"`
+	ValidationEnabled     bool       `json:"validation_enabled"`
 }
 
 type debeziumEnvelope struct {
@@ -100,6 +145,7 @@ type schemaField struct {
 type valueSchema struct {
 	Fields []struct {
 		Type   string        `json:"type"`
+		Name   string        `json:"name"`
 		Field  string        `json:"field"`
 		Fields []schemaField `json:"fields"`
 	} `json:"fields"`
@@ -118,6 +164,7 @@ type StreamingGatekeeper struct {
 	cfg        Config
 	metrics    *GatekeeperMetrics
 	sqlxDB     *sqlx.DB
+	queryDB    *sql.DB
 	ruleEngine *analytics.EmbeddedEngine
 	dlqWriter  *kafka.Writer
 	mu         sync.RWMutex
@@ -138,6 +185,8 @@ func loadConfig() Config {
 		ValidationEnabled: os.Getenv("VALIDATION_ENGINE_ENABLED") == "true" || os.Getenv("ENABLE_RULE_EVALUATION") == "true",
 		DatabaseDSN:       os.Getenv("DATABASE_URL"),
 		MetricsPort:       os.Getenv("METRICS_PORT"),
+		MaxRows:           2000,
+		FlushInterval:     10 * time.Second,
 	}
 
 	if cfg.AssignedTenantID == "" {
@@ -173,7 +222,63 @@ func loadConfig() Config {
 	if cfg.DatabaseDSN == "" {
 		cfg.DatabaseDSN = os.Getenv("POSTGRES_DSN")
 	}
+	if pk := os.Getenv("PRIMARY_KEYS"); pk != "" {
+		for _, k := range strings.Split(pk, ",") {
+			if k = strings.TrimSpace(k); k != "" {
+				cfg.PrimaryKeys = append(cfg.PrimaryKeys, k)
+			}
+		}
+	}
+	if len(cfg.PrimaryKeys) == 0 {
+		// Every table in the orm schema carries a single-column "id" primary key.
+		// Making this explicit beats guessing wrong on an unconfigured deployment.
+		cfg.PrimaryKeys = []string{"id"}
+	}
+	if v := os.Getenv("STREAM_LOAD_MAX_ROWS"); v != "" {
+		if n := parsePositiveInt(v); n > 0 {
+			cfg.MaxRows = n
+		}
+	}
+	if v := os.Getenv("STREAM_LOAD_FLUSH_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.FlushInterval = d
+		}
+	}
+	cfg.QueryDSN = os.Getenv("STARROCKS_QUERY_DSN")
+	if cfg.QueryDSN == "" {
+		if host := hostOf(cfg.StarRocksHTTP); host != "" {
+			cfg.QueryDSN = fmt.Sprintf("%s:%s@tcp(%s:9030)/%s", cfg.StarRocksUser, cfg.StarRocksPassword, host, cfg.StarRocksDB)
+		}
+	}
+	cfg.StrictMode = true
+	if v := os.Getenv("STREAM_LOAD_STRICT_MODE"); v != "" {
+		cfg.StrictMode = !strings.EqualFold(v, "false")
+	}
 	return cfg
+}
+
+// hostOf extracts the hostname from an http(s) URL so the query port can be derived
+// from the same host the stream load already targets.
+func hostOf(raw string) string {
+	s := strings.TrimPrefix(strings.TrimPrefix(raw, "https://"), "http://")
+	if i := strings.IndexAny(s, "/:"); i >= 0 {
+		s = s[:i]
+	}
+	return s
+}
+
+func parsePositiveInt(s string) int {
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0
+		}
+		n = n*10 + int(r-'0')
+		if n > 1<<20 {
+			return 0
+		}
+	}
+	return n
 }
 
 func deriveBusinessObject(table string) string {
@@ -186,14 +291,13 @@ func deriveBusinessObject(table string) string {
 
 func main() {
 	cfg := loadConfig()
-	log.Printf("Starting Streaming Gatekeeper Service [Topic=%s -> StarRocks=%s.%s]...", cfg.Topic, cfg.StarRocksDB, cfg.StarRocksTable)
+	log.Printf("Starting Streaming Gatekeeper Service [Topic=%s -> StarRocks=%s.%s keys=%v maxRows=%d flush=%s]...",
+		cfg.Topic, cfg.StarRocksDB, cfg.StarRocksTable, cfg.PrimaryKeys, cfg.MaxRows, cfg.FlushInterval)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	metrics := &GatekeeperMetrics{
-		StartTime: time.Now(),
-	}
+	metrics := &GatekeeperMetrics{StartTime: time.Now()}
 
 	var db *sqlx.DB
 	var ruleEngine *analytics.EmbeddedEngine
@@ -229,10 +333,8 @@ func main() {
 		dlqWriter:  dlqWriter,
 	}
 
-	// Start Telemetry / Health HTTP Server
 	go gk.startHTTPServer()
 
-	// Handle graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -256,17 +358,13 @@ func (gk *StreamingGatekeeper) startHTTPServer() {
 			"validation_enabled": gk.cfg.ValidationEnabled,
 		})
 	})
-
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		stats := gk.GetStats()
-		json.NewEncoder(w).Encode(stats)
+		json.NewEncoder(w).Encode(gk.GetStats())
 	})
-
 	mux.HandleFunc("/stats", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		stats := gk.GetStats()
-		json.NewEncoder(w).Encode(stats)
+		json.NewEncoder(w).Encode(gk.GetStats())
 	})
 
 	addr := ":" + gk.cfg.MetricsPort
@@ -293,6 +391,12 @@ func (gk *StreamingGatekeeper) GetStats() GatekeeperStats {
 		RuleViolationsWarned:  gk.metrics.RuleViolationsWarned.Load(),
 		StreamLoadErrors:      gk.metrics.StreamLoadErrors.Load(),
 		DLQEmitted:            gk.metrics.DLQEmitted.Load(),
+		TotalDeletes:          gk.metrics.TotalDeletes.Load(),
+		DeleteErrors:          gk.metrics.DeleteErrors.Load(),
+		BatchesFlushed:        gk.metrics.BatchesFlushed.Load(),
+		RowsIn:                gk.metrics.RowsIn.Load(),
+		RowsLoaded:            gk.metrics.RowsLoaded.Load(),
+		RowsRejected:          gk.metrics.RowsRejected.Load(),
 		UptimeSeconds:         time.Since(gk.metrics.StartTime).Seconds(),
 		LastEventTime:         lastTime,
 		Topic:                 gk.cfg.Topic,
@@ -300,6 +404,46 @@ func (gk *StreamingGatekeeper) GetStats() GatekeeperStats {
 		AssignedTenantID:      gk.cfg.AssignedTenantID,
 		ValidationEnabled:     gk.cfg.ValidationEnabled,
 	}
+}
+
+// ---- batch assembly ----
+
+// pendingOp is one coalesced operation for a single primary key. A batch is built by
+// walking ops backwards and keeping the LAST operation seen for each key, so a
+// create-then-delete inside one batch resolves to a delete and a delete-then-create
+// resolves to an upsert. Order within a batch is therefore irrelevant.
+type pendingOp struct {
+	key      string
+	row      json.RawMessage
+	isDelete bool
+}
+
+type batch struct {
+	ops      []pendingOp
+	messages []kafka.Message
+}
+
+func (b *batch) empty() bool { return len(b.ops) == 0 }
+
+// sanitizeLabel renders a Kafka topic/offset range as a StarRocks stream-load label.
+// StarRocks validates labels against ^[-\w]{1,128}$ — letters, digits, underscore and
+// hyphen only, so a dotted topic name like "orm_oms.orm.order" must have its dots
+// replaced. The same label on a retry is what makes a redelivered batch a no-op.
+func sanitizeLabel(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	out := b.String()
+	if len(out) > 100 {
+		out = out[len(out)-100:]
+	}
+	return out
 }
 
 func (gk *StreamingGatekeeper) runLoop(ctx context.Context) {
@@ -315,101 +459,348 @@ func (gk *StreamingGatekeeper) runLoop(ctx context.Context) {
 
 	log.Printf("Listening for CDC events on topic %s -> %s.%s", gk.cfg.Topic, gk.cfg.StarRocksDB, gk.cfg.StarRocksTable)
 
+	ticker := time.NewTicker(gk.cfg.FlushInterval)
+	defer ticker.Stop()
+
+	b := &batch{}
+
+	// flush writes the accumulated batch and, only on success, commits its offsets.
+	// It retries internally so a transient StarRocks error does not advance the batch.
+	// A detached context is used because the final drain runs after ctx is cancelled.
+	flush := func(reason string) {
+		if b.empty() {
+			return
+		}
+		// The batch must survive a cancelled parent context, or a graceful shutdown
+		// would discard the rows it is holding.
+		wctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		for attempt := 1; ; attempt++ {
+			err := gk.writeBatch(wctx, b)
+			if err == nil {
+				gk.metrics.BatchesFlushed.Add(1)
+				if cerr := r.CommitMessages(wctx, b.messages...); cerr != nil {
+					log.Printf("Failed to commit messages: %v", cerr)
+				}
+				b = &batch{}
+				return
+			}
+			log.Printf("Batch flush failed (%s, attempt %d, %d ops): %v", reason, attempt, len(b.ops), err)
+			gk.metrics.StreamLoadErrors.Add(1)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff(attempt)):
+			}
+		}
+	}
+
+	// Consumption runs on its own goroutine. FetchMessage blocks for as long as the
+	// topic is quiet, so polling a flush ticker at the top of the reading loop would
+	// leave a batch unflushed indefinitely on a low-traffic topic.
+	messages := make(chan kafka.Message, 4096)
+	go func() {
+		defer close(messages)
+		for {
+			m, err := r.FetchMessage(ctx)
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				log.Printf("Error fetching message: %v", err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			select {
+			case messages <- m:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
+			flush("shutdown")
 			return
-		default:
-		}
 
-		m, err := r.FetchMessage(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
+		case <-ticker.C:
+			flush("interval")
+
+		case m, ok := <-messages:
+			if !ok {
+				flush("shutdown")
 				return
 			}
-			log.Printf("Error fetching message: %v", err)
-			time.Sleep(1 * time.Second)
-			continue
-		}
+			gk.metrics.TotalConsumed.Add(1)
+			gk.metrics.lastEventUnixNano.Store(time.Now().UnixNano())
 
-		gk.metrics.TotalConsumed.Add(1)
-		gk.metrics.lastEventUnixNano.Store(time.Now().UnixNano())
-
-		rowJSON, afterMap, skip, err := decodeRecord(m.Value)
-		if err != nil {
-			log.Printf("Error decoding Debezium event: %v", err)
-			_ = r.CommitMessages(ctx, m)
-			continue
-		}
-		if skip {
-			gk.metrics.SkippedTombstones.Add(1)
-			_ = r.CommitMessages(ctx, m)
-			continue
-		}
-
-		// Layer 2: Assert Tenant Identity
-		eventTenant := extractTenantID(afterMap)
-		if gk.cfg.AssignedTenantID != "" && eventTenant != "" && eventTenant != gk.cfg.AssignedTenantID {
-			gk.metrics.TenantMismatches.Add(1)
-			log.Printf("[SECURITY] Tenant Mismatch rejected: event tenant=%s != assigned tenant=%s", eventTenant, gk.cfg.AssignedTenantID)
-			gk.emitDLQ(ctx, "ERR_TENANT_MISMATCH", fmt.Sprintf("Event tenant %s does not match assigned %s", eventTenant, gk.cfg.AssignedTenantID), afterMap, m.Value)
-			_ = r.CommitMessages(ctx, m)
-			continue
-		}
-
-		// Layer 3: Embedded Validation Rule Engine
-		if gk.cfg.ValidationEnabled && gk.ruleEngine != nil {
-			boKey := gk.cfg.BusinessObject
-			tenantForEval := gk.cfg.AssignedTenantID
-			if tenantForEval == "" {
-				tenantForEval = eventTenant
-			}
-
-			evalResult, evalErr := gk.ruleEngine.ValidateRecord(ctx, boKey, "", "", afterMap)
-			if evalErr != nil {
-				log.Printf("Validation evaluation error: %v", evalErr)
-			} else if evalResult != nil {
-				if evalResult.Blocked {
-					gk.metrics.RuleViolationsBlocked.Add(1)
-					log.Printf("[BLOCK] Validation Rule violation blocked stream load on %s: %d violations", boKey, len(evalResult.Violations))
-					gk.persistViolations(ctx, tenantForEval, boKey, evalResult, true)
-					gk.emitDLQ(ctx, "ERR_RULE_BLOCK_VIOLATION", fmt.Sprintf("Rule violations: %d blocking rules failed", len(evalResult.Violations)), afterMap, m.Value)
-					_ = r.CommitMessages(ctx, m)
-					continue
-				} else if len(evalResult.Violations) > 0 {
-					gk.metrics.RuleViolationsWarned.Add(1)
-					gk.persistViolations(ctx, tenantForEval, boKey, evalResult, false)
+			if !gk.handleMessage(ctx, b, m) {
+				// Rejected/tombstoned: needs no StarRocks write, so commit it now.
+				if cerr := r.CommitMessages(ctx, m); cerr != nil {
+					log.Printf("Failed to commit message: %v", cerr)
 				}
+				continue
 			}
-		}
 
-		// StarRocks Stream Load
-		if err := streamLoad(gk.cfg, rowJSON); err != nil {
-			gk.metrics.StreamLoadErrors.Add(1)
-			log.Printf("Stream Load failed: %v", err)
-			time.Sleep(1 * time.Second)
-			continue
-		}
-
-		gk.metrics.TotalLoaded.Add(1)
-		if err := r.CommitMessages(ctx, m); err != nil {
-			log.Printf("Failed to commit message: %v", err)
+			if len(b.ops) >= gk.cfg.MaxRows {
+				flush("full")
+			}
 		}
 	}
+}
+
+func backoff(attempt int) time.Duration {
+	d := time.Second
+	for i := 1; i < attempt && d < 30*time.Second; i++ {
+		d *= 2
+	}
+	if d > 30*time.Second {
+		d = 30 * time.Second
+	}
+	return d
+}
+
+// handleMessage returns true when the message contributed an op to the batch (and so
+// must not be committed yet). It returns false when the message was consumed and
+// discarded, which the caller commits immediately.
+func (gk *StreamingGatekeeper) handleMessage(ctx context.Context, b *batch, m kafka.Message) bool {
+	ev, err := decodeRecord(m.Value)
+	if err != nil {
+		log.Printf("Error decoding Debezium event: %v", err)
+		return false
+	}
+	if ev.tombstone {
+		gk.metrics.SkippedTombstones.Add(1)
+		return false
+	}
+	if ev.row == nil && !ev.isDelete {
+		// Nothing carried (e.g. an op with neither before nor after). Drop it rather
+		// than commit it into an unbounded retry loop.
+		gk.metrics.SkippedTombstones.Add(1)
+		return false
+	}
+
+	// Deletes read their key from `before`; upserts from `after`.
+	src := ev.after
+	if ev.isDelete {
+		src = ev.before
+	}
+
+	// Layer 2: Assert Tenant Identity
+	eventTenant := extractTenantID(src)
+	if gk.cfg.AssignedTenantID != "" && eventTenant != "" && eventTenant != gk.cfg.AssignedTenantID {
+		gk.metrics.TenantMismatches.Add(1)
+		log.Printf("[SECURITY] Tenant Mismatch rejected: event tenant=%s != assigned tenant=%s", eventTenant, gk.cfg.AssignedTenantID)
+		gk.emitDLQ(ctx, "ERR_TENANT_MISMATCH", fmt.Sprintf("Event tenant %s does not match assigned %s", eventTenant, gk.cfg.AssignedTenantID), src, m.Value)
+		return false
+	}
+
+	// Layer 3: Embedded Validation Rule Engine (upserts only — there is nothing
+	// meaningful to validate about a row that no longer exists).
+	if !ev.isDelete && gk.cfg.ValidationEnabled && gk.ruleEngine != nil {
+		boKey := gk.cfg.BusinessObject
+		tenantForEval := gk.cfg.AssignedTenantID
+		if tenantForEval == "" {
+			tenantForEval = eventTenant
+		}
+
+		evalResult, evalErr := gk.ruleEngine.ValidateRecord(ctx, boKey, "", "", ev.after)
+		if evalErr != nil {
+			log.Printf("Validation evaluation error: %v", evalErr)
+		} else if evalResult != nil {
+			if evalResult.Blocked {
+				gk.metrics.RuleViolationsBlocked.Add(1)
+				log.Printf("[BLOCK] Validation Rule violation blocked stream load on %s: %d violations", boKey, len(evalResult.Violations))
+				gk.persistViolations(ctx, tenantForEval, boKey, evalResult, true)
+				gk.emitDLQ(ctx, "ERR_RULE_BLOCK_VIOLATION", fmt.Sprintf("Rule violations: %d blocking rules failed", len(evalResult.Violations)), ev.after, m.Value)
+				return false
+			} else if len(evalResult.Violations) > 0 {
+				gk.metrics.RuleViolationsWarned.Add(1)
+				gk.persistViolations(ctx, tenantForEval, boKey, evalResult, false)
+			}
+		}
+	}
+
+	key, ok := primaryKeyOf(gk.cfg.PrimaryKeys, src)
+	if !ok {
+		// Without a key we can neither upsert (ambiguous) nor delete (no predicate).
+		// Send it to the DLQ rather than writing a row we can never update or remove.
+		gk.metrics.DLQEmitted.Add(1)
+		log.Printf("[DLQ] %s event has no usable primary key %v", ev.op, gk.cfg.PrimaryKeys)
+		gk.emitDLQ(ctx, "ERR_MISSING_PRIMARY_KEY", fmt.Sprintf("no value for primary key %v", gk.cfg.PrimaryKeys), src, m.Value)
+		return false
+	}
+
+	b.ops = append(b.ops, pendingOp{key: key, row: ev.row, isDelete: ev.isDelete})
+	b.messages = append(b.messages, m)
+	gk.metrics.RowsIn.Add(1)
+	return true
+}
+
+func primaryKeyOf(keys []string, row map[string]interface{}) (string, bool) {
+	var parts []string
+	for _, k := range keys {
+		v, ok := row[k]
+		if !ok || v == nil {
+			return "", false
+		}
+		parts = append(parts, fmt.Sprintf("%v", v))
+	}
+	if len(parts) == 0 {
+		return "", false
+	}
+	return strings.Join(parts, "\x1f"), true
+}
+
+// writeBatch performs one stream load for the upserts and one DELETE for the deletes.
+// Upserts run first so that a batch containing both an update and a later delete of
+// the same key ends in the deleted state.
+func (gk *StreamingGatekeeper) writeBatch(ctx context.Context, b *batch) error {
+	// Coalesce by key, last operation wins.
+	type resolved struct {
+		op pendingOp
+	}
+	order := []string{}
+	byKey := map[string]pendingOp{}
+	for _, o := range b.ops {
+		if _, seen := byKey[o.key]; !seen {
+			order = append(order, o.key)
+		}
+		byKey[o.key] = o
+	}
+
+	var upserts []json.RawMessage
+	var deleteKeys []string
+	for _, k := range order {
+		o := byKey[k]
+		if o.isDelete {
+			deleteKeys = append(deleteKeys, o.key)
+		} else if o.row != nil {
+			upserts = append(upserts, o.row)
+		}
+	}
+
+	// The label is derived from the offset range so a retry of the same batch is
+	// rejected by StarRocks as a duplicate instead of loading the rows twice.
+	// A batch with no messages can only be constructed by a test; fall back to a
+	// content-derived label rather than panicking.
+	label := sanitizeLabel(gk.cfg.Topic)
+	if len(b.messages) > 0 {
+		label = fmt.Sprintf("%s_%d_%d", label, b.messages[0].Offset, b.messages[len(b.messages)-1].Offset)
+	} else {
+		label = fmt.Sprintf("%s_%d", label, time.Now().UnixNano())
+	}
+
+	if len(upserts) > 0 {
+		rejected, err := gk.loadRows(ctx, upserts, label)
+		if err != nil {
+			return fmt.Errorf("stream load %d rows: %w", len(upserts), err)
+		}
+		gk.metrics.TotalLoaded.Add(int64(len(upserts)))
+		gk.metrics.RowsLoaded.Add(int64(len(upserts)))
+		if rejected > 0 {
+			gk.metrics.RowsRejected.Add(rejected)
+		}
+	}
+
+	if len(deleteKeys) > 0 {
+		if err := gk.deleteRows(ctx, gk.cfg.PrimaryKeys, deleteKeys); err != nil {
+			return fmt.Errorf("delete %d rows: %w", len(deleteKeys), err)
+		}
+		gk.metrics.TotalDeletes.Add(int64(len(deleteKeys)))
+	}
+	return nil
+}
+
+// deleteRows issues the keyed DELETE over the MySQL protocol. The connection is
+// opened lazily so a loader with no deletes never pays for it.
+func (gk *StreamingGatekeeper) deleteRows(ctx context.Context, keyCols []string, keys []string) error {
+	q, ok := deleteSQL(gk.cfg, keyCols, keys)
+	if !ok {
+		return nil
+	}
+	if gk.queryDB == nil {
+		if gk.cfg.QueryDSN == "" {
+			return errors.New("no StarRocks query DSN is configured, cannot apply deletes")
+		}
+		db, err := sql.Open("mysql", gk.cfg.QueryDSN)
+		if err != nil {
+			return err
+		}
+		db.SetMaxOpenConns(2)
+		db.SetConnMaxLifetime(5 * time.Minute)
+		gk.queryDB = db
+	}
+	if _, err := gk.queryDB.ExecContext(ctx, q); err != nil {
+		return err
+	}
+	return nil
+}
+
+// loadRows loads a batch under strict_mode and, if StarRocks rejects it, bisects to
+// isolate the offending rows instead of letting one bad row block the whole batch.
+//
+// This matters because the failure is silent without strict mode: StarRocks writes
+// NULL into any column it cannot convert and still answers Status=Success with
+// NumberFilteredRows=0. Verified 3.3.22 — a DECIMAL fed "NOT_A_NUMBER" produced a
+// stored NULL, a Success status and zero filtered rows. Only strict_mode surfaces
+// it ("too many filtered rows"), so it is the default.
+//
+// Bisection costs log2(n) extra requests and only on the failure path. A single row
+// that still fails is the bad one: it goes to the DLQ and is counted, never silently
+// NULLed.
+func (gk *StreamingGatekeeper) loadRows(ctx context.Context, rows []json.RawMessage, label string) (int64, error) {
+	rejected, err := streamLoadBatch(ctx, gk.cfg, rows, label)
+	if err == nil {
+		return rejected, nil
+	}
+	if !gk.cfg.StrictMode || !isFilterFailure(err) {
+		return 0, err
+	}
+	if len(rows) == 1 {
+		// Counted by the caller from the returned total; incrementing here too would
+		// double-count every rejected row.
+		var row map[string]interface{}
+		_ = json.Unmarshal(rows[0], &row)
+		gk.emitDLQ(ctx, "ERR_STARROCKS_REJECTED",
+			fmt.Sprintf("StarRocks could not store this row: %v", err), row, rows[0])
+		log.Printf("[DATA-LOSS] row %s could not be stored in %s.%s: %v",
+			gk.cfg.StarRocksDB+"."+gk.cfg.StarRocksTable, gk.cfg.StarRocksDB, gk.cfg.StarRocksTable, err)
+		return 1, nil
+	}
+
+	mid := len(rows) / 2
+	left, lerr := gk.loadRows(ctx, rows[:mid], label+"_a")
+	right, rerr := gk.loadRows(ctx, rows[mid:], label+"_b")
+	if lerr != nil {
+		return left, lerr
+	}
+	if rerr != nil {
+		return right, rerr
+	}
+	return left + right, nil
+}
+
+// isFilterFailure distinguishes "StarRocks refused these rows" from a transport or
+// authorisation problem, which must fail the batch rather than be bisected.
+func isFilterFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "filtered") || strings.Contains(s, "too many")
 }
 
 func extractTenantID(m map[string]interface{}) string {
 	if m == nil {
 		return ""
 	}
-	if v, ok := m["tenant_id"]; ok && v != nil {
-		return fmt.Sprintf("%v", v)
-	}
-	if v, ok := m["tenantId"]; ok && v != nil {
-		return fmt.Sprintf("%v", v)
-	}
-	if v, ok := m["TenantID"]; ok && v != nil {
-		return fmt.Sprintf("%v", v)
+	for _, k := range []string{"tenant_id", "tenantId", "TenantID"} {
+		if v, ok := m[k]; ok && v != nil {
+			return fmt.Sprintf("%v", v)
+		}
 	}
 	return ""
 }
@@ -489,55 +880,222 @@ func (gk *StreamingGatekeeper) persistViolations(ctx context.Context, tenantID, 
 	}
 }
 
-// decodeRecord parses a Debezium change-event envelope and returns the
-// "after" row as flat JSON, the map representation, skip flag, and any error.
-func decodeRecord(raw []byte) (json.RawMessage, map[string]interface{}, bool, error) {
+// ---- envelope decoding ----
+
+// decodedEvent is one Debezium change event with its logical types already
+// converted into something StarRocks can ingest.
+type decodedEvent struct {
+	op        string
+	isDelete  bool
+	tombstone bool
+	before    map[string]interface{}
+	after     map[string]interface{}
+	row       json.RawMessage
+}
+
+const (
+	opCreate = "c"
+	opUpdate = "u"
+	opDelete = "d"
+	opRead   = "r"
+)
+
+// decodeRecord parses a Debezium change-event envelope and normalises the row
+// according to the connector's own schema, which is the only reliable source for
+// how each logical type was encoded.
+func decodeRecord(raw []byte) (decodedEvent, error) {
 	var env debeziumEnvelope
 	if err := json.Unmarshal(raw, &env); err != nil {
-		return nil, nil, false, err
-	}
-	if len(env.Payload.After) == 0 || string(env.Payload.After) == "null" {
-		return nil, nil, true, nil
+		return decodedEvent{}, err
 	}
 
-	var after map[string]interface{}
-	if err := json.Unmarshal(env.Payload.After, &after); err != nil {
-		return nil, nil, false, err
+	ev := decodedEvent{op: env.Payload.Op, isDelete: env.Payload.Op == opDelete}
+
+	// A delete carries no "after" image — its row lives in "before". Checking
+	// "after" first would classify every delete as a tombstone and silently drop
+	// it, which is exactly the behaviour this loader is meant to stop having.
+	if ev.isDelete {
+		if isNullish(env.Payload.Before) {
+			// No key to delete by: unrepresentable, so drop it rather than
+			// leaving it in the topic forever.
+			ev.tombstone = true
+			return ev, nil
+		}
+		var before map[string]interface{}
+		if err := json.Unmarshal(env.Payload.Before, &before); err != nil {
+			return decodedEvent{}, err
+		}
+		ev.before = before
+	} else {
+		if isNullish(env.Payload.After) {
+			ev.tombstone = true
+			return ev, nil
+		}
+		var after map[string]interface{}
+		if err := json.Unmarshal(env.Payload.After, &after); err != nil {
+			return decodedEvent{}, err
+		}
+		ev.after = after
 	}
 
+	// Normalise logical types using the connector schema, which is the only reliable
+	// source for how each column was encoded.
 	if len(env.Schema) > 0 {
 		var vs valueSchema
 		if err := json.Unmarshal(env.Schema, &vs); err == nil {
-			for _, f := range vs.Fields {
-				if f.Field != "after" {
+			normalizeStruct(&vs, "after", ev.after)
+			normalizeStruct(&vs, "before", ev.before)
+		}
+	}
+
+	if !ev.isDelete {
+		rowJSON, err := json.Marshal(ev.after)
+		if err != nil {
+			return decodedEvent{}, err
+		}
+		ev.row = rowJSON
+	}
+	return ev, nil
+}
+
+func isNullish(raw json.RawMessage) bool {
+	s := strings.TrimSpace(string(raw))
+	return len(s) == 0 || s == "null"
+}
+
+// normalizeStruct converts the Debezium logical types that StarRocks cannot ingest
+// directly into their SQL literals:
+//
+//	Decimal      base64 two's-complement -> decimal string
+//	Date         epoch days              -> "YYYY-MM-DD"
+//	Timestamp    epoch millis/micros/nanos-> "YYYY-MM-DD HH:MM:SS[.ffffff]"
+//	ZonedTimestamp ISO-8601 with offset  -> "YYYY-MM-DD HH:MM:SS[.ffffff]" (UTC)
+//	Json         base64 UTF-8            -> the JSON text
+func normalizeStruct(vs *valueSchema, want string, row map[string]interface{}) {
+	for _, f := range vs.Fields {
+		if f.Field != want {
+			continue
+		}
+		for _, cf := range f.Fields {
+			v, ok := row[cf.Field]
+			if !ok || v == nil {
+				continue
+			}
+			switch logicalShortName(cf) {
+			case "Decimal":
+				s, isStr := v.(string)
+				if !isStr {
 					continue
 				}
-				for _, cf := range f.Fields {
-					if cf.Name != "org.apache.kafka.connect.data.Decimal" {
-						continue
-					}
-					rawVal, ok := after[cf.Field]
-					if !ok || rawVal == nil {
-						continue
-					}
-					b64, ok := rawVal.(string)
-					if !ok {
-						continue
-					}
-					decoded, err := decodeDebeziumDecimal(b64, cf.Parameters["scale"])
-					if err == nil {
-						after[cf.Field] = decoded
-					}
+				if dec, err := decodeDebeziumDecimal(s, cf.Parameters["scale"]); err == nil {
+					row[cf.Field] = dec
+				}
+			case "Date":
+				n, isNum := asInt64(v)
+				if !isNum {
+					continue
+				}
+				row[cf.Field] = epochDaysToDate(n)
+			case "MicroTimestamp", "NanoTimestamp":
+				n, isNum := asInt64(v)
+				if !isNum {
+					continue
+				}
+				if s, ok := epochToDatetime(n, logicalShortName(cf)); ok {
+					row[cf.Field] = s
+				}
+			case "Timestamp":
+				n, isNum := asInt64(v)
+				if !isNum {
+					continue
+				}
+				if s, ok := epochToDatetime(n*int64(time.Millisecond), "Timestamp"); ok {
+					row[cf.Field] = s
+				}
+			case "ZonedTimestamp":
+				s, isStr := v.(string)
+				if !isStr {
+					continue
+				}
+				if lit, ok := zonedToDatetime(s); ok {
+					row[cf.Field] = lit
+				}
+			case "Json":
+				s, isStr := v.(string)
+				if !isStr {
+					continue
+				}
+				if b, err := base64.StdEncoding.DecodeString(s); err == nil {
+					row[cf.Field] = string(b)
 				}
 			}
 		}
 	}
+}
 
-	rowJSON, err := json.Marshal(after)
-	if err != nil {
-		return nil, nil, false, err
+// logicalShortName resolves a schema field's logical type to its unqualified name.
+// Debezium carries these in the field's "name" ("io.debezium.data.Decimal") while
+// the primitive type sits in "type"; the Kafka Connect variants use the
+// "org.apache.kafka.connect.data" namespace. Matching on the short name covers both
+// without hard-coding a namespace that changes between connector versions.
+func logicalShortName(f schemaField) string {
+	for _, candidate := range []string{f.Name, f.Type} {
+		if i := strings.LastIndex(candidate, "."); i >= 0 {
+			candidate = candidate[i+1:]
+		}
+		if candidate != "" {
+			return candidate
+		}
 	}
-	return rowJSON, after, false, nil
+	return ""
+}
+
+func asInt64(v interface{}) (int64, bool) {
+	switch x := v.(type) {
+	case float64:
+		return int64(x), true
+	case int64:
+		return x, true
+	case int:
+		return int64(x), true
+	case json.Number:
+		n, err := x.Int64()
+		return n, err == nil
+	}
+	return 0, false
+}
+
+func epochDaysToDate(days int64) string {
+	return time.Unix(0, 0).UTC().AddDate(0, 0, int(days)).Format("2006-01-02")
+}
+
+func epochToDatetime(n int64, kind string) (string, bool) {
+	var unit time.Duration
+	switch kind {
+	case "MicroTimestamp":
+		unit = time.Microsecond
+	case "NanoTimestamp":
+		unit = time.Nanosecond
+	default:
+		unit = time.Millisecond
+	}
+	return time.Unix(0, n*int64(unit)).UTC().Format("2006-01-02 15:04:05.000000"), true
+}
+
+var zonedLayouts = []string{
+	time.RFC3339Nano,
+	time.RFC3339,
+	"2006-01-02T15:04:05.999999Z",
+	"2006-01-02T15:04:05Z",
+}
+
+func zonedToDatetime(s string) (string, bool) {
+	for _, layout := range zonedLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.UTC().Format("2006-01-02 15:04:05.000000"), true
+		}
+	}
+	return "", false
 }
 
 // decodeDebeziumDecimal converts Debezium's base64-encoded big-endian
@@ -563,35 +1121,153 @@ func decodeDebeziumDecimal(b64, scaleStr string) (string, error) {
 	return f.Text('f', scale), nil
 }
 
-func streamLoad(cfg Config, row json.RawMessage) error {
-	url := fmt.Sprintf("%s/api/%s/%s/_stream_load", cfg.StarRocksHTTP, cfg.StarRocksDB, cfg.StarRocksTable)
+// ---- StarRocks transport ----
 
-	req, err := http.NewRequest("PUT", url, bytes.NewReader(row))
-	if err != nil {
-		return err
+// starRocksResponse is the subset of the stream-load reply we act on. A load can
+// return HTTP 200 and still not have applied the rows ("Publish Timeout",
+// "Label Already Exists"), so the status must be read rather than assumed.
+//
+// The row counts matter too: StarRocks filters rows it cannot convert and still
+// answers Status=Success. Verified on 3.3.22 — a DECIMAL column fed the string
+// "NOT_A_NUMBER" loaded as NULL, with no error anywhere. The only signal is
+// NumberFilteredRows, which nothing reads unless we read it here.
+type starRocksResponse struct {
+	Status             string `json:"Status"`
+	Msg                string `json:"Message"`
+	NumberTotalRows    int64  `json:"NumberTotalRows"`
+	NumberLoadedRows   int64  `json:"NumberLoadedRows"`
+	NumberFilteredRows int64  `json:"NumberFilteredRows"`
+	NumberErrorRows    int64  `json:"NumberErrorRows"`
+}
+
+// rejected reports rows StarRocks refused to store, which become NULL columns.
+func (r starRocksResponse) rejected() int64 {
+	var v int64
+	for _, n := range []int64{r.NumberFilteredRows, r.NumberErrorRows} {
+		if n > v {
+			v = n
+		}
 	}
+	return v
+}
 
+func (gk *StreamingGatekeeper) httpClient() *http.Client {
+	return &http.Client{
+		Timeout: 60 * time.Second,
+		CheckRedirect: func(r *http.Request, via []*http.Request) error {
+			r.SetBasicAuth(gk.cfg.StarRocksUser, gk.cfg.StarRocksPassword)
+			return nil
+		},
+	}
+}
+
+// streamLoadBatch sends every row as one JSON array in a single request. The `label`
+// makes the request idempotent: a retry carrying the same label is rejected as a
+// duplicate rather than loading the rows twice.
+//
+// It returns the number of rows StarRocks refused to store. Those rows are
+// written with NULL in any column it could not convert, so the caller must
+// surface the count rather than treating Status=Success as a clean load.
+func streamLoadBatch(ctx context.Context, cfg Config, rows []json.RawMessage, label string) (int64, error) {
+	body := make([]byte, 0, len(rows)*128)
+	body = append(body, '[')
+	for i, r := range rows {
+		if i > 0 {
+			body = append(body, ',')
+		}
+		body = append(body, r...)
+	}
+	body = append(body, ']')
+
+	url := fmt.Sprintf("%s/api/%s/%s/_stream_load", cfg.StarRocksHTTP, cfg.StarRocksDB, cfg.StarRocksTable)
+	req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
 	req.SetBasicAuth(cfg.StarRocksUser, cfg.StarRocksPassword)
 	req.Header.Set("Expect", "100-continue")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("format", "json")
-	req.Header.Set("strip_outer_array", "false")
+	req.Header.Set("strip_outer_array", "true")
+	req.Header.Set("label", label)
+	// strict_mode makes StarRocks reject the whole load rather than filtering the
+	// rows it cannot convert. It is off by default because one bad row would then
+	// block an entire batch; the filtered-row count below catches the same
+	// corruption without stalling the stream. Operators who prefer fail-loud can
+	// set STREAM_LOAD_STRICT_MODE=true.
+	if cfg.StrictMode {
+		req.Header.Set("strict_mode", "true")
+	}
+	// These tables are PRIMARY KEY tables; the label is the idempotency key and the
+	// rows are keyed by the table's own key columns.
+	req.Header.Set("partial_update", "false")
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
+	resp, err := clientFor(cfg).Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	var out starRocksResponse
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	switch {
+	case out.Status == "Success":
+		return out.rejected(), nil
+	case out.Status == "Label Already Exists":
+		// A previous attempt with this label already applied these rows.
+		return 0, nil
+	case out.Status == "Publish Timeout":
+		// StarRocks committed but the FE lost the reply; the label makes a retry safe.
+		return 0, nil
+	case resp.StatusCode != http.StatusOK:
+		return 0, fmt.Errorf("bad status %s: %s", resp.Status, out.Msg)
+	default:
+		return 0, fmt.Errorf("stream load rejected: %s (%s)", out.Status, out.Msg)
+	}
+}
+
+// deleteSQL builds one keyed DELETE for the whole batch. StarRocks 3.3 removed the
+// HTTP SQL endpoint, so this is issued over the MySQL protocol instead.
+func deleteSQL(cfg Config, keyCols []string, keys []string) (string, bool) {
+	var clauses []string
+	for _, k := range keys {
+		parts := strings.Split(k, "\x1f")
+		if len(parts) != len(keyCols) {
+			// A key that does not match the configured key columns must never become
+			// a partial predicate, which would delete more than intended.
+			continue
+		}
+		conds := make([]string, 0, len(parts))
+		for i, p := range parts {
+			conds = append(conds, fmt.Sprintf("`%s` = %s", keyCols[i], quoteLiteral(p)))
+		}
+		clauses = append(clauses, "("+strings.Join(conds, " AND ")+")")
+	}
+	if len(clauses) == 0 {
+		return "", false
+	}
+	return fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE %s",
+		cfg.StarRocksDB, cfg.StarRocksTable, strings.Join(clauses, " OR ")), true
+}
+
+// quoteLiteral renders a primary-key value as a SQL string literal using the SQL
+// standard escape (a single quote is written twice). Key values come off the CDC
+// envelope, so doubling is applied unconditionally rather than trusting the
+// character set. Unlike a backslash escape, doubling is correct whether or not
+// NO_BACKSLASH_ESCAPES is in effect.
+func quoteLiteral(s string) string {
+	if strings.ContainsAny(s, "\x00\n\r") {
+		return "NULL"
+	}
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+func clientFor(cfg Config) *http.Client {
+	return &http.Client{
+		Timeout: 60 * time.Second,
 		CheckRedirect: func(r *http.Request, via []*http.Request) error {
 			r.SetBasicAuth(cfg.StarRocksUser, cfg.StarRocksPassword)
 			return nil
 		},
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad status: %s", resp.Status)
-	}
-	return nil
 }

@@ -12,7 +12,7 @@
  */
 
 import { getSelectedRegion } from './region';
-import { readCachedSelection, whenTenantScopeReady } from '../utils/tenantScope';
+import { isValidUUID, readCachedSelection, whenTenantScopeReady } from '../utils/tenantScope';
 import { acceptLanguage, parseCatalogError, type CatalogErrorBody } from '../utils/catalogError';
 
 /**
@@ -51,11 +51,11 @@ function getTenantHeadersInternal(): Record<string, string> {
   // Resolve tenant and datasource from unified scope helper
   try {
     const { tenant, datasource } = readCachedSelection();
-    if (tenant?.id) {
+    if (tenant?.id && isValidUUID(tenant.id)) {
       headers['X-Tenant-ID'] = tenant.id;
     }
     const datasourceId = datasource?.id || datasource?.alpha_tenant_instance_id;
-    if (datasourceId) {
+    if (datasourceId && isValidUUID(datasourceId)) {
       headers['X-Tenant-Datasource-ID'] = datasourceId;
     }
   } catch (_) {

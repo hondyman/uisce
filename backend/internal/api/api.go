@@ -41,6 +41,8 @@ import (
 	"github.com/hondyman/uisce/backend/internal/cashflow/settlement"
 	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/compliance/blotter"
+	"github.com/hondyman/uisce/backend/internal/compliance/calendar"
+	"github.com/hondyman/uisce/backend/internal/compliance/limits"
 	"github.com/hondyman/uisce/backend/internal/compliance/regulatory"
 	"github.com/hondyman/uisce/backend/internal/compliance/surveillance"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
@@ -58,6 +60,9 @@ import (
 	"github.com/hondyman/uisce/backend/internal/provisioning"
 	"github.com/hondyman/uisce/backend/internal/household"
 	"github.com/hondyman/uisce/backend/internal/infrastructure"
+	"github.com/hondyman/uisce/backend/internal/lakehouse"
+	"github.com/hondyman/uisce/backend/internal/lakehouse/infra"
+	"github.com/hondyman/uisce/backend/internal/lakehouse/registry"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/master/customer"
@@ -1936,6 +1941,16 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			lakehouseProvisioner = handlers.NewTemporalLakehouseProvisioner(temporalClient)
 		}
 		handlers.NewSystemLakehouseHandler(db, lakehouseProvisioner).RegisterRoutes(r)
+		// Platform > Lakehouse status (read-only): the cluster view, resource groups, and
+		// per-tenant wiring — surfaces cross-check warnings the runbook gap 4 calls out.
+		// AdminDB opens from the legacy LAKEHOUSE_STARROCKS_DSN (any user can SHOW; do NOT
+		// pass the root credential). On a cluster without the env, the handler serves the
+		// tenants-only view with a "cluster not configured" note rather than 500-ing.
+		statusDB, statusErr := infra.StatusAdminDBFromEnv()
+		if statusErr != nil {
+			slog.Warn("lakehouse status AdminDB not configured; panel will serve tenants-only", "error", statusErr)
+		}
+		handlers.NewLakehouseStatusHandler(lakehouse.NewStatusService(statusDB, registry.NewStore(db), false)).RegisterRoutes(r)
 		// System > tenant provisioning: create a tenant (optionally with its own app database,
 		// ADR-030) and read a run's status. Global admins only, enforced inside the handlers.
 		// The saga runs on cmd/worker (bp_queue); without Temporal the POST answers 503.
@@ -2090,6 +2105,16 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				// Post-Trade Streaming Surveillance Findings Queue
 				survHandler := surveillance.NewHandler(db)
 				survHandler.RegisterRoutes(r)
+
+				// Statutory Compliance Calendar
+				calSvc := calendar.NewService(db)
+				calHandler := calendar.NewHandler(calSvc)
+				calHandler.RegisterRoutes(r)
+
+				// Portfolio Limits & Headroom Utilization Dashboard
+				limitsSvc := limits.NewService(db)
+				limitsHandler := limits.NewHandler(limitsSvc)
+				limitsHandler.RegisterRoutes(r)
 			}
 		}
 

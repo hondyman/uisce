@@ -59,7 +59,7 @@ const WIDEN_TARGET = 157; // 164 prior; −7 Track D orphan components/pagestudi
  *                   AND tenantContextStub.identity.test.ts, 6 tests, the
  *                   identity + shape guard for the fixture extensions)
  */
-const RUNNING_FILE_BASELINE = 115; // 122 prior; −7 Track D orphan components/pagestudio vitests
+const RUNNING_FILE_BASELINE = 120; // 115 prior; +5 (navigationTree, codeEditorWidget, treeViewWidget, etc.)
 const EXECUTED_TEST_BASELINE = 679; // 709 prior; −30 it/test in orphan pagestudio vitests (Track D)
 
 function globFiles(roots: string[], patterns: string[]): string[] {

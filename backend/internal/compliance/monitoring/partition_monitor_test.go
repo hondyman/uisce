@@ -2,26 +2,18 @@ package monitoring
 
 import (
 	"context"
-	"database/sql"
-	"os"
 	"testing"
 	"time"
 
+	"github.com/hondyman/uisce/backend/internal/compliance/testutil"
 	_ "github.com/lib/pq"
 )
 
 func TestDefaultPartitionMonitor_ZeroIncidents(t *testing.T) {
-	dsn := os.Getenv("ALPHA_DSN")
-	if dsn == "" {
-		// Local mock or skip
-		t.Skip("ALPHA_DSN not set, skipping live database test")
+	db := testutil.GetEphemeralTestDB(t)
+	if db == nil {
+		return
 	}
-
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		t.Fatalf("Failed to connect to alpha: %v", err)
-	}
-	defer db.Close()
 
 	alertCalled := false
 	monitor := NewDefaultPartitionMonitor(db, func(count int64) {

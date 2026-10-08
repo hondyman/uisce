@@ -26,6 +26,9 @@ func TestApplyTenantGUCs_SetsTenantAndGold(t *testing.T) {
 	mock.ExpectExec("set_config\\('app.tenant_id'").
 		WithArgs("t-a").
 		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("set_config\\('app.current_tenant'").
+		WithArgs("t-a").
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("set_config\\('uisce.gold_tenant'").
 		WithArgs("t-gold").
 		WillReturnResult(sqlmock.NewResult(0, 0))
@@ -58,6 +61,9 @@ func TestWithTenantGoldTransaction_AppliesGUCs(t *testing.T) {
 		WithArgs("t-a").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("set_config\\('app.tenant_id'").
+		WithArgs("t-a").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("set_config\\('app.current_tenant'").
 		WithArgs("t-a").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("set_config\\('uisce.gold_tenant'").

@@ -28,6 +28,10 @@ func TestGetBOTerms_CalcTermSkipsDefaultAggregation(t *testing.T) {
 		"description", "data_type", "role", "binding_status", "term_type",
 	}
 
+	mock.ExpectQuery("FROM public.business_objects").
+		WithArgs("test-bo-id").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("00000000-0000-0000-0000-000000000001"))
+
 	mock.ExpectQuery("FROM public.business_object_fields f").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows(cols).

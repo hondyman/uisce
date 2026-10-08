@@ -4,33 +4,19 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/compliance/testutil"
 	_ "github.com/lib/pq"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
 
 func getSurveillanceTestDB(t *testing.T) *sql.DB {
-	homeDir, _ := os.UserHomeDir()
-	dsn := fmt.Sprintf("postgres://postgres:postgres@100.84.50.65:5432/alpha?sslmode=verify-full&sslrootcert=%s/.uisce/certs/ca.crt&sslcert=%s/.uisce/certs/postgres-client.crt&sslkey=%s/.uisce/certs/postgres-client.key", homeDir, homeDir, homeDir)
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		t.Skipf("Postgres alpha not reachable, skipping: %v", err)
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	if err := db.PingContext(ctx); err != nil {
-		t.Skipf("Postgres alpha ping failed, skipping: %v", err)
-		return nil
-	}
-	return db
+	t.Helper()
+	return testutil.GetEphemeralTestDB(t)
 }
 
 // TestSurveillance_RebalanceIdempotency_DeterministicDedupKey asserts that Kafka rebalances

@@ -62,6 +62,59 @@ sed 's/REPLACE_WITH_POSTGRES_PASSWORD/postgres/' orm-oms-connector.json | \
 ## 4. Verify
 
 ```bash
-curl -s http://localhost:8083/connectors/orm-oms-connector/status
+curl -s http://localhost:8083/connectors/orm-oms-connector-v2/status
 docker exec semlayer-redpanda rpk topic list | grep orm_oms
 ```
+
+## 5. Two traps in this config (both caused a silent three-week outage)
+
+### `table.include.list` must be the PLAIN form — do not add backslashes
+
+The table is named `order` (lowercase; `pg_class.relname = 'order'`). Write it plainly:
+
+```
+orm.execution,orm.order,orm.placement,...
+```
+
+A previous deployment carried `orm.\"order\"`, on the theory that Debezium needs
+SQL-keyword quoting. It does not here, and it is actively harmful: Debezium then looks
+for a table whose name is literally `"order"` **including the quote characters**, matches
+nothing, and silently captures zero rows from `orm."order"` while the other four tables
+keep flowing. The symptom is a *partial* outage — `orm_oms.orm.placement` advances,
+`orm_oms.orm.order` sits at its old high-water mark — which reads like a broken consumer
+rather than a broken filter.
+
+If you are tempted to add escaping at POST time, do not. Verified live 2026-10-07:
+the plain `orm.order` form emitted all 187 rows; the escaped form emitted none.
+
+`rpk topic describe -p` reports **only partition 0**. With more than one partition that
+is a misleading spot-check — sum across all partitions instead:
+
+```bash
+docker exec uisce-redpanda rpk topic describe orm_oms.orm.order
+```
+
+### `decimal.handling.mode` must be `string`, not `double`
+
+A double cannot hold a full `numeric(18,9)`. Measured end-to-end through
+Postgres → Debezium → Redpanda → StarRocks on 2026-10-07:
+
+| Postgres `numeric(18,9)` | via `double` | via `string` |
+|---|---|---|
+| `12345.123456789` | `12345.123456789` | `12345.123456789` |
+| `1234567.123456789` | `1234567.123456789` | `1234567.123456789` |
+| `12345678.123456789` | `12345678.123456790` (rounded) | exact |
+| `999999999.999999999` | **`NULL`** | exact |
+
+The last row is the dangerous one: the double rounds to `1e9`, which **overflows**
+`DECIMAL(18,9)`, and StarRocks stores NULL rather than erroring. An amount column
+silently becomes null with no DLQ entry and no loader error.
+
+The stream loader needs no change for `string` mode — it passes the decimal through as
+a JSON string and StarRocks casts it into the `DECIMAL` column.
+
+### Preventing recurrence
+
+Both failures were invisible to "no errors in the logs". A scheduled parity check
+(row counts per table, Postgres vs StarRocks) would have caught the `order` table's
+silent absence on day one.

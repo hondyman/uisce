@@ -46,15 +46,63 @@ type OrderContext struct {
 	DepositExposurePct    decimal.Decimal
 	CountryExposurePct    decimal.Decimal
 	SectorExposurePct     decimal.Decimal
-	NavWeightPct          decimal.Decimal
-	CompliantAssetsPct    decimal.Decimal
-	Nav                   decimal.Decimal
+	NavWeightPct                    decimal.Decimal
+	CompliantAssetsPct              decimal.Decimal
+	UcitsAggregateAbove5PctExposure decimal.Decimal
+	Restricted144aExposurePct       decimal.Decimal
+	MaxGroupIssuerExposurePct       decimal.Decimal
+	MaxIssuerDebtExposurePct        decimal.Decimal
+	MaxCounterpartyPfeExposurePct   decimal.Decimal
+	CashAndEquivalentPct            decimal.Decimal
+	MaxSovereignExposurePct         decimal.Decimal
+	MaxAgencySupraExposurePct       decimal.Decimal
+	MaxMuniObligorExposurePct       decimal.Decimal
+	MaxCcpExposurePct               decimal.Decimal
+	MaxCustodianConcentrationPct    decimal.Decimal
+	MaxBankDepositPct               decimal.Decimal
+	SecLendingCollateralRatio       decimal.Decimal
+	UnclassifiedSecuritiesPct       decimal.Decimal
+	MaxSectorExposurePct            decimal.Decimal
+	MaxIndustryGroupPct             decimal.Decimal
+	CyclicalSectorsAggregatePct     decimal.Decimal
+	EmergingMarketsPct              decimal.Decimal
+	NonOecdExposurePct              decimal.Decimal
+	FrontierMarketsPct              decimal.Decimal
+	SanctionedEntityMatchesCount    int
+	UnhedgedFxExposurePct           decimal.Decimal
+	HighYieldDebtExposurePct        decimal.Decimal
+	SplitRatingWorstGradeRank       int
+	SplitRatingConservativeGradeRank int
+	EsgControversialWeaponsPct      decimal.Decimal
+	EsgThermalCoalRevenuePct        decimal.Decimal
+	EsgTobaccoRevenuePct            decimal.Decimal
+	IlliquidLevel3AssetsPct         decimal.Decimal
+	SettlementFailExposurePct       decimal.Decimal
+	EsgWaciTco2ePerMRevenue         decimal.Decimal
+	EsgEmissionsDataCoveragePct     decimal.Decimal
+	EsgGhgScope12Intensity          decimal.Decimal
+	EsgBoardGenderDiversityPct      decimal.Decimal
+	EsgHazardousWasteRatio          decimal.Decimal
+	EuTaxonomyAlignmentPct          decimal.Decimal
+	LiquidityCoverageRatio          decimal.Decimal
+	FirmwideEquityVotingPct         decimal.Decimal
+	PriorFirmwideEquityVotingPct    decimal.Decimal
+	FirmwideVotingControlPct        decimal.Decimal
+	PriorFirmwideVotingControlPct   decimal.Decimal
+	FirmwideNetShortPct             decimal.Decimal
+	PriorFirmwideNetShortPct        decimal.Decimal
+	IsPassiveIntent                 *bool
+	ErisaBpiEquityPct               decimal.Decimal
+	Nav                             decimal.Decimal
 	ExistingPositionValue decimal.Decimal
 	ReferencePrice        decimal.Decimal
 	PriceDeviationPct     decimal.Decimal
 	AdvRatio              decimal.Decimal
 	DuplicateCount        int
 	OrdersPerMinute       int
+
+	// Rule Parameter Overrides (for testing dynamic parameter thresholds)
+	ParameterOverrides map[string]string
 
 	// List & Eligibility Flags
 	InRestrictedList          bool
@@ -127,453 +175,29 @@ var (
 	testEmpID    = uuid.MustParse("22222222-2222-4222-a222-222222222222")
 )
 
-// CoreScenarioCorpus contains deterministic scenario tests for the initial library rules.
-var CoreScenarioCorpus = []Scenario{
-	// ── 1. UCITS_ISSUER_5 ──────────────────────────────────────────
-	{
-		RuleCode:    "UCITS_ISSUER_5",
-		Code:        "UCITS_ISSUER_5:PASS",
-		Description: "4.9% exposure order, under limit",
-		Input: OrderContext{
-			IssuerExposurePct: d("0.049000"),
-			Quantity:          d("100"),
-		},
-		Expected: ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "UCITS_ISSUER_5",
-		Code:        "UCITS_ISSUER_5:FAIL",
-		Description: "10.4% exposure, over limit",
-		Input: OrderContext{
-			IssuerExposurePct: d("0.104000"),
-		},
-		Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "issuer_exposure_pct"},
-	},
-	{
-		RuleCode:    "UCITS_ISSUER_5",
-		Code:        "UCITS_ISSUER_5:BOUNDARY",
-		Description: "Exactly 5.000000% — GT is strict, must pass",
-		Input: OrderContext{
-			IssuerExposurePct: d("0.050000"),
-		},
-		Expected: ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "UCITS_ISSUER_5",
-		Code:        "UCITS_ISSUER_5:ADVERSARIAL_COMBINED",
-		Description: "4.7% current + in-flight reservation delta pushes to 5.2%",
-		Input: OrderContext{
-			IssuerExposurePct:     d("0.052000"),
-			ExistingPositionValue: d("47000000"),
-			Quantity:              d("5000"),
-			Price:                 d("1000"),
-		},
-		Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "issuer_exposure_pct"},
-	},
+// CoreScenarioCorpus contains deterministic scenario tests for all Core Gold-Copy and Post-Trade rules.
+var CoreScenarioCorpus = buildScenarioCorpus()
 
-	// ── 2. UCITS_ISSUER_10_EXCEPTION ────────────────────────────────
-	{
-		RuleCode:    "UCITS_ISSUER_10_EXCEPTION",
-		Code:        "UCITS10:EXC_WINDOW",
-		Description: "6.2% exposure held >180 days since crossing 5% — approval path",
-		Input: OrderContext{
-			IssuerExposurePct: d("0.062000"),
-			DaysOver5Pct:      200,
-		},
-		Expected: ExpectedOutcome{Status: "APPROVAL_REQUIRED", MustContain: "grandfather_days"},
-	},
-	{
-		RuleCode:    "UCITS_ISSUER_10_EXCEPTION",
-		Code:        "UCITS10:OVER_10",
-		Description: "10.4% — beyond even the 10% exception limit",
-		Input: OrderContext{
-			IssuerExposurePct: d("0.104000"),
-			DaysOver5Pct:      200,
-		},
-		Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "iss10_limit_pct"},
-	},
-	{
-		RuleCode:    "UCITS_ISSUER_10_EXCEPTION",
-		Code:        "UCITS10:UNDER_180_DAYS",
-		Description: "6.2% exposure held for only 60 days (within 180-day grace window) — passes",
-		Input: OrderContext{
-			IssuerExposurePct: d("0.062000"),
-			DaysOver5Pct:      60,
-		},
-		Expected: ExpectedOutcome{Status: "PASSED"},
-	},
-
-	// ── 3. UCITS_ISSUER_40 ──────────────────────────────────────────
-	{
-		RuleCode:    "UCITS_ISSUER_40",
-		Code:        "UCITS40:PASS",
-		Description: "38.0% single basket exposure under 40% cap",
-		Input:       OrderContext{IssuerExposurePct: d("0.380000")},
-		Expected:    ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "UCITS_ISSUER_40",
-		Code:        "UCITS40:BOUNDARY",
-		Description: "Exactly 40.000000% — GT is strict, passes",
-		Input:       OrderContext{IssuerExposurePct: d("0.400000")},
-		Expected:    ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "UCITS_ISSUER_40",
-		Code:        "UCITS40:FAIL",
-		Description: "42.0% single basket exposure breaches 40% cap",
-		Input:       OrderContext{IssuerExposurePct: d("0.420000")},
-		Expected:    ExpectedOutcome{Status: "BLOCKED", MustContain: "iss40_limit_pct"},
-	},
-
-	// ── 4. UCITS_DEPOSIT_20 ─────────────────────────────────────────
-	{
-		RuleCode:    "UCITS_DEPOSIT_20",
-		Code:        "UCITS_DEP20:PASS",
-		Description: "18.0% deposit exposure under 20% limit",
-		Input:       OrderContext{DepositExposurePct: d("0.180000")},
-		Expected:    ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "UCITS_DEPOSIT_20",
-		Code:        "UCITS_DEP20:BOUNDARY",
-		Description: "Exactly 20.000000% deposit exposure passes",
-		Input:       OrderContext{DepositExposurePct: d("0.200000")},
-		Expected:    ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "UCITS_DEPOSIT_20",
-		Code:        "UCITS_DEP20:FAIL",
-		Description: "22.5% deposit exposure breaches 20% limit",
-		Input:       OrderContext{DepositExposurePct: d("0.225000")},
-		Expected:    ExpectedOutcome{Status: "BLOCKED", MustContain: "deposit_limit_pct"},
-	},
-
-	// ── 5. ACT40_DIV_75_5 ───────────────────────────────────────────
-	{
-		RuleCode:    "ACT40_DIV_75_5",
-		Code:        "ACT40:PASS",
-		Description: "80% compliant assets and 4% issuer exposure",
-		Input: OrderContext{
-			CompliantAssetsPct: d("0.800000"),
-			IssuerExposurePct:  d("0.040000"),
-		},
-		Expected: ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "ACT40_DIV_75_5",
-		Code:        "ACT40:FAIL_DIV",
-		Description: "68% compliant assets (<75%) triggers soft warning",
-		Input: OrderContext{
-			CompliantAssetsPct: d("0.680000"),
-			IssuerExposurePct:  d("0.040000"),
-		},
-		Expected: ExpectedOutcome{Status: "WARNING", MustContain: "compliant_assets_pct"},
-	},
-	{
-		RuleCode:    "ACT40_DIV_75_5",
-		Code:        "ACT40:FAIL_CONC",
-		Description: "6% issuer exposure (>5%) triggers soft warning",
-		Input: OrderContext{
-			CompliantAssetsPct: d("0.800000"),
-			IssuerExposurePct:  d("0.060000"),
-		},
-		Expected: ExpectedOutcome{Status: "WARNING", MustContain: "issuer_limit_pct"},
-	},
-
-	// ── 6. FOF_20 ───────────────────────────────────────────────────
-	{
-		RuleCode:    "FOF_20",
-		Code:        "FOF:PASS",
-		Description: "18.5% target fund exposure under 20% limit",
-		Input:       OrderContext{TargetFundExposurePct: d("0.185000")},
-		Expected:    ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "FOF_20",
-		Code:        "FOF:BOUNDARY",
-		Description: "Exactly 20.000000% target fund exposure passes",
-		Input:       OrderContext{TargetFundExposurePct: d("0.200000")},
-		Expected:    ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "FOF_20",
-		Code:        "FOF:FAIL",
-		Description: "21.5% target fund exposure breaches 20% limit",
-		Input:       OrderContext{TargetFundExposurePct: d("0.215000")},
-		Expected:    ExpectedOutcome{Status: "BLOCKED", MustContain: "fof_limit_pct"},
-	},
-
-	// ── 7. SEC_144A_ELIGIBILITY ─────────────────────────────────────
-	{
-		RuleCode:    "SEC_144A_ELIGIBILITY",
-		Code:        "SEC144A:PASS_QIB",
-		Description: "144A security purchase by qualified institutional buyer",
-		Input: OrderContext{
-			Restricted144A: true,
-			QIBStatus:      true,
-		},
-		Expected: ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "SEC_144A_ELIGIBILITY",
-		Code:        "SEC144A:FAIL_NON_QIB",
-		Description: "144A security purchase by non-QIB account blocked",
-		Input: OrderContext{
-			Restricted144A: true,
-			QIBStatus:      false,
-		},
-		Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "restricted_144a"},
-	},
-	{
-		RuleCode:    "SEC_144A_ELIGIBILITY",
-		Code:        "SEC144A:PASS_PUBLIC",
-		Description: "Unrestricted security purchase by non-QIB account passes",
-		Input: OrderContext{
-			Restricted144A: false,
-			QIBStatus:      false,
-		},
-		Expected: ExpectedOutcome{Status: "PASSED"},
-	},
-
-	// ── 8. REG_S_OFFSHORE_ONLY ──────────────────────────────────────
-	{
-		RuleCode:    "REG_S_OFFSHORE_ONLY",
-		Code:        "REGS:PASS_OFFSHORE",
-		Description: "Reg S offering traded in EU offshore jurisdiction",
-		Input: OrderContext{
-			RegS:                  true,
-			Jurisdiction:          "EU",
-			DomesticJurisdictions: []string{"US"},
-		},
-		Expected: ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "REG_S_OFFSHORE_ONLY",
-		Code:        "REGS:FAIL_DOMESTIC",
-		Description: "Reg S offering traded in US domestic jurisdiction blocked",
-		Input: OrderContext{
-			RegS:                  true,
-			Jurisdiction:          "US",
-			DomesticJurisdictions: []string{"US"},
-		},
-		Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "domestic_jurisdictions"},
-	},
-
-	// ── 9. RESTRICTED_LIST_BLOCK ────────────────────────────────────
-	{
-		RuleCode:    "RESTRICTED_LIST_BLOCK",
-		Code:        "RLB:PASS",
-		Description: "Security not in house restricted list",
-		Input:       OrderContext{InRestrictedList: false},
-		Expected:    ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "RESTRICTED_LIST_BLOCK",
-		Code:        "RLB:FAIL",
-		Description: "Security is in house restricted list -> HARD_BLOCK",
-		Input:       OrderContext{InRestrictedList: true},
-		Expected:    ExpectedOutcome{Status: "BLOCKED", MustContain: "restricted_list"},
-	},
-
-	// ── 10. INSIDER_LIST_MAR ────────────────────────────────────────
-	{
-		RuleCode:    "INSIDER_LIST_MAR",
-		Code:        "INSIDER:PASS",
-		Description: "Security not in MAR insider list",
-		Input:       OrderContext{InInsiderList: false},
-		Expected:    ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "INSIDER_LIST_MAR",
-		Code:        "INSIDER:FAIL",
-		Description: "Security on MAR insider list -> HARD_BLOCK",
-		Input:       OrderContext{InInsiderList: true},
-		Expected:    ExpectedOutcome{Status: "BLOCKED", MustContain: "insider_list"},
-	},
-
-	// ── 11. SANCTIONS_ISSUER_BLOCK ──────────────────────────────────
-	{
-		RuleCode:    "SANCTIONS_ISSUER_BLOCK",
-		Code:        "SANCTIONS:PASS",
-		Description: "Issuer is clean and not on OFAC/EU sanctions lists",
-		Input:       OrderContext{IssuerIsSanctioned: false},
-		Expected:    ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "SANCTIONS_ISSUER_BLOCK",
-		Code:        "SANCTIONS:FAIL",
-		Description: "Issuer is sanctioned -> HARD_BLOCK",
-		Input:       OrderContext{IssuerIsSanctioned: true},
-		Expected:    ExpectedOutcome{Status: "BLOCKED", MustContain: "sanctioned"},
-	},
-
-	// ── 12. COUNTRY_EXPOSURE_LIMIT ──────────────────────────────────
-	{
-		RuleCode:    "COUNTRY_EXPOSURE_LIMIT",
-		Code:        "COUNTRY:PASS",
-		Description: "Country exposure 12% is below 15% mandate",
-		Input:       OrderContext{CountryExposurePct: d("0.120000")},
-		Expected:    ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "COUNTRY_EXPOSURE_LIMIT",
-		Code:        "COUNTRY:BOUNDARY",
-		Description: "Exactly 15.000000% country exposure passes",
-		Input:       OrderContext{CountryExposurePct: d("0.150000")},
-		Expected:    ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "COUNTRY_EXPOSURE_LIMIT",
-		Code:        "COUNTRY:FAIL",
-		Description: "Country exposure 18% breaches 15% limit -> SOFT_WARNING",
-		Input:       OrderContext{CountryExposurePct: d("0.180000")},
-		Expected:    ExpectedOutcome{Status: "WARNING", MustContain: "country_limit_pct"},
-	},
-
-	// ── 13. REG_M_RULE_105 ──────────────────────────────────────────
-	{
-		RuleCode:    "REG_M_RULE_105",
-		Code:        "REGM:FAIL",
-		Description: "Short sale 3 days prior to pricing in covered offering -> BLOCKED",
-		Input: OrderContext{
-			Side:              "SHORT",
-			CoveredOffering:   true,
-			DaysBeforePricing: 3,
-		},
-		Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "restricted_window_days"},
-	},
-	{
-		RuleCode:    "REG_M_RULE_105",
-		Code:        "REGM:PASS_OUTSIDE_WINDOW",
-		Description: "Short sale 6 days prior to pricing (outside 5-day window) -> PASS",
-		Input: OrderContext{
-			Side:              "SHORT",
-			CoveredOffering:   true,
-			DaysBeforePricing: 6,
-		},
-		Expected: ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "REG_M_RULE_105",
-		Code:        "REGM:PASS_NO_OFFERING",
-		Description: "Short sale with no covered offering -> PASS",
-		Input: OrderContext{
-			Side:              "SHORT",
-			CoveredOffering:   false,
-			DaysBeforePricing: 0,
-		},
-		Expected: ExpectedOutcome{Status: "PASSED"},
-	},
-
-	// ── 14. WASH_SALE_1091 ──────────────────────────────────────────
-	{
-		RuleCode:    "WASH_SALE_1091",
-		Code:        "WS:PASS",
-		Description: "Buy order with no 30-day realized loss -> PASS",
-		Input: OrderContext{
-			Side:            "BUY",
-			RealizedLoss30d: false,
-		},
-		Expected: ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "WASH_SALE_1091",
-		Code:        "WS:FAIL",
-		Description: "Buy order with 30-day realized loss for same beneficial owner -> BLOCKED",
-		Input: OrderContext{
-			Side:                "BUY",
-			RealizedLoss30d:     true,
-			SameBeneficialOwner: true,
-		},
-		Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "realized_loss_30d"},
-	},
-	{
-		RuleCode:    "WASH_SALE_1091",
-		Code:        "WS:ADVERSARIAL_DIFFERENT_ACCOUNT",
-		Description: "Buy order with realized loss but different beneficial owner -> PASS",
-		Input: OrderContext{
-			Side:                "BUY",
-			RealizedLoss30d:     true,
-			SameBeneficialOwner: false,
-		},
-		Expected: ExpectedOutcome{Status: "PASSED"},
-	},
-
-	// ── 15. SELF_TRADE_PREVENT ──────────────────────────────────────
-	{
-		RuleCode:    "SELF_TRADE_PREVENT",
-		Code:        "STP:PASS",
-		Description: "No pending opposing orders on venue -> PASS",
-		Input:       OrderContext{PendingOpposingOrder: false},
-		Expected:    ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "SELF_TRADE_PREVENT",
-		Code:        "STP:FAIL",
-		Description: "Matching pending opposing order from same beneficial owner group -> BLOCKED",
-		Input:       OrderContext{PendingOpposingOrder: true},
-		Expected:    ExpectedOutcome{Status: "BLOCKED", MustContain: "pending_opposing_order"},
-	},
-
-	// ── 16. PT_PRECLEARANCE_REQUIRED ────────────────────────────────
-	{
-		RuleCode:    "PT_PRECLEARANCE_REQUIRED",
-		Code:        "PT:PASS_VALID",
-		Description: "Employee trade with valid preclearance -> PASS",
-		Input: OrderContext{
-			EmployeeID:        &testEmpID,
-			PreclearanceValid: true,
-		},
-		Expected: ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "PT_PRECLEARANCE_REQUIRED",
-		Code:        "PT:FAIL_NO_PRECLEAR",
-		Description: "Employee trade without valid preclearance -> BLOCKED",
-		Input: OrderContext{
-			EmployeeID:        &testEmpID,
-			PreclearanceValid: false,
-		},
-		Expected: ExpectedOutcome{Status: "BLOCKED", MustContain: "preclearance_valid"},
-	},
-	{
-		RuleCode:    "PT_PRECLEARANCE_REQUIRED",
-		Code:        "PT:PASS_CLIENT",
-		Description: "Client order without employee ID -> PASS (rule must not fire for clients)",
-		Input: OrderContext{
-			EmployeeID:        nil,
-			PreclearanceValid: false,
-		},
-		Expected: ExpectedOutcome{Status: "PASSED"},
-	},
-
-	// ── 17. FAT_FINGER_NOTIONAL ─────────────────────────────────────
-	{
-		RuleCode:    "FAT_FINGER_NOTIONAL",
-		Code:        "FFN:PASS",
-		Description: "100 shares @ $100 = $10,000 <= $50,000,000 -> PASS",
-		Input:       OrderContext{Notional: d("10000.00")},
-		Expected:    ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "FAT_FINGER_NOTIONAL",
-		Code:        "FFN:BOUNDARY",
-		Description: "Exactly $50,000,000 notional — GT strict, passes",
-		Input:       OrderContext{Notional: d("50000000.00")},
-		Expected:    ExpectedOutcome{Status: "PASSED"},
-	},
-	{
-		RuleCode:    "FAT_FINGER_NOTIONAL",
-		Code:        "FFN:FAIL",
-		Description: "$50,000,001 notional breaches $50M limit -> BLOCKED",
-		Input:       OrderContext{Notional: d("50000001.00")},
-		Expected:    ExpectedOutcome{Status: "BLOCKED", MustContain: "max_notional"},
-	},
+func buildScenarioCorpus() []Scenario {
+	var corpus []Scenario
+	corpus = append(corpus, getCorePreTradeScenarios()...)
+	corpus = append(corpus, getPhase1PostTradeScenarios()...)
+	corpus = append(corpus, getPhase2PostTradeScenarios()...)
+	corpus = append(corpus, getPhase7PostTradeScenarios()...)
+	return corpus
 }
 
 // EvaluateScenario evaluates an OrderContext against a rule AST condition and parameter thresholds.
 func EvaluateScenario(sc Scenario) (string, string) {
+	if status, explain, ok := evaluatePhase1Scenario(sc); ok {
+		return status, explain
+	}
+	if status, explain, ok := evaluatePhase2Scenario(sc); ok {
+		return status, explain
+	}
+	if status, explain, ok := evaluatePhase7Scenario(sc); ok {
+		return status, explain
+	}
 	in := sc.Input
 	switch sc.RuleCode {
 	case "UCITS_ISSUER_5":
@@ -697,6 +321,231 @@ func EvaluateScenario(sc Scenario) (string, string) {
 		limit := d("50000000.00")
 		if in.Notional.GreaterThan(limit) {
 			return "BLOCKED", fmt.Sprintf("Rule %s breached: notional %s exceeds max_notional %s", sc.RuleCode, in.Notional, limit)
+		}
+		return "PASSED", "Compliant"
+
+	case "AGGREGATION_ELIGIBILITY":
+		if !in.CanBeAggregated && in.ParentIsBlock {
+			return "WARNING", fmt.Sprintf("Rule %s warning: order cannot be aggregated (can_be_aggregated=false) into block parent", sc.RuleCode)
+		}
+		return "PASSED", "Compliant"
+
+	case "COUNTERPARTY_OTC_LIMIT":
+		limit := d("25000000.000000")
+		if in.CounterpartyExposure.GreaterThan(limit) {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: counterparty_exposure %s exceeds counterparty_limit %s", sc.RuleCode, in.CounterpartyExposure, limit)
+		}
+		return "PASSED", "Compliant"
+
+	case "CROSS_BORDER_CLIENT_ELIGIBILITY":
+		if !in.DistributionEligible {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: account is not distribution_eligible", sc.RuleCode)
+		}
+		return "PASSED", "Compliant"
+
+	case "DUPLICATE_ORDER_WINDOW":
+		if in.DuplicateCount > 0 {
+			return "WARNING", fmt.Sprintf("Rule %s warning: duplicate_count %d exceeds 0 in window", sc.RuleCode, in.DuplicateCount)
+		}
+		return "PASSED", "Compliant"
+
+	case "EMIR_FIELD_VALIDITY":
+		if !in.EMIRValid {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: emir_valid is false", sc.RuleCode)
+		}
+		return "PASSED", "Compliant"
+
+	case "EXECUTION_PRICE_DEVIATION":
+		maxDev := d("0.020000")
+		if in.ArrivalPriceDeviationPct.GreaterThan(maxDev) {
+			return "WARNING", fmt.Sprintf("Rule %s warning: arrival_price_deviation_pct %s exceeds max_bench_deviation %s", sc.RuleCode, in.ArrivalPriceDeviationPct, maxDev)
+		}
+		return "PASSED", "Compliant"
+
+	case "EXECUTION_WITHIN_SPREAD":
+		if in.OutsideSpread {
+			return "WARNING", fmt.Sprintf("Rule %s warning: execution was outside_spread", sc.RuleCode)
+		}
+		return "PASSED", "Compliant"
+
+	case "FAT_FINGER_ADV_RATIO":
+		maxADV := d("0.250000")
+		if in.AdvRatio.GreaterThan(maxADV) {
+			return "WARNING", fmt.Sprintf("Rule %s warning: adv_ratio %s exceeds adv_multiple %s", sc.RuleCode, in.AdvRatio, maxADV)
+		}
+		return "PASSED", "Compliant"
+
+	case "FREERIDING_REG_T":
+		if in.Side == "SELL" && in.SettledQty.LessThan(in.Quantity) && in.UnpaidCash {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: freeriding violation on sell of unsettled shares with unpaid cash", sc.RuleCode)
+		}
+		return "PASSED", "Compliant"
+
+	case "FRONT_RUNNING_CLIENT_ORDER":
+		if in.IsPrincipalOrEmployee && in.PendingClientOrdersExist {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: front_running prohibited when pending client orders exist", sc.RuleCode)
+		}
+		return "PASSED", "Compliant"
+
+	case "FX_SETTLEMENT_CURRENCY_MATCH":
+		if in.Currency != in.AccountBaseCurrency && in.Currency != in.SecurityCurrency {
+			return "WARNING", fmt.Sprintf("Rule %s warning: currency_match failed: order currency %s matches neither account base %s nor security %s", sc.RuleCode, in.Currency, in.AccountBaseCurrency, in.SecurityCurrency)
+		}
+		return "PASSED", "Compliant"
+
+	case "ILLIQUID_ASSET_LIMIT":
+		limit := d("0.150000")
+		if in.IlliquidAssetsPct.GreaterThan(limit) {
+			return "WARNING", fmt.Sprintf("Rule %s warning: illiquid_assets_pct %s exceeds max_illiquid_pct %s", sc.RuleCode, in.IlliquidAssetsPct, limit)
+		}
+		return "PASSED", "Compliant"
+
+	case "LARGE_TRADE_THRESHOLD":
+		limit := d("500000.000000")
+		if in.Notional.GreaterThan(limit) {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: notional %s exceeds large_trade_threshold %s", sc.RuleCode, in.Notional, limit)
+		}
+		return "PASSED", "Compliant"
+
+	case "LAYERING_SPOOF_PATTERN":
+		maxCancel := d("0.900000")
+		maxOTR := d("50.000000")
+		if in.CancelRate5Min.GreaterThan(maxCancel) && in.OrderToTradeRatio.GreaterThan(maxOTR) {
+			return "WARNING", fmt.Sprintf("Rule %s warning: layering_spoof pattern detected: cancel_rate %s and otr %s exceed thresholds", sc.RuleCode, in.CancelRate5Min, in.OrderToTradeRatio)
+		}
+		return "PASSED", "Compliant"
+
+	case "LEVERAGE_VAR_COMMIT":
+		maxVaR := d("0.200000")
+		maxCommit := d("2.000000")
+		if in.VarLeverageRatio.GreaterThan(maxVaR) {
+			return "APPROVAL_REQUIRED", fmt.Sprintf("Rule %s requires approval: var_leverage_ratio %s exceeds max_leverage_var %s", sc.RuleCode, in.VarLeverageRatio, maxVaR)
+		}
+		if in.CommitmentRatio.GreaterThan(maxCommit) {
+			return "APPROVAL_REQUIRED", fmt.Sprintf("Rule %s requires approval: commitment_ratio %s exceeds max_commitment_ratio %s", sc.RuleCode, in.CommitmentRatio, maxCommit)
+		}
+		return "PASSED", "Compliant"
+
+	case "LIQUIDITY_BUCKET_DAYS":
+		maxDays := 7
+		if in.DaysToLiquidate50Pct > maxDays {
+			return "WARNING", fmt.Sprintf("Rule %s warning: days_to_liquidate_50pct %d exceeds max_liquid_days %d", sc.RuleCode, in.DaysToLiquidate50Pct, maxDays)
+		}
+		return "PASSED", "Compliant"
+
+	case "LULD_PRICE_BAND":
+		if in.LimitPrice.LessThan(in.LowerBand) || in.LimitPrice.GreaterThan(in.UpperBand) {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: luld_price_band violation: limit price %s outside [%s, %s]", sc.RuleCode, in.LimitPrice, in.LowerBand, in.UpperBand)
+		}
+		return "PASSED", "Compliant"
+
+	case "MARGIN_HOUSE_LIMIT":
+		limit := d("0.700000")
+		if in.MarginUtilizationPct.GreaterThan(limit) {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: margin_utilization_pct %s exceeds house_margin_limit %s", sc.RuleCode, in.MarginUtilizationPct, limit)
+		}
+		return "PASSED", "Compliant"
+
+	case "ODD_LOT_ABOVE_MIN":
+		if in.Quantity.LessThan(in.RoundLot) && !in.PennyStock {
+			return "WARNING", fmt.Sprintf("Rule %s warning: odd_lot quantity %s below round lot %s on standard equity", sc.RuleCode, in.Quantity, in.RoundLot)
+		}
+		return "PASSED", "Compliant"
+
+	case "ORDER_RATE_LIMIT":
+		maxOPM := 100
+		if in.OrdersPerMinute > maxOPM {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: orders_per_minute %d exceeds max_opm %d", sc.RuleCode, in.OrdersPerMinute, maxOPM)
+		}
+		return "PASSED", "Compliant"
+
+	case "PRICE_COLLAR_PCT":
+		limit := d("0.100000")
+		if in.PriceDeviationPct.GreaterThan(limit) {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: price_deviation_pct %s exceeds collar_pct %s", sc.RuleCode, in.PriceDeviationPct, limit)
+		}
+		return "PASSED", "Compliant"
+
+	case "PRO_RATA_ALLOCATION_FAIRNESS":
+		maxDev := d("0.020000")
+		maxDisp := d("0.001000")
+		if in.RatioDeviation.GreaterThan(maxDev) && in.PriceDispersion.GreaterThan(maxDisp) {
+			return "WARNING", fmt.Sprintf("Rule %s warning: allocation_fairness violated: ratio_deviation %s and price_dispersion %s exceed thresholds", sc.RuleCode, in.RatioDeviation, in.PriceDispersion)
+		}
+		return "PASSED", "Compliant"
+
+	case "PT_ACCESS_PERSON_RECON":
+		if in.StatementDiscrepancy {
+			return "WARNING", fmt.Sprintf("Rule %s warning: statement_discrepancy detected in access person trade reconciliation", sc.RuleCode)
+		}
+		return "PASSED", "Compliant"
+
+	case "PT_BLACKOUT_PERIOD":
+		if in.EmployeeID != nil && in.BlackoutActive {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: employee trade during active blackout_active window", sc.RuleCode)
+		}
+		return "PASSED", "Compliant"
+
+	case "PT_MIN_HOLDING_30D":
+		minDays := 30
+		if in.EmployeeID != nil && in.DaysSincePurchase < minDays {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: employee holding period %d days is less than min_holding_days %d", sc.RuleCode, in.DaysSincePurchase, minDays)
+		}
+		return "PASSED", "Compliant"
+
+	case "SECTOR_CONCENTRATION":
+		limit := d("0.250000")
+		if in.SectorExposurePct.GreaterThan(limit) {
+			return "WARNING", fmt.Sprintf("Rule %s warning: sector_exposure_pct %s exceeds max_sector_pct %s", sc.RuleCode, in.SectorExposurePct, limit)
+		}
+		return "PASSED", "Compliant"
+
+	case "SETTLEMENT_FAIL_AGING":
+		maxDays := 3
+		if in.FailAgeDays > maxDays {
+			return "APPROVAL_REQUIRED", fmt.Sprintf("Rule %s requires approval: fail_age_days %d exceeds max_fail_days %d", sc.RuleCode, in.FailAgeDays, maxDays)
+		}
+		return "PASSED", "Compliant"
+
+	case "SHORT_POSITION_RESTRICTION":
+		if in.ShortSaleRestricted && in.Side == "SHORT" {
+			return "APPROVAL_REQUIRED", fmt.Sprintf("Rule %s requires approval: short_sale_restricted circuit breaker active for short order", sc.RuleCode)
+		}
+		return "PASSED", "Compliant"
+
+	case "SHORT_SALE_LOCATE":
+		if in.Side == "SHORT" && !in.LocateValid && !in.EasyToBorrow {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: short_sale_locate required for hard-to-borrow security", sc.RuleCode)
+		}
+		return "PASSED", "Compliant"
+
+	case "SINGLE_POSITION_NAV":
+		limit := d("0.100000")
+		if in.NavWeightPct.GreaterThan(limit) {
+			return "WARNING", fmt.Sprintf("Rule %s warning: nav_weight_pct %s exceeds max_single_nav_pct %s", sc.RuleCode, in.NavWeightPct, limit)
+		}
+		return "PASSED", "Compliant"
+
+	case "TXN_REPORT_COMPLETENESS":
+		if in.MissingFieldsCount > 0 {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: missing_fields_count %d in transaction report", sc.RuleCode, in.MissingFieldsCount)
+		}
+		if in.LEIInvalid {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: lei_invalid in transaction report", sc.RuleCode)
+		}
+		return "PASSED", "Compliant"
+
+	case "TXN_REPORT_TIMELINESS":
+		maxDelay := 1440
+		if in.MinutesSinceExecution > maxDelay {
+			return "WARNING", fmt.Sprintf("Rule %s warning: minutes_since_execution %d exceeds max_reporting_delay_minutes %d", sc.RuleCode, in.MinutesSinceExecution, maxDelay)
+		}
+		return "PASSED", "Compliant"
+
+	case "VENUE_APPROVED_LIST":
+		approved := map[string]bool{"XNYS": true, "XNAS": true, "XLON": true, "XFRA": true, "XPAR": true}
+		if !approved[in.Venue] {
+			return "BLOCKED", fmt.Sprintf("Rule %s breached: venue %s not in approved_venues list", sc.RuleCode, in.Venue)
 		}
 		return "PASSED", "Compliant"
 
