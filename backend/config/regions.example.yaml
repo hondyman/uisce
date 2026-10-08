@@ -1,0 +1,10 @@
+# Region registry, loaded once at boot. Copy to a per-environment file and
+# fill in the real endpoints. Every region code must match the pattern in
+# internal/region/registry.go. Unknown regions fail closed.
+regions:
+  us-east-1:
+    postgres_host: pg.us-east-1.example.internal
+    postgres_port: 5432
+    lakekeeper_url: https://lakekeeper.us-east-1.example.internal:8181
+    starrocks_fe_host: starrocks-fe.us-east-1.example.internal
+    debezium_connect_url: http://debezium-connect.us-east-1.example.internal:8083
