@@ -5,7 +5,11 @@ WORKDIR /app
 COPY . .
 RUN go mod download
 
-RUN go build -o stream_loader ./backend/cmd/stream_loader/main.go
+# Build the package, not a single file. `go build .../main.go` compiles only the
+# named file, so it broke the moment the loader was split across main.go, routing.go,
+# query_pool.go, topology_tripwire.go and dlq_smoke.go -- the image could no longer be
+# built at all, while the last running container kept serving the pre-split binary.
+RUN go build -o stream_loader ./backend/cmd/stream_loader/
 
 FROM alpine:latest
 WORKDIR /app
