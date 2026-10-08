@@ -17,12 +17,13 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/provisioning"
 	"go.temporal.io/sdk/temporal"
 )
 
-// ErrRealmExists means the tenant's realm was already there before this run.
-// The run must not delete it on rollback.
+// ErrRealmExists means the realm is already there. Whether this run may treat
+// it as its own is decided by RealmOwner, not by this error.
 var ErrRealmExists = errors.New("keycloak realm already exists")
 
 const (
@@ -42,15 +43,23 @@ const (
 // KeycloakAdmin is the subset of Keycloak's admin API the identity step needs.
 // Implementations must use a realm-management service account, not the
 // master-realm admin. The adapter is not built yet; see the plan.
+//
+// Every method must be idempotent. Temporal retries an activity whose earlier
+// attempt may have partly succeeded, so a repeat call must converge, not fail.
 type KeycloakAdmin interface {
-	// CreateRealm creates the realm, or returns ErrRealmExists if it is there.
-	CreateRealm(ctx context.Context, realm string) error
-	// DeleteRealm removes the realm. Used only for realms this run created.
+	// CreateRealm creates the realm and records tenantID on it as an attribute.
+	// It returns ErrRealmExists if the realm is already there.
+	CreateRealm(ctx context.Context, realm, tenantID string) error
+	// RealmOwner returns the tenant ID recorded on the realm, or "" if the realm
+	// has no owner record.
+	RealmOwner(ctx context.Context, realm string) (tenantID string, err error)
+	// DeleteRealm removes the realm. Used only for realms this run owns.
 	DeleteRealm(ctx context.Context, realm string) error
-	// CreatePlatformClient creates the platform's OIDC client in the realm and
-	// returns its client secret. The secret is returned to this package only.
+	// CreatePlatformClient creates the platform's OIDC client in the realm, or
+	// returns the existing client's secret if it is already there.
 	CreatePlatformClient(ctx context.Context, realm string) (clientSecret string, err error)
 	// AddLDAPFederation attaches an LDAP user-federation provider to the realm.
+	// It is a no-op if a federation with the same name is already attached.
 	AddLDAPFederation(ctx context.Context, realm string, ldap LDAPConfig, bindPassword string) error
 }
 
@@ -61,7 +70,8 @@ type SecretStore interface {
 	GetMap(ctx context.Context, key string) (map[string]string, error)
 }
 
-// IssuerStore records the realm's issuer URL on the tenant.
+// IssuerStore records the realm's issuer URL on the tenant. SetIssuer must be
+// an upsert: a retry writes the same value again.
 type IssuerStore interface {
 	SetIssuer(ctx context.Context, tenantCode, issuer string) error
 }
@@ -77,6 +87,7 @@ type LDAPConfig struct {
 
 // Input is what the wizard supplies for the identity step.
 type Input struct {
+	TenantID   string // the tenant's UUID; recorded on the realm as its owner
 	TenantCode string
 	LDAP       *LDAPConfig // nil means Keycloak-local users only
 }
@@ -124,6 +135,9 @@ func (a *Activities) ConfigureTenantIdentity(ctx context.Context, in Input) (Res
 	if a.Keycloak == nil || a.Secrets == nil || a.Issuers == nil {
 		return Result{}, nonRetryable(errTypeIdentityConfig, errors.New("tenant identity is not configured"))
 	}
+	if _, err := uuid.Parse(in.TenantID); err != nil {
+		return Result{}, nonRetryable(errTypeIdentityInput, errors.New("tenant ID is not a valid UUID"))
+	}
 	identityPath, err := IdentityPath(in.TenantCode)
 	if err != nil {
 		return Result{}, nonRetryable(errTypeIdentityInput, err)
@@ -146,11 +160,20 @@ func (a *Activities) ConfigureTenantIdentity(ctx context.Context, in Input) (Res
 
 	res := Result{Realm: in.TenantCode, Issuer: issuer, SecretPath: identityPath}
 
-	if err := a.Keycloak.CreateRealm(ctx, in.TenantCode); err != nil {
-		if errors.Is(err, ErrRealmExists) {
-			return res, nonRetryable(errTypeIdentityConflict, fmt.Errorf("realm for tenant %s already exists", in.TenantCode))
+	if err := a.Keycloak.CreateRealm(ctx, in.TenantCode, in.TenantID); err != nil {
+		if !errors.Is(err, ErrRealmExists) {
+			return res, fmt.Errorf("create realm: %w", err)
 		}
-		return res, fmt.Errorf("create realm: %w", err)
+		// The realm exists. It is ours only if this tenant recorded itself as the
+		// owner, which means an earlier attempt of this same run created it. An
+		// unowned or foreign realm is a conflict, and this run must not touch it.
+		owner, ownerErr := a.Keycloak.RealmOwner(ctx, in.TenantCode)
+		if ownerErr != nil {
+			return res, errors.New("check realm ownership: the identity provider could not be read")
+		}
+		if owner != in.TenantID {
+			return res, nonRetryable(errTypeIdentityConflict, fmt.Errorf("realm for tenant %s already exists and is not owned by this tenant", in.TenantCode))
+		}
 	}
 	res.RealmCreated = true
 

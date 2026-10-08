@@ -8,10 +8,19 @@ import (
 	"testing"
 )
 
+const (
+	testTenantID     = "11111111-1111-1111-1111-111111111111"
+	testOtherTenant  = "22222222-2222-2222-2222-222222222222"
+	testBase         = "https://keycloak.example.internal"
+	testBindPassword = "bind-secret-value"
+	testClientSecret = "client-secret-value"
+)
+
 type fakeKeycloak struct {
 	calls         []string
-	realmExists   bool
+	realms        map[string]string // realm -> owner tenant ID ("" = unowned)
 	failClient    error
+	failClientOne bool // fail the next CreatePlatformClient only
 	failLDAP      error
 	clientSecret  string
 	deletedRealms []string
@@ -19,12 +28,21 @@ type fakeKeycloak struct {
 	ldapConfigs   []LDAPConfig
 }
 
-func (f *fakeKeycloak) CreateRealm(_ context.Context, realm string) error {
+func (f *fakeKeycloak) CreateRealm(_ context.Context, realm, tenantID string) error {
 	f.calls = append(f.calls, "CreateRealm")
-	if f.realmExists {
+	if f.realms == nil {
+		f.realms = map[string]string{}
+	}
+	if _, exists := f.realms[realm]; exists {
 		return ErrRealmExists
 	}
+	f.realms[realm] = tenantID
 	return nil
+}
+
+func (f *fakeKeycloak) RealmOwner(_ context.Context, realm string) (string, error) {
+	f.calls = append(f.calls, "RealmOwner")
+	return f.realms[realm], nil
 }
 
 func (f *fakeKeycloak) DeleteRealm(_ context.Context, realm string) error {
@@ -35,6 +53,10 @@ func (f *fakeKeycloak) DeleteRealm(_ context.Context, realm string) error {
 
 func (f *fakeKeycloak) CreatePlatformClient(_ context.Context, realm string) (string, error) {
 	f.calls = append(f.calls, "CreatePlatformClient")
+	if f.failClientOne {
+		f.failClientOne = false
+		return "", errors.New("keycloak 503")
+	}
 	if f.failClient != nil {
 		return "", f.failClient
 	}
@@ -97,12 +119,6 @@ func (f *fakeIssuers) SetIssuer(_ context.Context, code, issuer string) error {
 	return f.err
 }
 
-const (
-	testBase         = "https://keycloak.example.internal"
-	testBindPassword = "bind-secret-value"
-	testClientSecret = "client-secret-value"
-)
-
 func newActivities(kc *fakeKeycloak, sec *fakeSecrets, iss *fakeIssuers) *Activities {
 	return &Activities{Keycloak: kc, Secrets: sec, Issuers: iss, PublicBaseURL: testBase}
 }
@@ -133,7 +149,7 @@ func TestConfigureTenantIdentityLocalUsers(t *testing.T) {
 	kc := &fakeKeycloak{clientSecret: testClientSecret}
 	sec := &fakeSecrets{}
 	iss := &fakeIssuers{}
-	res, err := newActivities(kc, sec, iss).ConfigureTenantIdentity(context.Background(), Input{TenantCode: "acme"})
+	res, err := newActivities(kc, sec, iss).ConfigureTenantIdentity(context.Background(), Input{TenantID: testTenantID, TenantCode: "acme"})
 	if err != nil {
 		t.Fatalf("ConfigureTenantIdentity: %v", err)
 	}
@@ -142,6 +158,9 @@ func TestConfigureTenantIdentityLocalUsers(t *testing.T) {
 	}
 	if res.Issuer != testBase+"/realms/acme" || iss.issuer != res.Issuer || iss.code != "acme" {
 		t.Fatalf("issuer = %q, recorded %q for %q", res.Issuer, iss.issuer, iss.code)
+	}
+	if kc.realms["acme"] != testTenantID {
+		t.Fatalf("realm owner = %q, want the tenant ID", kc.realms["acme"])
 	}
 	if sec.putPath != "tenants/acme/identity" {
 		t.Fatalf("secret path = %q", sec.putPath)
@@ -158,7 +177,7 @@ func TestConfigureTenantIdentityWithLDAPReadsBindPasswordFromStore(t *testing.T)
 	kc := &fakeKeycloak{clientSecret: testClientSecret}
 	sec := seededSecrets(t, "acme")
 	iss := &fakeIssuers{}
-	if _, err := newActivities(kc, sec, iss).ConfigureTenantIdentity(context.Background(), Input{TenantCode: "acme", LDAP: validLDAP()}); err != nil {
+	if _, err := newActivities(kc, sec, iss).ConfigureTenantIdentity(context.Background(), Input{TenantID: testTenantID, TenantCode: "acme", LDAP: validLDAP()}); err != nil {
 		t.Fatalf("ConfigureTenantIdentity: %v", err)
 	}
 	if len(kc.ldapPasswords) != 1 || kc.ldapPasswords[0] != testBindPassword {
@@ -174,8 +193,7 @@ func TestConfigureTenantIdentityWithLDAPReadsBindPasswordFromStore(t *testing.T)
 func TestMissingBindPasswordFailsBeforeAnythingIsCreated(t *testing.T) {
 	kc := &fakeKeycloak{clientSecret: testClientSecret}
 	sec := &fakeSecrets{} // no bind password in the store
-	iss := &fakeIssuers{}
-	_, err := newActivities(kc, sec, iss).ConfigureTenantIdentity(context.Background(), Input{TenantCode: "acme", LDAP: validLDAP()})
+	_, err := newActivities(kc, sec, &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantID: testTenantID, TenantCode: "acme", LDAP: validLDAP()})
 	if err == nil {
 		t.Fatal("ran LDAP setup without a bind password")
 	}
@@ -187,7 +205,7 @@ func TestMissingBindPasswordFailsBeforeAnythingIsCreated(t *testing.T) {
 func TestUnreadableStoreFailsBeforeAnythingIsCreated(t *testing.T) {
 	kc := &fakeKeycloak{}
 	sec := &fakeSecrets{getErr: errors.New("infisical 503 with detail")}
-	_, err := newActivities(kc, sec, &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantCode: "acme", LDAP: validLDAP()})
+	_, err := newActivities(kc, sec, &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantID: testTenantID, TenantCode: "acme", LDAP: validLDAP()})
 	if err == nil {
 		t.Fatal("ran LDAP setup with an unreadable store")
 	}
@@ -204,7 +222,7 @@ func TestBindPasswordOverlongIsRejected(t *testing.T) {
 	sec := &fakeSecrets{stored: map[string]map[string]string{
 		"tenants/acme/identity": {LDAPBindPasswordKey: strings.Repeat("p", maxBindPasswordLen+1)},
 	}}
-	if _, err := newActivities(kc, sec, &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantCode: "acme", LDAP: validLDAP()}); err == nil {
+	if _, err := newActivities(kc, sec, &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantID: testTenantID, TenantCode: "acme", LDAP: validLDAP()}); err == nil {
 		t.Fatal("accepted an overlong bind password")
 	}
 	if len(kc.calls) != 0 {
@@ -217,23 +235,23 @@ func TestConfigureTenantIdentityRejectsBadInputBeforeKeycloak(t *testing.T) {
 		name string
 		in   Input
 	}{
-		{"empty code", Input{TenantCode: ""}},
-		{"semicolon injection", Input{TenantCode: "x; DROP DATABASE alpha;--"}},
-		{"quote", Input{TenantCode: `x"y`}},
-		{"space", Input{TenantCode: "ac me"}},
-		{"uppercase", Input{TenantCode: "Acme"}},
-		{"leading digit", Input{TenantCode: "1acme"}},
-		{"unicode", Input{TenantCode: "acmé"}},
-		{"dotdot path", Input{TenantCode: ".."}},
-		{"slash path", Input{TenantCode: "acme/prod"}},
-		{"overlong", Input{TenantCode: "a" + strings.Repeat("b", 60)}},
-		{"ldap host semicolon", Input{TenantCode: "acme", LDAP: withHost(validLDAP(), "ldap;evil")}},
-		{"ldap host empty", Input{TenantCode: "acme", LDAP: withHost(validLDAP(), "")}},
-		{"ldap host overlong", Input{TenantCode: "acme", LDAP: withHost(validLDAP(), strings.Repeat("a", 300))}},
-		{"ldap port zero", Input{TenantCode: "acme", LDAP: withPort(validLDAP(), 0)}},
-		{"ldap port too large", Input{TenantCode: "acme", LDAP: withPort(validLDAP(), 70000)}},
-		{"ldap base dn newline", Input{TenantCode: "acme", LDAP: withBaseDN(validLDAP(), "dc=a\nb")}},
-		{"ldap bind dn quote", Input{TenantCode: "acme", LDAP: withBindDN(validLDAP(), `cn="x"`)}},
+		{"empty code", Input{TenantID: testTenantID, TenantCode: ""}},
+		{"semicolon injection", Input{TenantID: testTenantID, TenantCode: "x; DROP DATABASE alpha;--"}},
+		{"quote", Input{TenantID: testTenantID, TenantCode: `x"y`}},
+		{"space", Input{TenantID: testTenantID, TenantCode: "ac me"}},
+		{"uppercase", Input{TenantID: testTenantID, TenantCode: "Acme"}},
+		{"leading digit", Input{TenantID: testTenantID, TenantCode: "1acme"}},
+		{"unicode", Input{TenantID: testTenantID, TenantCode: "acmé"}},
+		{"dotdot path", Input{TenantID: testTenantID, TenantCode: ".."}},
+		{"slash path", Input{TenantID: testTenantID, TenantCode: "acme/prod"}},
+		{"overlong", Input{TenantID: testTenantID, TenantCode: "a" + strings.Repeat("b", 60)}},
+		{"ldap host semicolon", Input{TenantID: testTenantID, TenantCode: "acme", LDAP: withHost(validLDAP(), "ldap;evil")}},
+		{"ldap host empty", Input{TenantID: testTenantID, TenantCode: "acme", LDAP: withHost(validLDAP(), "")}},
+		{"ldap host overlong", Input{TenantID: testTenantID, TenantCode: "acme", LDAP: withHost(validLDAP(), strings.Repeat("a", 300))}},
+		{"ldap port zero", Input{TenantID: testTenantID, TenantCode: "acme", LDAP: withPort(validLDAP(), 0)}},
+		{"ldap port too large", Input{TenantID: testTenantID, TenantCode: "acme", LDAP: withPort(validLDAP(), 70000)}},
+		{"ldap base dn newline", Input{TenantID: testTenantID, TenantCode: "acme", LDAP: withBaseDN(validLDAP(), "dc=a\nb")}},
+		{"ldap bind dn quote", Input{TenantID: testTenantID, TenantCode: "acme", LDAP: withBindDN(validLDAP(), `cn="x"`)}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -249,11 +267,23 @@ func TestConfigureTenantIdentityRejectsBadInputBeforeKeycloak(t *testing.T) {
 	}
 }
 
+func TestInvalidTenantIDRejectedBeforeKeycloak(t *testing.T) {
+	for _, id := range []string{"", "not-a-uuid", testTenantID + "; drop"} {
+		kc := &fakeKeycloak{}
+		if _, err := newActivities(kc, &fakeSecrets{}, &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantID: id, TenantCode: "acme"}); err == nil {
+			t.Errorf("accepted tenant ID %q", id)
+		}
+		if len(kc.calls) != 0 {
+			t.Errorf("Keycloak called for tenant ID %q", id)
+		}
+	}
+}
+
 func TestConfigureTenantIdentityRejectsBadBaseURL(t *testing.T) {
 	for _, base := range []string{"", "ftp://kc.example.internal", "javascript:alert(1)", "https://"} {
 		kc := &fakeKeycloak{}
 		a := &Activities{Keycloak: kc, Secrets: &fakeSecrets{}, Issuers: &fakeIssuers{}, PublicBaseURL: base}
-		if _, err := a.ConfigureTenantIdentity(context.Background(), Input{TenantCode: "acme"}); err == nil {
+		if _, err := a.ConfigureTenantIdentity(context.Background(), Input{TenantID: testTenantID, TenantCode: "acme"}); err == nil {
 			t.Errorf("accepted base URL %q", base)
 		}
 		if len(kc.calls) != 0 {
@@ -262,23 +292,78 @@ func TestConfigureTenantIdentityRejectsBadBaseURL(t *testing.T) {
 	}
 }
 
-func TestConfigureTenantIdentityRealmAlreadyExistsIsNotOwned(t *testing.T) {
-	kc := &fakeKeycloak{realmExists: true}
-	res, err := newActivities(kc, &fakeSecrets{}, &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantCode: "acme"})
+// A realm owned by another tenant is a conflict. This run must not adopt it,
+// configure it, or delete it on rollback.
+func TestForeignRealmIsConflictAndNotOwned(t *testing.T) {
+	kc := &fakeKeycloak{realms: map[string]string{"acme": testOtherTenant}}
+	res, err := newActivities(kc, &fakeSecrets{}, &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantID: testTenantID, TenantCode: "acme"})
 	if err == nil {
-		t.Fatal("expected realm-exists error")
+		t.Fatal("took over a realm owned by another tenant")
 	}
 	if res.RealmCreated {
-		t.Fatal("pre-existing realm reported as created")
+		t.Fatal("foreign realm reported as owned")
 	}
-	if len(kc.calls) != 1 {
-		t.Fatalf("expected only CreateRealm, got %v", kc.calls)
+	for _, c := range kc.calls {
+		if c == "CreatePlatformClient" || c == "AddLDAPFederation" {
+			t.Fatalf("configured a foreign realm: %v", kc.calls)
+		}
+	}
+}
+
+// An unowned realm that already exists is not this run's either.
+func TestUnownedPreexistingRealmIsConflict(t *testing.T) {
+	kc := &fakeKeycloak{realms: map[string]string{"acme": ""}}
+	res, err := newActivities(kc, &fakeSecrets{}, &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantID: testTenantID, TenantCode: "acme"})
+	if err == nil || res.RealmCreated {
+		t.Fatalf("unowned realm adopted: err=%v created=%v", err, res.RealmCreated)
+	}
+}
+
+// A retry after a partial first attempt must converge. The first attempt
+// creates the realm and fails at client creation. The retry finds the realm
+// owned by this tenant and completes.
+func TestRetryAfterPartialFirstAttemptConverges(t *testing.T) {
+	kc := &fakeKeycloak{clientSecret: testClientSecret, failClientOne: true}
+	iss := &fakeIssuers{}
+	a := newActivities(kc, &fakeSecrets{}, iss)
+	in := Input{TenantID: testTenantID, TenantCode: "acme"}
+
+	first, err := a.ConfigureTenantIdentity(context.Background(), in)
+	if err == nil {
+		t.Fatal("first attempt should fail at client creation")
+	}
+	if !first.RealmCreated || first.ClientCreated {
+		t.Fatalf("first attempt result = %+v", first)
+	}
+
+	second, err := a.ConfigureTenantIdentity(context.Background(), in)
+	if err != nil {
+		t.Fatalf("retry did not converge: %v", err)
+	}
+	if !second.RealmCreated || !second.ClientCreated || !second.SecretsWritten {
+		t.Fatalf("retry result = %+v", second)
+	}
+	if iss.issuer != testBase+"/realms/acme" {
+		t.Fatalf("issuer after retry = %q", iss.issuer)
+	}
+}
+
+// A realm owned by this tenant from an earlier attempt is reported as owned, so
+// compensation can delete it if the run fails later.
+func TestOwnedRealmFromEarlierAttemptIsReportedForCompensation(t *testing.T) {
+	kc := &fakeKeycloak{realms: map[string]string{"acme": testTenantID}}
+	res, err := newActivities(kc, &fakeSecrets{}, &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantID: testTenantID, TenantCode: "acme"})
+	if err != nil {
+		t.Fatalf("owned realm should continue: %v", err)
+	}
+	if !res.RealmCreated {
+		t.Fatal("owned realm not reported for compensation")
 	}
 }
 
 func TestConfigureTenantIdentityPartialFailureReportsCreatedRealm(t *testing.T) {
 	kc := &fakeKeycloak{failClient: errors.New("keycloak 503")}
-	res, err := newActivities(kc, &fakeSecrets{}, &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantCode: "acme"})
+	res, err := newActivities(kc, &fakeSecrets{}, &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantID: testTenantID, TenantCode: "acme"})
 	if err == nil {
 		t.Fatal("expected client error")
 	}
@@ -291,7 +376,7 @@ func TestConfigureTenantIdentitySecretsFailureReportsCreatedClient(t *testing.T)
 	kc := &fakeKeycloak{clientSecret: testClientSecret}
 	sec := &fakeSecrets{putErr: errors.New("infisical unavailable")}
 	iss := &fakeIssuers{}
-	res, err := newActivities(kc, sec, iss).ConfigureTenantIdentity(context.Background(), Input{TenantCode: "acme"})
+	res, err := newActivities(kc, sec, iss).ConfigureTenantIdentity(context.Background(), Input{TenantID: testTenantID, TenantCode: "acme"})
 	if err == nil {
 		t.Fatal("expected secrets error")
 	}
@@ -307,12 +392,11 @@ func TestConfigureTenantIdentitySecretsFailureReportsCreatedClient(t *testing.T)
 // not appear in the result or in any error text.
 func TestClientSecretNeverLeavesTheActivity(t *testing.T) {
 	kc := &fakeKeycloak{clientSecret: testClientSecret}
-	res, err := newActivities(kc, &fakeSecrets{}, &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantCode: "acme"})
+	res, err := newActivities(kc, &fakeSecrets{}, &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantID: testTenantID, TenantCode: "acme"})
 	if err != nil {
 		t.Fatalf("ConfigureTenantIdentity: %v", err)
 	}
-	fields := []string{res.Realm, res.Issuer, res.SecretPath}
-	for _, f := range fields {
+	for _, f := range []string{res.Realm, res.Issuer, res.SecretPath} {
 		if strings.Contains(f, testClientSecret) {
 			t.Fatalf("client secret present in result field %q", f)
 		}
@@ -321,7 +405,7 @@ func TestClientSecretNeverLeavesTheActivity(t *testing.T) {
 
 func TestErrorsNeverContainBindPassword(t *testing.T) {
 	kc := &fakeKeycloak{failLDAP: errors.New("ldap refused")}
-	_, err := newActivities(kc, seededSecrets(t, "acme"), &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantCode: "acme", LDAP: validLDAP()})
+	_, err := newActivities(kc, seededSecrets(t, "acme"), &fakeIssuers{}).ConfigureTenantIdentity(context.Background(), Input{TenantID: testTenantID, TenantCode: "acme", LDAP: validLDAP()})
 	if err == nil {
 		t.Fatal("expected LDAP error")
 	}
@@ -332,7 +416,7 @@ func TestErrorsNeverContainBindPassword(t *testing.T) {
 
 func TestConfigureTenantIdentityWithoutDependenciesFailsClosed(t *testing.T) {
 	a := &Activities{PublicBaseURL: testBase}
-	if _, err := a.ConfigureTenantIdentity(context.Background(), Input{TenantCode: "acme"}); err == nil {
+	if _, err := a.ConfigureTenantIdentity(context.Background(), Input{TenantID: testTenantID, TenantCode: "acme"}); err == nil {
 		t.Fatal("ran without dependencies")
 	}
 }
