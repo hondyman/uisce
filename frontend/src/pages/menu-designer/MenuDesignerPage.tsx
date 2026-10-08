@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box, Paper, Typography, Stack, Button, IconButton, Dialog, DialogTitle, DialogContent,
   DialogActions, TextField, MenuItem, Select, InputLabel, FormControl, FormHelperText, Alert, Tooltip,
-  CircularProgress, Chip,
+  CircularProgress, Chip, FormControlLabel, Switch, Divider,
 } from '@mui/material';
 import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
@@ -14,19 +14,16 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import DescriptionIcon from '@mui/icons-material/Description';
 import LaunchIcon from '@mui/icons-material/Launch';
 import LockIcon from '@mui/icons-material/Lock';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import SecurityIcon from '@mui/icons-material/Security';
 import { useNavigate } from 'react-router-dom';
 import { NavigationMenuApi, NavigationMenuNode, NavigationMenuUpsert } from '../../api/navigationMenu';
 import { PageStudioApi, PageStudioPage } from '../../api/pageStudio';
+import { PAGE_ICONS, PageIcon } from '../page-studio/app/icons';
 
 // Menu Designer - PeopleSoft/Workday/Salesforce-style: an arbitrarily deep
 // tree of menu nodes (navigation_menu_nodes), where a leaf node is bound to
 // a Page Studio page by slug (targetPageKey).
-//
-// requiredEntitlement is a target_profile_key: the same profile string that
-// GET /api/capabilities resolves for the caller (via iam.user_roles, else the
-// verified JWT role claims, else BASE_USER). MainNavigation enforces it. It is
-// deliberately NOT a menu:* capability key - that is a separate mechanism on
-// the hardcoded nav categories, and the two namespaces must not be mixed.
 interface EditState {
   mode: 'create' | 'edit';
   parentId: string | null;
@@ -41,14 +38,19 @@ function slugify(label: string): string {
     .replace(/^_+|_+$/g, '') || `node_${Date.now()}`;
 }
 
-/**
- * Profile keys a node may be gated on. These are the two built-ins seeded by
- * backend/db/migrations/20260930_001_seed_menu_abac_policies.up.sql, plus the
- * convention for tenant-minted roles. A tenant that defines its own roles in
- * iam.roles can use those names here too; they are not enumerable from the
- * designer without an extra endpoint.
- */
 const PROFILE_KEYS = ['BASE_USER', 'PLATFORM_OPERATOR'] as const;
+
+const AVAILABLE_CAPABILITIES = [
+  { key: '', label: 'None (Unrestricted)' },
+  { key: 'menu:admin', label: 'menu:admin (Administration & Platform)' },
+  { key: 'menu:catalog', label: 'menu:catalog (Catalog & Metadata)' },
+  { key: 'menu:compliance', label: 'menu:compliance (Compliance & Surveillance)' },
+  { key: 'menu:operations', label: 'menu:operations (Operations & Workflows)' },
+  { key: 'menu:analytics', label: 'menu:analytics (Analytics & Cubes)' },
+  { key: 'menu:fabric', label: 'menu:fabric (Data Fabric & Pipelines)' },
+  { key: 'menu:reporting', label: 'menu:reporting (Reporting Studio)' },
+  { key: 'menu:security', label: 'menu:security (Security & IAM)' },
+];
 
 const MenuDesignerPage: React.FC = () => {
   const navigate = useNavigate();
@@ -63,7 +65,12 @@ const MenuDesignerPage: React.FC = () => {
   const [formNodeKey, setFormNodeKey] = useState('');
   const [formNodeKeyTouched, setFormNodeKeyTouched] = useState(false);
   const [formTargetPageKey, setFormTargetPageKey] = useState('');
+  const [formIcon, setFormIcon] = useState('');
   const [formEntitlement, setFormEntitlement] = useState('BASE_USER');
+  const [formCapability, setFormCapability] = useState('');
+  const [formHidden, setFormHidden] = useState(false);
+  const [formDisplayOrder, setFormDisplayOrder] = useState(0);
+
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<NavigationMenuNode | null>(null);
@@ -89,25 +96,17 @@ const MenuDesignerPage: React.FC = () => {
     load();
   }, [load]);
 
-  const allNodeIds = useMemo(() => {
-    const ids: string[] = [];
-    const walk = (nodes: NavigationMenuNode[]) => {
-      for (const n of nodes) {
-        ids.push(n.id);
-        if (n.children?.length) walk(n.children);
-      }
-    };
-    walk(tree);
-    return ids;
-  }, [tree]);
-
   const openCreate = (parentId: string | null) => {
     setEditState({ mode: 'create', parentId });
     setFormLabel('');
     setFormNodeKey('');
     setFormNodeKeyTouched(false);
     setFormTargetPageKey('');
+    setFormIcon('');
     setFormEntitlement('BASE_USER');
+    setFormCapability('');
+    setFormHidden(false);
+    setFormDisplayOrder(0);
     setSaveError(null);
   };
 
@@ -117,7 +116,11 @@ const MenuDesignerPage: React.FC = () => {
     setFormNodeKey(node.nodeKey);
     setFormNodeKeyTouched(true);
     setFormTargetPageKey(node.targetPageKey || '');
+    setFormIcon(node.icon || '');
     setFormEntitlement(node.requiredEntitlement || 'BASE_USER');
+    setFormCapability(node.requiredCapability || '');
+    setFormHidden(!!node.hidden);
+    setFormDisplayOrder(node.displayOrder ?? 0);
     setSaveError(null);
   };
 
@@ -142,9 +145,12 @@ const MenuDesignerPage: React.FC = () => {
       parentId: editState.parentId,
       nodeKey: formNodeKey.trim(),
       label: formLabel.trim(),
+      icon: formIcon.trim() || null,
       targetPageKey: formTargetPageKey || null,
-      displayOrder: editState.node?.displayOrder ?? 0,
+      displayOrder: Number(formDisplayOrder) || 0,
       requiredEntitlement: formEntitlement || 'BASE_USER',
+      requiredCapability: formCapability.trim() || null,
+      hidden: formHidden,
     };
     try {
       if (editState.mode === 'create') {
@@ -178,11 +184,27 @@ const MenuDesignerPage: React.FC = () => {
         key={node.id}
         itemId={node.id}
         label={
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ py: 0.5, pr: 1 }}>
-            {node.targetPageKey ? <DescriptionIcon fontSize="small" color="primary" /> : <MenuBookIcon fontSize="small" color="action" />}
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ py: 0.5, pr: 1, opacity: node.hidden ? 0.5 : 1 }}>
+            {node.icon ? (
+              <PageIcon name={node.icon} fontSize="small" color={node.targetPageKey ? 'primary' : 'action'} />
+            ) : node.targetPageKey ? (
+              <DescriptionIcon fontSize="small" color="primary" />
+            ) : (
+              <MenuBookIcon fontSize="small" color="action" />
+            )}
             <Typography variant="body2" sx={{ flex: 1, fontWeight: node.targetPageKey ? 400 : 600 }}>
               {node.label}
             </Typography>
+            {node.hidden && (
+              <Tooltip title="Hidden from consumer navigation">
+                <Chip size="small" icon={<VisibilityOffIcon fontSize="small" />} label="Hidden" color="default" variant="outlined" />
+              </Tooltip>
+            )}
+            {node.requiredCapability && (
+              <Tooltip title={`Required capability: ${node.requiredCapability}`}>
+                <Chip size="small" icon={<SecurityIcon fontSize="small" />} label={node.requiredCapability} color="secondary" variant="outlined" />
+              </Tooltip>
+            )}
             {node.targetPageKey && (
               <Tooltip title={`Bound to page "${node.targetPageKey}"`}>
                 <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
@@ -209,8 +231,7 @@ const MenuDesignerPage: React.FC = () => {
               </IconButton>
             </Tooltip>
             {node.inherited ? (
-              // Gold-copy entries: every tenant has them; change them in the gold copy.
-              <Tooltip title="From the gold copy - read-only here. You can add your own entries under it.">
+              <Tooltip title="From the gold copy core taxonomy.">
                 <Chip size="small" variant="outlined" color="primary" label="Core" />
               </Tooltip>
             ) : (
@@ -240,12 +261,12 @@ const MenuDesignerPage: React.FC = () => {
     ));
 
   return (
-    <Box sx={{ p: 3, maxWidth: 900, mx: 'auto' }}>
+    <Box sx={{ p: 3, maxWidth: 960, mx: 'auto' }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 800 }}>Menu Designer</Typography>
           <Typography variant="body2" color="text.secondary">
-            Build the navigation tree consumers see — menus, folders, and pages, PeopleSoft/Workday/Salesforce-style.
+            Single source of truth for application navigation: categories, menus, capabilities, and Page Studio page bindings.
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
@@ -284,6 +305,7 @@ const MenuDesignerPage: React.FC = () => {
               value={formLabel}
               onChange={(e) => handleLabelChange(e.target.value)}
               fullWidth
+              required
             />
             <TextField
               label="Node key"
@@ -291,12 +313,51 @@ const MenuDesignerPage: React.FC = () => {
               onChange={(e) => { setFormNodeKey(e.target.value); setFormNodeKeyTouched(true); }}
               helperText="Stable identifier for this node, e.g. 'orders_menu'"
               fullWidth
+              required
             />
+            <Stack direction="row" spacing={2}>
+              <FormControl fullWidth>
+                <InputLabel id="icon-select-label">Icon</InputLabel>
+                <Select
+                  labelId="icon-select-label"
+                  label="Icon"
+                  value={formIcon}
+                  onChange={(e) => setFormIcon(e.target.value)}
+                  renderValue={(selected) => (
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      {selected && <PageIcon name={selected} fontSize="small" />}
+                      <Typography variant="body2">{selected || 'None'}</Typography>
+                    </Stack>
+                  )}
+                >
+                  <MenuItem value="">
+                    <em>None</em>
+                  </MenuItem>
+                  {Object.keys(PAGE_ICONS).sort().map((iconKey) => (
+                    <MenuItem key={iconKey} value={iconKey}>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <PageIcon name={iconKey} fontSize="small" />
+                        <Typography variant="body2">{iconKey}</Typography>
+                      </Stack>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField
+                label="Display Order"
+                type="number"
+                value={formDisplayOrder}
+                onChange={(e) => setFormDisplayOrder(parseInt(e.target.value, 10) || 0)}
+                sx={{ width: 140 }}
+                helperText="Sort position"
+              />
+            </Stack>
+
             <FormControl fullWidth>
-              <InputLabel id="target-page-label">Target page (leave blank for a folder)</InputLabel>
+              <InputLabel id="target-page-label">Target page (leave blank for a folder/group)</InputLabel>
               <Select
                 labelId="target-page-label"
-                label="Target page (leave blank for a folder)"
+                label="Target page (leave blank for a folder/group)"
                 value={formTargetPageKey}
                 onChange={(e) => setFormTargetPageKey(e.target.value)}
               >
@@ -310,12 +371,34 @@ const MenuDesignerPage: React.FC = () => {
                 ))}
               </Select>
             </FormControl>
+
+            <Divider />
+
             <FormControl fullWidth>
-              <InputLabel id="required-entitlement-label">Required entitlement</InputLabel>
+              <InputLabel id="required-capability-label">Required Capability (ABAC Gate)</InputLabel>
+              <Select
+                labelId="required-capability-label"
+                label="Required Capability (ABAC Gate)"
+                value={formCapability}
+                onChange={(e) => setFormCapability(e.target.value)}
+              >
+                {AVAILABLE_CAPABILITIES.map((cap) => (
+                  <MenuItem key={cap.key} value={cap.key}>
+                    {cap.label}
+                  </MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>
+                Category or menu-level capability key enforced for role-based navigation visibility.
+              </FormHelperText>
+            </FormControl>
+
+            <FormControl fullWidth>
+              <InputLabel id="required-entitlement-label">Required Entitlement Profile</InputLabel>
               <Select
                 labelId="required-entitlement-label"
                 id="required-entitlement"
-                label="Required entitlement"
+                label="Required Entitlement Profile"
                 value={formEntitlement || 'BASE_USER'}
                 onChange={(e) => setFormEntitlement(e.target.value)}
               >
@@ -326,10 +409,20 @@ const MenuDesignerPage: React.FC = () => {
                 ))}
               </Select>
               <FormHelperText>
-                Profile key from IAM. A node is shown only to callers resolved to this
-                profile; unknown values hide the node.
+                Profile key from IAM. A node is shown only to callers resolved to this profile.
               </FormHelperText>
             </FormControl>
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formHidden}
+                  onChange={(e) => setFormHidden(e.target.checked)}
+                  color="warning"
+                />
+              }
+              label="Hide from Navigation (keep node in tree for designer/direct route aliases)"
+            />
           </Stack>
         </DialogContent>
         <DialogActions>

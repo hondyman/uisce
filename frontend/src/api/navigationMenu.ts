@@ -27,6 +27,8 @@ export interface NavigationMenuUpsert {
   targetPageKey?: string | null;
   displayOrder: number;
   requiredEntitlement?: string;
+  requiredCapability?: string | null;
+  hidden?: boolean;
 }
 
 const BASE = '/navigation-menu';

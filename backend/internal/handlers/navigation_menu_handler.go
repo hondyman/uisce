@@ -190,6 +190,8 @@ type navMenuUpsertRequest struct {
 	TargetPageKey       *string    `json:"targetPageKey"`
 	DisplayOrder        int        `json:"displayOrder"`
 	RequiredEntitlement string     `json:"requiredEntitlement"`
+	RequiredCapability  *string    `json:"requiredCapability"`
+	Hidden              bool       `json:"hidden"`
 }
 
 func (h *NavigationMenuHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -218,10 +220,10 @@ func (h *NavigationMenuHandler) create(w http.ResponseWriter, r *http.Request) {
 	id := uuid.New()
 	var node NavigationMenuNode
 	err := h.db.GetContext(r.Context(), &node, `
-		INSERT INTO navigation_menu_nodes (id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		RETURNING id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement
-	`, id, tenantID, req.ParentID, req.NodeKey, req.Label, req.Icon, req.TargetPageKey, req.DisplayOrder, req.RequiredEntitlement)
+		INSERT INTO navigation_menu_nodes (id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement, required_capability, hidden)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement, required_capability, hidden
+	`, id, tenantID, req.ParentID, req.NodeKey, req.Label, req.Icon, req.TargetPageKey, req.DisplayOrder, req.RequiredEntitlement, req.RequiredCapability, req.Hidden)
 	if err != nil {
 		if isUniqueViolation(err) {
 			http.Error(w, "a menu node with this key already exists", http.StatusConflict)
@@ -272,10 +274,10 @@ func (h *NavigationMenuHandler) update(w http.ResponseWriter, r *http.Request) {
 	err = h.db.GetContext(r.Context(), &node, `
 		UPDATE navigation_menu_nodes
 		SET parent_id = $1, node_key = $2, label = $3, icon = $4, target_page_key = $5,
-		    display_order = $6, required_entitlement = $7
-		WHERE id = $8 AND tenant_id = $9
-		RETURNING id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement
-	`, req.ParentID, req.NodeKey, req.Label, req.Icon, req.TargetPageKey, req.DisplayOrder, req.RequiredEntitlement, id, tenantID)
+		    display_order = $6, required_entitlement = $7, required_capability = $8, hidden = $9
+		WHERE id = $10 AND tenant_id = $11
+		RETURNING id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement, required_capability, hidden
+	`, req.ParentID, req.NodeKey, req.Label, req.Icon, req.TargetPageKey, req.DisplayOrder, req.RequiredEntitlement, req.RequiredCapability, req.Hidden, id, tenantID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "menu node not found", http.StatusNotFound)
