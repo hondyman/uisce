@@ -47,7 +47,7 @@ REGISTRY='{{REGISTRY}}'
 REPO='{{REPO}}'
 IMAGE="${REGISTRY}/${REPO}/kafka-connect-iceberg"
 CA_CERT_SRC="/tmp/keycloak-ca.crt"
-CA_CERT_DST="/etc/kafka-connect-iceberg/certs/keycloak-ca.crt"
+CA_CERT_DST="$HOME/kafka-connect-iceberg/certs/keycloak-ca.crt"
 GITHUB_REPO="https://github.com/hondyman/uisce.git"
 
 echo "==> Deploying bronze sink to ${USER}@${HOST}:${PATH_ARG}"
