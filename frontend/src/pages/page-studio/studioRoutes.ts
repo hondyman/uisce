@@ -21,6 +21,9 @@ export const STUDIO_ROUTES: { path: string; slug: string }[] = [
   { path: 'lakehouse-streaming', slug: 'lakehouse-streaming' },
   { path: 'system/lakehouse', slug: 'system-lakehouse' },
   { path: 'build/cubes', slug: 'cubes-catalog' },
+  { path: 'core/domains', slug: 'core-domains' },
+  { path: 'fabric/settings', slug: 'fabric-settings' },
+  { path: 'admin/rbac/roles', slug: 'rbac-roles' },
   // PR6: composed designer host (param :id so {{route.id}} binds; /new = absent id)
   { path: 'build/cubes/new', slug: 'cube-designer' },
   { path: 'build/cubes/:id', slug: 'cube-designer' },

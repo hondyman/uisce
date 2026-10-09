@@ -10,6 +10,9 @@ import { lakehouseStreamingBlueprint } from './lakehouseStreaming';
 import { systemLakehouseBlueprint } from './systemLakehouse';
 import { cubesCatalogBlueprint } from './cubesCatalog';
 import { cubeDesignerBlueprint } from './cubeDesigner';
+import { coreDomainsBlueprint } from './coreDomains';
+import { fabricSettingsBlueprint } from './fabricSettings';
+import { rbacRolesBlueprint } from './rbacRoles';
 
 /**
  * Pages the studio can start from: complete, working pages built entirely
@@ -106,6 +109,24 @@ export const PAGE_BLUEPRINTS: PageBlueprint[] = [
     name: 'Cube designer',
     description: 'Composed cube editor at /build/cubes/new and /build/cubes/:id (overview, axes, federation, materialization).',
     build: cubeDesignerBlueprint,
+  },
+  {
+    id: 'core-domains',
+    name: 'Data domains',
+    description: 'The shared data-domain taxonomy: levels, parents, and descriptions. Core administrators make changes.',
+    build: coreDomainsBlueprint,
+  },
+  {
+    id: 'fabric-settings',
+    name: 'Settings',
+    description: 'Appearance for this browser.',
+    build: fabricSettingsBlueprint,
+  },
+  {
+    id: 'rbac-roles',
+    name: 'Roles',
+    description: 'Roles for this tenant: create and edit roles, see who holds them and their field permissions.',
+    build: rbacRolesBlueprint,
   },
 ];
 

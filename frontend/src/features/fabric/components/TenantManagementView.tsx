@@ -46,12 +46,13 @@ import AddIPForm from './AddIPForm';
 import DashboardPage from '../pages/DashboardPage';
 import TenantsManagementPage from '../pages/TenantsManagementPage';
 import AuditLogsPage from '../pages/AuditLogsPage';
-import SettingsPage from '../pages/SettingsPage';
+import { useNavigate } from 'react-router-dom';
 
-type SidebarView = 'ip-whitelist' | 'dashboard' | 'tenants' | 'audit-logs' | 'settings';
+type SidebarView = 'ip-whitelist' | 'dashboard' | 'tenants' | 'audit-logs';
 
 const TenantManagementView: React.FC = () => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const [currentView, setCurrentView] = useState<SidebarView>('ip-whitelist');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -322,15 +323,15 @@ new Date(entry.createdAt || '').toLocaleDateString()
           <Button
             fullWidth
             startIcon={<span>⚙️</span>}
-            onClick={() => setCurrentView('settings')}
-            variant={currentView === 'settings' ? 'contained' : 'text'}
+            onClick={() => navigate('/fabric/settings')}
+            variant="text"
             disableElevation
             sx={{
               textTransform: 'none',
               justifyContent: 'flex-start',
-              color: currentView === 'settings' ? 'primary.contrastText' : 'text.primary',
-              bgcolor: currentView === 'settings' ? 'primary.main' : 'transparent',
-              '&:hover': { bgcolor: currentView === 'settings' ? 'primary.dark' : 'action.hover' }
+              color: 'text.primary',
+              bgcolor: 'transparent',
+              '&:hover': { bgcolor: 'action.hover' }
             }}
           >
             Settings
@@ -649,11 +650,6 @@ new Date(entry.createdAt || '').toLocaleDateString()
       {/* Audit Logs View */}
       {currentView === 'audit-logs' && (
         <AuditLogsPage />
-      )}
-
-      {/* Settings View */}
-      {currentView === 'settings' && (
-        <SettingsPage />
       )}
 
       {/* Delete Confirmation Dialog */}

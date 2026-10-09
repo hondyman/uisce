@@ -14,7 +14,6 @@ import CalculatedFieldBuilderPage from "./pages/CalculatedFieldBuilderPage";
 import IPWhitelistManagementPage from "./features/fabric/pages/IPWhitelistManagementPage";
 import DashboardPage from "./features/fabric/pages/DashboardPage";
 import AuditLogsPage from "./features/fabric/pages/AuditLogsPage";
-import SettingsPage from "./features/fabric/pages/SettingsPage";
 import TenantsManagementPage from "./features/fabric/pages/TenantsManagementPage";
 import ViewsCatalogPage from "./features/views/pages/ViewsCatalogPage";
 import ViewDetailsPage from "./features/views/pages/ViewDetailsPage";
@@ -22,7 +21,6 @@ import BundleListPage from "./pages/bundles/BundleListPage";
 import BundleEditor from "./pages/bundles/BundleEditor";
 import RoleListPage from "./pages/roles/RoleListPage";
 import RoleEditorPage from "./pages/roles/RoleEditorPage";
-import DomainsManagementPage from "./features/core/pages/DomainsManagementPage";
 import SemanticMapperPage from "./features/core/pages/SemanticMapperPage";
 import { TenantDetailPageV2 } from "./features/tenants/pages/TenantDetailPageV2";
 import { SemanticCatalogPage } from "./pages/SemanticCatalogPage";
@@ -116,7 +114,6 @@ const SecurityRoutes = React.lazy(() => import("./features/security/routes").the
 
 
 // RBAC Management Pages
-const RoleManagerPage = React.lazy(() => import("./features/admin/pages/RoleManagerPage"));
 const UserManagementPage = React.lazy(() => import("./features/admin/pages/UserManagementPage").then(m => ({ default: m.UserManagementPage })));
 const UserRoleAssignmentPage = React.lazy(() => import("./features/admin/pages/UserRoleAssignmentPage"));
 const TenantUserAssignmentPage = React.lazy(() => import("./features/admin/pages/TenantUserAssignmentPage"));
@@ -228,7 +225,6 @@ function ProtectedApp() {
             ═══════════════════════════════════════════════════════════════════ */}
         <Route path="tenants" element={<ProtectedRoute><TenantDetailPageV2 /></ProtectedRoute>} />
         <Route path="tenants/:tenantId" element={<ProtectedRoute><TenantDetailPageV2 /></ProtectedRoute>} />
-        <Route path="admin/rbac/roles" element={<ProtectedRoute><RoleManagerPage /></ProtectedRoute>} />
         <Route path="admin/rbac/users" element={<ProtectedRoute><UserManagementPage /></ProtectedRoute>} />
         <Route path="admin/rbac/teams" element={<ProtectedRoute><TeamManagerPage /></ProtectedRoute>} />
         <Route path="admin/rbac/delegations" element={<ProtectedRoute><DelegationManagerPage /></ProtectedRoute>} />
@@ -257,7 +253,6 @@ function ProtectedApp() {
         <Route path="core/business-terms" element={<ProtectedRoute><BusinessTermsExplorer /></ProtectedRoute>} />
         <Route path="catalog/business-terms" element={<ProtectedRoute><BusinessTermsExplorer /></ProtectedRoute>} />
         <Route path="core/abbreviations" element={<ProtectedRoute><AbbreviationsPage /></ProtectedRoute>} />
-        <Route path="core/domains" element={<ProtectedRoute><DomainsManagementPage /></ProtectedRoute>} />
         <Route path="schema-explorer" element={<ProtectedRoute><SchemaExplorerPage /></ProtectedRoute>} />
         <Route path="catalog/api-inventory" element={<ProtectedRoute><ApiInventoryPage /></ProtectedRoute>} />
         <Route path="catalog/custom-fields" element={<ProtectedRoute><EntityPickerPage /></ProtectedRoute>} />
@@ -512,7 +507,6 @@ function ProtectedApp() {
         <Route path="fabric/calculations" element={<ProtectedRoute><CalculationsLibraryPage tenantId="default" datasourceId="default" /></ProtectedRoute>} />
         <Route path="fabric/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="fabric/audit-logs" element={<ProtectedRoute><AuditLogsPage /></ProtectedRoute>} />
-        <Route path="fabric/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
         <Route path="core/audit-explorer" element={<ProtectedRoute><AuditExplorerPage /></ProtectedRoute>} />
         <Route path="core/approval-inbox" element={<ProtectedRoute><ApprovalInboxPage /></ProtectedRoute>} />
         <Route path="core/sla-dashboard" element={<ProtectedRoute><SLADashboardPage /></ProtectedRoute>} />

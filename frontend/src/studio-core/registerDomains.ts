@@ -12,3 +12,6 @@ import '../features/validation-rules/studio';
 import '../features/lakehouse-streaming/studio';
 import '../features/system-lakehouse/studio';
 import '../features/cubes/studio';
+import '../features/data-domains/studio';
+import '../features/platform-settings/studio';
+import '../features/rbac/roles/studio';
