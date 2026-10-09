@@ -110,6 +110,42 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------
+  # Kafka Connect — Iceberg bronze sink (started by deploy-bronze.yml)
+  # ---------------------------------------------------------
+  # Host port 8084, not 8083: uisce-debezium already publishes 8083 on this host.
+  # The deploy script writes the Keycloak CA into ./certs (the deploy path) and this
+  # mount exposes it at the path the image's entrypoint imports from.
+  kafka-connect-iceberg:
+    image: ghcr.io/hondyman/uisce/kafka-connect-iceberg:bronze-latest
+    container_name: kafka-connect-iceberg
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: uisce-redpanda:9092
+      CONNECT_REST_PORT: 8083
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect-iceberg
+      CONNECT_GROUP_ID: bronze-sink
+      CONNECT_CONFIG_STORAGE_TOPIC: bronze_connect_configs
+      CONNECT_OFFSET_STORAGE_TOPIC: bronze_connect_offsets
+      CONNECT_STATUS_STORAGE_TOPIC: bronze_connect_status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_PLUGIN_PATH: /usr/share/confluent-hub-components
+    volumes:
+      - ./certs:/etc/kafka-connect-iceberg/certs:ro
+    ports:
+      - "8084:8083"
+    networks:
+      - remote-net
+    depends_on:
+      uisce-redpanda:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------
   # Temporal
   # ---------------------------------------------------------
   uisce-temporal:

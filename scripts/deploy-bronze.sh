@@ -7,7 +7,8 @@
 #
 # Required secrets (GitHub Actions):
 #   REMOTE_SSH_HOST, REMOTE_SSH_USER, REMOTE_SSH_PORT, REMOTE_SSH_PATH,
-#   GHCR_TOKEN (for image pull), DEPLOY_SSH_PRIVATE_KEY
+#   REMOTE_SSH_PRIVATE_KEY (loaded into ssh-agent by the workflow)
+#   GHCR_TOKEN (environment, for the image pull; the workflow passes GITHUB_TOKEN)
 #
 # What this script does NOT need sudo for:
 #   - docker build / docker compose up   → docker group membership (not root)
@@ -31,6 +32,7 @@ SSH_OPTS="-o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $PORT"
 REGISTRY="ghcr.io"
 REPO=${6:?Usage: $0 <host> <user> <path> <port> <image_digest> <repo>}  # e.g. "hondyman/uisce"
 IMAGE="${REGISTRY}/${REPO}/kafka-connect-iceberg"
+: "${GHCR_TOKEN:?GHCR_TOKEN must be set (the workflow passes GITHUB_TOKEN)}"
 
 echo "==> Deploying bronze sink to ${USER}@${HOST}:${PATH_ARG}"
 echo "    Image: ${IMAGE}@${IMAGE_DIGEST}"
@@ -46,8 +48,7 @@ IMAGE_DIGEST='{{IMAGE_DIGEST}}'
 REGISTRY='{{REGISTRY}}'
 REPO='{{REPO}}'
 IMAGE="${REGISTRY}/${REPO}/kafka-connect-iceberg"
-CA_CERT_SRC="/tmp/keycloak-ca.crt"
-CA_CERT_DST="/etc/kafka-connect-iceberg/certs/keycloak-ca.crt"
+CA_CERT_DST="$PATH_ARG/certs/keycloak-ca.crt"
 GITHUB_REPO="https://github.com/hondyman/uisce.git"
 
 echo "==> Deploying bronze sink to ${USER}@${HOST}:${PATH_ARG}"
@@ -66,20 +67,25 @@ fi
 
 cd "$PATH_ARG"
 
-# 2. Extract Keycloak CA into bind-mount directory (no sudo needed — deploy owns this)
+# 2. Extract Keycloak CA into the compose bind-mount directory ($PATH_ARG/certs, owned by deploy)
 echo "==> Fetching Keycloak CA from ${HOST}:8443"
 mkdir -p "$(dirname "$CA_CERT_DST")"
 openssl s_client -connect "${HOST}:8443" </dev/null 2>/dev/null | \
-  openssl x509 -outform PEM -out "$CA_CERT_SRC"
-chmod 0444 "$CA_CERT_SRC"
-echo "    CA cert saved to $CA_CERT_SRC ($(wc -l < "$CA_CERT_SRC") lines)"
+  openssl x509 -outform PEM -out "$CA_CERT_DST"
+chmod 0444 "$CA_CERT_DST"
+echo "    CA cert saved to $CA_CERT_DST ($(wc -l < "$CA_CERT_DST") lines)"
 
 # 3. Pull image by digest and tag as bronze-latest (avoids depending on a moving tag)
+#    The token arrives on stdin (see the ssh line below), so it never appears in argv.
+echo "==> Logging in to ${REGISTRY}"
+printf '%s' "$GHCR_TOKEN" | docker login "$REGISTRY" -u "${REPO%%/*}" --password-stdin >/dev/null
 echo "==> Pulling image ${IMAGE}@${IMAGE_DIGEST}"
 docker pull "${IMAGE}@${IMAGE_DIGEST}" || {
   echo "ERROR: docker pull failed — check GHCR_TOKEN has packages:read permission"
+  docker logout "$REGISTRY" >/dev/null 2>&1 || true
   exit 1
 }
+docker logout "$REGISTRY" >/dev/null
 docker tag "${IMAGE}@${IMAGE_DIGEST}" "${IMAGE}:bronze-latest"
 echo "    Tagged as ${IMAGE}:bronze-latest"
 
@@ -91,7 +97,7 @@ docker compose -f docker-compose.remote.yml up -d kafka-connect-iceberg
 echo "==> Waiting for Kafka Connect worker to be healthy"
 HEALTHY=0
 for i in $(seq 1 30); do
-  if curl -s -f http://localhost:8083/ > /dev/null 2>&1; then
+  if curl -s -f http://localhost:8084/ > /dev/null 2>&1; then
     echo "    Worker healthy after ${i}s"
     HEALTHY=1
     break
@@ -107,7 +113,7 @@ fi
 
 # 6. Register (or update) the connector — PUT is idempotent, no 409 on re-run
 echo "==> Registering connector iceberg-bronze-sink"
-REGISTER_RESP=$(curl -s -X PUT http://localhost:8083/connectors/iceberg-bronze-sink/config \
+REGISTER_RESP=$(curl -s -X PUT http://localhost:8084/connectors/iceberg-bronze-sink/config \
   -H 'Content-Type: application/json' \
   -d @infrastructure/iceberg-bronze-sink.json)
 echo "    $REGISTER_RESP" | head -c 200
@@ -116,7 +122,7 @@ echo "    $REGISTER_RESP" | head -c 200
 echo "==> Waiting for connector to reach RUNNING"
 CONNECTOR_RUNNING=0
 for i in $(seq 1 30); do
-  STATUS=$(curl -s http://localhost:8083/connectors/iceberg-bronze-sink/status)
+  STATUS=$(curl -s http://localhost:8084/connectors/iceberg-bronze-sink/status)
   C_STATE=$(echo "$STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin)['connector']['state'])" 2>/dev/null || echo "UNKNOWN")
   T_STATES=$(echo "$STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin)['tasks'])" 2>/dev/null || echo "[]")
   echo "    [${i}/30] connector=${C_STATE}"
@@ -140,14 +146,14 @@ done
 
 if [ "$CONNECTOR_RUNNING" -eq 0 ]; then
   echo "ERROR: connector did not reach RUNNING state"
-  curl -s http://localhost:8083/connectors/iceberg-bronze-sink/status | python3 -m json.tool
+  curl -s http://localhost:8084/connectors/iceberg-bronze-sink/status | python3 -m json.tool
   docker logs kafka-connect-iceberg 2>&1 | grep -i 'error\|exception\|failed' | tail -20
   exit 1
 fi
 
 echo ""
 echo "==> Deploy complete"
-echo "    Worker:  http://localhost:8083"
+echo "    Worker:  http://localhost:8084"
 echo "    Connector: iceberg-bronze-sink (RUNNING)"
 echo "    Next: three-probe — insert/update/delete one row in Postgres, verify op: c/u/d in Bronze"
 INNER_EOF
@@ -162,6 +168,7 @@ REMOTE_CMD="${REMOTE_CMD//\{\{IMAGE_DIGEST\}\}/$IMAGE_DIGEST}"
 REMOTE_CMD="${REMOTE_CMD//\{\{REGISTRY\}\}/$REGISTRY}"
 REMOTE_CMD="${REMOTE_CMD//\{\{REPO\}\}/$REPO}"
 
-ssh $SSH_OPTS "${USER}@${HOST}" "$REMOTE_CMD"
+# The GHCR token goes over stdin, not argv, so it stays out of the remote process list.
+printf '%s\n' "$GHCR_TOKEN" | ssh $SSH_OPTS "${USER}@${HOST}" "read -r GHCR_TOKEN; export GHCR_TOKEN; $REMOTE_CMD"
 
 echo "==> Remote deploy finished."

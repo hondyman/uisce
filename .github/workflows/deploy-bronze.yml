@@ -120,6 +120,7 @@ jobs:
           REMOTE_SSH_PORT: ${{ secrets.REMOTE_SSH_PORT || '22' }}
           REMOTE_SSH_PATH: ${{ secrets.REMOTE_SSH_PATH || '/mnt/uisce' }}
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chmod +x scripts/deploy-bronze.sh
           ./scripts/deploy-bronze.sh \
