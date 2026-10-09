@@ -30,15 +30,20 @@ SELECT current_user AS role,
        (SELECT rolsuper FROM pg_roles WHERE rolname = current_user)    AS superuser,
        (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user) AS bypass_rls;
 
-\echo '== 2. Are RLS flags on, and forced?'
-SELECT relname, relrowsecurity AS rls_enabled, relforcerowsecurity AS rls_forced
-FROM pg_class
-WHERE oid IN ('public.app_user'::regclass, 'public.user_tenant'::regclass);
+\echo '== 2. Are RLS flags on, and forced? (every table the RBAC routes read or write)'
+SELECT c.relname, c.relrowsecurity AS rls_enabled, c.relforcerowsecurity AS rls_forced,
+       (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+FROM pg_class c
+WHERE c.relnamespace = 'public'::regnamespace
+  AND c.relname IN ('app_user', 'user_tenant', 'catalog_node', 'bp_roles', 'bp_user_roles', 'bp_teams',
+                    'bp_team_members', 'bp_approval_delegations', 'bp_field_permissions', 'navigation_menu_nodes')
+ORDER BY c.relname;
 
 \echo '== 3. Which policies exist, and what do they allow?'
 SELECT polrelid::regclass AS table_name, polname, pg_get_expr(polqual, polrelid) AS using_expr
 FROM pg_policy
-WHERE polrelid IN ('public.app_user'::regclass, 'public.user_tenant'::regclass);
+WHERE polrelid IN (SELECT c.oid FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace
+                   AND c.relname IN ('app_user', 'user_tenant', 'catalog_node', 'bp_roles', 'bp_user_roles', 'bp_teams'));
 
 \echo '== 4. The handlers set no tenant. Inside a transaction that sets it, as the app would:'
 BEGIN;

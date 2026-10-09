@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 )
 
 // Scope checks for the RBAC handlers. Every handler that takes an id from the
@@ -139,10 +141,15 @@ func authorizeUser(ctx context.Context, db *sqlx.DB, tenantID, userID string) er
 		return errNotInTenant
 	}
 	var member bool
-	err = db.GetContext(ctx, &member, `
-		SELECT EXISTS (SELECT 1 FROM user_tenant WHERE user_id = $1 AND tenant_id = $2)
-		    OR EXISTS (SELECT 1 FROM app_user WHERE id = $1 AND tenant_id = $2)
-	`, userID, tid)
+	// Read inside a transaction that sets the tenant on the session. user_tenant and
+	// app_user are row-level-security forced: with no tenant set, a restricted role sees
+	// no rows, and every user would look like a non-member.
+	err = dbpkg.WithTenantTransaction(ctx, db.DB, tenantID, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `
+			SELECT EXISTS (SELECT 1 FROM user_tenant WHERE user_id = $1 AND tenant_id = $2)
+			    OR EXISTS (SELECT 1 FROM app_user WHERE id = $1 AND tenant_id = $2)
+		`, userID, tid).Scan(&member)
+	})
 	if err != nil {
 		return fmt.Errorf("check membership: %w", err)
 	}

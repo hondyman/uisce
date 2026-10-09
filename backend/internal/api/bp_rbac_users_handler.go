@@ -12,6 +12,8 @@ import (
 
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/security"
+
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 )
 
 // isTenantOrGlobalAdmin reports whether the caller holds a role authorized to
@@ -53,57 +55,63 @@ func (h *RBACHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var users []map[string]interface{}
-	rows, err := h.db.Query(`
-		SELECT u.id, u.username, u.email, u.name, u.first_name, u.last_name, u.status, u.is_active, u.created_at, u.tenant_id
-		FROM users u
-		WHERE u.is_active = true
-		  AND (u.tenant_id = $1::uuid
-		       OR EXISTS (SELECT 1 FROM user_tenant ut WHERE ut.user_id = u.id AND ut.tenant_id = $1::uuid))
-		ORDER BY u.name, u.username
-	`, secCtx.TenantID)
+	// Inside a tenant transaction: the user tables are row-level-security forced, and a
+	// session with no tenant set sees no rows.
+	err = dbpkg.WithTenantTransaction(r.Context(), h.db.DB, secCtx.TenantID, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(r.Context(), `
+			SELECT u.id, u.username, u.email, u.name, u.first_name, u.last_name, u.status, u.is_active, u.created_at, u.tenant_id
+			FROM users u
+			WHERE u.is_active = true
+			  AND (u.tenant_id = $1::uuid
+			       OR EXISTS (SELECT 1 FROM user_tenant ut WHERE ut.user_id = u.id AND ut.tenant_id = $1::uuid))
+			ORDER BY u.name, u.username
+		`, secCtx.TenantID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var user map[string]interface{} = make(map[string]interface{})
+			var id, username, email string
+			var name, firstName, lastName, status, userTenantID sql.NullString
+			var isActive bool
+			var createdAt time.Time
+
+			if err := rows.Scan(&id, &username, &email, &name, &firstName, &lastName, &status, &isActive, &createdAt, &userTenantID); err != nil {
+				continue
+			}
+
+			user["id"] = id
+			user["username"] = username
+			user["email"] = email
+			if name.Valid {
+				user["name"] = name.String
+			}
+			if firstName.Valid {
+				user["first_name"] = firstName.String
+			}
+			if lastName.Valid {
+				user["last_name"] = lastName.String
+			}
+			if status.Valid {
+				user["status"] = status.String
+			} else {
+				user["status"] = "active"
+			}
+			user["is_active"] = isActive
+			user["created_at"] = createdAt
+			if userTenantID.Valid {
+				user["tenant_id"] = userTenantID.String
+			} else {
+				user["tenant_id"] = nil
+			}
+			users = append(users, user)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch users: %v", err), http.StatusInternalServerError)
 		return
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var user map[string]interface{} = make(map[string]interface{})
-		var id, username, email string
-		var name, firstName, lastName, status, userTenantID sql.NullString
-		var isActive bool
-		var createdAt time.Time
-
-		if err := rows.Scan(&id, &username, &email, &name, &firstName, &lastName, &status, &isActive, &createdAt, &userTenantID); err != nil {
-			continue
-		}
-
-		user["id"] = id
-		user["username"] = username
-		user["email"] = email
-		if name.Valid {
-			user["name"] = name.String
-		}
-		if firstName.Valid {
-			user["first_name"] = firstName.String
-		}
-		if lastName.Valid {
-			user["last_name"] = lastName.String
-		}
-		if status.Valid {
-			user["status"] = status.String
-		} else {
-			user["status"] = "active"
-		}
-		user["is_active"] = isActive
-		user["created_at"] = createdAt
-		if userTenantID.Valid {
-			user["tenant_id"] = userTenantID.String
-		} else {
-			user["tenant_id"] = nil
-		}
-
-		users = append(users, user)
 	}
 
 	respondJSONRBAC(w, r, users, http.StatusOK)
@@ -124,38 +132,43 @@ func (h *RBACHandlers) listAssignableUsers(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	rows, err := h.db.Query(`
-		SELECT u.id, u.username, u.email, u.name,
-		       (u.tenant_id = $1::uuid OR EXISTS (SELECT 1 FROM user_tenant ut WHERE ut.user_id = u.id AND ut.tenant_id = $1::uuid)) AS is_member
-		FROM users u
-		WHERE u.is_active = true
-		  AND (u.tenant_id = $1::uuid
-		       OR EXISTS (SELECT 1 FROM user_tenant ut WHERE ut.user_id = u.id AND ut.tenant_id = $1::uuid)
-		       OR (u.tenant_id IS NULL AND NOT EXISTS (SELECT 1 FROM user_tenant ut2 WHERE ut2.user_id = u.id)))
-		ORDER BY u.name, u.username
-	`, secCtx.TenantID)
+	users := []map[string]interface{}{}
+	err = dbpkg.WithTenantTransaction(r.Context(), h.db.DB, secCtx.TenantID, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(r.Context(), `
+			SELECT u.id, u.username, u.email, u.name,
+			       (u.tenant_id = $1::uuid OR EXISTS (SELECT 1 FROM user_tenant ut WHERE ut.user_id = u.id AND ut.tenant_id = $1::uuid)) AS is_member
+			FROM users u
+			WHERE u.is_active = true
+			  AND (u.tenant_id = $1::uuid
+			       OR EXISTS (SELECT 1 FROM user_tenant ut WHERE ut.user_id = u.id AND ut.tenant_id = $1::uuid)
+			       OR (u.tenant_id IS NULL AND NOT EXISTS (SELECT 1 FROM user_tenant ut2 WHERE ut2.user_id = u.id)))
+			ORDER BY u.name, u.username
+		`, secCtx.TenantID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id, username string
+			var email, name sql.NullString
+			var isMember bool
+			if err := rows.Scan(&id, &username, &email, &name, &isMember); err != nil {
+				continue
+			}
+			user := map[string]interface{}{"id": id, "username": username, "is_member": isMember}
+			if name.Valid {
+				user["name"] = name.String
+			}
+			if isMember && email.Valid {
+				user["email"] = email.String
+			}
+			users = append(users, user)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch assignable users: %v", err), http.StatusInternalServerError)
 		return
-	}
-	defer rows.Close()
-
-	users := []map[string]interface{}{}
-	for rows.Next() {
-		var id, username string
-		var email, name sql.NullString
-		var isMember bool
-		if err := rows.Scan(&id, &username, &email, &name, &isMember); err != nil {
-			continue
-		}
-		user := map[string]interface{}{"id": id, "username": username, "is_member": isMember}
-		if name.Valid {
-			user["name"] = name.String
-		}
-		if isMember && email.Valid {
-			user["email"] = email.String
-		}
-		users = append(users, user)
 	}
 	respondJSONRBAC(w, r, users, http.StatusOK)
 }
@@ -213,7 +226,7 @@ func (h *RBACHandlers) createUser(w http.ResponseWriter, r *http.Request) {
 // updateUserTenant updates the tenant_id for a user
 func (h *RBACHandlers) updateUserTenant(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "userId")
-	
+
 	var req struct {
 		TenantID *string `json:"tenant_id"`
 	}
@@ -246,9 +259,11 @@ func (h *RBACHandlers) updateUserTenant(w http.ResponseWriter, r *http.Request) 
 		// assignments of other tenants cannot be read or changed through this route.
 		if err := authorizeUser(r.Context(), h.db, secCtx.TenantID, userID); err != nil {
 			var unassigned bool
-			if qErr := h.db.GetContext(r.Context(), &unassigned,
-				`SELECT EXISTS (SELECT 1 FROM app_user u WHERE u.id = $1 AND u.tenant_id IS NULL
-				                AND NOT EXISTS (SELECT 1 FROM user_tenant ut WHERE ut.user_id = u.id))`, userID); qErr != nil {
+			if qErr := dbpkg.WithTenantTransaction(r.Context(), h.db.DB, secCtx.TenantID, func(tx *sql.Tx) error {
+				return tx.QueryRowContext(r.Context(),
+					`SELECT EXISTS (SELECT 1 FROM app_user u WHERE u.id = $1 AND u.tenant_id IS NULL
+					                AND NOT EXISTS (SELECT 1 FROM user_tenant ut WHERE ut.user_id = u.id))`, userID).Scan(&unassigned)
+			}); qErr != nil {
 				http.Error(w, fmt.Sprintf("Failed to check user: %v", qErr), http.StatusInternalServerError)
 				return
 			}
@@ -284,4 +299,3 @@ func (h *RBACHandlers) updateUserTenant(w http.ResponseWriter, r *http.Request) 
 
 	respondJSONRBAC(w, r, map[string]string{"status": "updated"}, http.StatusOK)
 }
-

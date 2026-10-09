@@ -268,9 +268,19 @@ const (
 )
 
 // userMember answers the membership lookup for a user the tenant may act on.
+// beginTenantTx expects the transaction a user-table read runs in: it sets the tenant on the session.
+func beginTenantTx(mock sqlmock.Sqlmock, tenant string) {
+	mock.ExpectBegin()
+	mock.ExpectExec(`set_config\('uisce.current_tenant'`).WithArgs(tenant).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`set_config\('app.tenant_id'`).WithArgs(tenant).WillReturnResult(sqlmock.NewResult(0, 0))
+}
+
+// expectUserMember answers the membership lookup for a user the tenant may act on.
 func expectUserMember(mock sqlmock.Sqlmock, user string, member bool) {
+	beginTenantTx(mock, scopeTenant)
 	mock.ExpectQuery(`FROM user_tenant WHERE user_id = \$1 AND tenant_id = \$2`).WithArgs(user, scopeTenant).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(member))
+	mock.ExpectCommit()
 }
 
 // Assigning one of the tenant's roles to a user of another tenant is refused: the role
@@ -461,8 +471,10 @@ func adminRequest(method, path, tenant, body string, roles ...string) *http.Requ
 func TestRBACUserTenant_TenantAdminCannotMoveOtherTenantsUser(t *testing.T) {
 	mock, r := roleScopeRouter(t)
 	expectUserMember(mock, scopeOtherUser, false)
+	beginTenantTx(mock, scopeTenant)
 	mock.ExpectQuery(`FROM app_user u WHERE u.id = \$1 AND u.tenant_id IS NULL`).WithArgs(scopeOtherUser).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectCommit()
 
 	w := httptest.NewRecorder()
 	body := `{"tenant_id":"` + scopeTenant + `"}`
@@ -475,8 +487,10 @@ func TestRBACUserTenant_TenantAdminCannotMoveOtherTenantsUser(t *testing.T) {
 func TestRBACUserTenant_TenantAdminBringsInUnassignedUser(t *testing.T) {
 	mock, r := roleScopeRouter(t)
 	expectUserMember(mock, scopeOtherUser, false)
+	beginTenantTx(mock, scopeTenant)
 	mock.ExpectQuery(`FROM app_user u WHERE u.id = \$1 AND u.tenant_id IS NULL`).WithArgs(scopeOtherUser).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectCommit()
 	mock.ExpectExec(`UPDATE users`).WithArgs(scopeTenant, scopeOtherUser, false, scopeTenant).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -512,10 +526,12 @@ func TestRBACUsers_ListRefusesNonAdmin(t *testing.T) {
 // The admin list is scoped to the caller's tenant: the query is bound to it.
 func TestRBACUsers_ListIsScopedToTenant(t *testing.T) {
 	mock, r := roleScopeRouter(t)
+	beginTenantTx(mock, scopeTenant)
 	mock.ExpectQuery(`FROM users u\s+WHERE u.is_active = true\s+AND \(u.tenant_id = \$1::uuid\s+OR EXISTS \(SELECT 1 FROM user_tenant ut`).
 		WithArgs(scopeTenant).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "email", "name", "first_name", "last_name", "status", "is_active", "created_at", "tenant_id"}).
 			AddRow(scopeUser, "ann", "ann@example.com", "Ann", nil, nil, "active", true, time.Now(), scopeTenant))
+	mock.ExpectCommit()
 
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, adminRequest(http.MethodGet, "/rbac/users", scopeTenant, "", "admin"))
@@ -537,10 +553,12 @@ func TestRBACUsers_AssignableRefusesNonAdmin(t *testing.T) {
 // even if the row came back with an email, because the mapping drops it on the way out.
 func TestRBACUsers_AssignableSendsEmailForMembersOnly(t *testing.T) {
 	mock, r := roleScopeRouter(t)
+	beginTenantTx(mock, scopeTenant)
 	mock.ExpectQuery(`FROM users u`).WithArgs(scopeTenant).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "email", "name", "is_member"}).
 			AddRow(scopeUser, "ann", "ann@example.com", "Ann", true).
 			AddRow(scopeOtherUser, "cy", "cy@example.com", "Cy", false))
+	mock.ExpectCommit()
 
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, adminRequest(http.MethodGet, "/rbac/users/assignable", scopeTenant, "", "admin"))
