@@ -69,10 +69,14 @@ cd "$PATH_ARG"
 
 # 2. Extract Keycloak CA into the compose bind-mount directory ($PATH_ARG/certs, owned by deploy)
 echo "==> Fetching Keycloak CA from ${HOST}:8443"
+# The previous run left the file 0444, so a rerun cannot open it for writing. Write a temp
+# file and rename it over the destination: rename needs only directory write access.
 mkdir -p "$(dirname "$CA_CERT_DST")"
+CA_CERT_TMP="$CA_CERT_DST.tmp"
 openssl s_client -connect "${HOST}:8443" </dev/null 2>/dev/null | \
-  openssl x509 -outform PEM -out "$CA_CERT_DST"
-chmod 0444 "$CA_CERT_DST"
+  openssl x509 -outform PEM -out "$CA_CERT_TMP"
+chmod 0444 "$CA_CERT_TMP"
+mv -f "$CA_CERT_TMP" "$CA_CERT_DST"
 echo "    CA cert saved to $CA_CERT_DST ($(wc -l < "$CA_CERT_DST") lines)"
 
 # 3. Pull image by digest and tag as bronze-latest (avoids depending on a moving tag)
