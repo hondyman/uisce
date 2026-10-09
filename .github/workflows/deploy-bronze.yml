@@ -95,7 +95,7 @@ jobs:
       - name: Join tailnet
         uses: tailscale/github-action@v3
         with:
-          auth-key: ${{ secrets.TS_AUTH_KEY }}
+          authkey: ${{ secrets.TS_AUTH_KEY }}
           tags: tag:ci
 
       # -----------------------------------------------------------------------
