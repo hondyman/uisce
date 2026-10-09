@@ -12,6 +12,8 @@ export interface NavigationMenuNode {
   children?: NavigationMenuNode[];
   /** From the gold copy: every tenant has it, read-only outside the gold copy. */
   inherited?: boolean;
+  /** Gold-copy entry this tenant has switched off (with everything under it). Only returned to the Menu Designer. */
+  hidden?: boolean;
 }
 
 export interface NavigationMenuUpsert {
@@ -27,7 +29,16 @@ export interface NavigationMenuUpsert {
 const BASE = '/navigation-menu';
 
 export const NavigationMenuApi = {
-  listTree: (): Promise<NavigationMenuNode[]> => apiClient<NavigationMenuNode[]>(BASE),
+  /** Hidden entries are left out unless `includeHidden` (the Menu Designer asks for them). */
+  listTree: (includeHidden = false): Promise<NavigationMenuNode[]> =>
+    apiClient<NavigationMenuNode[]>(includeHidden ? `${BASE}?includeHidden=true` : BASE),
+
+  /** Switch a gold-copy entry off (or back on) for this tenant only. */
+  setHidden: (id: string, hidden: boolean): Promise<void> =>
+    apiClient<void>(`${BASE}/${id}/hidden`, {
+      method: 'PUT',
+      body: JSON.stringify({ hidden }),
+    }),
 
   create: (node: NavigationMenuUpsert): Promise<NavigationMenuNode> =>
     apiClient<NavigationMenuNode>(BASE, {

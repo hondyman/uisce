@@ -30,23 +30,35 @@ type NavigationMenuNode struct {
 	// Inherited: a gold-copy node seen from another tenant - shown, never
 	// editable there. A tenant may add its own nodes under it.
 	Inherited bool `json:"inherited,omitempty" db:"-"`
+	// Hidden: this tenant has switched a gold-copy entry (or its folder) off.
+	// Only the Menu Designer sees hidden entries (listTree?includeHidden=true).
+	Hidden bool `json:"hidden,omitempty" db:"hidden"`
 }
 
 // loadMenuNodes returns the tenant's own menu nodes plus the gold copy's,
 // which every tenant inherits read-only (like core pages). Entries that
-// open a core page the tenant has switched off are left out.
+// open a core page the tenant has switched off are left out, and so are
+// gold-copy entries the tenant has hidden (with everything under them).
 func loadMenuNodes(ctx context.Context, db *sqlx.DB, tenantID uuid.UUID) ([]NavigationMenuNode, error) {
+	return queryMenuNodes(ctx, db, tenantID, false)
+}
+
+// queryMenuNodes is loadMenuNodes, optionally keeping the hidden entries
+// (flagged Hidden) so the Menu Designer can show them and bring them back.
+func queryMenuNodes(ctx context.Context, db *sqlx.DB, tenantID uuid.UUID, includeHidden bool) ([]NavigationMenuNode, error) {
 	gold := goldcopy.ResolveTenantID(ctx, db)
 	var flat []NavigationMenuNode
 	err := db.SelectContext(ctx, &flat, `
-		SELECT id, tenant_id, parent_id, node_key, label, icon, target_page_key, display_order, required_entitlement
-		FROM navigation_menu_nodes
-		WHERE (tenant_id = $1 OR tenant_id = $2)
-		  AND (target_page_key IS NULL OR target_page_key NOT IN (
+		SELECT n.id, n.tenant_id, n.parent_id, n.node_key, n.label, n.icon, n.target_page_key, n.display_order, n.required_entitlement,
+		       (o.node_id IS NOT NULL) AS hidden
+		FROM navigation_menu_nodes n
+		LEFT JOIN navigation_menu_placement_overrides o ON o.node_id = n.id AND o.tenant_id = $1
+		WHERE (n.tenant_id = $1 OR n.tenant_id = $2)
+		  AND (n.target_page_key IS NULL OR n.target_page_key NOT IN (
 		        SELECT p.slug FROM core_object_adoption a
 		        JOIN page_definitions p ON p.id = a.core_object_id
 		        WHERE a.tenant_id = $1 AND a.object_type = 'page' AND NOT a.active))
-		ORDER BY display_order, label
+		ORDER BY n.display_order, n.label
 	`, tenantID, gold)
 	if err != nil {
 		return nil, err
@@ -54,7 +66,43 @@ func loadMenuNodes(ctx context.Context, db *sqlx.DB, tenantID uuid.UUID) ([]Navi
 	for i := range flat {
 		flat[i].Inherited = flat[i].TenantID != tenantID
 	}
-	return flat, nil
+	return applyHidden(flat, includeHidden), nil
+}
+
+// applyHidden extends a hidden entry to everything under it: a hidden folder
+// takes its entries with it. Without this, buildMenuTree would promote an
+// orphaned child to a root. Hidden entries are dropped unless includeHidden.
+func applyHidden(flat []NavigationMenuNode, includeHidden bool) []NavigationMenuNode {
+	children := make(map[uuid.UUID][]int, len(flat))
+	for i := range flat {
+		if flat[i].ParentID != nil {
+			children[*flat[i].ParentID] = append(children[*flat[i].ParentID], i)
+		}
+	}
+	var mark func(i int)
+	mark = func(i int) {
+		for _, c := range children[flat[i].ID] {
+			if !flat[c].Hidden {
+				flat[c].Hidden = true
+				mark(c)
+			}
+		}
+	}
+	for i := range flat {
+		if flat[i].Hidden {
+			mark(i)
+		}
+	}
+	if includeHidden {
+		return flat
+	}
+	out := flat[:0]
+	for _, n := range flat {
+		if !n.Hidden {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // buildMenuTree nests flat nodes under their parents; nodes whose parent is
@@ -151,6 +199,7 @@ func (h *NavigationMenuHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/", h.create)
 		r.Put("/{id}", h.update)
 		r.Delete("/{id}", h.delete)
+		r.Put("/{id}/hidden", h.setHidden)
 	})
 }
 
@@ -164,7 +213,8 @@ func (h *NavigationMenuHandler) listTree(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
 		return
 	}
-	flat, err := loadMenuNodes(r.Context(), h.db, tenantID)
+	includeHidden := r.URL.Query().Get("includeHidden") == "true"
+	flat, err := queryMenuNodes(r.Context(), h.db, tenantID, includeHidden)
 	if err != nil {
 		http.Error(w, "failed to list navigation menu: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -258,6 +308,19 @@ func (h *NavigationMenuHandler) update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "parent menu node not found", http.StatusBadRequest)
 		return
 	}
+	// Moving a node under one of its own descendants would close a loop the
+	// same way (the self-parent check above only catches the direct case).
+	if req.ParentID != nil {
+		within, err := h.isWithin(r.Context(), *req.ParentID, id)
+		if err != nil {
+			http.Error(w, "failed to check menu position: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if within {
+			http.Error(w, "a menu node cannot be moved under its own descendant", http.StatusBadRequest)
+			return
+		}
+	}
 
 	var node NavigationMenuNode
 	err = h.db.GetContext(r.Context(), &node, `
@@ -280,6 +343,81 @@ func (h *NavigationMenuHandler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, node)
+}
+
+// isWithin reports whether candidate is node or sits anywhere under it, by
+// walking up candidate's parent_id chain. UNION (not UNION ALL) keeps the
+// walk finite even if the stored tree already contains a loop.
+func (h *NavigationMenuHandler) isWithin(ctx context.Context, candidate, node uuid.UUID) (bool, error) {
+	var within bool
+	err := h.db.GetContext(ctx, &within, `
+		WITH RECURSIVE up AS (
+			SELECT id, parent_id FROM navigation_menu_nodes WHERE id = $1
+			UNION
+			SELECT n.id, n.parent_id FROM navigation_menu_nodes n JOIN up ON n.id = up.parent_id
+		)
+		SELECT EXISTS (SELECT 1 FROM up WHERE id = $2)
+	`, candidate, node)
+	return within, err
+}
+
+type navMenuHiddenRequest struct {
+	Hidden bool `json:"hidden"`
+}
+
+// setHidden switches a gold-copy entry off (or back on) for this tenant. The
+// override is a row in the tenant's own table; the gold-copy row is never
+// written, so the gold copy stays the only place core menu structure changes.
+func (h *NavigationMenuHandler) setHidden(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	var req navMenuHiddenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	var owner uuid.UUID
+	err = h.db.GetContext(r.Context(), &owner, `SELECT tenant_id FROM navigation_menu_nodes WHERE id = $1`, id)
+	if err == sql.ErrNoRows {
+		http.Error(w, "menu node not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "failed to read menu node: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if owner == tenantID {
+		http.Error(w, "only core entries can be hidden; delete your own entry instead", http.StatusBadRequest)
+		return
+	}
+	if gold := goldcopy.ResolveTenantID(r.Context(), h.db); gold == uuid.Nil || owner != gold {
+		http.Error(w, "menu node not found", http.StatusNotFound)
+		return
+	}
+	if req.Hidden {
+		_, err = h.db.ExecContext(r.Context(), `
+			INSERT INTO navigation_menu_placement_overrides (tenant_id, node_id)
+			VALUES ($1, $2)
+			ON CONFLICT (tenant_id, node_id) DO NOTHING
+		`, tenantID, id)
+	} else {
+		_, err = h.db.ExecContext(r.Context(), `
+			DELETE FROM navigation_menu_placement_overrides WHERE tenant_id = $1 AND node_id = $2
+		`, tenantID, id)
+	}
+	if err != nil {
+		http.Error(w, "failed to update menu node visibility: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *NavigationMenuHandler) delete(w http.ResponseWriter, r *http.Request) {

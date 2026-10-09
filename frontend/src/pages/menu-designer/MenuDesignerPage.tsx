@@ -14,9 +14,12 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import DescriptionIcon from '@mui/icons-material/Description';
 import LaunchIcon from '@mui/icons-material/Launch';
 import LockIcon from '@mui/icons-material/Lock';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useNavigate } from 'react-router-dom';
 import { NavigationMenuApi, NavigationMenuNode, NavigationMenuUpsert } from '../../api/navigationMenu';
 import { PageStudioApi, PageStudioPage } from '../../api/pageStudio';
+import { sections } from '../page-studio/PlaceOnMenuDialog';
 
 // Menu Designer - PeopleSoft/Workday/Salesforce-style: an arbitrarily deep
 // tree of menu nodes (navigation_menu_nodes), where a leaf node is bound to
@@ -64,6 +67,7 @@ const MenuDesignerPage: React.FC = () => {
   const [formNodeKeyTouched, setFormNodeKeyTouched] = useState(false);
   const [formTargetPageKey, setFormTargetPageKey] = useState('');
   const [formEntitlement, setFormEntitlement] = useState('BASE_USER');
+  const [formParentId, setFormParentId] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<NavigationMenuNode | null>(null);
@@ -73,7 +77,7 @@ const MenuDesignerPage: React.FC = () => {
     setError(null);
     try {
       const [treeRes, pagesRes] = await Promise.all([
-        NavigationMenuApi.listTree(),
+        NavigationMenuApi.listTree(true),
         PageStudioApi.listPages().catch(() => [] as PageStudioPage[]),
       ]);
       setTree(treeRes || []);
@@ -108,6 +112,7 @@ const MenuDesignerPage: React.FC = () => {
     setFormNodeKeyTouched(false);
     setFormTargetPageKey('');
     setFormEntitlement('BASE_USER');
+    setFormParentId(parentId ?? '');
     setSaveError(null);
   };
 
@@ -118,7 +123,31 @@ const MenuDesignerPage: React.FC = () => {
     setFormNodeKeyTouched(true);
     setFormTargetPageKey(node.targetPageKey || '');
     setFormEntitlement(node.requiredEntitlement || 'BASE_USER');
+    setFormParentId(node.parentId ?? '');
     setSaveError(null);
+  };
+
+  // Folders the node being edited can move under: every folder except the
+  // node itself and anything beneath it (the server refuses those as well).
+  const parentOptions = useMemo(() => {
+    const excluded = new Set<string>();
+    const collect = (n: NavigationMenuNode) => {
+      excluded.add(n.id);
+      (n.children || []).forEach(collect);
+    };
+    if (editState?.node) {
+      collect(editState.node);
+    }
+    return sections(tree).filter(({ node }) => !excluded.has(node.id));
+  }, [tree, editState]);
+
+  const handleSetHidden = async (node: NavigationMenuNode, hidden: boolean) => {
+    try {
+      await NavigationMenuApi.setHidden(node.id, hidden);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update menu entry');
+    }
   };
 
   const closeDialog = () => setEditState(null);
@@ -139,7 +168,7 @@ const MenuDesignerPage: React.FC = () => {
     setSaving(true);
     setSaveError(null);
     const payload: NavigationMenuUpsert = {
-      parentId: editState.parentId,
+      parentId: formParentId || null,
       nodeKey: formNodeKey.trim(),
       label: formLabel.trim(),
       targetPageKey: formTargetPageKey || null,
@@ -178,9 +207,11 @@ const MenuDesignerPage: React.FC = () => {
         key={node.id}
         itemId={node.id}
         label={
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ py: 0.5, pr: 1 }}>
-            {node.targetPageKey ? <DescriptionIcon fontSize="small" color="primary" /> : <MenuBookIcon fontSize="small" color="action" />}
-            <Typography variant="body2" sx={{ flex: 1, fontWeight: node.targetPageKey ? 400 : 600 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ py: 0.5, pr: 1, opacity: node.hidden ? 0.55 : 1 }}>
+            {node.targetPageKey
+              ? <DescriptionIcon fontSize="small" sx={{ color: 'primary.main' }} />
+              : <MenuBookIcon fontSize="small" sx={{ color: 'text.secondary' }} />}
+            <Typography variant="body2" sx={{ flex: 1, color: 'text.primary', fontWeight: node.targetPageKey ? 400 : 600 }}>
               {node.label}
             </Typography>
             {node.targetPageKey && (
@@ -209,10 +240,26 @@ const MenuDesignerPage: React.FC = () => {
               </IconButton>
             </Tooltip>
             {node.inherited ? (
-              // Gold-copy entries: every tenant has them; change them in the gold copy.
-              <Tooltip title="From the gold copy - read-only here. You can add your own entries under it.">
-                <Chip size="small" variant="outlined" color="primary" label="Core" />
-              </Tooltip>
+              // Gold-copy entries: every tenant has them. This tenant can hide them
+              // (a per-tenant override) or add its own entries under them, but cannot edit them.
+              <>
+                <Tooltip title="From the gold copy - read-only here. You can hide it for this tenant or add your own entries under it.">
+                  <Chip size="small" variant="outlined" color="primary" label="Core" />
+                </Tooltip>
+                {node.hidden ? (
+                  <Tooltip title="Hidden for this tenant - show it again">
+                    <IconButton size="small" aria-label="Show again" onClick={(e) => { e.stopPropagation(); handleSetHidden(node, false); }}>
+                      <VisibilityIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    </IconButton>
+                  </Tooltip>
+                ) : (
+                  <Tooltip title="Hide for this tenant (also hides everything under it)">
+                    <IconButton size="small" aria-label="Hide for this tenant" onClick={(e) => { e.stopPropagation(); handleSetHidden(node, true); }}>
+                      <VisibilityOffIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </>
             ) : (
               <>
                 <Tooltip title="Edit">
@@ -240,10 +287,14 @@ const MenuDesignerPage: React.FC = () => {
     ));
 
   return (
-    <Box sx={{ p: 3, maxWidth: 900, mx: 'auto' }}>
+    // The app shell paints a dark canvas under a light MUI theme, so this page
+    // paints its own surface and sets its text colour explicitly (see memory:
+    // frontend-shell-theme). Icon buttons get an explicit colour too: the theme's
+    // action.active is a low-opacity tint that reads as disabled.
+    <Box sx={{ p: 3, maxWidth: 900, mx: 'auto', bgcolor: 'background.default', color: 'text.primary', borderRadius: 1, '& .MuiIconButton-root': { color: 'text.secondary' } }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 800 }}>Menu Designer</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 800, color: 'text.primary' }}>Menu Designer</Typography>
           <Typography variant="body2" color="text.secondary">
             Build the navigation tree consumers see — menus, folders, and pages, PeopleSoft/Workday/Salesforce-style.
           </Typography>
@@ -258,7 +309,7 @@ const MenuDesignerPage: React.FC = () => {
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      <Paper variant="outlined" sx={{ p: 2, minHeight: 300 }}>
+      <Paper variant="outlined" sx={{ p: 2, minHeight: 300, bgcolor: 'background.paper', color: 'text.primary' }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
             <CircularProgress size={24} />
@@ -292,6 +343,26 @@ const MenuDesignerPage: React.FC = () => {
               helperText="Stable identifier for this node, e.g. 'orders_menu'"
               fullWidth
             />
+            <FormControl fullWidth>
+              <InputLabel id="parent-label">Under</InputLabel>
+              <Select
+                labelId="parent-label"
+                id="parent-select"
+                label="Under"
+                value={formParentId}
+                onChange={(e) => setFormParentId(e.target.value)}
+              >
+                <MenuItem value="">
+                  <em>Top level</em>
+                </MenuItem>
+                {parentOptions.map(({ node, path }) => (
+                  <MenuItem key={node.id} value={node.id}>
+                    {path.join(' › ')}{node.inherited ? ' (core)' : ''}
+                  </MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>Move this entry by choosing a new folder. Folders under it are not offered.</FormHelperText>
+            </FormControl>
             <FormControl fullWidth>
               <InputLabel id="target-page-label">Target page (leave blank for a folder)</InputLabel>
               <Select

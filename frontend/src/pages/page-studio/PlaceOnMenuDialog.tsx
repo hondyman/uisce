@@ -15,7 +15,7 @@ interface Props {
 }
 
 /** Containers only (entries without a page), depth-first, with their path. */
-function sections(nodes: NavigationMenuNode[], path: string[] = []): { node: NavigationMenuNode; path: string[] }[] {
+export function sections(nodes: NavigationMenuNode[], path: string[] = []): { node: NavigationMenuNode; path: string[] }[] {
   return nodes.flatMap((n) => {
     const here = [...path, n.label];
     return n.targetPageKey ? [] : [{ node: n, path: here }, ...sections(n.children || [], here)];
