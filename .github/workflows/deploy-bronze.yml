@@ -7,16 +7,14 @@ name: Deploy Bronze Sink
 # attempted.
 #
 # Prerequisites (one-time, Tailscale admin console):
-#   1. Create an OAuth client (Settings → OAuth clients) with scope to create
-#      ephemeral auth keys. Note the client ID and secret.
-#   2. Create a tag (e.g. tag:ci) and add it to your ACL policy granting
-#      tag:ci → 100.84.50.65:22 (TCP only, nothing else).
-#   3. Add the OAuth client ID and secret as GitHub Actions secrets:
-#      TS_OAUTH_CLIENT_ID, TS_OAUTH_SECRET
+#   1. Create a tag (e.g. tag:ci) in Access Controls.
+#   2. Create a trust credential (Admin → Trust Credentials → Add) with
+#      "Auth Keys" Write scope and tag:ci assigned. Generate and copy the key.
+#   3. Add the trust credential as a GitHub Actions secret:
+#      TS_AUTH_KEY (value starts with tskey-client-...)
 #
 # Secrets required (GitHub repo Settings → Secrets → Actions):
-#   TS_OAUTH_CLIENT_ID    Tailscale OAuth client ID (for runner to join tailnet)
-#   TS_OAUTH_SECRET       Tailscale OAuth client secret
+#   TS_AUTH_KEY           Tailscale auth key (trust credential, for runner to join tailnet)
 #   REMOTE_SSH_HOST       e.g. 100.84.50.65 (Tailscale IP of deploy host)
 #   REMOTE_SSH_USER       deploy (not root)
 #   REMOTE_SSH_PRIVATE_KEY  private key for the deploy user
@@ -97,8 +95,7 @@ jobs:
       - name: Join tailnet
         uses: tailscale/github-action@v3
         with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          auth-key: ${{ secrets.TS_AUTH_KEY }}
           tags: tag:ci
 
       # -----------------------------------------------------------------------
