@@ -8,13 +8,14 @@ name: Deploy Bronze Sink
 #
 # Prerequisites (one-time, Tailscale admin console):
 #   1. Create a tag (e.g. tag:ci) in Access Controls.
-#   2. Create a trust credential (Admin → Trust Credentials → Add) with
-#      "Auth Keys" Write scope and tag:ci assigned. Generate and copy the key.
-#   3. Add the trust credential as a GitHub Actions secret:
-#      TS_AUTH_KEY (value starts with tskey-client-...)
+#   2. Create an OAuth client (Admin → OAuth clients) with scope:
+#      api_access_tokens, auth_keys, oauth_keys
+#   3. Add the OAuth client ID and secret as GitHub Actions secrets:
+#      TS_OAUTH_CLIENT_ID, TS_OAUTH_CLIENT_SECRET
 #
 # Secrets required (GitHub repo Settings → Secrets → Actions):
-#   TS_AUTH_KEY           Tailscale auth key (trust credential, for runner to join tailnet)
+#   TS_OAUTH_CLIENT_ID    Tailscale OAuth client ID (for runner to join tailnet)
+#   TS_OAUTH_CLIENT_SECRET Tailscale OAuth client secret
 #   REMOTE_SSH_HOST       e.g. 100.84.50.65 (Tailscale IP of deploy host)
 #   REMOTE_SSH_USER       deploy (not root)
 #   REMOTE_SSH_PRIVATE_KEY  private key for the deploy user
@@ -95,7 +96,9 @@ jobs:
       - name: Join tailnet
         uses: tailscale/github-action@v3
         with:
-          authkey: ${{ secrets.TS_AUTH_KEY }}
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci
 
       # -----------------------------------------------------------------------
       # 3. Deploy to remote — SSH as the deploy user (not root), run the script.
