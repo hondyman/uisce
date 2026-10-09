@@ -159,7 +159,8 @@ jobs:
             "$REMOTE_SSH_USER" \
             "$REMOTE_SSH_PATH" \
             "$REMOTE_SSH_PORT" \
-            "$IMAGE_DIGEST"
+            "$IMAGE_DIGEST" \
+            "${{ github.repository }}"
 
       - name: Report deployed image
         run: |
