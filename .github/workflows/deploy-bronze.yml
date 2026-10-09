@@ -89,39 +89,7 @@ jobs:
           echo "digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
-      # 2. Debug: verify secrets are populated (lengths + prefixes only, safe to log)
-      # -----------------------------------------------------------------------
-      - name: Debug OAuth secrets
-        run: |
-          echo "TS_OAUTH_CLIENT_ID length: ${#TS_OAUTH_CLIENT_ID}"
-          echo "TS_OAUTH_CLIENT_ID prefix: ${TS_OAUTH_CLIENT_ID:0:4}"
-          echo "TS_OAUTH_CLIENT_SECRET length: ${#TS_OAUTH_CLIENT_SECRET}"
-          echo "TS_OAUTH_CLIENT_SECRET prefix: ${TS_OAUTH_CLIENT_SECRET:0:20}"
-          echo "REMOTE_SSH_HOST: $REMOTE_SSH_HOST"
-        env:
-          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          TS_OAUTH_CLIENT_SECRET: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
-          REMOTE_SSH_HOST: ${{ secrets.REMOTE_SSH_HOST }}
-
-      - name: Test OAuth token endpoint from runner
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-            https://api.tailscale.com/api/v2/oauth/token \
-            -d "client_id=${TS_OAUTH_CLIENT_ID}" \
-            -d "client_secret=${TS_OAUTH_CLIENT_SECRET}")
-          echo "OAuth token endpoint status: $STATUS"
-          if [ "$STATUS" = "200" ]; then
-            echo "✅ Secrets are valid — proceeding with Tailscale join"
-          else
-            echo "❌ OAuth token request failed with HTTP $STATUS"
-            echo "This means the secrets in GitHub do not match the ones that work locally"
-          fi
-        env:
-          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          TS_OAUTH_CLIENT_SECRET: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
-
-      # -----------------------------------------------------------------------
-      # 3. Join the tailnet ephemerally — runner gets a short-lived Tailscale
+      # 2. Join the tailnet ephemerally — runner gets a short-lived Tailscale
       #    identity for the duration of this job. The ACL must grant this tag
       #    (tag:ci) TCP/22 access to REMOTE_SSH_HOST.
       # -----------------------------------------------------------------------
@@ -133,7 +101,7 @@ jobs:
           tags: tag:ci
 
       # -----------------------------------------------------------------------
-      # 4. Deploy to remote — SSH as the deploy user (not root), run the script.
+      # 3. Deploy to remote — SSH as the deploy user (not root), run the script.
       #    The runner is now on the tailnet and can reach REMOTE_SSH_HOST.
       # -----------------------------------------------------------------------
       - name: Start ssh-agent and add key
@@ -152,6 +120,7 @@ jobs:
           REMOTE_SSH_PORT: ${{ secrets.REMOTE_SSH_PORT || '22' }}
           REMOTE_SSH_PATH: ${{ secrets.REMOTE_SSH_PATH || '/mnt/uisce' }}
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chmod +x scripts/deploy-bronze.sh
           ./scripts/deploy-bronze.sh \

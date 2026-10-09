@@ -110,6 +110,42 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------
+  # Kafka Connect — Iceberg bronze sink (started by deploy-bronze.yml)
+  # ---------------------------------------------------------
+  # Host port 8084, not 8083: uisce-debezium already publishes 8083 on this host.
+  # The deploy script writes the Keycloak CA into ./certs (the deploy path) and this
+  # mount exposes it at the path the image's entrypoint imports from.
+  kafka-connect-iceberg:
+    image: ghcr.io/hondyman/uisce/kafka-connect-iceberg:bronze-latest
+    container_name: kafka-connect-iceberg
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: uisce-redpanda:9092
+      CONNECT_REST_PORT: 8083
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect-iceberg
+      CONNECT_GROUP_ID: bronze-sink
+      CONNECT_CONFIG_STORAGE_TOPIC: bronze_connect_configs
+      CONNECT_OFFSET_STORAGE_TOPIC: bronze_connect_offsets
+      CONNECT_STATUS_STORAGE_TOPIC: bronze_connect_status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_PLUGIN_PATH: /usr/share/confluent-hub-components
+    volumes:
+      - ./certs:/etc/kafka-connect-iceberg/certs:ro
+    ports:
+      - "8084:8083"
+    networks:
+      - remote-net
+    depends_on:
+      uisce-redpanda:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------
   # Temporal
   # ---------------------------------------------------------
   uisce-temporal:
@@ -676,52 +712,6 @@ services:
       test: ["CMD", "/home/nonroot/lakekeeper", "healthcheck"]
       interval: 10s
       timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  # ---------------------------------------------------------
-  # Kafka Connect Iceberg — CDC bronze sink
-  # Tabular Iceberg Sink Connector consumes Debezium envelopes
-  # from Redpanda and writes append-only Parquet to Iceberg/MinIO.
-  # Connector config (iceberg-bronze-sink.json) is mounted at
-  # runtime by the deploy script.
-  # ---------------------------------------------------------
-  kafka-connect-iceberg:
-    image: ${REGISTRY:-ghcr.io}/${REPO:-hondyman/uisce}/kafka-connect-iceberg:latest
-    container_name: kafka-connect-iceberg
-    ports:
-      - "8083:8083"
-    environment:
-      # Kafka Connect worker
-      BOOTSTRAP_SERVERS: uisce-redpanda:9092
-      GROUP_ID: iceberg-bronze
-      CONFIG_STORAGE_TOPIC: iceberg_bronze_configs
-      OFFSET_STORAGE_TOPIC: iceberg_bronze_offsets
-      STATUS_STORAGE_TOPIC: iceberg_bronze_status
-      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect-iceberg
-      # Iceberg REST catalog (Lakekeeper)
-      ICEBERG_CATALOG_URI: ${ICEBERG_CATALOG_URI:-http://lakekeeper:8181}
-      ICEBERG_CATALOG_WAREHOUSE: ${ICEBERG_CATALOG_WAREHOUSE:-tenant-alpha}
-      LAKEHOUSE_CLIENT_ID: ${LAKEHOUSE_CLIENT_ID:-lakehouse-client}
-      LAKEHOUSE_CLIENT_SECRET: ${LAKEHOUSE_CLIENT_SECRET:-secret}
-      ICEBERG_CATALOG_S3_ENDPOINT: ${ICEBERG_CATALOG_S3_ENDPOINT:-http://uisce-minio:9000}
-      ICEBERG_CATALOG_S3_ACCESS_KEY_ID: ${ICEBERG_CATALOG_S3_ACCESS_KEY_ID:-minioadmin}
-      ICEBERG_CATALOG_S3_SECRET_ACCESS_KEY: ${ICEBERG_CATALOG_S3_SECRET_ACCESS_KEY:-minioadmin}
-      # Keycloak CA for OAuth token endpoint TLS verification
-      SSL_CERT_FILE: /etc/kafka-connect-iceberg/certs/keycloak-ca.crt
-    volumes:
-      - ~/kafka-connect-iceberg/certs:/etc/kafka-connect-iceberg/certs:rw
-      - ./infrastructure:/etc/kafka-connect-iceberg/infrastructure:ro
-    networks:
-      - remote-net
-    depends_on:
-      uisce-redpanda:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8083/"]
-      interval: 10s
       retries: 5
     restart: unless-stopped
 

@@ -15,3 +15,10 @@ RUN if command -v yum >/dev/null 2>&1; then yum install -y unzip; \
 
 # Add other potential dependencies if needed (e.g. AWS headers for MinIO)
 # The connector usually handles S3 compatibility
+
+# Runtime CA import: imports /etc/kafka-connect-iceberg/certs/keycloak-ca.crt into the JVM
+# truststore before starting the worker. The file is bind-mounted by docker-compose.remote.yml.
+# The script is committed without the executable bit, so the mode is set here.
+COPY backend/docker-entrypoint-iceberg.sh /usr/local/bin/docker-entrypoint-iceberg.sh
+RUN chmod 0755 /usr/local/bin/docker-entrypoint-iceberg.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint-iceberg.sh"]
