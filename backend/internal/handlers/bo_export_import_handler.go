@@ -38,7 +38,7 @@ func (h *BOExportImportHandler) ExportBO(w http.ResponseWriter, r *http.Request)
 	boID := chi.URLParam(r, "boId")
 	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.SecurityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -66,7 +66,7 @@ func (h *BOExportImportHandler) ExportMultipleBOs(w http.ResponseWriter, r *http
 
 	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.SecurityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -93,7 +93,7 @@ func (h *BOExportImportHandler) ImportBO(w http.ResponseWriter, r *http.Request)
 	userID := r.Header.Get("X-User-ID")
 	secCtx, ctx, err := SecurityContextFromRequest(r, req.DatasourceID, req.Region, h.SecurityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteSecurityError(w, err)
 		return
 	}
 

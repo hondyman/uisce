@@ -32,7 +32,7 @@ func NewNBAHandler(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *NBAH
 func (h *NBAHandler) GetRecommendations(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	clientID := secCtx.DatasourceID // Use secure context value
@@ -324,7 +324,7 @@ func (h *NBAHandler) DismissAction(w http.ResponseWriter, r *http.Request) {
 func (h *NBAHandler) GetSignals(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID

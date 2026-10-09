@@ -86,7 +86,7 @@ func (h *GlossaryHandler) RegisterRoutes(r chi.Router) {
 func (h *GlossaryHandler) listTerms(w http.ResponseWriter, r *http.Request, termType string) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -193,7 +193,7 @@ func (h *GlossaryHandler) ListBusinessTerms(w http.ResponseWriter, r *http.Reque
 func (h *GlossaryHandler) ListEdges(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -338,7 +338,7 @@ func (h *GlossaryHandler) ListEdges(w http.ResponseWriter, r *http.Request) {
 func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -573,7 +573,7 @@ func (h *GlossaryHandler) UpdateTerm(w http.ResponseWriter, r *http.Request) {
 	termID := r.PathValue("id")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -980,7 +980,7 @@ func (p *NodeProperty) LabelOrName() string {
 func (h *GlossaryHandler) CreateEdge(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -1174,7 +1174,7 @@ func (h *GlossaryHandler) DeleteTerm(w http.ResponseWriter, r *http.Request) {
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -1227,7 +1227,7 @@ func (h *GlossaryHandler) DeleteEdge(w http.ResponseWriter, r *http.Request) {
 	edgeID := chi.URLParam(r, "id")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -1276,7 +1276,7 @@ func (h *GlossaryHandler) UpdateEdge(w http.ResponseWriter, r *http.Request) {
 	edgeID := chi.URLParam(r, "id")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -2135,7 +2135,7 @@ func (h *GlossaryHandler) ensureEdge(tenantID, datasourceID, subjectID, objectID
 func (h *GlossaryHandler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 	jobID := chi.URLParam(r, "jobID")
@@ -2159,7 +2159,7 @@ func (h *GlossaryHandler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -2223,7 +2223,7 @@ func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.R
 func (h *GlossaryHandler) PreviewSemanticTerms(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -2255,7 +2255,7 @@ func (h *GlossaryHandler) PreviewSemanticTerms(w http.ResponseWriter, r *http.Re
 func (h *GlossaryHandler) RecordRejection(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 	if h.glossarySvc == nil {
@@ -2304,7 +2304,7 @@ func (h *GlossaryHandler) RecordRejection(w http.ResponseWriter, r *http.Request
 func (h *GlossaryHandler) UnrecordRejection(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 	if h.glossarySvc == nil {

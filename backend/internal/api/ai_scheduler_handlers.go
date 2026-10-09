@@ -147,7 +147,7 @@ func (h *AISchedulerHandler) PredictOptimalTrigger(w http.ResponseWriter, r *htt
 func (h *AISchedulerHandler) GetCapacityWindows(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -224,7 +224,7 @@ func (h *AISchedulerHandler) GenerateIncidentReport(w http.ResponseWriter, r *ht
 func (h *AISchedulerHandler) GetSuggestions(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 

@@ -47,7 +47,7 @@ type ClaudeProvider struct {
 func (h *BPBuilderHandlers) GenerateProcessFromNaturalLanguage(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		respondJSON(w, handlers.SecurityErrorStatus(err), newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
 		return
 	}
 	tenantID := secCtx.TenantID

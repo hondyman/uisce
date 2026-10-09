@@ -45,7 +45,7 @@ func (h *CatalogScanHandler) RegisterRoutes(r chi.Router) {
 func (h *CatalogScanHandler) HandleCatalogScan(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteSecurityError(w, err)
 		return
 	}
 	// Set content type
@@ -173,7 +173,7 @@ func (h *DebugHandler) RegisterRoutes(r chi.Router) {
 func (h *DebugHandler) DebugChart(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteSecurityError(w, err)
 		return
 	}
 	datasourceID := secCtx.DatasourceID

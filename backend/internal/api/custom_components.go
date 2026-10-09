@@ -64,7 +64,7 @@ func (s *Server) registerCustomComponentRoutes(r chi.Router) {
 func (s *Server) listCustomComponents(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "Unauthorized", "unauthorized", "")
 		return
 	}
 
@@ -154,7 +154,7 @@ func (s *Server) listCustomComponents(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createCustomComponent(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "Unauthorized", "unauthorized", "")
 		return
 	}
 
@@ -224,7 +224,7 @@ func (s *Server) getCustomComponent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "Unauthorized", "unauthorized", "")
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -302,7 +302,7 @@ func (s *Server) updateCustomComponent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "Unauthorized", "unauthorized", "")
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -366,7 +366,7 @@ func (s *Server) deleteCustomComponent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "Unauthorized", "unauthorized", "")
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -409,7 +409,7 @@ func (s *Server) deleteCustomComponent(w http.ResponseWriter, r *http.Request) {
 func (s *Server) testComponentAPI(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "Unauthorized", "unauthorized", "")
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -492,7 +492,7 @@ func (s *Server) testComponentAPI(w http.ResponseWriter, r *http.Request) {
 func (s *Server) exportComponents(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "Unauthorized", "unauthorized", "")
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -600,7 +600,7 @@ func (s *Server) exportComponents(w http.ResponseWriter, r *http.Request) {
 func (s *Server) importComponents(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "Unauthorized", "unauthorized", "")
 		return
 	}
 	tenantID := secCtx.TenantID

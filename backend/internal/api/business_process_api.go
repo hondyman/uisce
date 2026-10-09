@@ -124,7 +124,7 @@ func (h *BPAPIHandler) APICreateBusinessProcess(w http.ResponseWriter, r *http.R
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -199,7 +199,7 @@ func (h *BPAPIHandler) APIListBusinessProcesses(w http.ResponseWriter, r *http.R
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -262,7 +262,7 @@ func (h *BPAPIHandler) APIGetBusinessProcess(w http.ResponseWriter, r *http.Requ
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -314,7 +314,7 @@ func (h *BPAPIHandler) APIStartBusinessProcessExecution(w http.ResponseWriter, r
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -414,7 +414,7 @@ func (h *BPAPIHandler) APIGetBusinessProcessInstanceStatus(w http.ResponseWriter
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -476,7 +476,7 @@ func (h *BPAPIHandler) APIApproveBusinessProcessStep(w http.ResponseWriter, r *h
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -549,7 +549,7 @@ func (h *BPAPIHandler) APIGetBusinessProcessAuditTrail(w http.ResponseWriter, r 
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 

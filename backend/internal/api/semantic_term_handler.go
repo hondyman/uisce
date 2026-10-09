@@ -69,7 +69,7 @@ func (s *Server) GetSemanticTermDetail(w http.ResponseWriter, r *http.Request) {
 		Resolver: s.DatasourceResolver,
 	})
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -172,7 +172,7 @@ func (s *Server) ListSemanticTermTraces(w http.ResponseWriter, r *http.Request) 
 		Resolver: s.DatasourceResolver,
 	})
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -268,7 +268,7 @@ func (s *Server) GetSemanticTermMetrics(w http.ResponseWriter, r *http.Request) 
 		Resolver: s.DatasourceResolver,
 	})
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 		return
 	}
 

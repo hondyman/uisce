@@ -44,7 +44,7 @@ type SoDRule struct {
 func (h *RBACHandlers) listGSIFIEventRegistry(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -92,7 +92,7 @@ func (h *RBACHandlers) createGSIFIEvent(w http.ResponseWriter, r *http.Request) 
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -148,7 +148,7 @@ func (h *RBACHandlers) updateGSIFIEvent(w http.ResponseWriter, r *http.Request) 
 func (h *RBACHandlers) listTAMRules(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -199,7 +199,7 @@ func (h *RBACHandlers) createTAMRule(w http.ResponseWriter, r *http.Request) {
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -242,7 +242,7 @@ func (h *RBACHandlers) deleteTAMRule(w http.ResponseWriter, r *http.Request) {
 func (h *RBACHandlers) listSoDRules(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -289,7 +289,7 @@ func (h *RBACHandlers) createSoDRule(w http.ResponseWriter, r *http.Request) {
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID

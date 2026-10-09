@@ -81,7 +81,7 @@ type CreateEntityRequest struct {
 func (h *FKGHandler) CreateEntity(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -119,7 +119,7 @@ func (h *FKGHandler) CreateEntity(w http.ResponseWriter, r *http.Request) {
 func (h *FKGHandler) GetEntity(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 	entityID := chi.URLParam(r, "entityID")
@@ -143,7 +143,7 @@ func (h *FKGHandler) GetEntity(w http.ResponseWriter, r *http.Request) {
 func (h *FKGHandler) UpdateEntity(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 	entityID := chi.URLParam(r, "entityID")
@@ -171,7 +171,7 @@ func (h *FKGHandler) UpdateEntity(w http.ResponseWriter, r *http.Request) {
 func (h *FKGHandler) DeleteEntity(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 	entityID := chi.URLParam(r, "entityID")
@@ -193,7 +193,7 @@ func (h *FKGHandler) DeleteEntity(w http.ResponseWriter, r *http.Request) {
 func (h *FKGHandler) ListEntities(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -223,7 +223,7 @@ func (h *FKGHandler) ListEntities(w http.ResponseWriter, r *http.Request) {
 func (h *FKGHandler) SearchSimilarEntities(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 	name := r.URL.Query().Get("name")
@@ -269,7 +269,7 @@ type CreateRelationshipRequest struct {
 func (h *FKGHandler) CreateRelationship(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -316,7 +316,7 @@ func (h *FKGHandler) ListRelationships(w http.ResponseWriter, r *http.Request) {
 func (h *FKGHandler) GetUBOChain(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 	entityID := chi.URLParam(r, "entityID")
@@ -359,7 +359,7 @@ type SearchDocumentsRequest struct {
 func (h *FKGHandler) SearchDocuments(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 

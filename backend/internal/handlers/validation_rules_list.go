@@ -57,7 +57,7 @@ func (h *ValidationRulesHandler) ListValidationRulesHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
+			http.Error(w, "Security context error: "+err.Error(), SecurityErrorStatus(err))
 			return
 		}
 

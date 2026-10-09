@@ -28,7 +28,7 @@ func (h *AnomalyHandler) RegisterRoutes(r chi.Router) {
 func (h *AnomalyHandler) HandleListAnomalies(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteSecurityError(w, err)
 		return
 	}
 	datasourceID := secCtx.DatasourceID

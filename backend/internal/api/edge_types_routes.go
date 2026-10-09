@@ -62,7 +62,7 @@ func (h *edgeTypesHandler) handleListEdgeTypes() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+			http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 			return
 		}
 
@@ -171,7 +171,7 @@ func (h *edgeTypesHandler) handleCreateEdgeType() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+			http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 			return
 		}
 
@@ -244,7 +244,7 @@ func (h *edgeTypesHandler) handleGetEdgeType() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+			http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 			return
 		}
 		id := chi.URLParam(r, "id")
@@ -346,7 +346,7 @@ func (h *edgeTypesHandler) handleUpdateEdgeType() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+			http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 			return
 		}
 		id := chi.URLParam(r, "id")
@@ -446,7 +446,7 @@ func (h *edgeTypesHandler) handleDeleteEdgeType() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+			http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 			return
 		}
 		id := chi.URLParam(r, "id")
@@ -473,7 +473,7 @@ func (h *edgeTypesHandler) handleGetEdgeTypeProperties() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+			http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 			return
 		}
 		id := chi.URLParam(r, "id")
@@ -517,7 +517,7 @@ func (h *edgeTypesHandler) handleAddEdgeTypeProperty() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+			http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 			return
 		}
 		id := chi.URLParam(r, "id")
@@ -588,7 +588,7 @@ func (h *edgeTypesHandler) handleUpdateEdgeTypeProperty() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+			http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 			return
 		}
 		id := chi.URLParam(r, "id")
@@ -665,7 +665,7 @@ func (h *edgeTypesHandler) handleDeleteEdgeTypeProperty() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+			http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 			return
 		}
 		id := chi.URLParam(r, "id")

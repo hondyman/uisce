@@ -135,7 +135,7 @@ func (h *BusinessObjectHandler) GetBusinessObjectFields(w http.ResponseWriter, r
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -176,7 +176,7 @@ func (h *BusinessObjectHandler) ListBusinessObjects(w http.ResponseWriter, r *ht
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -226,7 +226,7 @@ func (h *BusinessObjectHandler) CreateBusinessObject(w http.ResponseWriter, r *h
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -264,7 +264,7 @@ func (h *BusinessObjectHandler) GetBusinessObject(w http.ResponseWriter, r *http
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -385,7 +385,7 @@ func (h *BusinessObjectHandler) UpdateBusinessObject(w http.ResponseWriter, r *h
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -422,7 +422,7 @@ func (h *BusinessObjectHandler) DeleteBusinessObject(w http.ResponseWriter, r *h
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -450,7 +450,7 @@ func (h *BusinessObjectHandler) RenameSubtype(w http.ResponseWriter, r *http.Req
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -494,7 +494,7 @@ func (h *BusinessObjectHandler) DeleteSubtype(w http.ResponseWriter, r *http.Req
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -525,7 +525,7 @@ func (h *BusinessObjectHandler) GetBusinessObjectRelationships(w http.ResponseWr
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -548,7 +548,7 @@ func (h *BusinessObjectHandler) CreateBusinessObjectRelationship(w http.Response
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -644,7 +644,7 @@ func (h *BusinessObjectHandler) UpdateBusinessObjectRelationship(w http.Response
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -694,7 +694,7 @@ func (h *BusinessObjectHandler) DeleteBusinessObjectRelationship(w http.Response
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -738,7 +738,7 @@ func (h *BusinessObjectHandler) GetBusinessObjectBindings(w http.ResponseWriter,
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	boID := chi.URLParam(r, "id")
@@ -800,7 +800,7 @@ func (h *BusinessObjectHandler) CreateBusinessObjectBinding(w http.ResponseWrite
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -953,7 +953,7 @@ func (h *BusinessObjectHandler) UpdateBusinessObjectBinding(w http.ResponseWrite
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1034,7 +1034,7 @@ func (h *BusinessObjectHandler) DeleteBusinessObjectBinding(w http.ResponseWrite
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1109,7 +1109,7 @@ func (h *BusinessObjectHandler) GetBusinessObjectWithBindings(w http.ResponseWri
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1263,7 +1263,7 @@ func (h *BusinessObjectHandler) IntrospectTable(w http.ResponseWriter, r *http.R
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1302,7 +1302,7 @@ func (h *BusinessObjectHandler) GetBODelta(w http.ResponseWriter, r *http.Reques
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1324,7 +1324,7 @@ func (h *BusinessObjectHandler) QueryBORecords(w http.ResponseWriter, r *http.Re
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1383,7 +1383,7 @@ func (h *BusinessObjectHandler) CreateBORecord(w http.ResponseWriter, r *http.Re
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1419,7 +1419,7 @@ func (h *BusinessObjectHandler) UpdateBORecord(w http.ResponseWriter, r *http.Re
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1455,7 +1455,7 @@ func (h *BusinessObjectHandler) DeleteBORecord(w http.ResponseWriter, r *http.Re
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1483,7 +1483,7 @@ func (h *BusinessObjectHandler) SynthesizeBOWithAI(w http.ResponseWriter, r *htt
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1510,7 +1510,7 @@ func (h *BusinessObjectHandler) TranslateNLToQueryDef(w http.ResponseWriter, r *
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1537,7 +1537,7 @@ func (h *BusinessObjectHandler) ExplainDeltaWithAI(w http.ResponseWriter, r *htt
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1563,7 +1563,7 @@ func (h *BusinessObjectHandler) DetectAnomaliesWithAI(w http.ResponseWriter, r *
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1589,7 +1589,7 @@ func (h *BusinessObjectHandler) GetBOWorkflowStatus(w http.ResponseWriter, r *ht
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1611,7 +1611,7 @@ func (h *BusinessObjectHandler) ExecuteWorkflowAction(w http.ResponseWriter, r *
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1645,7 +1645,7 @@ func (h *BusinessObjectHandler) DiscoverBindingScope(w http.ResponseWriter, r *h
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1669,7 +1669,7 @@ func (h *BusinessObjectHandler) ValidatePublishGate(w http.ResponseWriter, r *ht
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1691,7 +1691,7 @@ func (h *BusinessObjectHandler) GetMultiBackendConfiguration(w http.ResponseWrit
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1713,7 +1713,7 @@ func (h *BusinessObjectHandler) PerformGraphRAGContext(w http.ResponseWriter, r 
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1740,7 +1740,7 @@ func (h *BusinessObjectHandler) SimulateLineageImpact(w http.ResponseWriter, r *
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1768,7 +1768,7 @@ func (h *BusinessObjectHandler) GenerateBOArtifacts(w http.ResponseWriter, r *ht
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1790,7 +1790,7 @@ func (h *BusinessObjectHandler) EvaluateQueryCost(w http.ResponseWriter, r *http
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1817,7 +1817,7 @@ func (h *BusinessObjectHandler) DetectSchemaDrift(w http.ResponseWriter, r *http
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1839,7 +1839,7 @@ func (h *BusinessObjectHandler) ApplyDriftRepairPatch(w http.ResponseWriter, r *
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -1874,7 +1874,7 @@ func (h *BusinessObjectHandler) RunLakehouseCompaction(w http.ResponseWriter, r 
 		Resolver: h.datasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 

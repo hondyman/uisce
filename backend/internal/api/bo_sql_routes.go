@@ -474,7 +474,7 @@ func (s *Server) GetChannelAuditBillingSummaryHandler(w http.ResponseWriter, r *
 	if err != nil {
 		claims := jwtmiddleware.GetClaimsFromContext(r)
 		if claims == nil || claims.TenantID == "" {
-			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+			http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 			return
 		}
 	}
@@ -504,7 +504,7 @@ func (s *Server) GetChannelAuditLogsHandler(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		claims := jwtmiddleware.GetClaimsFromContext(r)
 		if claims == nil || claims.TenantID == "" {
-			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+			http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 			return
 		}
 	}

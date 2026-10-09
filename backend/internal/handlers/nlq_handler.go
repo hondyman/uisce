@@ -33,7 +33,7 @@ func (h *NLQHandler) HandleAsk(w http.ResponseWriter, r *http.Request) {
 	}
 	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteSecurityError(w, err)
 		return
 	}
 
@@ -60,7 +60,7 @@ func (h *NLQHandler) HandleAsk(w http.ResponseWriter, r *http.Request) {
 func (h *NLQHandler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	_, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteSecurityError(w, err)
 		return
 	}
 

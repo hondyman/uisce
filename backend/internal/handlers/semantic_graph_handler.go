@@ -96,7 +96,7 @@ func (h *SemanticGraphHandler) GetNode(w http.ResponseWriter, r *http.Request) {
 
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		WriteSecurityError(w, err)
 		return
 	}
 
@@ -277,7 +277,7 @@ func (h *SemanticGraphHandler) GenerateBOSQL(w http.ResponseWriter, r *http.Requ
 
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		WriteSecurityError(w, err)
 		return
 	}
 
@@ -302,7 +302,7 @@ func (h *SemanticGraphHandler) GetBOCalculations(w http.ResponseWriter, r *http.
 
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		WriteSecurityError(w, err)
 		return
 	}
 
@@ -332,7 +332,7 @@ func (h *SemanticGraphHandler) GetBOTerms(w http.ResponseWriter, r *http.Request
 
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		WriteSecurityError(w, err)
 		return
 	}
 

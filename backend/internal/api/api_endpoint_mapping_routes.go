@@ -67,7 +67,7 @@ func (h *endpointMappingHandler) handleListEntityMappings() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
+			writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed", "auth_error", err.Error())
 			return
 		}
 		endpointID := chi.URLParam(r, "endpoint-id")
@@ -108,7 +108,7 @@ func (h *endpointMappingHandler) handleCreateEntityMapping() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
+			writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed", "auth_error", err.Error())
 			return
 		}
 		endpointID := chi.URLParam(r, "endpoint-id")
@@ -164,7 +164,7 @@ func (h *endpointMappingHandler) handleDeleteEntityMapping() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
+			writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed", "auth_error", err.Error())
 			return
 		}
 		endpointID := chi.URLParam(r, "endpoint-id")
@@ -194,7 +194,7 @@ func (h *endpointMappingHandler) handleListDatasourceMappings() http.HandlerFunc
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
+			writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed", "auth_error", err.Error())
 			return
 		}
 		endpointID := chi.URLParam(r, "endpoint-id")
@@ -235,7 +235,7 @@ func (h *endpointMappingHandler) handleCreateDatasourceMapping() http.HandlerFun
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
+			writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed", "auth_error", err.Error())
 			return
 		}
 		endpointID := chi.URLParam(r, "endpoint-id")
@@ -291,7 +291,7 @@ func (h *endpointMappingHandler) handleDeleteDatasourceMapping() http.HandlerFun
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
+			writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed", "auth_error", err.Error())
 			return
 		}
 		endpointID := chi.URLParam(r, "endpoint-id")
@@ -321,7 +321,7 @@ func (h *endpointMappingHandler) handleGetEntityEndpoints() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
+			writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed", "auth_error", err.Error())
 			return
 		}
 		entityID := chi.URLParam(r, "entity-id")
@@ -403,7 +403,7 @@ func (h *endpointMappingHandler) handleGetDatasourceEndpoints() http.HandlerFunc
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
+			writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed", "auth_error", err.Error())
 			return
 		}
 		datasourceID := chi.URLParam(r, "datasource-id")

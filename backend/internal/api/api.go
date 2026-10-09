@@ -424,7 +424,7 @@ func (s *Server) listBusinessObjects(w http.ResponseWriter, r *http.Request) {
 		// Log but try to proceed with minimal context if tenant is present (legacy fallback)
 		claims := jwtmiddleware.GetClaimsFromContext(r)
 		if claims == nil {
-			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			http.Error(w, `{"error":"unauthorized"}`, handlers.SecurityErrorStatus(err))
 			return
 		}
 		tenantID := claims.TenantID
@@ -459,7 +459,7 @@ func (s *Server) getBusinessObjectByID(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		claims := jwtmiddleware.GetClaimsFromContext(r)
 		if claims == nil {
-			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			http.Error(w, `{"error":"unauthorized"}`, handlers.SecurityErrorStatus(err))
 			return
 		}
 		tenantID := claims.TenantID
@@ -3175,7 +3175,7 @@ func (s *Server) getProfileResults(w http.ResponseWriter, r *http.Request) {
 	datasourceIDFromQuery := r.URL.Query().Get("datasource_id")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, datasourceIDFromQuery, "", s.SecurityContextDeps)
 	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		http.Error(w, `{"error":"unauthorized"}`, handlers.SecurityErrorStatus(err))
 		return
 	}
 	tenantID := secCtx.TenantID

@@ -142,7 +142,7 @@ func newBPAPIResponse(success bool, data interface{}, err string) BPAPIResponse 
 func (h *BPBuilderHandlers) ListBusinessProcesses(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		respondJSON(w, handlers.SecurityErrorStatus(err), newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -200,7 +200,7 @@ func (h *BPBuilderHandlers) ListBusinessProcesses(w http.ResponseWriter, r *http
 func (h *BPBuilderHandlers) GetBusinessProcess(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		respondJSON(w, handlers.SecurityErrorStatus(err), newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -246,7 +246,7 @@ func (h *BPBuilderHandlers) GetBusinessProcess(w http.ResponseWriter, r *http.Re
 func (h *BPBuilderHandlers) CreateBusinessProcess(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		respondJSON(w, handlers.SecurityErrorStatus(err), newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -298,7 +298,7 @@ func (h *BPBuilderHandlers) CreateBusinessProcess(w http.ResponseWriter, r *http
 func (h *BPBuilderHandlers) UpdateBusinessProcess(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		respondJSON(w, handlers.SecurityErrorStatus(err), newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -352,7 +352,7 @@ func (h *BPBuilderHandlers) UpdateBusinessProcess(w http.ResponseWriter, r *http
 func (h *BPBuilderHandlers) DeleteBusinessProcess(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		respondJSON(w, handlers.SecurityErrorStatus(err), newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -385,7 +385,7 @@ func (h *BPBuilderHandlers) DeleteBusinessProcess(w http.ResponseWriter, r *http
 func (h *BPBuilderHandlers) PublishBusinessProcess(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		respondJSON(w, handlers.SecurityErrorStatus(err), newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -446,7 +446,7 @@ func (h *BPBuilderHandlers) SimulateBusinessProcess(w http.ResponseWriter, r *ht
 func (h *BPBuilderHandlers) DuplicateBusinessProcess(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		respondJSON(w, handlers.SecurityErrorStatus(err), newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
 		return
 	}
 	tenantID := secCtx.TenantID

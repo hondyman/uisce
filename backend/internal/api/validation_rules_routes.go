@@ -155,7 +155,7 @@ func (h *validationRulesHandler) handleListValidationRules() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
+			writeJSONError(w, handlers.SecurityErrorStatus(err), "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
 		}
 
@@ -573,7 +573,7 @@ func (h *validationRulesHandler) handleGetValidationRule() http.HandlerFunc {
 		id := chi.URLParam(r, "id")
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
+			writeJSONError(w, handlers.SecurityErrorStatus(err), "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
 		}
 
@@ -661,7 +661,7 @@ func (h *validationRulesHandler) handleUpdateValidationRule() http.HandlerFunc {
 		id := chi.URLParam(r, "id")
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
+			writeJSONError(w, handlers.SecurityErrorStatus(err), "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
 		}
 
@@ -786,7 +786,7 @@ func (h *validationRulesHandler) handleDeleteValidationRule() http.HandlerFunc {
 
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
+			writeJSONError(w, handlers.SecurityErrorStatus(err), "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
 		}
 
@@ -838,7 +838,7 @@ func (h *validationRulesHandler) handleGetValidationRuleAudit() http.HandlerFunc
 		id := chi.URLParam(r, "id")
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
+			writeJSONError(w, handlers.SecurityErrorStatus(err), "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
 		}
 
@@ -990,7 +990,7 @@ func (h *validationRulesHandler) handleExecuteValidationRuleBinding() http.Handl
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
+			writeJSONError(w, handlers.SecurityErrorStatus(err), "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
 		}
 

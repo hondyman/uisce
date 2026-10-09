@@ -427,7 +427,7 @@ func (h *CubeHandler) updateCube(ctx context.Context, c CubeDefinition) (*CubeDe
 func (h *CubeHandler) HandleListCubes(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -566,7 +566,7 @@ func (h *CubeHandler) listCubes(
 func (h *CubeHandler) HandleGetCube(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -590,7 +590,7 @@ func (h *CubeHandler) HandleGetCube(w http.ResponseWriter, r *http.Request) {
 func (h *CubeHandler) HandleCreateCube(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -639,7 +639,7 @@ func (h *CubeHandler) HandleCreateCube(w http.ResponseWriter, r *http.Request) {
 func (h *CubeHandler) HandlePatchCube(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -737,7 +737,7 @@ func (h *CubeHandler) HandlePatchCube(w http.ResponseWriter, r *http.Request) {
 func (h *CubeHandler) HandleValidateCube(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -843,7 +843,7 @@ func (h *CubeHandler) HandleValidateCube(w http.ResponseWriter, r *http.Request)
 func (h *CubeHandler) HandlePublishCubeVersion(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -927,7 +927,7 @@ type cubeMetricOption struct {
 func (h *CubeHandler) HandleListCubeMetrics(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 

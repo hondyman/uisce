@@ -102,7 +102,7 @@ func (h *SavedQueryFolderHandler) fetchWithCount(where string, args ...interface
 func (h *SavedQueryFolderHandler) HandleListFolders(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 	folders, err := h.fetchWithCount("f.tenant_id = $1 AND f.user_id = $2", secCtx.TenantID, secCtx.UserID)
@@ -122,7 +122,7 @@ type savedQueryFolderRequest struct {
 func (h *SavedQueryFolderHandler) HandleCreateFolder(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 	var req savedQueryFolderRequest
@@ -157,7 +157,7 @@ func (h *SavedQueryFolderHandler) HandleCreateFolder(w http.ResponseWriter, r *h
 func (h *SavedQueryFolderHandler) HandleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -205,7 +205,7 @@ func (h *SavedQueryFolderHandler) HandleUpdateFolder(w http.ResponseWriter, r *h
 func (h *SavedQueryFolderHandler) HandleDeleteFolder(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 	id := chi.URLParam(r, "id")

@@ -35,7 +35,7 @@ func (s *Server) HandleCubeRefresh(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCubeMaterializeStart(w http.ResponseWriter, r *http.Request, defaultForce bool) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.SecurityContextDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	if secCtx == nil || secCtx.TenantID == "" {

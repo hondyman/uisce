@@ -129,7 +129,7 @@ func (h *ProcessMonitorHandlers) RegisterRoutes(r chi.Router) {
 func (h *ProcessMonitorHandlers) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -253,7 +253,7 @@ func (h *ProcessMonitorHandlers) BroadcastEvent(event ProcessEvent) {
 func (h *ProcessMonitorHandlers) GetActiveInstances(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -371,7 +371,7 @@ func (h *ProcessMonitorHandlers) GetInstanceDetails(w http.ResponseWriter, r *ht
 	workflowID := chi.URLParam(r, "workflowID")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -479,7 +479,7 @@ func (h *ProcessMonitorHandlers) GetExecutionHistory(w http.ResponseWriter, r *h
 	workflowID := chi.URLParam(r, "workflowID")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -521,7 +521,7 @@ func (h *ProcessMonitorHandlers) GetExecutionHistory(w http.ResponseWriter, r *h
 func (h *ProcessMonitorHandlers) HandleIntervention(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -597,7 +597,7 @@ func (h *ProcessMonitorHandlers) HandleIntervention(w http.ResponseWriter, r *ht
 func (h *ProcessMonitorHandlers) GetMonitoringStats(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID

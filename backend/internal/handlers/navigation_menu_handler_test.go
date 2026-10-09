@@ -14,7 +14,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-var navCols = []string{"id", "tenant_id", "parent_id", "node_key", "label", "icon", "target_page_key", "display_order", "required_entitlement"}
+var navCols = []string{"id", "tenant_id", "parent_id", "node_key", "label", "icon", "target_page_key", "display_order", "required_entitlement", "hidden"}
 
 // A tenant's menu is the gold copy's (inherited, read-only) plus its own,
 // which may hang under a gold section; the list query also drops entries
@@ -31,12 +31,12 @@ func TestNavigationMenu_ListInheritsGoldCopy(t *testing.T) {
 	own := "desk-notes"
 
 	mock.ExpectQuery(`uisce_gold_copy_tenant_id`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldTenant))
-	mock.ExpectQuery(`FROM navigation_menu_nodes\s+WHERE \(tenant_id = \$1 OR tenant_id = \$2\)\s+AND \(target_page_key IS NULL OR target_page_key NOT IN .*NOT a.active`).
+	mock.ExpectQuery(`FROM navigation_menu_nodes n\s+LEFT JOIN navigation_menu_placement_overrides o .*WHERE \(n.tenant_id = \$1 OR n.tenant_id = \$2\)\s+AND \(n.target_page_key IS NULL OR n.target_page_key NOT IN .*NOT a.active`).
 		WithArgs(tenant, goldTenant).
 		WillReturnRows(sqlmock.NewRows(navCols).
-			AddRow(mdm, goldTenant, nil, "mdm", "Master Data", nil, nil, 0, "BASE_USER").
-			AddRow(console, goldTenant, mdm, "mastering-console", "Mastering console", nil, slug, 0, "BASE_USER").
-			AddRow(mine, tenant, mdm, "desk-notes", "Desk notes", nil, own, 1, "BASE_USER"))
+			AddRow(mdm, goldTenant, nil, "mdm", "Master Data", nil, nil, 0, "BASE_USER", false).
+			AddRow(console, goldTenant, mdm, "mastering-console", "Mastering console", nil, slug, 0, "BASE_USER", false).
+			AddRow(mine, tenant, mdm, "desk-notes", "Desk notes", nil, own, 1, "BASE_USER", false))
 
 	h := NewNavigationMenuHandler(sqlx.NewDb(db, "sqlmock"))
 	r := chi.NewRouter()
@@ -105,5 +105,108 @@ func TestNavigationMenu_CreateRejectsForeignParent(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Moving a node under one of its own descendants would close a loop; the
+// ancestor walk from the proposed parent finds the node itself and refuses.
+func TestNavigationMenu_UpdateRejectsMoveUnderDescendant(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	tenant, node, child := uuid.New(), uuid.New(), uuid.New()
+	mock.ExpectQuery(`SELECT tenant_id FROM navigation_menu_nodes WHERE id = \$1`).WithArgs(child).
+		WillReturnRows(sqlmock.NewRows([]string{"tenant_id"}).AddRow(tenant))
+	mock.ExpectQuery(`WITH RECURSIVE up AS`).WithArgs(child, node).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+
+	h := NewNavigationMenuHandler(sqlx.NewDb(db, "sqlmock"))
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+	w := httptest.NewRecorder()
+	body := `{"parentId":"` + child.String() + `","nodeKey":"folder","label":"Folder","displayOrder":0}`
+	r.ServeHTTP(w, tenantRequest(http.MethodPut, "/navigation-menu/"+node.String(), tenant.String(), security.AuthInfo{UserID: "u"}, body))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Hiding a gold-copy entry records a tenant-owned override; the gold row is
+// not written.
+func TestNavigationMenu_SetHiddenWritesOverrideForCoreEntry(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	tenant, node := uuid.New(), uuid.New()
+	mock.ExpectQuery(`SELECT tenant_id FROM navigation_menu_nodes WHERE id = \$1`).WithArgs(node).
+		WillReturnRows(sqlmock.NewRows([]string{"tenant_id"}).AddRow(goldTenant))
+	mock.ExpectQuery(`uisce_gold_copy_tenant_id`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldTenant))
+	mock.ExpectExec(`INSERT INTO navigation_menu_placement_overrides`).WithArgs(tenant, node).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	h := NewNavigationMenuHandler(sqlx.NewDb(db, "sqlmock"))
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, tenantRequest(http.MethodPut, "/navigation-menu/"+node.String()+"/hidden", tenant.String(), security.AuthInfo{UserID: "u"}, `{"hidden":true}`))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A tenant's own entries cannot be "hidden" - they are deleted instead.
+func TestNavigationMenu_SetHiddenRejectsOwnEntry(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	tenant, node := uuid.New(), uuid.New()
+	mock.ExpectQuery(`SELECT tenant_id FROM navigation_menu_nodes WHERE id = \$1`).WithArgs(node).
+		WillReturnRows(sqlmock.NewRows([]string{"tenant_id"}).AddRow(tenant))
+
+	h := NewNavigationMenuHandler(sqlx.NewDb(db, "sqlmock"))
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, tenantRequest(http.MethodPut, "/navigation-menu/"+node.String()+"/hidden", tenant.String(), security.AuthInfo{UserID: "u"}, `{"hidden":true}`))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A hidden folder takes its entries with it; the designer view (includeHidden)
+// keeps them, flagged, so they can be shown again.
+func TestApplyHidden_FolderHidesSubtree(t *testing.T) {
+	folder, child, other := uuid.New(), uuid.New(), uuid.New()
+	nodes := func() []NavigationMenuNode {
+		return []NavigationMenuNode{
+			{ID: folder, Label: "Build", Hidden: true},
+			{ID: child, ParentID: &folder, Label: "Cubes"},
+			{ID: other, Label: "Master Data"},
+		}
+	}
+
+	visible := applyHidden(nodes(), false)
+	if len(visible) != 1 || visible[0].ID != other {
+		t.Fatalf("visible: %+v", visible)
+	}
+
+	all := applyHidden(nodes(), true)
+	if len(all) != 3 || !all[1].Hidden || all[2].Hidden {
+		t.Fatalf("designer view: %+v", all)
 	}
 }

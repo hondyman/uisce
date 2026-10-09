@@ -119,7 +119,8 @@ const TenantUserAssignmentPage: React.FC = () => {
   // Fetch users
   const fetchUsers = async () => {
     try {
-      const data = await apiClient<User[]>('/api/rbac/users');
+      // The picker: members of this tenant plus unassigned users (email only for members).
+      const data = await apiClient<User[]>('/api/rbac/users/assignable');
       setUsers(Array.isArray(data) ? data : []);
     } catch (err: any) {
       console.error('Failed to fetch users:', err);
