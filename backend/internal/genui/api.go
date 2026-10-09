@@ -174,7 +174,7 @@ func (s *Service) HandleGetPendingApprovals(w http.ResponseWriter, r *http.Reque
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 

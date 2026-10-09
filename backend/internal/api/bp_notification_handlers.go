@@ -171,7 +171,7 @@ func (h *BPNotificationHandlers) RegisterRoutes(r chi.Router) {
 func (h *BPNotificationHandlers) GetTemplates(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		respondWithError(w, handlers.SecurityErrorStatus(err), "Unauthorized: "+err.Error())
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -219,7 +219,7 @@ func (h *BPNotificationHandlers) GetTemplate(w http.ResponseWriter, r *http.Requ
 func (h *BPNotificationHandlers) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		respondWithError(w, handlers.SecurityErrorStatus(err), "Unauthorized: "+err.Error())
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -339,7 +339,7 @@ func (h *BPNotificationHandlers) RenderTemplate(w http.ResponseWriter, r *http.R
 func (h *BPNotificationHandlers) SendNotification(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		respondWithError(w, handlers.SecurityErrorStatus(err), "Unauthorized: "+err.Error())
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -418,7 +418,7 @@ func (h *BPNotificationHandlers) SendNotification(w http.ResponseWriter, r *http
 func (h *BPNotificationHandlers) SendBatchNotifications(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		respondWithError(w, handlers.SecurityErrorStatus(err), "Unauthorized: "+err.Error())
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -501,7 +501,7 @@ func (h *BPNotificationHandlers) SendBatchNotifications(w http.ResponseWriter, r
 func (h *BPNotificationHandlers) GetUserPreferences(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		respondWithError(w, handlers.SecurityErrorStatus(err), "Unauthorized: "+err.Error())
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -535,7 +535,7 @@ func (h *BPNotificationHandlers) GetUserPreferences(w http.ResponseWriter, r *ht
 func (h *BPNotificationHandlers) UpdateUserPreferences(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		respondWithError(w, handlers.SecurityErrorStatus(err), "Unauthorized: "+err.Error())
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -608,7 +608,7 @@ func (h *BPNotificationHandlers) UpdateUserPreferences(w http.ResponseWriter, r 
 func (h *BPNotificationHandlers) GetLogs(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		respondWithError(w, handlers.SecurityErrorStatus(err), "Unauthorized: "+err.Error())
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -673,7 +673,7 @@ func (h *BPNotificationHandlers) GetLog(w http.ResponseWriter, r *http.Request) 
 func (h *BPNotificationHandlers) GetAnalytics(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		respondWithError(w, handlers.SecurityErrorStatus(err), "Unauthorized: "+err.Error())
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -719,7 +719,7 @@ func (h *BPNotificationHandlers) GetAnalytics(w http.ResponseWriter, r *http.Req
 func (h *BPNotificationHandlers) GetPendingDigests(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		respondWithError(w, handlers.SecurityErrorStatus(err), "Unauthorized: "+err.Error())
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -754,7 +754,7 @@ func (h *BPNotificationHandlers) GetPendingDigests(w http.ResponseWriter, r *htt
 func (h *BPNotificationHandlers) ProcessDigests(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		respondWithError(w, handlers.SecurityErrorStatus(err), "Unauthorized: "+err.Error())
 		return
 	}
 	tenantID := secCtx.TenantID

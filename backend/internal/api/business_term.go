@@ -279,7 +279,7 @@ func (s *Server) generateBusinessTermSuggestions(w http.ResponseWriter, r *http.
 		Resolver: s.DatasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 

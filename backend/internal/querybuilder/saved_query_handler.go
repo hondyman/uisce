@@ -244,7 +244,7 @@ func (h *SavedQueryHandler) writeError(w http.ResponseWriter, err error, status 
 func (h *SavedQueryHandler) HandleListSavedQueries(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -419,7 +419,7 @@ func (h *SavedQueryHandler) cubeVisibleToTenant(ctx context.Context, tenantID, c
 func (h *SavedQueryHandler) HandleCreateSavedQuery(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -787,7 +787,7 @@ func (h *SavedQueryHandler) HandleGetPreview(w http.ResponseWriter, r *http.Requ
 	}
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -866,7 +866,7 @@ func (h *SavedQueryHandler) HandleShareQuery(w http.ResponseWriter, r *http.Requ
 	}
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 	if sq.UserID != secCtx.UserID {

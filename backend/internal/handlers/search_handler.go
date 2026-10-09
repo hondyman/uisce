@@ -33,7 +33,7 @@ func (h *SearchHandler) HandleSemanticSearch(w http.ResponseWriter, r *http.Requ
 	secCtx, ctx, err := SecurityContextFromRequest(r, req.DatasourceID, req.Region, h.securityDeps)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(SecurityErrorStatus(err))
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error()})
 		return
 	}

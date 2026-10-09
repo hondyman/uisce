@@ -101,6 +101,15 @@ type ResolvedDatasource struct {
 // authenticated caller, not missing credentials.
 var ErrDatasourceNotAvailable = errors.New("datasource not found")
 
+// Refusals BuildContext reports as sentinels, so callers can tell a scope
+// problem (the caller may not use what they named) from an internal failure.
+var (
+	ErrNoActiveTenant      = errors.New("no active tenant for this request")
+	ErrNoTenantGranted     = errors.New("no allowed tenants configured for user")
+	ErrInvalidRegion       = errors.New("invalid region")
+	ErrRegionNotConfigured = errors.New("region is not configured for this datasource")
+)
+
 type DatasourceResolver interface {
 	Resolve(ctx context.Context, datasourceID string) (*ResolvedDatasource, error)
 }
@@ -110,10 +119,10 @@ var scopePartPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 func ValidateRegion(region string) error {
 	value := strings.TrimSpace(region)
 	if value == "" {
-		return fmt.Errorf("region is required")
+		return fmt.Errorf("%w: region is required", ErrInvalidRegion)
 	}
 	if !scopePartPattern.MatchString(value) {
-		return fmt.Errorf("region contains invalid characters")
+		return fmt.Errorf("%w: region contains invalid characters", ErrInvalidRegion)
 	}
 	return nil
 }
@@ -127,7 +136,7 @@ func BuildContext(ctx context.Context, auth AuthInfo, req BuildContextRequest, r
 		// Pure tenant/instance metadata scope (e.g. Business Object definitions, catalog metadata)
 		primaryTenantID, ok := auth.ActiveTenant()
 		if !ok {
-			return nil, fmt.Errorf("no active tenant for this request")
+			return nil, ErrNoActiveTenant
 		}
 		operatingScope := fmt.Sprintf("%s:default:default:none", primaryTenantID)
 		return &Context{
@@ -146,7 +155,7 @@ func BuildContext(ctx context.Context, auth AuthInfo, req BuildContextRequest, r
 		return nil, err
 	}
 	if len(auth.TenantIDs) == 0 && !isGlobalAdmin {
-		return nil, fmt.Errorf("no allowed tenants configured for user")
+		return nil, ErrNoTenantGranted
 	}
 
 	resolved, err := resolver.Resolve(ctx, req.DatasourceID)
@@ -157,7 +166,7 @@ func BuildContext(ctx context.Context, auth AuthInfo, req BuildContextRequest, r
 		return nil, ErrDatasourceNotAvailable
 	}
 	if len(resolved.AllowedRegions) > 0 && !containsRegion(resolved.AllowedRegions, req.Region) {
-		return nil, fmt.Errorf("region '%s' is not configured for datasource", req.Region)
+		return nil, fmt.Errorf("%w: %q", ErrRegionNotConfigured, req.Region)
 	}
 
 	// Phase 3 enforcement: when impersonation is active and a scope was chosen,

@@ -71,7 +71,7 @@ func RegisterEntitiesRoutes(r chi.Router, db *sql.DB, securityDeps handlers.Secu
 func (h *EntitiesHandler) handleListEntities(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, err.Error(), "unauthorized", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), err.Error(), "unauthorized", "")
 		return
 	}
 
@@ -100,7 +100,7 @@ func (h *EntitiesHandler) handleGetEntity(w http.ResponseWriter, r *http.Request
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, err.Error(), "unauthorized", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), err.Error(), "unauthorized", "")
 		return
 	}
 
@@ -130,7 +130,7 @@ func (h *EntitiesHandler) handleGetEntity(w http.ResponseWriter, r *http.Request
 func (h *EntitiesHandler) handleResolveEntities(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, err.Error(), "unauthorized", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), err.Error(), "unauthorized", "")
 		return
 	}
 

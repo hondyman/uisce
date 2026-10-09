@@ -250,7 +250,7 @@ func (h *SavedQueryHandler) validateAdoptionPreflight(tenantID string, content s
 func (h *SavedQueryHandler) HandleExtendCoreQuery(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 	if !h.canCustomize(r, secCtx.TenantID) {
@@ -340,7 +340,7 @@ type QueryComparison struct {
 func (h *SavedQueryHandler) loadCoreAndAdoption(w http.ResponseWriter, r *http.Request) (string, *SavedQuery, *queryAdoption, bool) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return "", nil, nil, false
 	}
 	id := chi.URLParam(r, "id")

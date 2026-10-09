@@ -117,7 +117,7 @@ func (h *DriftWSHandler) RegisterMuxRoutes(r *mux.Router) {
 func (h *DriftWSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID

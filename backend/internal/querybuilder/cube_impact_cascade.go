@@ -739,7 +739,7 @@ func nullActor(userID string) string {
 func (h *CubeHandler) HandlePostCubeCascade(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 	id := chi.URLParam(r, "id")

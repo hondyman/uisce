@@ -302,7 +302,7 @@ func (h *ProcessTemplateHandlers) CloneTemplate(w http.ResponseWriter, r *http.R
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -376,7 +376,7 @@ func (h *ProcessTemplateHandlers) GetUserClones(w http.ResponseWriter, r *http.R
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -481,7 +481,7 @@ func (h *ProcessTemplateHandlers) RateTemplate(w http.ResponseWriter, r *http.Re
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID

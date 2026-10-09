@@ -79,7 +79,7 @@ func (h *QueryBuilderHandler) Execute(w http.ResponseWriter, r *http.Request) {
 func (h *QueryBuilderHandler) ListBOTerms(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *QueryBuilderHandler) decodeAndAuthorize(w http.ResponseWriter, r *http.
 	// query with a populated BindingID fail datasource resolution outright.
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return nil, nil, false
 	}
 

@@ -101,7 +101,7 @@ func RegisterNodeTypesRoutes(r chi.Router, db *sql.DB, securityDeps handlers.Sec
 func (h *NodeTypesHandler) handleListNodeTypes(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -261,7 +261,7 @@ func (h *NodeTypesHandler) handleGetNodeType(w http.ResponseWriter, r *http.Requ
 	id := chi.URLParam(r, "id")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -317,7 +317,7 @@ func (h *NodeTypesHandler) handleUpdateNodeType(w http.ResponseWriter, r *http.R
 	id := chi.URLParam(r, "id")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -417,7 +417,7 @@ func (h *NodeTypesHandler) handleDeleteNodeType(w http.ResponseWriter, r *http.R
 	id := chi.URLParam(r, "id")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -442,7 +442,7 @@ func (h *NodeTypesHandler) handleGetNodeTypeProperties(w http.ResponseWriter, r 
 	id := chi.URLParam(r, "id")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -484,7 +484,7 @@ func (h *NodeTypesHandler) handleAddNodeTypeProperty(w http.ResponseWriter, r *h
 	id := chi.URLParam(r, "id")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -554,7 +554,7 @@ func (h *NodeTypesHandler) handleUpdateNodeTypeProperty(w http.ResponseWriter, r
 	propName := chi.URLParam(r, "propName")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -629,7 +629,7 @@ func (h *NodeTypesHandler) handleDeleteNodeTypeProperty(w http.ResponseWriter, r
 	propName := chi.URLParam(r, "propName")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -700,7 +700,7 @@ func (h *NodeTypesHandler) handleGetNodesForType(w http.ResponseWriter, r *http.
 	id := chi.URLParam(r, "id")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID

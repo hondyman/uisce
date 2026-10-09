@@ -430,7 +430,7 @@ func (s *Server) handleGetValidationRuleSchemaForBO(w http.ResponseWriter, r *ht
 		Resolver: s.DatasourceResolver,
 	})
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID

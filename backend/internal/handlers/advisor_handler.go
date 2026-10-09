@@ -80,7 +80,7 @@ func (h *AdvisorHandler) GetBOAdvisor(w http.ResponseWriter, r *http.Request) {
 	boName := chi.URLParam(r, "boName")
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "Security context error: "+err.Error(), SecurityErrorStatus(err))
 		return
 	}
 	tenantID := secCtx.TenantID

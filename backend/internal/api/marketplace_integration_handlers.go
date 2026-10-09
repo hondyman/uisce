@@ -214,7 +214,7 @@ func (h *MarketplaceIntegrationHandlers) GetIntegrationsByCategory(w http.Respon
 func (h *MarketplaceIntegrationHandlers) InstallIntegration(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -311,7 +311,7 @@ func (h *MarketplaceIntegrationHandlers) InstallIntegration(w http.ResponseWrite
 func (h *MarketplaceIntegrationHandlers) GetInstalledIntegrations(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -340,7 +340,7 @@ func (h *MarketplaceIntegrationHandlers) GetInstalledIntegration(w http.Response
 	installationID := chi.URLParam(r, "installationId")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -371,7 +371,7 @@ func (h *MarketplaceIntegrationHandlers) UpdateIntegrationConfig(w http.Response
 	installationID := chi.URLParam(r, "installationId")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -420,7 +420,7 @@ func (h *MarketplaceIntegrationHandlers) ToggleIntegration(w http.ResponseWriter
 	installationID := chi.URLParam(r, "installationId")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -471,7 +471,7 @@ func (h *MarketplaceIntegrationHandlers) UninstallIntegration(w http.ResponseWri
 	installationID := chi.URLParam(r, "installationId")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -529,7 +529,7 @@ func (h *MarketplaceIntegrationHandlers) ExecuteIntegration(w http.ResponseWrite
 	installationID := chi.URLParam(r, "installationId")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -644,7 +644,7 @@ func (h *MarketplaceIntegrationHandlers) TestIntegration(w http.ResponseWriter, 
 	installationID := chi.URLParam(r, "installationId")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -678,7 +678,7 @@ func (h *MarketplaceIntegrationHandlers) TestIntegration(w http.ResponseWriter, 
 func (h *MarketplaceIntegrationHandlers) GetIntegrationExecutions(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -721,7 +721,7 @@ func (h *MarketplaceIntegrationHandlers) GetIntegrationExecution(w http.Response
 	executionID := chi.URLParam(r, "executionId")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -750,7 +750,7 @@ func (h *MarketplaceIntegrationHandlers) GetInstallationStats(w http.ResponseWri
 	installationID := chi.URLParam(r, "installationId")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -801,7 +801,7 @@ func (h *MarketplaceIntegrationHandlers) InitiateOAuthFlow(w http.ResponseWriter
 	installationID := chi.URLParam(r, "installationId")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID

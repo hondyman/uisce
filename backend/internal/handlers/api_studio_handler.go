@@ -38,7 +38,7 @@ func (h *APIStudioHandler) Routes() chi.Router {
 func (h *APIStudioHandler) ListEndpoints(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteSecurityError(w, err)
 		return
 	}
 	env := r.URL.Query().Get("env")
@@ -92,7 +92,7 @@ func (h *APIStudioHandler) SaveEndpoint(w http.ResponseWriter, r *http.Request) 
 func (h *APIStudioHandler) GetOpenAPI(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteSecurityError(w, err)
 		return
 	}
 	env := r.URL.Query().Get("env")
@@ -118,7 +118,7 @@ func (h *APIStudioHandler) GetOpenAPI(w http.ResponseWriter, r *http.Request) {
 func (h *APIStudioHandler) DownloadSDK(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteSecurityError(w, err)
 		return
 	}
 	lang := chi.URLParam(r, "lang")

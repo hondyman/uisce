@@ -40,7 +40,7 @@ func (h *BenchmarkingHandler) GetBenchmarkScore(w http.ResponseWriter, r *http.R
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -174,7 +174,7 @@ func (h *BenchmarkingHandler) GetPeerComparison(w http.ResponseWriter, r *http.R
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -431,7 +431,7 @@ func (h *BenchmarkingHandler) GetGapAnalysis(w http.ResponseWriter, r *http.Requ
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "security context initialization failed: "+err.Error(), handlers.SecurityErrorStatus(err))
 		return
 	}
 

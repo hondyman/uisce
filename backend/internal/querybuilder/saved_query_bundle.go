@@ -189,7 +189,7 @@ func (h *SavedQueryHandler) HandleExportSavedQuery(w http.ResponseWriter, r *htt
 func (h *SavedQueryHandler) HandleExportSavedQueriesBatch(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -258,7 +258,7 @@ func (h *SavedQueryHandler) HandleExportSavedQueriesBatch(w http.ResponseWriter,
 func (h *SavedQueryHandler) HandleImportSavedQueries(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
-		h.writeError(w, err, http.StatusBadRequest)
+		h.writeError(w, err, handlers.SecurityErrorStatus(err))
 		return
 	}
 

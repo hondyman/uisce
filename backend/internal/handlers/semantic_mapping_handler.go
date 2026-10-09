@@ -296,7 +296,7 @@ func (h *SemanticMappingHandler) HandleGetPendingApprovalsWizard(w http.Response
 
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		h.respondJSON(w, SecurityErrorStatus(err), map[string]string{"error": "Unauthorized"})
 		return
 	}
 
@@ -361,7 +361,7 @@ func (h *SemanticMappingHandler) HandleGetCreatedMappingsWizard(w http.ResponseW
 
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		h.respondJSON(w, SecurityErrorStatus(err), map[string]string{"error": "Unauthorized"})
 		return
 	}
 
@@ -478,7 +478,7 @@ func (h *SemanticMappingHandler) HandleBackfillSemanticTermSQLProperties(w http.
 	// Backfill for specific tenant/datasource
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		h.respondJSON(w, SecurityErrorStatus(err), map[string]string{"error": "Unauthorized"})
 		return
 	}
 
@@ -531,7 +531,7 @@ func (h *SemanticMappingHandler) HandleBackfillPhysicalMappings(w http.ResponseW
 	// Backfill for specific tenant/datasource
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		h.respondJSON(w, SecurityErrorStatus(err), map[string]string{"error": "Unauthorized"})
 		return
 	}
 

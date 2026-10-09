@@ -106,7 +106,7 @@ func (h *APIEndpointsCatalogHandler) RegisterRoutes(r chi.Router) {
 func (h *APIEndpointsCatalogHandler) handleListAPIEndpoints(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed: "+err.Error(), "security_error", "")
 		return
 	}
 
@@ -237,7 +237,7 @@ func (h *APIEndpointsCatalogHandler) handleListAPIEndpoints(w http.ResponseWrite
 func (h *APIEndpointsCatalogHandler) handleCreateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed: "+err.Error(), "security_error", "")
 		return
 	}
 
@@ -315,7 +315,7 @@ func (h *APIEndpointsCatalogHandler) handleCreateAPIEndpoint(w http.ResponseWrit
 func (h *APIEndpointsCatalogHandler) handleGetAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed: "+err.Error(), "security_error", "")
 		return
 	}
 
@@ -374,7 +374,7 @@ func (h *APIEndpointsCatalogHandler) handleGetAPIEndpoint(w http.ResponseWriter,
 func (h *APIEndpointsCatalogHandler) handleUpdateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed: "+err.Error(), "security_error", "")
 		return
 	}
 
@@ -455,7 +455,7 @@ func (h *APIEndpointsCatalogHandler) handleUpdateAPIEndpoint(w http.ResponseWrit
 func (h *APIEndpointsCatalogHandler) handleDeleteAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed: "+err.Error(), "security_error", "")
 		return
 	}
 
@@ -488,7 +488,7 @@ func (h *APIEndpointsCatalogHandler) handleDeleteAPIEndpoint(w http.ResponseWrit
 func (h *APIEndpointsCatalogHandler) handleListAPIEndpointsByCategory(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed: "+err.Error(), "security_error", "")
 		return
 	}
 
@@ -559,7 +559,7 @@ func (h *APIEndpointsCatalogHandler) handleListAPIEndpointsByCategory(w http.Res
 func (h *APIEndpointsCatalogHandler) handleSearchAPIEndpoints(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed: "+err.Error(), "security_error", "")
 		return
 	}
 
@@ -654,7 +654,7 @@ func (h *APIEndpointsCatalogHandler) handleSearchAPIEndpoints(w http.ResponseWri
 func (h *APIEndpointsCatalogHandler) handleGetOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed: "+err.Error(), "security_error", "")
 		return
 	}
 
@@ -706,7 +706,7 @@ func (h *APIEndpointsCatalogHandler) handleGetOpenAPISpec(w http.ResponseWriter,
 func (h *APIEndpointsCatalogHandler) handleGetEndpointDocumentation(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		writeJSONError(w, handlers.SecurityErrorStatus(err), "security context initialization failed: "+err.Error(), "security_error", "")
 		return
 	}
 

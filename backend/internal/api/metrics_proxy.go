@@ -253,7 +253,7 @@ type TenantCommitMetrics struct {
 func (s *Server) commitMetricsV1Handler(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.SecurityContextDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 

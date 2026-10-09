@@ -58,7 +58,7 @@ func (h *SemanticModelHandler) GetCoreModels(w http.ResponseWriter, r *http.Requ
 func (h *SemanticModelHandler) GetTenantModels(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID

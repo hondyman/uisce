@@ -127,7 +127,7 @@ func (h *MetricsMigrationHandler) ConvertDSL(w http.ResponseWriter, r *http.Requ
 func (h *MetricsMigrationHandler) GetAvailableCalculations(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "Security context error: "+err.Error(), SecurityErrorStatus(err))
 		return
 	}
 
@@ -193,7 +193,7 @@ func (h *MetricsMigrationHandler) GetBOCalculations(w http.ResponseWriter, r *ht
 	boName := chi.URLParam(r, "boName")
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "Security context error: "+err.Error(), SecurityErrorStatus(err))
 		return
 	}
 

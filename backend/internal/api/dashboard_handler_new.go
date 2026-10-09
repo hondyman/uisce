@@ -167,7 +167,7 @@ func (h *DashboardHandler) GetComplianceMetrics(w http.ResponseWriter, r *http.R
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -250,7 +250,7 @@ func (h *DashboardHandler) GetRiskMetrics(w http.ResponseWriter, r *http.Request
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -336,7 +336,7 @@ func (h *DashboardHandler) GetSparklines(w http.ResponseWriter, r *http.Request)
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -411,7 +411,7 @@ func (h *DashboardHandler) GetETLHealth(w http.ResponseWriter, r *http.Request) 
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -472,7 +472,7 @@ func (h *DashboardHandler) GetAlerts(w http.ResponseWriter, r *http.Request) {
 
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 
@@ -571,7 +571,7 @@ func (h *DashboardHandler) GetAlerts(w http.ResponseWriter, r *http.Request) {
 func (h *DashboardHandler) TriggerETL(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 

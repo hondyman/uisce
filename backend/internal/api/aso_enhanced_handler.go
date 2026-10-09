@@ -138,7 +138,7 @@ func (h *ASOEnhancedHandler) GetOptimizationCosts(w http.ResponseWriter, r *http
 func (h *ASOEnhancedHandler) GetOpenDriftSignals(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 

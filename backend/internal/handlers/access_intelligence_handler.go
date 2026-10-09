@@ -41,7 +41,7 @@ func (h *AccessIntelligenceHandler) RegisterRoutes(r chi.Router) {
 func (h *AccessIntelligenceHandler) HandleGetEffectiveClaims(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteSecurityError(w, err)
 		return
 	}
 	userID, ok := security.RequireUser(w, r)
@@ -213,7 +213,7 @@ func (h *AccessIntelligenceHandler) HandleSimulateAccess(w http.ResponseWriter, 
 func (h *AccessIntelligenceHandler) HandleGetGovernanceCockpitSnapshot(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID

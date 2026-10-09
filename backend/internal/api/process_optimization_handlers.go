@@ -91,7 +91,7 @@ func (h *ProcessOptimizationHandlers) RegisterRoutes(r chi.Router) {
 func (h *ProcessOptimizationHandlers) GetSuggestions(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -147,7 +147,7 @@ func (h *ProcessOptimizationHandlers) GetSuggestions(w http.ResponseWriter, r *h
 func (h *ProcessOptimizationHandlers) AnalyzeAndGenerateSuggestions(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -642,7 +642,7 @@ func (h *ProcessOptimizationHandlers) ApplyOptimization(w http.ResponseWriter, r
 	suggestionID := chi.URLParam(r, "suggestionID")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -714,7 +714,7 @@ func (h *ProcessOptimizationHandlers) DismissSuggestion(w http.ResponseWriter, r
 	suggestionID := chi.URLParam(r, "suggestionID")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -748,7 +748,7 @@ func (h *ProcessOptimizationHandlers) DismissSuggestion(w http.ResponseWriter, r
 func (h *ProcessOptimizationHandlers) GetAppliedOptimizations(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -790,7 +790,7 @@ func (h *ProcessOptimizationHandlers) ForecastImpact(w http.ResponseWriter, r *h
 	suggestionID := chi.URLParam(r, "suggestionID")
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -869,7 +869,7 @@ func (h *ProcessOptimizationHandlers) assessRollbackComplexity(suggestion Optimi
 func (h *ProcessOptimizationHandlers) EnableAutoTune(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID
@@ -906,7 +906,7 @@ func (h *ProcessOptimizationHandlers) EnableAutoTune(w http.ResponseWriter, r *h
 func (h *ProcessOptimizationHandlers) GetAutoTuneStatus(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		handlers.WriteSecurityError(w, err)
 		return
 	}
 	tenantID := secCtx.TenantID

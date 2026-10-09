@@ -291,7 +291,7 @@ func (h *ModelCatalogHandler) CloneModel(w http.ResponseWriter, r *http.Request)
 
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		h.respondJSON(w, SecurityErrorStatus(err), map[string]string{"error": "Unauthorized"})
 		return
 	}
 
@@ -361,7 +361,7 @@ func (h *ModelCatalogHandler) GetModel(w http.ResponseWriter, r *http.Request) {
 
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		h.respondJSON(w, SecurityErrorStatus(err), map[string]string{"error": "Unauthorized"})
 		return
 	}
 	modelID := chi.URLParam(r, "model_id")
@@ -427,7 +427,7 @@ func (h *ModelCatalogHandler) UpdateModel(w http.ResponseWriter, r *http.Request
 
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		h.respondJSON(w, SecurityErrorStatus(err), map[string]string{"error": "Unauthorized"})
 		return
 	}
 	modelIDStr := chi.URLParam(r, "model_id")
@@ -584,7 +584,7 @@ func (h *ModelCatalogHandler) DeleteModel(w http.ResponseWriter, r *http.Request
 
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		h.respondJSON(w, SecurityErrorStatus(err), map[string]string{"error": "Unauthorized"})
 		return
 	}
 	modelID := chi.URLParam(r, "model_id")
@@ -805,7 +805,7 @@ func (h *ModelCatalogHandler) CreateGeneratedModel(w http.ResponseWriter, r *htt
 
 	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
-		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		h.respondJSON(w, SecurityErrorStatus(err), map[string]string{"error": "Unauthorized"})
 		return
 	}
 

@@ -208,7 +208,7 @@ func (s *Service) ComputeTenantDelta(ctx context.Context, tenantID string) (*Ten
 func (s *Service) UpgradeTenantHandler(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.securityDeps)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get security context: %v", err), http.StatusUnauthorized)
+		http.Error(w, fmt.Sprintf("Failed to get security context: %v", err), handlers.SecurityErrorStatus(err))
 		return
 	}
 
@@ -240,7 +240,7 @@ func (s *Service) UpgradeTenantHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Service) GetTenantDeltaHandler(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.securityDeps)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get security context: %v", err), http.StatusUnauthorized)
+		http.Error(w, fmt.Sprintf("Failed to get security context: %v", err), handlers.SecurityErrorStatus(err))
 		return
 	}
 
