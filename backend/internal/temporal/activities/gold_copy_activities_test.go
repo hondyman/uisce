@@ -43,11 +43,20 @@ func TestSyncConnectionToTenant_WorksUnderStrictRLS(t *testing.T) {
 	targetTenantID := uuid.New().String()
 	goldConnectionID := uuid.New().String()
 
-	if _, err := sqlDB.Exec("INSERT INTO public.tenants (id, name, gold_copy) VALUES ($1, $2, false)", targetTenantID, "activity-test-"+targetTenantID[:8]); err != nil {
+	tenantName := "activity-test-" + targetTenantID[:8]
+	if _, err := sqlDB.Exec("INSERT INTO public.tenants (id, name, display_name, gold_copy) VALUES ($1, $2, $2, false)", targetTenantID, tenantName); err != nil {
 		t.Fatalf("seed tenant: %v", err)
+	}
+	// The sync copies a gold-copy connection into the target tenant, and
+	// connections.core_id must reference a real row. Seed that gold-copy row
+	// (owned by the gold-copy tenant) so the FK holds.
+	const goldCopyTenantID = "99e99e99-99e9-49e9-89e9-99e99e99e999"
+	if _, err := sqlDB.Exec("INSERT INTO public.connections (id, tenant_id, name, type, is_active) VALUES ($1, $2, $3, $4, true)", goldConnectionID, goldCopyTenantID, "gold-copy-test-conn", "postgres"); err != nil {
+		t.Fatalf("seed gold-copy connection: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = sqlDB.Exec("DELETE FROM public.connections WHERE tenant_id = $1", targetTenantID)
+		_, _ = sqlDB.Exec("DELETE FROM public.connections WHERE id = $1", goldConnectionID)
 		_, _ = sqlDB.Exec("DELETE FROM public.tenants WHERE id = $1", targetTenantID)
 	})
 
