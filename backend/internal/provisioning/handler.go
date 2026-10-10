@@ -37,6 +37,8 @@ type ProvisioningHandler struct {
 	controlDB      *sql.DB
 	workflowIDBase string
 	logger         *zap.SugaredLogger
+	// catalog answers the product path's region, product and name checks.
+	catalog Catalog
 }
 
 func NewProvisioningHandler(temporalClient client.Client, controlDB *sql.DB, logger *zap.SugaredLogger) *ProvisioningHandler {
@@ -45,6 +47,7 @@ func NewProvisioningHandler(temporalClient client.Client, controlDB *sql.DB, log
 		controlDB:      controlDB,
 		workflowIDBase: "tenant-provisioning",
 		logger:         logger,
+		catalog:        SQLCatalog{DB: controlDB},
 	}
 }
 
@@ -53,9 +56,11 @@ func NewProvisioningHandler(temporalClient client.Client, controlDB *sql.DB, log
 // depend on where this is mounted). Re-provisioning an existing instance is not mounted.
 //
 //	POST /system/tenants/provision
+//	POST /system/tenants/provision/describe
 //	GET  /system/tenants/{tenantID}/provision/{workflow_id}
 func (h *ProvisioningHandler) RegisterAdminRoutes(r chi.Router) {
 	r.Post("/system/tenants/provision", h.ProvisionTenant)
+	r.Post("/system/tenants/provision/describe", h.DescribeParameters)
 	r.Get("/system/tenants/{tenantID}/provision/{workflow_id}", h.GetProvisioningStatus)
 }
 
@@ -86,6 +91,10 @@ func (h *ProvisioningHandler) ProvisionTenant(w http.ResponseWriter, r *http.Req
 	var req ProvisionTenantRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil {
 		http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(req.Products) > 0 || req.Region != "" {
+		h.provisionProducts(w, r, caller, req)
 		return
 	}
 	if req.App != "" {
@@ -276,6 +285,18 @@ func (h *ProvisioningHandler) GetProvisioningStatus(w http.ResponseWriter, r *ht
 		WorkflowID: workflowID,
 		Status:     status,
 	}
+	// The step in flight, for a client that shows progress.
+	if pa := describeResp.GetPendingActivities(); len(pa) > 0 {
+		resp.Step = pa[0].GetActivityType().GetName()
+	}
+	// A finished run reports what it made, or why it stopped.
+	if status == "completed" || status == "failed" {
+		var res ProvisioningWorkflowResult
+		if err := h.temporalClient.GetWorkflow(r.Context(), workflowID, "").Get(r.Context(), &res); err != nil {
+			resp.Error = truncate(err.Error(), 600)
+		}
+		resp.TenantID, resp.InstanceID, resp.DatabaseName = res.TenantID, res.InstanceID, res.DatabaseName
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
@@ -439,4 +460,12 @@ func (h *ProvisioningHandler) getInstance(instanceID string) (*InstanceInfo, err
 		return nil, err
 	}
 	return &i, nil
+}
+
+// truncate keeps a failure message a client can show.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }

@@ -641,6 +641,11 @@ func (a *TenantProvisioningActivities) RegisterTenantDatabaseActivities(w Activi
 	w.RegisterActivity(a.ProbeTenantDatabase)
 	w.RegisterActivity(a.ActivateTenantDatabase)
 	w.RegisterActivity(a.RollbackTenantDatabase)
+	// The product path (tenant_region_activities.go).
+	w.RegisterActivity(a.AssertRegionCluster)
+	w.RegisterActivity(a.CreateTenantDatabaseInRegion)
+	w.RegisterActivity(a.RollbackCreateTenantDatabaseInRegion)
+	w.RegisterActivity(a.SeedTenantDatabase)
 }
 
 // ConfigureTenantDatabaseFromEnv wires the cluster admin connection, the secrets provider and

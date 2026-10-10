@@ -33,8 +33,10 @@ func TestRegisterTenantDatabaseActivities_RegistersWhatTheSagaCalls(t *testing.T
 	(&activities.TenantProvisioningActivities{}).RegisterTenantDatabaseActivities(rec)
 	sort.Strings(rec.names)
 	require.Equal(t, []string{
-		"ActivateTenantDatabase", "ApplyTenantMigrations", "ApplyTenantStructure", "BindTenantDatabase", "InspectProvisioningState",
-		"PlanTenantStructure", "ProbeTenantDatabase", "ProvisionTenantDatabaseAccess", "ResolveStructureTemplate", "RollbackTenantDatabase",
+		"ActivateTenantDatabase", "ApplyTenantMigrations", "ApplyTenantStructure", "AssertRegionCluster", "BindTenantDatabase",
+		"CreateTenantDatabaseInRegion", "InspectProvisioningState", "PlanTenantStructure", "ProbeTenantDatabase",
+		"ProvisionTenantDatabaseAccess", "ResolveStructureTemplate", "RollbackCreateTenantDatabaseInRegion", "RollbackTenantDatabase",
+		"SeedTenantDatabase",
 	}, rec.names)
 }
 
@@ -53,7 +55,8 @@ func TestBothWorkersRegisterTheTenantDatabaseActivitiesAndNeverAsBPSafe(t *testi
 				continue
 			}
 			for _, name := range []string{"BindTenantDatabase", "ProvisionTenantDatabaseAccess", "ApplyTenantMigrations",
-				"PlanTenantStructure", "ResolveStructureTemplate", "ApplyTenantStructure", "ProbeTenantDatabase", "ActivateTenantDatabase", "RollbackTenantDatabase", "InspectProvisioningState"} {
+				"PlanTenantStructure", "ResolveStructureTemplate", "ApplyTenantStructure", "ProbeTenantDatabase", "ActivateTenantDatabase", "RollbackTenantDatabase", "InspectProvisioningState",
+				"AssertRegionCluster", "CreateTenantDatabaseInRegion", "RollbackCreateTenantDatabaseInRegion", "SeedTenantDatabase"} {
 				if !strings.Contains(line, name) {
 					continue
 				}

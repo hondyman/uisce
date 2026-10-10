@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/dscreds"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 // ClonedInstance holds the result of an instance cloning operation
@@ -109,6 +111,20 @@ func CloneGoldCopyInstance(
 	targetTenantID uuid.UUID,
 	targetInstanceID uuid.UUID,
 ) (*ClonedInstance, error) {
+	return CloneGoldCopyInstanceProducts(ctx, db, targetTenantID, targetInstanceID, nil)
+}
+
+// CloneGoldCopyInstanceProducts is CloneGoldCopyInstance for a chosen set of products. A non-empty
+// productCodes (alpha_product.product_code, compared case-insensitively) registers only those
+// products: the datasources under any other product are not cloned, and neither are the connections
+// that belong to one. Empty clones everything, as CloneGoldCopyInstance does.
+func CloneGoldCopyInstanceProducts(
+	ctx context.Context,
+	db *sqlx.DB,
+	targetTenantID uuid.UUID,
+	targetInstanceID uuid.UUID,
+	productCodes []string,
+) (*ClonedInstance, error) {
 	logger := logging.GetLogger().Sugar()
 	logger.Infof("Starting Gold Copy clone for tenant %s, instance %s", targetTenantID, targetInstanceID)
 
@@ -158,9 +174,17 @@ func CloneGoldCopyInstance(
 	}
 
 	// Step 3: Clone products
-	goldProducts, err := getGoldCopyProducts(ctx, tx, goldInstance.ID)
+	goldProducts, err := getGoldCopyProducts(ctx, tx, goldInstance.ID, productCodes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get gold copy products: %w", err)
+	}
+	if len(productCodes) > 0 && len(goldProducts) == 0 {
+		// A chosen product the gold copy does not hold would otherwise register nothing and look like a success.
+		return nil, fmt.Errorf("the gold copy has no product among %v", productCodes)
+	}
+	selected := make(map[uuid.UUID]bool, len(goldProducts))
+	for _, gp := range goldProducts {
+		selected[gp.ID] = true
 	}
 
 	productMapping := make(map[uuid.UUID]uuid.UUID) // gold product ID -> new product ID
@@ -189,6 +213,9 @@ func CloneGoldCopyInstance(
 
 	connectionMapping := make(map[uuid.UUID]uuid.UUID) // gold connection ID -> new connection ID
 	for _, gc := range goldConnections {
+		if len(productCodes) > 0 && gc.TenantProductID.Valid && !selected[gc.TenantProductID.UUID] {
+			continue // belongs to a product this tenant did not register
+		}
 		newConnID, err := syncConnectionToInstance(ctx, tx, gc, targetTenantID, targetInstanceID, logger)
 		if err != nil {
 			return nil, err
@@ -645,14 +672,31 @@ func findGoldCopyInstance(ctx context.Context, tx *sqlx.Tx) (*goldCopyInstanceIn
 	return &info, nil
 }
 
-func getGoldCopyProducts(ctx context.Context, tx *sqlx.Tx, instanceID uuid.UUID) ([]goldCopyProduct, error) {
+func getGoldCopyProducts(ctx context.Context, tx *sqlx.Tx, instanceID uuid.UUID, productCodes []string) ([]goldCopyProduct, error) {
 	var products []goldCopyProduct
+	if len(productCodes) == 0 {
+		err := tx.SelectContext(ctx, &products, `
+			SELECT id, alpha_product_id, version
+			FROM public.tenant_product
+			WHERE datasource_id = $1
+		`, instanceID)
+		return products, err
+	}
 	err := tx.SelectContext(ctx, &products, `
-		SELECT id, alpha_product_id, version
-		FROM public.tenant_product
-		WHERE datasource_id = $1
-	`, instanceID)
+		SELECT tp.id, tp.alpha_product_id, tp.version
+		FROM public.tenant_product tp
+		JOIN public.alpha_product ap ON ap.id = tp.alpha_product_id
+		WHERE tp.datasource_id = $1 AND lower(ap.product_code) = ANY($2)
+	`, instanceID, pq.Array(lowerAll(productCodes)))
 	return products, err
+}
+
+func lowerAll(in []string) []string {
+	out := make([]string, len(in))
+	for i, s := range in {
+		out[i] = strings.ToLower(s)
+	}
+	return out
 }
 
 func getGoldCopyConnections(ctx context.Context, tx *sqlx.Tx, tenantID uuid.UUID) ([]goldCopyConnection, error) {
