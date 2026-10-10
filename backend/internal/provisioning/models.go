@@ -23,6 +23,14 @@ type ProvisionTenantRequest struct {
 	// (ADR-050), so the request names no id. The saga refuses when none, or more than one, is marked. Exclusive with
 	// TemplateDatasourceID.
 	StructureFromGoldCopy bool `json:"structure_from_gold_copy,omitempty"`
+	// Region is the region the tenant is created in. A code ("us-east-1"), or a name or its first
+	// words ("US East"), which is resolved against the configured regions. Required with Products.
+	Region string `json:"region,omitempty"`
+	// Products are the products to register, each with the label that names its database
+	// (<label>_<product>). When set, the request takes the product path: only these products are
+	// registered, the database is named from the label, and the region chooses the cluster. App and
+	// the structure flags are derived and must not be set.
+	Products []ProductRequest `json:"products,omitempty"`
 }
 
 type ProvisionTenantResponse struct {
@@ -33,6 +41,8 @@ type ProvisionTenantResponse struct {
 	LakekeeperNS  string    `json:"lakekeeper_namespace"`
 	Status        string    `json:"status"`
 	StartedAt     time.Time `json:"started_at"`
+	// Plan is set on the product path: what the request will create.
+	Plan *Plan `json:"plan,omitempty"`
 }
 
 type ProvisioningStatus struct {
@@ -41,9 +51,11 @@ type ProvisioningStatus struct {
 	InstanceID   string    `json:"instance_id,omitempty"`
 	DatabaseName string    `json:"database_name,omitempty"`
 	Status       string    `json:"status"`
-	Error        string    `json:"error,omitempty"`
-	StartedAt    time.Time `json:"started_at"`
-	CompletedAt  time.Time `json:"completed_at,omitempty"`
+	// Step is the saga step in flight while the run is provisioning.
+	Step        string    `json:"step,omitempty"`
+	Error       string    `json:"error,omitempty"`
+	StartedAt   time.Time `json:"started_at"`
+	CompletedAt time.Time `json:"completed_at,omitempty"`
 }
 
 type ProvisioningWorkflowInput struct {
@@ -71,6 +83,16 @@ type ProvisioningWorkflowInput struct {
 	TemplateDatasourceID string `json:"template_datasource_id,omitempty"`
 	// StructureFromGoldCopy: see ProvisionTenantRequest. Requires App.
 	StructureFromGoldCopy bool `json:"structure_from_gold_copy,omitempty"`
+	// Region, ClusterHost and ClusterPort are set on the product path. The worker creates databases
+	// only on the cluster it holds administrator credentials for, and refuses when the region's
+	// cluster is another one.
+	Region      string `json:"region,omitempty"`
+	ClusterHost string `json:"cluster_host,omitempty"`
+	ClusterPort int    `json:"cluster_port,omitempty"`
+	// ProductCodes are the products to register for the tenant. Empty keeps the clone of every gold-copy product.
+	ProductCodes []string `json:"product_codes,omitempty"`
+	// Seed asks for the app's reference rows after the structure is applied.
+	Seed bool `json:"seed,omitempty"`
 }
 
 type ProvisioningWorkflowResult struct {
@@ -87,6 +109,17 @@ type RegisterTenantInput struct {
 	TenantID   string
 	TenantName string
 	TenantCode string
+	// Region, when set, is stored as the tenant's region, default region and only allowed region.
+	// Empty keeps the column defaults, as before.
+	Region string `json:"region,omitempty"`
+}
+
+// RegionDatabaseInput names a database and the cluster the region puts it on.
+type RegionDatabaseInput struct {
+	Region       string
+	Host         string
+	Port         int
+	DatabaseName string
 }
 
 type RegisterInstanceInput struct {
@@ -113,6 +146,8 @@ type CloneProductsInput struct {
 	GoldCopyInstanceID string
 	TargetTenantID    string
 	TargetInstanceID  string
+	// ProductCodes, when set, registers only these products. Empty clones every gold-copy product.
+	ProductCodes []string `json:"product_codes,omitempty"`
 }
 
 type EmitEventInput struct {

@@ -67,8 +67,19 @@ func (a *TenantProvisioningActivities) RegisterTenant(ctx context.Context, input
 		ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, display_name = EXCLUDED.display_name, updated_at = NOW()
 		RETURNING id
 	`
+	args := []interface{}{tenantID, input.TenantName, input.TenantCode}
+	if input.Region != "" {
+		// The region the tenant was asked for is the only one it may use until an administrator widens it.
+		query = `
+		INSERT INTO public.tenants (id, name, code, display_name, is_active, gold_copy, status, region, default_region, allowed_regions, created_at, updated_at)
+		VALUES ($1, $2, $3, $2, true, false, 'provisioning', $4, $4, jsonb_build_array($4::text), NOW(), NOW())
+		ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, display_name = EXCLUDED.display_name, updated_at = NOW()
+		RETURNING id
+	`
+		args = append(args, input.Region)
+	}
 	var returnedID string
-	err := a.ControlDB.GetContext(ctx, &returnedID, query, tenantID, input.TenantName, input.TenantCode)
+	err := a.ControlDB.GetContext(ctx, &returnedID, query, args...)
 	if err != nil {
 		return "", fmt.Errorf("failed to insert tenant: %w", err)
 	}
@@ -361,7 +372,7 @@ func (a *TenantProvisioningActivities) CloneGoldCopyProducts(ctx context.Context
 		return fmt.Errorf("invalid target instance ID: %w", err)
 	}
 
-	_, err = db.CloneGoldCopyInstance(ctx, a.ControlDB, targetTenantID, targetInstanceID)
+	_, err = db.CloneGoldCopyInstanceProducts(ctx, a.ControlDB, targetTenantID, targetInstanceID, input.ProductCodes)
 	if err != nil {
 		return fmt.Errorf("failed to clone gold copy products: %w", err)
 	}

@@ -192,6 +192,12 @@ const sagaTenantDatabaseVersion = "saga-tenant-database-v1"
 // TemplateDatasourceID, so a request that names no template takes exactly the path it took before.
 const sagaTenantStructureVersion = "saga-tenant-structure-v1"
 
+// sagaProductPathVersion gates the product path ("create tenant X in region R with product P and label L"): the region's
+// cluster is checked before anything is created, the database is created through the cluster administrator the worker holds,
+// only the chosen products are registered, and the app's reference rows are seeded. It also requires
+// ProvisioningWorkflowInput.Region, which only the product path sets, so every other run takes exactly the path it took before.
+const sagaProductPathVersion = "saga-product-path-v1"
+
 // TenantInstanceProvisioningWorkflowFn is the registered provisioning saga.
 func TenantInstanceProvisioningWorkflowFn(ctx workflow.Context, input provisioning.ProvisioningWorkflowInput) (*provisioning.ProvisioningWorkflowResult, error) {
 	if workflow.GetVersion(ctx, sagaCompensationVersion, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
@@ -307,6 +313,7 @@ func tenantInstanceProvisioning(ctx workflow.Context, input provisioning.Provisi
 		TenantID:   input.TenantID,
 		TenantName: input.TenantName,
 		TenantCode: input.TenantCode,
+		Region:     input.Region,
 	}).Get(ctx, &tenantID); e != nil {
 		return fail("RegisterTenant", e)
 	}
@@ -376,14 +383,37 @@ func tenantInstanceProvisioning(ctx workflow.Context, input provisioning.Provisi
 		logger.Info("Tenant structure planned", "template", structure.TemplateDatasourceID, "hash", structure.Hash, "tables", structure.Tables, "statements", structure.Statements)
 	}
 
-	// 4. Tenant database.
-	if e := workflow.ExecuteActivity(ctx, acts.CreateTenantDatabase, input.DatabaseName).Get(ctx, nil); e != nil {
-		return fail("CreateTenantDatabase", e)
+	// 3c. The product path: the region's cluster must be the one this worker administers, and the database name must be
+	// free there. Both are refused here, before anything is created.
+	productPath := input.Region != "" && input.App != "" &&
+		workflow.GetVersion(ctx, sagaProductPathVersion, workflow.DefaultVersion, 1) == 1
+	regionDB := provisioning.RegionDatabaseInput{
+		Region: input.Region, Host: input.ClusterHost, Port: input.ClusterPort, DatabaseName: input.DatabaseName,
 	}
-	if state.Owned() && !state.DatabaseExisted {
-		comps = append(comps, compensation{"RollbackCreateTenantDatabase", func(c workflow.Context) error {
-			return workflow.ExecuteActivity(c, acts.RollbackCreateTenantDatabase, input.DatabaseName).Get(c, nil)
+	if productPath {
+		if e := workflow.ExecuteActivity(ctx, acts.AssertRegionCluster, regionDB).Get(ctx, nil); e != nil {
+			return fail("AssertRegionCluster", e)
+		}
+	}
+
+	// 4. Tenant database.
+	if productPath {
+		if e := workflow.ExecuteActivity(ctx, acts.CreateTenantDatabaseInRegion, regionDB).Get(ctx, nil); e != nil {
+			return fail("CreateTenantDatabaseInRegion", e)
+		}
+		// AssertRegionCluster proved the name was free, so this run made the database.
+		comps = append(comps, compensation{"RollbackCreateTenantDatabaseInRegion", func(c workflow.Context) error {
+			return workflow.ExecuteActivity(c, acts.RollbackCreateTenantDatabaseInRegion, regionDB).Get(c, nil)
 		}})
+	} else {
+		if e := workflow.ExecuteActivity(ctx, acts.CreateTenantDatabase, input.DatabaseName).Get(ctx, nil); e != nil {
+			return fail("CreateTenantDatabase", e)
+		}
+		if state.Owned() && !state.DatabaseExisted {
+			comps = append(comps, compensation{"RollbackCreateTenantDatabase", func(c workflow.Context) error {
+				return workflow.ExecuteActivity(c, acts.RollbackCreateTenantDatabase, input.DatabaseName).Get(c, nil)
+			}})
+		}
 	}
 
 	// 5. Schema. Undone by dropping the database above, so no compensation of its own. In structure mode there is no
@@ -413,6 +443,7 @@ func tenantInstanceProvisioning(ctx workflow.Context, input provisioning.Provisi
 		GoldCopyInstanceID: input.GoldCopyInstanceID,
 		TargetTenantID:     input.TenantID,
 		TargetInstanceID:   input.InstanceID,
+		ProductCodes:       input.ProductCodes,
 	}
 	if e := workflow.ExecuteActivity(ctx, acts.CloneGoldCopyProducts, cloneIn).Get(ctx, nil); e != nil {
 		return fail("CloneGoldCopyProducts", e)
@@ -459,6 +490,12 @@ func tenantInstanceProvisioning(ctx workflow.Context, input provisioning.Provisi
 			}
 			if !report.Done {
 				return fail("ApplyTenantStructure", fmt.Errorf("structure report for %s is not done", report.Target))
+			}
+			// The app's reference rows, after its structure and before the probe: a tenant is not active without them.
+			if productPath && input.Seed {
+				if e := workflow.ExecuteActivity(ctx, acts.SeedTenantDatabase, tdIn).Get(ctx, nil); e != nil {
+					return fail("SeedTenantDatabase", e)
+				}
 			}
 		} else {
 			if e := workflow.ExecuteActivity(ctx, acts.ApplyTenantMigrations, tdIn).Get(ctx, &report); e != nil {
